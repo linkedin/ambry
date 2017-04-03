@@ -42,7 +42,6 @@ import com.github.ambry.network.SocketServer;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
-import com.github.ambry.store.StatsManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -157,7 +156,8 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
-      if (statsConfig.publishEnabled) {
+      if (serverConfig.serverStatsPublishEnabled) {
+        logger.info("Creating StatsManager to publish stats");
         List<PartitionId> partitionIds = new ArrayList<>();
         for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
           partitionIds.add(replicaId.getPartitionId());

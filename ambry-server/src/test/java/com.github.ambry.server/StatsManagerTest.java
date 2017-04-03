@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.store;
+package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -21,6 +21,18 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreStats;
+import com.github.ambry.store.TimeRange;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -28,13 +40,16 @@ import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Test;
 
@@ -45,7 +60,6 @@ import static org.junit.Assert.*;
  * Tests for {@link StatsManager}.
  */
 public class StatsManagerTest {
-  private static final long CAPACITY = 1024 * 1024 * 1024;
   private static final int MAX_ACCOUNT_COUNT = 10;
   private static final int MIN_ACCOUNT_COUNT = 5;
   private static final int MAX_CONTAINER_COUNT = 6;
@@ -65,22 +79,27 @@ public class StatsManagerTest {
    */
   @After
   public void cleanup() throws IOException {
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    File[] files = tempDir.listFiles();
+    if (files == null) {
+      throw new IOException("Could not list files in directory: " + tempDir.getAbsolutePath());
+    }
+    for (File file : files) {
+      assertTrue(file + " could not be deleted", file.delete());
+    }
   }
 
   public StatsManagerTest() throws IOException, StoreException {
-    tempDir = StoreTestUtils.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10));
+    tempDir = Files.createTempDirectory("nodeStatsDir-" + UtilsTest.getRandomString(10)).toFile();
+    tempDir.deleteOnExit();
     outputFileString = (new File(tempDir.getAbsolutePath(), "stats_output.json")).getAbsolutePath();
     storeMap = new HashMap<>();
     preAggregatedSnapshot = generateRandomSnapshot();
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     for (int i = 0; i < 2; i++) {
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
-      storeMap.put(new MockPartitionId(i),
-          new MockBlobStore(new MockBlobStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      storeMap.put(new MockPartitionId(i), new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
     }
-    storeMap.put(new MockPartitionId(2),
-        new MockBlobStore(new MockBlobStoreStats(baseSliceAndNewSlice.getFirst(), false)));
+    storeMap.put(new MockPartitionId(2), new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
@@ -126,7 +145,7 @@ public class StatsManagerTest {
   public void testStatsManagerWithProblematicStores() throws StoreException, IOException {
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
     problematicStoreMap.put(new MockPartitionId(1), null);
-    Store exceptionStore = new MockBlobStore(new MockBlobStoreStats(null, true));
+    Store exceptionStore = new MockStore(new MockStoreStats(null, true));
     problematicStoreMap.put(new MockPartitionId(2), exceptionStore);
     StatsManager testStatsManager =
         new StatsManager(new MockStorageManager(problematicStoreMap), new ArrayList<>(problematicStoreMap.keySet()),
@@ -244,10 +263,9 @@ public class StatsManagerTest {
   private class MockStorageManager extends StorageManager {
     private final Map<PartitionId, Store> storeMap;
 
-    public MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
+    MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
       super(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
-          new MetricRegistry(), new ArrayList<ReplicaId>(), new MockIdFactory(), new DummyMessageStoreRecovery(),
-          new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+          new MetricRegistry(), new ArrayList<ReplicaId>(), null, null, null, SystemTime.getInstance());
       storeMap = map;
     }
 
@@ -258,34 +276,81 @@ public class StatsManagerTest {
   }
 
   /**
-   * Mocked {@link BlobStore} that is intended to return a predefined {@link StoreStats} when getStoreStats is called.
+   * Mocked {@link Store} that is intended to return a predefined {@link StoreStats} when getStoreStats is called.
    */
-  private class MockBlobStore extends BlobStore {
+  private class MockStore implements Store {
     private final StoreStats storeStats;
 
-    MockBlobStore(StoreStats storeStats) {
-      super(UtilsTest.getRandomString(10), null, null, null, new StorageManagerMetrics(new MetricRegistry()), null,
-          CAPACITY, null, null, null, null);
+    MockStore(StoreStats storeStats) {
       this.storeStats = storeStats;
+    }
+
+    @Override
+    public void start() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void put(MessageWriteSet messageSetToWrite) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
+      throw new IllegalStateException("Not implemented");
     }
 
     @Override
     public StoreStats getStoreStats() {
       return storeStats;
     }
+
+    @Override
+    public boolean isKeyDeleted(StoreKey key) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public long getSizeInBytes() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void shutdown() throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
   }
 
   /**
-   * Mocked {@link BlobStoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
+   * Mocked {@link StoreStats} to return predefined {@link StatsSnapshot} when getStatsSnapshot is called.
    */
-  private class MockBlobStoreStats extends BlobStoreStats {
+  private class MockStoreStats implements StoreStats {
     private final StatsSnapshot statsSnapshot;
     private final boolean throwStoreException;
 
-    MockBlobStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
-      super(null, null, null);
+    MockStoreStats(StatsSnapshot statsSnapshot, boolean throwStoreException) {
       this.statsSnapshot = statsSnapshot;
       this.throwStoreException = throwStoreException;
+    }
+
+    @Override
+    public Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException {
+      throw new IllegalStateException("Not implemented");
     }
 
     @Override

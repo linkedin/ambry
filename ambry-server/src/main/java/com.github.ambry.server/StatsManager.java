@@ -12,11 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.store;
+package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.StatsManagerConfig;
+import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.BufferedOutputStream;
@@ -43,12 +46,13 @@ import org.slf4j.LoggerFactory;
  * The stats manager is responsible for periodic aggregation of node level stats and expose/publish such stats to
  * potential consumers.
  */
-public class StatsManager {
+class StatsManager {
   private static final Logger logger = LoggerFactory.getLogger(StatsManager.class);
 
   private final StorageManager storageManager;
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
+  private final int initialDelayInSecs;
   private final List<PartitionId> totalPartitionIds;
   private final StatsManagerMetrics metrics;
   private final Time time;
@@ -64,12 +68,13 @@ public class StatsManager {
    * @param time the {@link Time} instance to be used for reporting
    * @throws IOException
    */
-  public StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
+  StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
       StatsManagerConfig config, Time time) throws IOException {
     this.storageManager = storageManager;
     totalPartitionIds = partitionIds;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
+    initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
     this.time = time;
   }
@@ -77,18 +82,18 @@ public class StatsManager {
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
-  public void start() {
+  void start() {
     scheduler = Utils.newScheduler(1, false);
     statsAggregator = new StatsAggregator();
-    // random initial delay between 1 to 10 minutes to offset nodes from collecting stats at the same time
-    scheduler.scheduleAtFixedRate(statsAggregator, ThreadLocalRandom.current().nextInt(540) + 60, publishPeriodInSecs,
-        TimeUnit.SECONDS);
+    int actualDelay = initialDelayInSecs > 0 ? ThreadLocalRandom.current().nextInt(initialDelayInSecs) : 0;
+    logger.info("Scheduling stats aggregation job with an initial delay of {} secs", actualDelay);
+    scheduler.scheduleAtFixedRate(statsAggregator, actualDelay, publishPeriodInSecs, TimeUnit.SECONDS);
   }
 
   /**
    * Stops the periodic task that is collecting, aggregating and publishing stats.
    */
-  public void shutdown() throws InterruptedException {
+  void shutdown() throws InterruptedException {
     if (statsAggregator != null) {
       statsAggregator.cancel();
     }
@@ -142,7 +147,7 @@ public class StatsManager {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot();
         aggregate(aggregatedSnapshot, statsSnapshot);
-        metrics.fetchAndAggregateTimePerStore.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
+        metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
       }
@@ -176,25 +181,27 @@ public class StatsManager {
 
     @Override
     public void run() {
-      long totalFetchAndAggregateStartTimeMs = time.milliseconds();
-      StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
-      List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = totalPartitionIds.iterator();
-      while (!cancelled && iterator.hasNext()) {
-        PartitionId partitionId = iterator.next();
-        collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
-      }
-      if (!cancelled) {
-        metrics.totalFetchAndAggregateTime.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-        StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
-            totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
-        try {
+      logger.info("Aggregating stats");
+      try {
+        long totalFetchAndAggregateStartTimeMs = time.milliseconds();
+        StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
+        List<String> unreachableStores = new ArrayList<>();
+        Iterator<PartitionId> iterator = totalPartitionIds.iterator();
+        while (!cancelled && iterator.hasNext()) {
+          PartitionId partitionId = iterator.next();
+          collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
+        }
+        if (!cancelled) {
+          metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
+          StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
+              totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
-        } catch (IOException e) {
-          metrics.statsPublishFailureCount.inc();
-          logger.error("IOException when publishing stats to {}", statsOutputFile.getAbsolutePath(), e);
         }
+      } catch (Exception e) {
+        metrics.statsAggregationFailureCount.inc();
+        logger.error("Exception while aggregating stats. Stats output file path - {}",
+            statsOutputFile.getAbsolutePath(), e);
       }
     }
 

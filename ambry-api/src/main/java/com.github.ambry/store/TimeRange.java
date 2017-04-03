@@ -16,7 +16,7 @@ package com.github.ambry.store;
 /**
  * A TimeRange is the range between two times in milliseconds
  */
-class TimeRange {
+public class TimeRange {
 
   private final long startTimeInMs;
   private final long endTimeInMs;
@@ -26,7 +26,7 @@ class TimeRange {
    * @param referenceTimeInMs the reference time in milliseconds that this {@link TimeRange} is referring to
    * @param errorMarginInMs the allowable error margin in milliseconds
    */
-  TimeRange(long referenceTimeInMs, long errorMarginInMs) {
+  public TimeRange(long referenceTimeInMs, long errorMarginInMs) {
     if (errorMarginInMs < 0 || referenceTimeInMs < 0 || referenceTimeInMs - errorMarginInMs < 0
         || referenceTimeInMs > Long.MAX_VALUE - errorMarginInMs) {
       throw new IllegalArgumentException(
@@ -39,14 +39,14 @@ class TimeRange {
   /**
    * @return the start time in Secs that this {@link TimeRange} is referring to
    */
-  long getStartTimeInMs() {
+  public long getStartTimeInMs() {
     return startTimeInMs;
   }
 
   /**
    * @return the end time in Secs that this {@link TimeRange} is referring to
    */
-  long getEndTimeInMs() {
+  public long getEndTimeInMs() {
     return endTimeInMs;
   }
 }

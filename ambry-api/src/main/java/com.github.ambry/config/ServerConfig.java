@@ -33,8 +33,16 @@ public class ServerConfig {
   @Default("10")
   public final int serverSchedulerNumOfthreads;
 
+  /**
+   * The option to enable or disable publishing stats.
+   */
+  @Config("server.stats.publish.enabled")
+  @Default("false")
+  public final boolean serverStatsPublishEnabled;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
+    serverStatsPublishEnabled = verifiableProperties.getBoolean("server.stats.publish.enabled", false);
   }
 }

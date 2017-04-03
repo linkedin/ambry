@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
