@@ -34,7 +34,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -72,7 +71,6 @@ class BlobStoreCompactor {
   private final StoreMetrics tgtMetrics;
   private final Log srcLog;
   private final DiskIOScheduler diskIOScheduler;
-  private final ScheduledExecutorService scheduler;
   private final MessageStoreRecovery recovery;
   private final Time time;
   private final UUID sessionId;
@@ -98,7 +96,6 @@ class BlobStoreCompactor {
    * @param metrics the {@link StoreMetrics} to use to record metrics.
    * @param diskIOScheduler the {@link DiskIOScheduler} to schedule I/O.
    * @param srcLog the {@link Log} to copy data from.
-   * @param scheduler the {@link ScheduledExecutorService} to use.
    * @param recovery the {@link MessageStoreRecovery} to use to recover the index and log.
    * @param time the {@link Time} instance to use.
    * @param sessionId the sessionID of the store.
@@ -107,8 +104,8 @@ class BlobStoreCompactor {
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
-      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, ScheduledExecutorService scheduler,
-      MessageStoreRecovery recovery, Time time, UUID sessionId, UUID incarnationId) throws IOException, StoreException {
+      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, MessageStoreRecovery recovery, Time time,
+      UUID sessionId, UUID incarnationId) throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -117,7 +114,6 @@ class BlobStoreCompactor {
     tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
-    this.scheduler = scheduler;
     this.recovery = recovery;
     this.time = time;
     this.sessionId = sessionId;
@@ -406,9 +402,8 @@ class BlobStoreCompactor {
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
-    tgtIndex =
-        new PersistentIndex(dataDir.getAbsolutePath(), scheduler, tgtLog, config, storeKeyFactory, recovery, null,
-            tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
+    tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, recovery, null,
+        tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
       srcIndex.hardDeleter.pause();
     }
