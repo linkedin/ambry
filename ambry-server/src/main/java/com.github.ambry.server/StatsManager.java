@@ -198,7 +198,7 @@ class StatsManager {
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
-      } catch (Exception e) {
+      } catch (Exception | Error e) {
         metrics.statsAggregationFailureCount.inc();
         logger.error("Exception while aggregating stats. Stats output file path - {}",
             statsOutputFile.getAbsolutePath(), e);
