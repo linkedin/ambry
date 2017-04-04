@@ -36,8 +36,6 @@ import static org.junit.Assert.*;
  */
 public class CompactionManagerTest {
 
-  private static final long CAPACITY_IN_BYTES = 10 * 1024 * 1024;
-  private static final long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
   private static final String MOUNT_PATH = "/tmp/";
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
@@ -45,7 +43,6 @@ public class CompactionManagerTest {
   private StoreConfig config;
   private MockBlobStore blobStore;
   private CompactionManager compactionManager;
-  private long messageRetentionTimeInMs;
 
   /**
    * Instantiates {@link CompactionManagerTest} with the required cast
@@ -53,11 +50,11 @@ public class CompactionManagerTest {
    */
   public CompactionManagerTest() throws InterruptedException {
     config = new StoreConfig(new VerifiableProperties(properties));
-    messageRetentionTimeInMs = config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
+    long messageRetentionTimeInMs = config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
     time.sleep(2 * messageRetentionTimeInMs);
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
-    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
+    blobStore = new MockBlobStore(config, metrics, time, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
   }
@@ -76,7 +73,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
+        blobStore = new MockBlobStore(config, metrics, time, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.enable();
@@ -100,7 +97,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES, null);
+    blobStore = new MockBlobStore(config, metrics, time, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.disable();
@@ -108,8 +105,7 @@ public class CompactionManagerTest {
   }
 
   /**
-   * Basic tests for {@link CompactionManager#getCompactionDetails(BlobStore)} for different values of
-   * log segment count
+   * Basic tests for {@link CompactionManager#getCompactionDetails(BlobStore)}
    * @throws StoreException
    * @throws InterruptedException
    */
@@ -124,10 +120,16 @@ public class CompactionManagerTest {
     assertEquals("CompactionDetails mismatch", blobStore.details, compactionManager.getCompactionDetails(blobStore));
   }
 
+  /**
+   * Tests {@link CompactionManager} for failure cases
+   * @throws StoreException
+   */
+  @Test
   public void testCompactionManagerFailureCases() throws StoreException {
     blobStore.details = generateRandomCompactionDetails(5);
     // StoreException thrown
-    blobStore.exceptionToThrow = new StoreException("Random StoreException to test", StoreErrorCodes.Unknown_Error);
+    blobStore.exceptionToThrowOnGetCompactionDetails =
+        new StoreException("Random StoreException to test", StoreErrorCodes.Unknown_Error);
     try {
       compactionManager.getCompactionDetails(blobStore);
     } catch (StoreException e) {
@@ -152,10 +154,9 @@ public class CompactionManagerTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     for (int i = 0; i < numStores; i++) {
-      MockBlobStore store = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES,
-          compactCallsCountdown, null);
+      MockBlobStore store = new MockBlobStore(config, metrics, time, compactCallsCountdown, null);
       // one store should not have any segments to compact
-      store.validLogSegments = i == 0 ? null : generateRandomStrings(i);
+      store.details = i == 0 ? null : generateRandomCompactionDetails(i);
       stores.add(store);
     }
     compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
@@ -198,9 +199,8 @@ public class CompactionManagerTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     for (int i = 0; i < numStores; i++) {
-      MockBlobStore store = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES,
-          compactCallsCountdown, null);
-      store.validLogSegments = generateRandomStrings(2);
+      MockBlobStore store = new MockBlobStore(config, metrics, time, compactCallsCountdown, null);
+      store.details = generateRandomCompactionDetails(2);
       if (i == 0) {
         // one store should not be started
         store.started = false;
@@ -240,19 +240,6 @@ public class CompactionManagerTest {
   // helper methods
 
   /**
-   * Generates random strings
-   * @param count the total number of random strings that needs to be generated
-   * @return a {@link List} of random strings of size {@code count}
-   */
-  private List<String> generateRandomStrings(int count) {
-    List<String> randomStrings = new ArrayList<>();
-    for (int i = 0; i < count; i++) {
-      randomStrings.add(UtilsTest.getRandomString(5));
-    }
-    return randomStrings;
-  }
-
-  /**
    * Generates random {@link CompactionDetails} with random log segment names
    * @param count number of log segments to be compacted as part of {@link CompactionDetails}
    * @return the randomly generated {@link CompactionDetails}
@@ -262,67 +249,38 @@ public class CompactionManagerTest {
     return new CompactionDetails(time.milliseconds(), logSegmentsNames);
   }
 
-
-  // verification helper methods
-
-  /**
-   * Verifies {@link CompactionManager#getCompactionDetails(BlobStore)} returns expected values i.e.
-   * {@code expectedCompactionDetails}
-   * @param expectedCompactionDetails expected {@link CompactionDetails}
-   * @throws StoreException
-   */
-  private void verifyCompactionDetails(CompactionDetails expectedCompactionDetails) throws StoreException {
-    CompactionDetails compactionDetails = compactionManager.getCompactionDetails(blobStore);
-    if (expectedCompactionDetails == null) {
-      assertNull("CompactionDetails expected to be null ", compactionDetails);
-    } else {
-      assertEquals("Returned invalid time ", expectedCompactionDetails.getReferenceTimeMs(),
-          compactionDetails.getReferenceTimeMs());
-      assertEquals("Compaction range mismatch ", expectedCompactionDetails.getLogSegmentsUnderCompaction(),
-          compactionDetails.getLogSegmentsUnderCompaction());
-    }
-  }
-
   /**
    * MockBlobStore to assist in testing {@link CompactionManager}
    */
   private class MockBlobStore extends BlobStore {
-    private long usedCapacity;
-    private long capacityInBytes;
     private final CountDownLatch compactCallsCountdown;
-    List<String> validLogSegments = null;
-    StoreException exceptionToThrow;
     CompactionDetails details;
 
     private boolean resumeCompactionCalled = false;
     boolean compactCalled = false;
     Exception callOrderException = null;
 
+    StoreException exceptionToThrowOnGetCompactionDetails = null;
     RuntimeException exceptionToThrowOnResume = null;
     RuntimeException exceptionToThrowOnCompact = null;
     boolean started = true;
 
-    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
-        long usedCapacity, CompactionDetails details) {
-      this(config, metrics, time, capacityInBytes, usedCapacity, new CountDownLatch(0), details);
+    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, CompactionDetails details) {
+      this(config, metrics, time, new CountDownLatch(0), details);
     }
 
-    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes, long usedCapacity,
-        CountDownLatch compactCallsCountdown, CompactionDetails details) {
+    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, CountDownLatch compactCallsCountdown,
+        CompactionDetails details) {
       super("", config, null, null, metrics, null, 0, null, null, null, time);
-      this.capacityInBytes = capacityInBytes;
-      this.usedCapacity = usedCapacity;
       this.compactCallsCountdown = compactCallsCountdown;
       this.details = details;
     }
 
     @Override
-    public long getSizeInBytes() {
-      return usedCapacity;
-    }
-
-    @Override
     CompactionDetails getCompactionDetails(CompactionPolicy compactionPolicy) throws StoreException {
+      if (exceptionToThrowOnGetCompactionDetails != null) {
+        throw exceptionToThrowOnGetCompactionDetails;
+      }
       return details;
     }
 
