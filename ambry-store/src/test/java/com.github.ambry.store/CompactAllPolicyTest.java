@@ -38,11 +38,11 @@ public class CompactAllPolicyTest {
    */
   public CompactAllPolicyTest() throws InterruptedException {
     Pair<MockBlobStore, StoreConfig> initState = CompactionPolicyTest.initializeBlobStore(properties, time, -1, -1, -1);
-    this.config = initState.getSecond();
-    this.messageRetentionTimeInMs =
+    config = initState.getSecond();
+    messageRetentionTimeInMs =
         config.storeDeletedMessageRetentionDays * Time.HoursPerDay * Time.SecsPerHour * Time.MsPerSec;
-    this.blobStore = initState.getFirst();
-    this.compactionPolicy = new CompactAllPolicy(config, time);
+    blobStore = initState.getFirst();
+    compactionPolicy = new CompactAllPolicy(config, time);
   }
 
   /**

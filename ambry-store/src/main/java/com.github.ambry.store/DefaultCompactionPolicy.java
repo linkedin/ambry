@@ -17,7 +17,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -31,6 +30,7 @@ import org.slf4j.LoggerFactory;
  */
 class DefaultCompactionPolicy implements CompactionPolicy {
 
+  final static long ERROR_MARGIN_MS = 1000 * 60 * 60;
   private final Time time;
   private final StoreConfig storeConfig;
   private final long messageRetentionTimeInMs;
@@ -49,27 +49,18 @@ class DefaultCompactionPolicy implements CompactionPolicy {
     CompactionDetails details = null;
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
-        Pair<Long, NavigableMap<String, Long>> validDataPerLogSegments = blobStoreStats.getValidDataSizeByLogSegment(
-            new TimeRange(time.milliseconds() - messageRetentionTimeInMs, 0));
-
-        Iterator<Map.Entry<String, Long>> validEntryIterator =
-            validDataPerLogSegments.getSecond().entrySet().iterator();
-        while (validEntryIterator.hasNext()) {
-          Map.Entry<String, Long> validEntry = validEntryIterator.next();
-          if (!logSegmentsNotInJournal.contains(validEntry.getKey())) {
-            validEntryIterator.remove();
-          }
-        }
+        Pair<Long, NavigableMap<String, Long>> validDataSizeByLogSegment = blobStoreStats.getValidDataSizeByLogSegment(
+            new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
+        NavigableMap<String, Long> potentialLogSegmentValidSizeMap = validDataSizeByLogSegment.getSecond()
+            .subMap(logSegmentsNotInJournal.get(0), true,
+                logSegmentsNotInJournal.get(logSegmentsNotInJournal.size() - 1), true);
 
         CostBenefitInfo bestCandidateToCompact =
-            getBestCandidateToCompact(validDataPerLogSegments.getSecond(), segmentCapacity, segmentHeaderSize,
+            getBestCandidateToCompact(potentialLogSegmentValidSizeMap, segmentCapacity, segmentHeaderSize,
                 blobStoreStats.getMaxBlobSize());
         if (bestCandidateToCompact != null) {
-          List<String> segmentsToCompact = new ArrayList<>(validDataPerLogSegments.getSecond()
-              .subMap(bestCandidateToCompact.getFirstLogSegmentName(), true,
-                  bestCandidateToCompact.getLastLogSegmentName(), true)
-              .keySet());
-          details = new CompactionDetails(validDataPerLogSegments.getFirst(), segmentsToCompact);
+          details = new CompactionDetails(validDataSizeByLogSegment.getFirst(),
+              bestCandidateToCompact.getSegmentsToCompact());
         }
       }
     }
@@ -90,15 +81,15 @@ class DefaultCompactionPolicy implements CompactionPolicy {
     Map.Entry<String, Long> firstEntry = validDataPerLogSegments.firstEntry();
     Map.Entry<String, Long> lastEntry = validDataPerLogSegments.lastEntry();
     CostBenefitInfo bestCandidateToCompact = null;
-    while (firstEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) <= 0) {
+    while (firstEntry != null) {
       Map.Entry<String, Long> endEntry = lastEntry;
       while (endEntry != null && firstEntry.getKey().compareTo(endEntry.getKey()) <= 0) {
         CostBenefitInfo costBenefitInfo =
             getCostBenefitInfo(firstEntry.getKey(), endEntry.getKey(), validDataPerLogSegments, segmentCapacity,
                 segmentHeaderSize, maxBlobSize);
-        // @TODO: introduce storeConfig for minimum benefit to consider
-        if (costBenefitInfo.getBenefit() > 0 && (bestCandidateToCompact == null
-            || costBenefitInfo.getCostBenefitRatio().compareTo(bestCandidateToCompact.getCostBenefitRatio()) < 0)) {
+        if (costBenefitInfo.getBenefit() >= storeConfig.storeMinLogSegmentCountToReclaimToTriggerCompaction && (
+            bestCandidateToCompact == null
+                || costBenefitInfo.getCostBenefitRatio().compareTo(bestCandidateToCompact.getCostBenefitRatio()) < 0)) {
           bestCandidateToCompact = costBenefitInfo;
           logger.trace("Updating best candidate to compact to {} ", bestCandidateToCompact);
         }
@@ -139,6 +130,8 @@ class DefaultCompactionPolicy implements CompactionPolicy {
     totalSegmentsToBeCompacted++;
     long maxCapacityPerSegment = segmentCapacity - segmentHeaderSize - maxBlobSize;
     int benefit = totalSegmentsToBeCompacted - (int) Math.ceil(totalCost / (maxCapacityPerSegment * 1.0));
-    return new CostBenefitInfo(firstLogSegmentName, lastLogSegmentName, totalCost, benefit);
+    return new CostBenefitInfo(new ArrayList<>(
+        validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet()), totalCost,
+        benefit);
   }
 }

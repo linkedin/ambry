@@ -13,6 +13,9 @@
  */
 package com.github.ambry.store;
 
+import java.util.List;
+
+
 /**
  * CostBenefitInfo Stores cost benefit information for a potential candidate to be compacted
  */
@@ -20,21 +23,20 @@ class CostBenefitInfo implements Comparable<CostBenefitInfo> {
   private final long cost;
   private final int benefit;
   private final Double costBenefitRatio;
-  private final String firstLogSegmentName;
-  private final String lastLogSegmentName;
+  private final List<String> segmentsToCompact;
 
-  CostBenefitInfo(String firstLogSegmentName, String lastLogSegmentName, long cost, int benefit) {
-    this.firstLogSegmentName = firstLogSegmentName;
-    this.lastLogSegmentName = lastLogSegmentName;
+  CostBenefitInfo(List<String> segmentsToCompact, long cost, int benefit) {
+    this.segmentsToCompact = segmentsToCompact;
     this.cost = cost;
     this.benefit = benefit;
-    costBenefitRatio = benefit == 0 ? Double.MAX_VALUE : cost * 1.0 / benefit;
+    costBenefitRatio = benefit == 0 ? Double.MAX_VALUE : cost * (1.0 / benefit);
   }
 
   @Override
   public int compareTo(CostBenefitInfo that) {
-    if (costBenefitRatio.compareTo(that.costBenefitRatio) != 0) {
-      return costBenefitRatio.compareTo(that.costBenefitRatio);
+    int compareToVal = costBenefitRatio.compareTo(that.costBenefitRatio);
+    if (compareToVal != 0) {
+      return compareToVal;
     }
     if (benefit != that.benefit) {
       return benefit > that.benefit ? -1 : 1;
@@ -64,22 +66,15 @@ class CostBenefitInfo implements Comparable<CostBenefitInfo> {
   }
 
   /**
-   * @return the first log segment name associated with this {@link CostBenefitInfo}
+   * @return the {@link List} of log segment names to compact
    */
-  String getFirstLogSegmentName() {
-    return firstLogSegmentName;
-  }
-
-  /**
-   * @return the last log segment name associated with this {@link CostBenefitInfo}
-   */
-  String getLastLogSegmentName() {
-    return lastLogSegmentName;
+  List<String> getSegmentsToCompact() {
+    return segmentsToCompact;
   }
 
   @Override
   public String toString() {
-    return "[CandidateInfo: First segment name " + firstLogSegmentName + ", Last segment name " + lastLogSegmentName
-        + ", Cost " + cost + "," + "Benefit " + benefit + ", CostBenefitRatio " + costBenefitRatio + "]";
+    return "[CandidateInfo: Segments to compact " + segmentsToCompact + ", Cost " + cost + "," + "Benefit " + benefit
+        + ", CostBenefitRatio " + costBenefitRatio + "]";
   }
 }

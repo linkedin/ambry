@@ -40,7 +40,8 @@ import java.util.concurrent.atomic.AtomicLong;
 class BlobStoreStats implements StoreStats {
   static final String IO_SCHEDULER_JOB_TYPE = "BlobStoreStats";
   static final String IO_SCHEDULER_JOB_ID = "indexSegment_read";
-  // Max blob size to factor in while calculating the cost benefit
+  // Max blob size thats encountered while generating stats
+  // TODO: make this dynamically generated
   private static final long MAX_BLOB_SIZE = 4 * 1024 * 1024;
 
   private final PersistentIndex index;
@@ -76,8 +77,8 @@ class BlobStoreStats implements StoreStats {
   }
 
   /**
-   * Returns the max blob size to factor in while calculating the cost benefit
-   * @return the max blob size to factor in while calculating the cost benefit
+   * Returns the max blob size that is encountered while generating stats
+   * @return the max blob size that is encountered while generating stats
    */
   long getMaxBlobSize() {
     return MAX_BLOB_SIZE;

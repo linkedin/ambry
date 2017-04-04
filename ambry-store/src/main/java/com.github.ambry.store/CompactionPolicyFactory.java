@@ -19,7 +19,7 @@ package com.github.ambry.store;
 interface CompactionPolicyFactory {
 
   /**
-   * @return the {@link CompactionPolicy} to be use
+   * @return the {@link CompactionPolicy} to use
    */
   CompactionPolicy getCompactionPolicy();
 }

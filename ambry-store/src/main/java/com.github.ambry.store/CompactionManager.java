@@ -37,6 +37,7 @@ class CompactionManager {
   private final Collection<BlobStore> stores;
   private final CompactionExecutor compactionExecutor;
   private final StorageManagerMetrics metrics;
+  private final CompactionPolicy compactionPolicy;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private Thread compactionThread;
@@ -57,6 +58,14 @@ class CompactionManager {
     this.time = time;
     this.metrics = metrics;
     compactionExecutor = storeConfig.storeEnableCompaction ? new CompactionExecutor() : null;
+    try {
+      CompactionPolicyFactory compactionPolicyFactory =
+          Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
+      compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
+    } catch (Exception e) {
+      throw new IllegalStateException(
+          "Error creating compaction policy using compactionPolicyFactory " + storeConfig.storeCompactionPolicyFactory);
+    }
   }
 
   /**
@@ -108,13 +117,7 @@ class CompactionManager {
    * @throws StoreException when {@link BlobStore} is not started
    */
   CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
-    CompactionPolicyFactory compactionPolicyFactory;
-    try {
-      compactionPolicyFactory = Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
-    } catch (Exception e) {
-      throw new IllegalStateException("Error creating compaction policy for store " + blobStore.toString());
-    }
-    return blobStore.getCompactionDetails(compactionPolicyFactory.getCompactionPolicy());
+    return blobStore.getCompactionDetails(compactionPolicy);
   }
 
   /**

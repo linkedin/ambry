@@ -19,7 +19,6 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -54,24 +53,6 @@ public class CompactionPolicyFactoryTest {
       CompactionPolicy compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
       Assert.assertEquals("Did not receive expected CompactionPolicy instance", validCompactionPolicyInfo.getSecond(),
           compactionPolicy.getClass().getCanonicalName());
-    }
-  }
-
-  /**
-   * Tests {@link CompactionPolicyFactory} for failure cases
-   * @throws Exception
-   */
-  @Test
-  public void testCompactionPolicyFactoryFailureCases()
-      throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
-             IllegalAccessException {
-    Properties properties = new Properties();
-    properties.setProperty("store.compaction.policy.factory", "com.github.ambry.store.RandomCompactionPolicy");
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    Time time = new MockTime();
-    try {
-      Utils.getObj(config.storeCompactionPolicyFactory, config, time);
-    } catch (ClassNotFoundException e) {
     }
   }
 }
