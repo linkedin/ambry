@@ -36,7 +36,7 @@ class HelixClusterManagerMetrics {
   public final Counter getReplicaIdsMismatchCount;
   public final Counter getDataNodeIdsMismatchCount;
 
-  public Gauge<Boolean> helixClusterManagerInstantiationFailed;
+  public Gauge<Long> helixClusterManagerInstantiationFailed;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -69,10 +69,10 @@ class HelixClusterManagerMetrics {
   }
 
   void initializeInstantiationMetric(final boolean instantiated) {
-    helixClusterManagerInstantiationFailed = new Gauge<Boolean>() {
+    helixClusterManagerInstantiationFailed = new Gauge<Long>() {
       @Override
-      public Boolean getValue() {
-        return !instantiated;
+      public Long getValue() {
+        return instantiated ? 0L : 1L;
       }
     };
     registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
@@ -114,10 +114,10 @@ class HelixClusterManagerMetrics {
 
     for (final AmbryDataNode datanode : clusterMapCallback.getDatanodes()) {
       final String metricName = datanode.getHostname() + "-" + datanode.getPort() + "-DataNodeResourceState";
-      Gauge<Boolean> dataNodeState = new Gauge<Boolean>() {
+      Gauge<Long> dataNodeState = new Gauge<Long>() {
         @Override
-        public Boolean getValue() {
-          return datanode.getState() == HardwareState.AVAILABLE;
+        public Long getValue() {
+          return datanode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
         }
       };
       registry.register(MetricRegistry.name(HelixClusterManager.class, metricName), dataNodeState);
@@ -148,10 +148,10 @@ class HelixClusterManagerMetrics {
       final String metricName =
           disk.getDataNode().getHostname() + "-" + disk.getDataNode().getPort() + "-" + disk.getMountPath()
               + "-DiskResourceState";
-      Gauge<Boolean> diskState = new Gauge<Boolean>() {
+      Gauge<Long> diskState = new Gauge<Long>() {
         @Override
-        public Boolean getValue() {
-          return disk.getState() == HardwareState.AVAILABLE;
+        public Long getValue() {
+          return disk.getState() == HardwareState.AVAILABLE ? 1L : 0L;
         }
       };
       registry.register(MetricRegistry.name(HelixClusterManager.class, metricName), diskState);
@@ -187,9 +187,9 @@ class HelixClusterManagerMetrics {
     };
     registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionSealedCount"), partitionSealedCount);
 
-    Gauge<Boolean> isMajorityReplicasDownForAnyPartition = new Gauge<Boolean>() {
+    Gauge<Long> isMajorityReplicasDownForAnyPartition = new Gauge<Long>() {
       @Override
-      public Boolean getValue() {
+      public Long getValue() {
         for (PartitionId partition : clusterMapCallback.getPartitions()) {
           List<? extends ReplicaId> replicas = partition.getReplicaIds();
           int replicaCount = replicas.size();
@@ -200,10 +200,10 @@ class HelixClusterManagerMetrics {
             }
           }
           if (downReplicas > replicaCount / 2) {
-            return true;
+            return 1L;
           }
         }
-        return false;
+        return 0L;
       }
     };
     registry.register(MetricRegistry.name(HelixClusterManager.class, "isMajorityReplicasDownForAnyPartition"),
