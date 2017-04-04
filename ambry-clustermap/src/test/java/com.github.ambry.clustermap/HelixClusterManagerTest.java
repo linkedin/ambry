@@ -135,9 +135,8 @@ public class HelixClusterManagerTest {
   @Test
   public void badInstantiationTest() throws Exception {
     // Good test happened in the constructor
-    assertEquals(false, metricRegistry.getGauges()
-        .get(HelixClusterManager.class.getName() + ".instantiationFailed")
-        .getValue());
+    assertEquals(0L,
+        metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
 
     // Bad test
     Set<ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
@@ -155,9 +154,8 @@ public class HelixClusterManagerTest {
           metricRegistry);
       fail("Instantiation should have failed with invalid zk addresses");
     } catch (IOException e) {
-      assertEquals(true, metricRegistry.getGauges()
-          .get(HelixClusterManager.class.getName() + ".instantiationFailed")
-          .getValue());
+      assertEquals(1L,
+          metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
     }
   }
 
@@ -281,47 +279,51 @@ public class HelixClusterManagerTest {
     assertEquals(instanceTriggerCount, getCounterValue("liveInstanceChangeTriggerCount"));
     assertEquals(dcs.length, getCounterValue("externalViewChangeTriggerCount"));
     assertEquals(dcs.length, getCounterValue("instanceConfigChangeTriggerCount"));
-    assertEquals(helixCluster.getDataCenterCount(), (long) getGaugeValue("datacenterCount", Long.class));
+    assertEquals(helixCluster.getDataCenterCount(), getGaugeValue("datacenterCount"));
     assertEquals(helixCluster.getDownInstances().size() + helixCluster.getUpInstances().size(),
-        (long) getGaugeValue("dataNodeCount", Long.class));
-    assertEquals(helixCluster.getDownInstances().size(), (long) getGaugeValue("dataNodeDownCount", Long.class));
-    assertEquals(helixCluster.getDiskCount(), (long) getGaugeValue("diskCount", Long.class));
-    assertEquals(helixCluster.getDiskDownCount(), (long) getGaugeValue("diskDownCount", Long.class));
-    assertEquals(helixCluster.getPartitions().size(), (long) getGaugeValue("partitionCount", Long.class));
-    assertEquals(helixCluster.getPartitions().size(), (long) getGaugeValue("partitionReadWriteCount", Long.class));
-    assertEquals(0, (long) getGaugeValue("partitionSealedCount", Long.class));
-    assertEquals(helixCluster.getDiskCapacity(), (long) getGaugeValue("rawTotalCapacityBytes", Long.class));
-    assertFalse(getGaugeValue("isMajorityReplicasDownForAnyPartition", Boolean.class));
+        getGaugeValue("dataNodeCount"));
+    assertEquals(helixCluster.getDownInstances().size(), getGaugeValue("dataNodeDownCount"));
+    assertEquals(helixCluster.getDiskCount(), getGaugeValue("diskCount"));
+    assertEquals(helixCluster.getDiskDownCount(), getGaugeValue("diskDownCount"));
+    assertEquals(helixCluster.getPartitions().size(), getGaugeValue("partitionCount"));
+    assertEquals(helixCluster.getPartitions().size(), getGaugeValue("partitionReadWriteCount"));
+    assertEquals(0L, getGaugeValue("partitionSealedCount"));
+    assertEquals(helixCluster.getDiskCapacity(), getGaugeValue("rawTotalCapacityBytes"));
+    assertEquals(0L, getGaugeValue("isMajorityReplicasDownForAnyPartition"));
+    assertEquals(0L,
+        getGaugeValue(helixCluster.getDownInstances().iterator().next().replace('_', '-') + "-DataNodeResourceState"));
+    assertEquals(1L,
+        getGaugeValue(helixCluster.getUpInstances().iterator().next().replace('_', '-') + "-DataNodeResourceState"));
     helixCluster.bringAllInstancesDown();
-    assertTrue(getGaugeValue("isMajorityReplicasDownForAnyPartition", Boolean.class));
+    assertEquals(1L, getGaugeValue("isMajorityReplicasDownForAnyPartition"));
     if (useComposite) {
       helixCluster.bringAllInstancesUp();
       PartitionId partition = clusterManager.getWritablePartitionIds().get(0);
-      assertEquals(0, getCounterValue("getPartitionIdFromStreamMismatchCount"));
+      assertEquals(0L, getCounterValue("getPartitionIdFromStreamMismatchCount"));
 
       ReplicaId replicaId = partition.getReplicaIds().get(0);
-      assertEquals(0, getCounterValue("getReplicaIdsMismatchCount"));
+      assertEquals(0L, getCounterValue("getReplicaIdsMismatchCount"));
 
       // bring the replica down.
       for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold; i++) {
         clusterManager.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
       }
       clusterManager.getWritablePartitionIds();
-      assertEquals(0, getCounterValue("getPartitionIdFromStreamMismatchCount"));
+      assertEquals(0L, getCounterValue("getPartitionIdFromStreamMismatchCount"));
 
       InputStream partitionStream = new ByteBufferInputStream(ByteBuffer.wrap(partition.getBytes()));
       clusterManager.getPartitionIdFromStream(partitionStream);
-      assertEquals(0, getCounterValue("getWritablePartitionIdsMismatchCount"));
+      assertEquals(0L, getCounterValue("getWritablePartitionIdsMismatchCount"));
 
       clusterManager.hasDatacenter("invalid");
       clusterManager.hasDatacenter(dcs[0]);
-      assertEquals(0, getCounterValue("hasDatacenterMismatchCount"));
+      assertEquals(0L, getCounterValue("hasDatacenterMismatchCount"));
 
       DataNodeId dataNodeId = clusterManager.getDataNodeIds().get(0);
-      assertEquals(0, getCounterValue("getDataNodeIdsMismatchCount"));
+      assertEquals(0L, getCounterValue("getDataNodeIdsMismatchCount"));
 
       clusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
-      assertEquals(0, getCounterValue("getDataNodeIdMismatchCount"));
+      assertEquals(0L, getCounterValue("getDataNodeIdMismatchCount"));
     }
   }
 
@@ -339,11 +341,10 @@ public class HelixClusterManagerTest {
   /**
    * Get the gauge value for the metric in {@link HelixClusterManagerMetrics} with the given suffix.
    * @param suffix the suffix of the metric that distinguishes it from other metrics in the class.
-   * @param type the type of the gauge.
    * @return the value of the gauge.
    */
-  private <T> T getGaugeValue(String suffix, Class<T> type) {
-    return type.cast(gauges.get(HelixClusterManager.class.getName() + "." + suffix).getValue());
+  private long getGaugeValue(String suffix) {
+    return (long) gauges.get(HelixClusterManager.class.getName() + "." + suffix).getValue();
   }
 
   /**

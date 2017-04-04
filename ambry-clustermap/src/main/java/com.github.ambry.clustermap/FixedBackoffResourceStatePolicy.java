@@ -54,7 +54,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
     int count = failureCount.incrementAndGet();
     if (count >= failureCountThreshold) {
       if (count == failureCountThreshold) {
-        logger.error("Resource {} has gone down", resource);
+        logger.info("Resource {} has gone down", resource);
       }
       logger.trace("Resource {} remains in down state at time {}; adding downtime of {} ms", resource,
           time.milliseconds(), retryBackoffMs);
@@ -68,7 +68,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onHardDown() {
-    logger.info("Marking resource {} as Hard down", resource);
+    logger.trace("Marking resource {} as Hard down", resource);
     hardDown.set(true);
   }
 
@@ -78,7 +78,7 @@ class FixedBackoffResourceStatePolicy implements ResourceStatePolicy {
    */
   @Override
   public void onHardUp() {
-    logger.info("Marking resource {} as Hard up", resource);
+    logger.trace("Marking resource {} as Hard up", resource);
     hardDown.set(false);
     onSuccess();
   }
