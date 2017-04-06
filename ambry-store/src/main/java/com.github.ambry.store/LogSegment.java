@@ -355,4 +355,10 @@ class LogSegment implements Read, Write {
     buffer.flip();
     appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), buffer.remaining());
   }
+
+  @Override
+  public String toString() {
+    return "(File: [" + file + " ], Capacity: [" + capacityInBytes + "], Start offset: [" + startOffset
+        + "], End offset: [" + endOffset + "])";
+  }
 }

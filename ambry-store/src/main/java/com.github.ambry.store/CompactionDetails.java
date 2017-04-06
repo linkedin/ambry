@@ -130,4 +130,9 @@ class CompactionDetails {
     }
     return buf;
   }
+
+  @Override
+  public String toString() {
+    return "(Delete Ref Time [" + referenceTimeMs + "] Segments to compact [" + logSegmentsUnderCompaction + "])";
+  }
 }

@@ -432,9 +432,7 @@ class BlobStore implements Store {
    */
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
-    logger.info("Compaction of {} started", this);
     compactor.compact(details);
-    logger.info("Compaction of {} finished", this);
   }
 
   /**
@@ -446,7 +444,6 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
-      logger.info("Compaction of {} finished", this);
     }
   }
 

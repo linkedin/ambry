@@ -42,4 +42,9 @@ class IndexEntry {
   Long getCrc() {
     return this.crc;
   }
+
+  @Override
+  public String toString() {
+    return "(Key: [" + key + "]. Value: [" + value + "]. CRC: [" + crc + "])";
+  }
 }

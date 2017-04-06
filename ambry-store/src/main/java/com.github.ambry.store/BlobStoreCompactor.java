@@ -35,6 +35,7 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +76,7 @@ class BlobStoreCompactor {
   private final Time time;
   private final UUID sessionId;
   private final UUID incarnationId;
+  private final AtomicBoolean compactionInProgress = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private volatile boolean isActive = false;
@@ -119,6 +121,7 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     fixStateIfRequired();
+    logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
 
   /**
@@ -128,9 +131,13 @@ class BlobStoreCompactor {
   void initialize(PersistentIndex srcIndex) {
     this.srcIndex = srcIndex;
     if (compactionLog == null && srcIndex.hardDeleter != null && srcIndex.hardDeleter.isPaused()) {
+      logger.debug("Resuming hard delete in {} during compactor initialize because there is no compaction in progress",
+          storeId);
       srcIndex.hardDeleter.resume();
     }
     isActive = true;
+    srcMetrics.initializeCompactorGauges(compactionInProgress);
+    logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
   /**
@@ -141,8 +148,9 @@ class BlobStoreCompactor {
   void close(long waitTimeSecs) throws InterruptedException {
     isActive = false;
     if (waitTimeSecs > 0 && !runningLatch.await(waitTimeSecs, TimeUnit.SECONDS)) {
-      logger.error("Compactor did not shutdown within {} seconds", waitTimeSecs);
+      logger.error("Compactor did not shutdown within {} seconds for {}", waitTimeSecs, storeId);
     }
+    logger.trace("Closed BlobStoreCompactor for {}", storeId);
   }
 
   /**
@@ -162,6 +170,7 @@ class BlobStoreCompactor {
       throw new IllegalStateException("There is already a compaction in progress");
     }
     checkSanity(details);
+    logger.info("Compaction of {} started with details {}", storeId, details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details);
     resumeCompaction();
   }
@@ -177,7 +186,6 @@ class BlobStoreCompactor {
     } else if (compactionLog == null) {
       throw new IllegalStateException("There is no compaction to resume");
     }
-    runningLatch = new CountDownLatch(1);
     /*
     A single compaction job could be performed across multiple compaction cycles (if there aren't enough swap spaces to
     complete the job in one cycle). Therefore, we loop and perform PREPARE, COPY, COMMIT and CLEANUP until the
@@ -190,21 +198,32 @@ class BlobStoreCompactor {
     4. CLEANUP - Cleans up the old log segments and their index files
      */
 
+    logger.trace("resumeCompaction() started for {}", storeId);
+    runningLatch = new CountDownLatch(1);
+    compactionInProgress.set(true);
     try {
       while (isActive && !compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         CompactionLog.Phase phase = compactionLog.getCompactionPhase();
+        logger.debug("Starting cycle to compact {} in {}", compactionLog.getCompactionDetails(), storeId);
         switch (phase) {
           case PREPARE:
+            logger.debug("Compaction PREPARE started for {} in {}", compactionLog.getCompactionDetails(), storeId);
             compactionLog.markCopyStart();
             // fall through to COPY
           case COPY:
+            logger.debug("Compaction COPY started for {} in {}", compactionLog.getCompactionDetails(), storeId);
             copy();
             if (isActive) {
               compactionLog.markCommitStart();
+              logger.debug("Compaction COMMIT started for {} in {}", compactionLog.getCompactionDetails(), storeId);
               commit(false);
               compactionLog.markCleanupStart();
+              logger.debug("Compaction CLEANUP started for {} in {}", compactionLog.getCompactionDetails(), storeId);
               waitTillRefCountZero();
+              logger.debug("Wait for ref count to go to 0 has been finished {} in {}",
+                  compactionLog.getCompactionDetails(), storeId);
               cleanup(false);
+              logger.debug("Completing for {} in {}", compactionLog.getCompactionDetails(), storeId);
               compactionLog.markCycleComplete();
             }
             break;
@@ -216,7 +235,9 @@ class BlobStoreCompactor {
     } catch (InterruptedException | IOException e) {
       throw new StoreException("Exception during compaction", e, StoreErrorCodes.Unknown_Error);
     } finally {
+      compactionInProgress.set(false);
       runningLatch.countDown();
+      logger.trace("resumeCompaction() ended for {}", storeId);
     }
   }
 
@@ -231,17 +252,24 @@ class BlobStoreCompactor {
     if (CompactionLog.isCompactionInProgress(dataDir.getAbsolutePath(), storeId)) {
       compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, storeKeyFactory, time);
       CompactionLog.Phase phase = compactionLog.getCompactionPhase();
+      logger.info("Fixing compaction state for {} (phase is {})", storeId, phase);
       switch (phase) {
         case COMMIT:
           commit(true);
           compactionLog.markCleanupStart();
+          logger.info("Finished compaction COMMIT for {} in {}", compactionLog.getCompactionDetails(), storeId);
           // fall through to CLEANUP
         case CLEANUP:
           cleanup(true);
+          logger.info("Completing compaction cycle for {} in {}", compactionLog.getCompactionDetails(), storeId);
           compactionLog.markCycleComplete();
+          srcMetrics.compactionFixStateCount.inc();
           break;
         case COPY:
+          srcMetrics.compactionFixStateCount.inc();
           recoveryStartToken = compactionLog.getSafeToken();
+          logger.info("Compaction recovery start token for {} in {} set to {}", compactionLog.getCompactionDetails(),
+              storeId, recoveryStartToken);
           // fall through to the break.
         case PREPARE:
         case DONE:
@@ -291,6 +319,8 @@ class BlobStoreCompactor {
     setupState();
     List<String> logSegmentsUnderCompaction = compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction();
     Offset startOffsetOfLastIndexSegmentForDeleteCheck = getStartOffsetOfLastIndexSegmentForDeleteCheck();
+    logger.debug("Start offset of last index segment for delete check is {} for {}",
+        startOffsetOfLastIndexSegmentForDeleteCheck, storeId);
     FileSpan duplicateSearchSpan = null;
     if (compactionLog.getCurrentIdx() > 0) {
       // only records in the the very first log segment in the cycle could have been copied in a previous cycle
@@ -302,15 +332,19 @@ class BlobStoreCompactor {
         Offset endOffset = new Offset(prevSegment.getName(), prevSegment.getEndOffset());
         duplicateSearchSpan = new FileSpan(startOffset, endOffset);
       }
+      logger.trace("Duplicate search span is {} for {}", duplicateSearchSpan, storeId);
     }
 
     for (String logSegmentName : logSegmentsUnderCompaction) {
+      logger.debug("Processing {} in {}", logSegmentName, storeId);
       LogSegment srcLogSegment = srcLog.getSegment(logSegmentName);
       Offset logSegmentEndOffset = new Offset(srcLogSegment.getName(), srcLogSegment.getEndOffset());
       if (needsCopying(logSegmentEndOffset) && !copyDataByLogSegment(srcLogSegment, duplicateSearchSpan,
           startOffsetOfLastIndexSegmentForDeleteCheck)) {
         if (isActive) {
           // split the cycle only if there is no shutdown in progress
+          logger.debug("Splitting current cycle with segments {} at {} for {}", logSegmentsUnderCompaction,
+              logSegmentName, storeId);
           compactionLog.splitCurrentCycle(logSegmentName);
         }
         break;
@@ -319,6 +353,7 @@ class BlobStoreCompactor {
     }
 
     numSwapsUsed = tgtIndex.getLogSegmentCount();
+    logger.debug("Swaps used to copy {} is {} for {}", compactionLog.getCompactionDetails(), numSwapsUsed, storeId);
     tgtIndex.close();
     tgtLog.close();
     // persist the bloom of the "latest" index segment if it exists
@@ -326,6 +361,7 @@ class BlobStoreCompactor {
       tgtIndex.getIndexSegments().lastEntry().getValue().map(true);
     } else {
       // there were no valid entries copied, return any temp segments back to the pool
+      logger.trace("Cleaning up temp segments in {} because no swap spaces were used", storeId);
       cleanupUnusedTempSegments();
     }
   }
@@ -342,6 +378,7 @@ class BlobStoreCompactor {
    */
   private void commit(boolean recovering) throws IOException, StoreException {
     List<String> logSegmentNames = getTargetLogSegmentNames();
+    logger.debug("Target log segments are {} for {}", logSegmentNames, storeId);
     renameLogSegments(logSegmentNames);
     addNewLogSegmentsToSrcLog(logSegmentNames, recovering);
     if (!recovering) {
@@ -382,6 +419,7 @@ class BlobStoreCompactor {
     for (String segmentName : details.getLogSegmentsUnderCompaction()) {
       highestGeneration = Math.max(highestGeneration, LogSegmentNameHelper.getGeneration(segmentName));
     }
+    logger.debug("Generation of target segments will be {} for {} in {}", highestGeneration + 1, details, storeId);
     List<Pair<String, String>> targetSegmentNamesAndFilenames = new ArrayList<>();
     List<LogSegment> existingTargetLogSegments = new ArrayList<>();
     for (String segmentName : details.getLogSegmentsUnderCompaction()) {
@@ -398,6 +436,8 @@ class BlobStoreCompactor {
     }
     // TODO: available swap space count should be obtained from DiskManager. For now, assumed to be 1.
     long targetLogTotalCapacity = srcLog.getSegmentCapacity();
+    logger.debug("Target log capacity is {} for {}. Existing log segments are {}. Future names and files are {}",
+        targetLogTotalCapacity, storeId, existingTargetLogSegments, targetSegmentNamesAndFilenames);
     tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), tgtMetrics, true,
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
@@ -405,6 +445,7 @@ class BlobStoreCompactor {
     tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, recovery, null,
         tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
+      logger.debug("Pausing hard delete for {}", storeId);
       srcIndex.hardDeleter.pause();
     }
   }
@@ -452,11 +493,14 @@ class BlobStoreCompactor {
    */
   private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan,
       Offset startOffsetOfLastIndexSegmentForDeleteCheck) throws IOException, StoreException {
+    logger.debug("Copying data from {}", logSegmentToCopy);
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
+      logger.debug("Processing index segment {}", indexSegmentToCopy.getFile());
       if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,
           indexSegmentToCopy, duplicateSearchSpan, startOffsetOfLastIndexSegmentForDeleteCheck)) {
         // there is a shutdown in progress or there was no space to copy all entries.
+        logger.debug("Did not copy all entries in {}", indexSegmentToCopy.getFile());
         return false;
       }
     }
@@ -478,6 +522,7 @@ class BlobStoreCompactor {
   private boolean copyDataByIndexSegment(LogSegment logSegmentToCopy, IndexSegment indexSegmentToCopy,
       FileSpan duplicateSearchSpan, Offset startOffsetOfLastIndexSegmentForDeleteCheck)
       throws IOException, StoreException {
+    logger.debug("Copying data from {}", indexSegmentToCopy.getFile());
     List<IndexEntry> allIndexEntries = new ArrayList<>();
     // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
@@ -490,14 +535,17 @@ class BlobStoreCompactor {
         new StoreFindToken(allIndexEntries.get(0).getKey(), indexSegmentToCopy.getStartOffset(), sessionId,
             incarnationId);
     compactionLog.setSafeToken(safeToken);
+    logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
 
     boolean checkAlreadyCopied =
         recoveryStartToken != null && recoveryStartToken.getOffset().equals(indexSegmentToCopy.getStartOffset());
+    logger.trace("Should check already copied for {}: {} ", indexSegmentToCopy.getFile(), checkAlreadyCopied);
 
     // filter deleted/expired entries and get index entries for all the PUT and DELETE records
     List<IndexEntry> indexEntriesToCopy =
         getIndexEntriesToCopy(allIndexEntries, duplicateSearchSpan, indexSegmentToCopy.getStartOffset(),
             startOffsetOfLastIndexSegmentForDeleteCheck, checkAlreadyCopied);
+    logger.debug("{} entries need to be copied in {}", indexEntriesToCopy.size(), indexSegmentToCopy.getFile());
 
     // Copy these over
     boolean copiedAll = copyRecords(logSegmentToCopy, indexEntriesToCopy, indexSegmentToCopy.getLastModifiedTimeSecs());
@@ -537,22 +585,30 @@ class BlobStoreCompactor {
         if (possibleDuplicate != null) {
           if (possibleDuplicate.isFlagSet(IndexValue.Flags.Delete_Index)) {
             // copyCandidate is surely a duplicate because srcIndex contains a DELETE index entry
+            logger.trace("Found a duplicate IndexValue {} for {} in segment with start offset {} in {}",
+                possibleDuplicate, copyCandidateValue, indexSegmentStartOffset, storeId);
             continue;
           } else if (!copyCandidateValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
             // copyCandidate is a duplicate because it is a PUT entry and so is the possible duplicate.
+            logger.trace("Found a duplicate IndexValue {} for {} in segment with start offset {} in {}",
+                possibleDuplicate, copyCandidateValue, indexSegmentStartOffset, storeId);
             continue;
           }
         }
       }
       // search for duplicates in tgtIndex if required
       if (!checkAlreadyCopied || !alreadyExistsInTgt(copyCandidate.getKey(), copyCandidateValue)) {
-        logger.trace("Adding index entry for {} because it is valid and does not already exist",
-            copyCandidate.getKey());
+        logger.trace(
+            "Adding index entry {} in index segment with start offset {} in {} because it is valid and does not already"
+                + " exist", copyCandidate, indexSegmentStartOffset, storeId);
         indexEntriesToCopy.add(copyCandidate);
       }
     }
     // order by offset in log.
     Collections.sort(indexEntriesToCopy, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+    logger.debug(
+        "For index segment with start offset {} in {} - Total index entries: {}. Valid index entries: {}. Entries to "
+            + "copy: {}", indexSegmentStartOffset, storeId, allIndexEntries, copyCandidates, indexEntriesToCopy);
     return indexEntriesToCopy;
   }
 
@@ -571,6 +627,8 @@ class BlobStoreCompactor {
     // TODO: move this blob store stats
     boolean deletesInEffect = startOffsetOfLastIndexSegmentForDeleteCheck != null
         && indexSegmentStartOffset.compareTo(startOffsetOfLastIndexSegmentForDeleteCheck) <= 0;
+    logger.trace("Deletes in effect is {} for index segment with start offset {} in {}", deletesInEffect,
+        indexSegmentStartOffset, storeId);
     List<IndexEntry> validEntries = new ArrayList<>();
     for (IndexEntry indexEntry : allIndexEntries) {
       IndexValue value = indexEntry.getValue();
@@ -582,6 +640,8 @@ class BlobStoreCompactor {
         // NOTE: In PersistentIndex.markAsDeleted(), the expiry time of the put value is copied into the delete value.
         // So it is safe to check for isExpired() on the delete value.
         if (!deletesInEffect && !srcIndex.isExpired(value)) {
+          logger.trace("Fetching the PUT entry of a deleted blob with entry {} in index segment with start offset {} in"
+              + " {} because it needs to be retained", indexEntry, indexSegmentStartOffset, storeId);
           long putRecordOffset = value.getOriginalMessageOffset();
           if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
               && indexSegmentStartOffset.getOffset() <= putRecordOffset) {
@@ -603,14 +663,16 @@ class BlobStoreCompactor {
             // PUT entry that has not expired and is not considered deleted.
             validEntries.add(indexEntry);
           } else {
-            logger.trace("Skipping {} because it is a deleted PUT", indexEntry.getKey());
+            logger.trace("Skipping {} in index segment with start offset {} in {} because it is a deleted PUT",
+                indexEntry, indexSegmentStartOffset, storeId);
           }
         } else {
           // valid PUT entry
           validEntries.add(indexEntry);
         }
       } else {
-        logger.trace("Skipping {} because it is an expired PUT", indexEntry.getKey());
+        logger.trace("Skipping {} in index segment with start offset {} in {} because it is an expired PUT", indexEntry,
+            indexSegmentStartOffset, storeId);
       }
     }
     return validEntries;
@@ -677,14 +739,15 @@ class BlobStoreCompactor {
                 : lastModifiedTimeSecs;
         tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
         writtenLastTime = srcValue.getSize();
+        srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
       } else if (!isActive) {
-        logger.info("Stopping copying because shutdown is in progress");
+        logger.info("Stopping copying in {} because shutdown is in progress", storeId);
         copiedAll = false;
         break;
       } else {
         // this is the extra segment, so it is ok to run out of space.
-        logger.info("There is no more capacity in the destination log. Total capacity is {}. Used capacity is {}. "
-            + "Segment that was being copied is {}", totalCapacity, usedCapacity, logSegmentToCopy.getName());
+        logger.info("There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
+            + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity, logSegmentToCopy.getName());
         copiedAll = false;
         break;
       }
@@ -701,6 +764,7 @@ class BlobStoreCompactor {
   private void cleanupUnusedTempSegments() throws StoreException {
     File[] files = dataDir.listFiles(TEMP_LOG_SEGMENTS_FILTER);
     if (files != null) {
+      logger.debug("Cleaning up {}", (Object[]) files);
       for (File file : files) {
         // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
         if (!file.delete()) {
@@ -743,6 +807,7 @@ class BlobStoreCompactor {
       String filename = LogSegmentNameHelper.nameToFilename(segmentName);
       File from = new File(dataDir, filename + TEMP_LOG_SEGMENT_NAME_SUFFIX);
       File to = new File(dataDir, filename);
+      logger.debug("Renaming {} to {}", from, to);
       if (!from.renameTo(to)) {
         // TODO: change error code
         throw new StoreException("Failed to rename " + from + " to " + to, StoreErrorCodes.Unknown_Error);
@@ -757,6 +822,7 @@ class BlobStoreCompactor {
    * @throws IOException if there were any I/O errors creating a log segment
    */
   private void addNewLogSegmentsToSrcLog(List<String> logSegmentNames, boolean recovering) throws IOException {
+    logger.debug("Adding {} in {} to the application log", logSegmentNames, storeId);
     for (String logSegmentName : logSegmentNames) {
       File segmentFile = new File(dataDir, LogSegmentNameHelper.nameToFilename(logSegmentName));
       LogSegment segment = new LogSegment(logSegmentName, segmentFile, srcMetrics);
@@ -794,6 +860,8 @@ class BlobStoreCompactor {
       }
       logSegment.setEndOffset(endOffset);
     }
+    logger.debug("Adding {} to the application index and removing {} from the application index in {}",
+        indexSegmentFilesToAdd, indexSegmentsToRemove, storeId);
     srcIndex.changeIndexSegments(indexSegmentFilesToAdd, indexSegmentsToRemove);
   }
 
@@ -826,6 +894,9 @@ class BlobStoreCompactor {
           time.sleep(singleWaitMs);
           waitSoFar += singleWaitMs;
         }
+        if (srcLog.getSegment(segmentName).refCount() > 0) {
+          logger.debug("Ref count of {} in {} did not go down to 0", segmentName, storeId);
+        }
       }
     }
   }
@@ -840,6 +911,7 @@ class BlobStoreCompactor {
   private void cleanupLogAndIndexSegments(boolean recovering) throws IOException {
     CompactionDetails details = compactionLog.getCompactionDetails();
     List<String> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
+    logger.debug("Cleaning up {} (and related index segments) in {}", segmentsUnderCompaction, storeId);
     for (int i = 0; i < segmentsUnderCompaction.size(); i++) {
       String segmentName = segmentsUnderCompaction.get(i);
       if (srcLog.getSegment(segmentName) != null) {
@@ -864,6 +936,11 @@ class BlobStoreCompactor {
    */
   private void endCompaction() {
     if (compactionLog != null) {
+      if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
+        logger.info("Compaction of {} finished", storeId);
+      } else {
+        logger.info("Compaction of {} suspended", storeId);
+      }
       compactionLog.close();
       compactionLog = null;
       if (srcIndex != null && srcIndex.hardDeleter != null) {
