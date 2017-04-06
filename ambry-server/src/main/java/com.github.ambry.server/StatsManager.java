@@ -149,14 +149,14 @@ class StatsManager {
    */
   private void aggregate(StatsSnapshot baseSnapshot, StatsSnapshot newSnapshot) {
     baseSnapshot.setValue(baseSnapshot.getValue() + newSnapshot.getValue());
-    if (baseSnapshot.getSubtree() == null) {
-      baseSnapshot.setSubtree(newSnapshot.getSubtree());
-    } else if (newSnapshot.getSubtree() != null) {
-      for (Map.Entry<String, StatsSnapshot> entry : newSnapshot.getSubtree().entrySet()) {
-        if (!baseSnapshot.getSubtree().containsKey(entry.getKey())) {
-          baseSnapshot.getSubtree().put(entry.getKey(), new StatsSnapshot(0L, null));
+    if (baseSnapshot.getSubMap() == null) {
+      baseSnapshot.setSubMap(newSnapshot.getSubMap());
+    } else if (newSnapshot.getSubMap() != null) {
+      for (Map.Entry<String, StatsSnapshot> entry : newSnapshot.getSubMap().entrySet()) {
+        if (!baseSnapshot.getSubMap().containsKey(entry.getKey())) {
+          baseSnapshot.getSubMap().put(entry.getKey(), new StatsSnapshot(0L, null));
         }
-        aggregate(baseSnapshot.getSubtree().get(entry.getKey()), entry.getValue());
+        aggregate(baseSnapshot.getSubMap().get(entry.getKey()), entry.getValue());
       }
     }
   }

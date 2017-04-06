@@ -28,16 +28,16 @@ class StatsHeader {
 
   private final StatsDescription description;
   private final long timestamp;
-  private final int storeContacted;
-  private final int storeResponded;
+  private final int storesContactedCount;
+  private final int storesRespondedCount;
   private final List<String> unreachableStores;
 
-  StatsHeader(StatsDescription description, long timestamp, int storeContacted, int storeResponded,
+  StatsHeader(StatsDescription description, long timestamp, int storesContactedCount, int storesRespondedCount,
       List<String> unreachableStores) {
     this.description = description;
     this.timestamp = timestamp;
-    this.storeContacted = storeContacted;
-    this.storeResponded = storeResponded;
+    this.storesContactedCount = storesContactedCount;
+    this.storesRespondedCount = storesRespondedCount;
     this.unreachableStores = unreachableStores;
   }
 }

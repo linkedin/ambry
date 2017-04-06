@@ -20,34 +20,34 @@ import java.util.Map;
 /**
  * A model object to encapsulate stats in the form of a directory or tree. A example use case would be quota related
  * stats which will be two levels deep. The first level's value will be the total valid data size for all accounts and
- * the subtree field will contain a mapping of accountIds to {@link StatsSnapshot}. Each mapped {@link StatsSnapshot}'s
+ * the subMap field will contain a mapping of accountIds to {@link StatsSnapshot}. Each mapped {@link StatsSnapshot}'s
  * value will be the total valid data size for all containers that belong to the account that is mapped with. The mapped
- * {@link StatsSnapshot}'s subtree will contain all the containers in the account that is mapped with. At the leaf level
- * {@link StatsSnapshot}'s subtree will be null.
+ * {@link StatsSnapshot}'s subMap will contain all the containers in the account that is mapped with. At the leaf level
+ * {@link StatsSnapshot}'s subMap will be null.
  */
 public class StatsSnapshot {
   private long value;
-  private Map<String, StatsSnapshot> subtree;
+  private Map<String, StatsSnapshot> subMap;
 
-  public StatsSnapshot(Long value, Map<String, StatsSnapshot> subtree) {
+  public StatsSnapshot(Long value, Map<String, StatsSnapshot> subMap) {
     this.value = value;
-    this.subtree = subtree;
+    this.subMap = subMap;
   }
 
   public long getValue() {
     return value;
   }
 
-  public Map<String, StatsSnapshot> getSubtree() {
-    return subtree;
+  public Map<String, StatsSnapshot> getSubMap() {
+    return subMap;
   }
 
   void setValue(long value) {
     this.value = value;
   }
 
-  void setSubtree(Map<String, StatsSnapshot> subtree) {
-    this.subtree = subtree;
+  void setSubMap(Map<String, StatsSnapshot> subMap) {
+    this.subMap = subMap;
   }
 
   @Override
@@ -64,13 +64,13 @@ public class StatsSnapshot {
     if (value != that.value) {
       return false;
     }
-    return subtree != null ? subtree.equals(that.subtree) : that.subtree == null;
+    return subMap != null ? subMap.equals(that.subMap) : that.subMap == null;
   }
 
   @Override
   public int hashCode() {
     int result = (int) (value ^ (value >>> 32));
-    result = 31 * result + (subtree != null ? subtree.hashCode() : 0);
+    result = 31 * result + (subMap != null ? subMap.hashCode() : 0);
     return result;
   }
 }

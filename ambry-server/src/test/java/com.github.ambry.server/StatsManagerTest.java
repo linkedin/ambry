@@ -221,17 +221,17 @@ public class StatsManagerTest {
    * after the decomposition and whose second element is the random slice taken from the original base snapshot.
    */
   private Pair<StatsSnapshot, StatsSnapshot> decomposeSnapshot(StatsSnapshot baseSnapshot) {
-    int accountSliceCount = random.nextInt(baseSnapshot.getSubtree().size() + 1);
+    int accountSliceCount = random.nextInt(baseSnapshot.getSubMap().size() + 1);
     Map<String, StatsSnapshot> accountMap1 = new HashMap<>();
     Map<String, StatsSnapshot> accountMap2 = new HashMap<>();
     long partialTotalSize = 0;
-    for (Map.Entry<String, StatsSnapshot> accountEntry : baseSnapshot.getSubtree().entrySet()) {
+    for (Map.Entry<String, StatsSnapshot> accountEntry : baseSnapshot.getSubMap().entrySet()) {
       if (accountSliceCount > 0) {
-        int containerSliceCount = random.nextInt(accountEntry.getValue().getSubtree().size() + 1);
+        int containerSliceCount = random.nextInt(accountEntry.getValue().getSubMap().size() + 1);
         Map<String, StatsSnapshot> containerMap1 = new HashMap<>();
         Map<String, StatsSnapshot> containerMap2 = new HashMap<>();
         long partialSubTotalSize = 0;
-        for (Map.Entry<String, StatsSnapshot> containerEntry : accountEntry.getValue().getSubtree().entrySet()) {
+        for (Map.Entry<String, StatsSnapshot> containerEntry : accountEntry.getValue().getSubMap().entrySet()) {
           if (containerSliceCount > 0) {
             long baseValue = containerEntry.getValue().getValue();
             long partialValue = random.nextInt((int) baseValue);
