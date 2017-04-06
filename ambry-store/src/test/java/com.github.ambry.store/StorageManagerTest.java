@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -81,8 +82,10 @@ public class StorageManagerTest {
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
+
     assertEquals("Compaction thread count is incorrect", mountPaths.size() - 1,
-        storageManager.getCompactionThreadCount());
+        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    verifyCompactionThreadCount(storageManager, mountPaths.size() - 1);
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
@@ -111,7 +114,8 @@ public class StorageManagerTest {
       }
     }
     assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
-        storageManager.getCompactionThreadCount());
+        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
@@ -141,7 +145,9 @@ public class StorageManagerTest {
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
-    assertEquals("Compaction thread count is incorrect", mountPaths.size(), storageManager.getCompactionThreadCount());
+    assertEquals("Compaction thread count is incorrect", mountPaths.size(),
+        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    verifyCompactionThreadCount(storageManager, mountPaths.size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
@@ -163,7 +169,8 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.", storageManager.getStore(invalidPartition));
     assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
-        storageManager.getCompactionThreadCount());
+        TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
@@ -212,6 +219,28 @@ public class StorageManagerTest {
       }
     }
     file.delete();
+  }
+
+  /**
+   * Verifies that return value {@link StorageManager#getCompactionThreadCount()} of the given {@code storageManager}
+   * is equal to {@code expectedCount}
+   * @param storageManager the {@link StorageManager} instance to use.
+   * @param expectedCount the number of compaction threads expected.
+   * @throws InterruptedException
+   */
+  private static void verifyCompactionThreadCount(StorageManager storageManager, int expectedCount)
+      throws InterruptedException {
+    // there is no option but to sleep here since we have to wait for the CompactionManager to start the threads up
+    // we cannot mock these components since they are internally constructed within the StorageManager and DiskManager.
+    int totalWaitTimeMs = 1000;
+    int alreadyWaitedMs = 0;
+    int singleWaitTimeMs = 10;
+    while (storageManager.getCompactionThreadCount() != expectedCount && alreadyWaitedMs < totalWaitTimeMs) {
+      Thread.sleep(singleWaitTimeMs);
+      alreadyWaitedMs += singleWaitTimeMs;
+    }
+    assertEquals("Compaction thread count report not as expected", expectedCount,
+        storageManager.getCompactionThreadCount());
   }
 }
 

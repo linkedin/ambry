@@ -80,7 +80,8 @@ public class CompactionManagerTest {
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.enable();
-    assertTrue("Compaction thread should be running", compactionManager.isCompactionExecutorRunning());
+    assertNotNull("Compaction thread should be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
@@ -234,7 +235,8 @@ public class CompactionManagerTest {
     }
     compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
     compactionManager.enable();
-    assertTrue("Compaction thread should be running", compactionManager.isCompactionExecutorRunning());
+    assertNotNull("Compaction thread should be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
     assertTrue("Compaction calls did not come within the expected time",
         compactCallsCountdown.await(1, TimeUnit.SECONDS));
     for (int i = 0; i < numStores; i++) {
@@ -288,7 +290,8 @@ public class CompactionManagerTest {
     }
     compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
     compactionManager.enable();
-    assertTrue("Compaction thread should be running", compactionManager.isCompactionExecutorRunning());
+    assertNotNull("Compaction thread should be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
     assertTrue("Compaction calls did not come within the expected time",
         compactCallsCountdown.await(1, TimeUnit.SECONDS));
     for (int i = 0; i < numStores; i++) {

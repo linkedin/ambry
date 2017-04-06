@@ -20,8 +20,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -33,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * ignoring those overlapping with {@link Journal} as part of CompactionDetails.
  */
 class CompactionManager {
-  private static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
+  static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
 
   private final String mountPath;
   private final StoreConfig storeConfig;
@@ -73,13 +71,6 @@ class CompactionManager {
       logger.info("Compaction thread started for {}", mountPath);
       compactionThread = Utils.newThread(THREAD_NAME_PREFIX + mountPath, compactionExecutor, true);
       compactionThread.start();
-      try {
-        if (!compactionExecutor.startLatch.await(1, TimeUnit.SECONDS)) {
-          throw new IllegalStateException("Compaction thread did not start in 1 second");
-        }
-      } catch (InterruptedException e) {
-        throw new IllegalStateException(e);
-      }
     }
   }
 
@@ -146,7 +137,6 @@ class CompactionManager {
     private volatile boolean enabled = true;
 
     volatile boolean isRunning = false;
-    CountDownLatch startLatch = new CountDownLatch(1);
 
     /**
      * Starts by resuming any compactions that were left halfway. In steady state, it cycles through the stores at a
@@ -155,22 +145,22 @@ class CompactionManager {
     @Override
     public void run() {
       isRunning = true;
-      startLatch.countDown();
       try {
-        logger.info("Starting compaction thread");
+        logger.info("Starting compaction thread for {}", mountPath);
         // complete any compactions in progress
         for (BlobStore store : stores) {
           logger.trace("{} being checked for resume", store);
           if (store.isStarted()) {
             logger.trace("{} is started and eligible for resume check", store);
+            metrics.markCompactionStart(false);
             try {
-              metrics.markCompactionStart(false);
               store.maybeResumeCompaction();
-              metrics.markCompactionStop();
             } catch (Exception e) {
               metrics.compactionErrorCount.inc();
               logger.error("Compaction of store {} failed on resume. Continuing with the next store", store, e);
               storesToSkip.add(store);
+            } finally {
+              metrics.markCompactionStop();
             }
           }
         }
@@ -182,7 +172,7 @@ class CompactionManager {
               logger.trace("{} being checked for compaction", store);
               try {
                 if (!enabled) {
-                  logger.trace("Breaking out because compaction thread is disabled");
+                  logger.trace("Breaking out because compaction thread is disabled for {}", mountPath);
                   break;
                 }
                 if (store.isStarted() && !storesToSkip.contains(store)) {
@@ -205,7 +195,7 @@ class CompactionManager {
             try {
               if (enabled) {
                 long timeElapsed = time.milliseconds() - startTimeMs;
-                logger.trace("Going to wait for {} ms", waitTimeMs - timeElapsed);
+                logger.trace("Going to wait for {} ms in compaction thread at {}", waitTimeMs - timeElapsed, mountPath);
                 time.await(waitCondition, waitTimeMs - timeElapsed);
               }
             } finally {
@@ -213,12 +203,12 @@ class CompactionManager {
             }
           } catch (Exception e) {
             metrics.compactionExecutorErrorCount.inc();
-            logger.error("Compaction executor encountered an error. Continuing", e);
+            logger.error("Compaction executor for {} encountered an error. Continuing", mountPath, e);
           }
         }
       } finally {
         isRunning = false;
-        logger.info("Stopping compaction thread");
+        logger.info("Stopping compaction thread for {}", mountPath);
       }
     }
 
@@ -233,7 +223,7 @@ class CompactionManager {
       } finally {
         lock.unlock();
       }
-      logger.info("Disabled compaction thread");
+      logger.info("Disabled compaction thread for {}", mountPath);
     }
   }
 }

@@ -164,7 +164,8 @@ class CompactionLog implements Closeable {
     }
     cycleLog.safeToken = safeToken;
     flush();
-    logger.trace("{}: Set safe token to {} during compaction of {}", file, cycleLog.safeToken, cycleLog.compactionDetails);
+    logger.trace("{}: Set safe token to {} during compaction of {}", file, cycleLog.safeToken,
+        cycleLog.compactionDetails);
   }
 
   /**
