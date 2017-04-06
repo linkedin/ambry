@@ -125,8 +125,8 @@ public class StatsManagerTest {
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
         preAggregatedSnapshot.equals(actualSnapshot));
     StatsHeader statsHeader =
-        new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), storeMap.keySet().size(),
-            storeMap.keySet().size(), unreachableStores);
+        new StatsHeader(StatsHeader.StatsDescription.QUOTA, SystemTime.getInstance().milliseconds(),
+            storeMap.keySet().size(), storeMap.keySet().size(), unreachableStores);
     File outputFile = new File(outputFileString);
     if (outputFile.exists()) {
       outputFile.createNewFile();
@@ -155,7 +155,7 @@ public class StatsManagerTest {
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
-    assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue().longValue());
+    assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue());
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
     // test for the scenario where some stores are healthy and some are bad
     Map<PartitionId, Store> mixedStoreMap = new HashMap<>(storeMap);
@@ -221,17 +221,17 @@ public class StatsManagerTest {
    * after the decomposition and whose second element is the random slice taken from the original base snapshot.
    */
   private Pair<StatsSnapshot, StatsSnapshot> decomposeSnapshot(StatsSnapshot baseSnapshot) {
-    int accountSliceCount = random.nextInt(baseSnapshot.getSubtree().size() + 1);
+    int accountSliceCount = random.nextInt(baseSnapshot.getSubMap().size() + 1);
     Map<String, StatsSnapshot> accountMap1 = new HashMap<>();
     Map<String, StatsSnapshot> accountMap2 = new HashMap<>();
     long partialTotalSize = 0;
-    for (Map.Entry<String, StatsSnapshot> accountEntry : baseSnapshot.getSubtree().entrySet()) {
+    for (Map.Entry<String, StatsSnapshot> accountEntry : baseSnapshot.getSubMap().entrySet()) {
       if (accountSliceCount > 0) {
-        int containerSliceCount = random.nextInt(accountEntry.getValue().getSubtree().size() + 1);
+        int containerSliceCount = random.nextInt(accountEntry.getValue().getSubMap().size() + 1);
         Map<String, StatsSnapshot> containerMap1 = new HashMap<>();
         Map<String, StatsSnapshot> containerMap2 = new HashMap<>();
         long partialSubTotalSize = 0;
-        for (Map.Entry<String, StatsSnapshot> containerEntry : accountEntry.getValue().getSubtree().entrySet()) {
+        for (Map.Entry<String, StatsSnapshot> containerEntry : accountEntry.getValue().getSubMap().entrySet()) {
           if (containerSliceCount > 0) {
             long baseValue = containerEntry.getValue().getValue();
             long partialValue = random.nextInt((int) baseValue);

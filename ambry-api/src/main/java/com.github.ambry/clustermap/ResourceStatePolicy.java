@@ -50,6 +50,5 @@ public interface ResourceStatePolicy {
    * Should be called if the caller knows outside of the policy that the resource is up.
    */
   void onHardUp();
-
 }
 

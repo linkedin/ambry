@@ -15,17 +15,6 @@ buildscript {
     apply from: file('gradle/buildscript.gradle'), to: buildscript
 }
 
-buildscript {
-    repositories {
-        maven {
-            url "https://plugins.gradle.org/m2/"
-        }
-    }
-    dependencies {
-        classpath "com.commercehub.gradle.plugin:gradle-avro-plugin:0.9.0"
-    }
-}
-
 apply from: file('gradle/license.gradle')
 apply from: file('gradle/environment.gradle')
 apply from: file("gradle/dependency-versions.gradle")
@@ -36,7 +25,6 @@ allprojects {
     apply plugin: 'eclipse'
     apply plugin: 'idea'
     apply plugin: 'project-report'
-    apply plugin: 'com.commercehub.gradle.plugin.avro'
 
     repositories {
         mavenCentral()
@@ -101,7 +89,6 @@ project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
-        compile 'org.apache.avro:avro:1.8.1'
         testCompile project(':ambry-utils').sourceSets.test.output
     }
 }

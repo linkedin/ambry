@@ -22,11 +22,8 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -34,10 +31,8 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import org.apache.avro.io.DatumWriter;
-import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.io.JsonEncoder;
-import org.apache.avro.specific.SpecificDatumWriter;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +51,7 @@ class StatsManager {
   private final List<PartitionId> totalPartitionIds;
   private final StatsManagerMetrics metrics;
   private final Time time;
+  private final ObjectMapper mapper = new ObjectMapper();
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
 
@@ -76,6 +72,7 @@ class StatsManager {
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
+    mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(JsonAutoDetect.Visibility.ANY));
     this.time = time;
   }
 
@@ -113,16 +110,7 @@ class StatsManager {
   void publish(StatsWrapper statsWrapper) throws IOException {
     File tempFile = new File(statsOutputFile.getAbsolutePath() + ".tmp");
     if (tempFile.createNewFile()) {
-      OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(tempFile));
-      DatumWriter<StatsWrapper> statsWrapperDatumWriter = new SpecificDatumWriter<StatsWrapper>(StatsWrapper.class);
-      JsonEncoder jsonEncoder = EncoderFactory.get().jsonEncoder(StatsWrapper.getClassSchema(), outputStream, true);
-      try {
-        statsWrapperDatumWriter.write(statsWrapper, jsonEncoder);
-        jsonEncoder.flush();
-        outputStream.flush();
-      } finally {
-        outputStream.close();
-      }
+      mapper.defaultPrettyPrintingWriter().writeValue(tempFile, statsWrapper);
       if (!tempFile.renameTo(statsOutputFile)) {
         throw new IOException(
             "Failed to rename " + tempFile.getAbsolutePath() + " to " + statsOutputFile.getAbsolutePath());
@@ -161,14 +149,14 @@ class StatsManager {
    */
   private void aggregate(StatsSnapshot baseSnapshot, StatsSnapshot newSnapshot) {
     baseSnapshot.setValue(baseSnapshot.getValue() + newSnapshot.getValue());
-    if (baseSnapshot.getSubtree() == null) {
-      baseSnapshot.setSubtree(newSnapshot.getSubtree());
-    } else if (newSnapshot.getSubtree() != null) {
-      for (Map.Entry<String, StatsSnapshot> entry : newSnapshot.getSubtree().entrySet()) {
-        if (!baseSnapshot.getSubtree().containsKey(entry.getKey())) {
-          baseSnapshot.getSubtree().put(entry.getKey(), new StatsSnapshot(0L, null));
+    if (baseSnapshot.getSubMap() == null) {
+      baseSnapshot.setSubMap(newSnapshot.getSubMap());
+    } else if (newSnapshot.getSubMap() != null) {
+      for (Map.Entry<String, StatsSnapshot> entry : newSnapshot.getSubMap().entrySet()) {
+        if (!baseSnapshot.getSubMap().containsKey(entry.getKey())) {
+          baseSnapshot.getSubMap().put(entry.getKey(), new StatsSnapshot(0L, null));
         }
-        aggregate(baseSnapshot.getSubtree().get(entry.getKey()), entry.getValue());
+        aggregate(baseSnapshot.getSubMap().get(entry.getKey()), entry.getValue());
       }
     }
   }
@@ -193,8 +181,9 @@ class StatsManager {
         }
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-          StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
-              totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
+          StatsHeader statsHeader =
+              new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), totalPartitionIds.size(),
+                  totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
