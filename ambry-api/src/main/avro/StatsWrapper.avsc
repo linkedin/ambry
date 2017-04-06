@@ -1,9 +1,0 @@
-{
-  "namespace": "com.github.ambry.server",
-  "type": "record",
-  "name": "StatsWrapper",
-  "fields": [
-    {"name": "header", "type": "StatsHeader"},
-    {"name": "snapshot", "type": "StatsSnapshot"}
-  ]
-}

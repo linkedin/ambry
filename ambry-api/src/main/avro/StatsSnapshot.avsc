@@ -1,9 +1,0 @@
-{
-  "namespace": "com.github.ambry.server",
-  "type": "record",
-  "name": "StatsSnapshot",
-  "fields": [
-    {"name": "value", "type": "long"},
-    {"name": "subtree", "type": ["null", {"type": "map", "values": "StatsSnapshot"}]}
-  ]
-}

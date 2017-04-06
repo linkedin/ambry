@@ -267,7 +267,7 @@ public class BlobStoreStatsTest {
     StatsSnapshot statsSnapshot = new StatsSnapshot(total, firstSubTreeMap);
     StatsSnapshot convertedStatsSnapshot = BlobStoreStats.convertQuotaToStatsSnapshot(quotaMap);
     assertTrue("Mismatch between the converted StatsSnapshot and expected StatsSnapshot",
-        statsSnapshot.equals(convertedStatsSnapshot));
+        StatsSnapshot.isEqual(statsSnapshot, convertedStatsSnapshot));
   }
 
   /**
@@ -284,7 +284,7 @@ public class BlobStoreStatsTest {
       Map<String, Long> innerQuotaMap = entry.getValue();
       assertEquals("Mismatch on number of containers", innerQuotaMap.size(), innerStatsSnapshotMap.size());
       for (Map.Entry<String, Long> innerEntry : innerQuotaMap.entrySet()) {
-        assertEquals("Mismatch on leaf node value", innerEntry.getValue(),
+        assertEquals("Mismatch on leaf node value", innerEntry.getValue().longValue(),
             innerStatsSnapshotMap.get(innerEntry.getKey()).getValue());
       }
     }

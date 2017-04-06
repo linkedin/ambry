@@ -22,11 +22,8 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -34,10 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import org.apache.avro.io.DatumWriter;
-import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.io.JsonEncoder;
-import org.apache.avro.specific.SpecificDatumWriter;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +50,7 @@ class StatsManager {
   private final List<PartitionId> totalPartitionIds;
   private final StatsManagerMetrics metrics;
   private final Time time;
+  private final ObjectMapper mapper = new ObjectMapper();
   private ScheduledExecutorService scheduler = null;
   private StatsAggregator statsAggregator = null;
 
@@ -113,16 +108,7 @@ class StatsManager {
   void publish(StatsWrapper statsWrapper) throws IOException {
     File tempFile = new File(statsOutputFile.getAbsolutePath() + ".tmp");
     if (tempFile.createNewFile()) {
-      OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(tempFile));
-      DatumWriter<StatsWrapper> statsWrapperDatumWriter = new SpecificDatumWriter<StatsWrapper>(StatsWrapper.class);
-      JsonEncoder jsonEncoder = EncoderFactory.get().jsonEncoder(StatsWrapper.getClassSchema(), outputStream, true);
-      try {
-        statsWrapperDatumWriter.write(statsWrapper, jsonEncoder);
-        jsonEncoder.flush();
-        outputStream.flush();
-      } finally {
-        outputStream.close();
-      }
+      mapper.defaultPrettyPrintingWriter().writeValue(tempFile, statsWrapper);
       if (!tempFile.renameTo(statsOutputFile)) {
         throw new IOException(
             "Failed to rename " + tempFile.getAbsolutePath() + " to " + statsOutputFile.getAbsolutePath());
@@ -193,8 +179,9 @@ class StatsManager {
         }
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-          StatsHeader statsHeader = new StatsHeader(Description.QUOTA, time.milliseconds(), totalPartitionIds.size(),
-              totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
+          StatsHeader statsHeader =
+              new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), totalPartitionIds.size(),
+                  totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }

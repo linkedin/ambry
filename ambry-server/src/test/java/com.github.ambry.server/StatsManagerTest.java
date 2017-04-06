@@ -123,10 +123,10 @@ public class StatsManagerTest {
       statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
-        preAggregatedSnapshot.equals(actualSnapshot));
+        StatsSnapshot.isEqual(preAggregatedSnapshot, actualSnapshot));
     StatsHeader statsHeader =
-        new StatsHeader(Description.QUOTA, SystemTime.getInstance().milliseconds(), storeMap.keySet().size(),
-            storeMap.keySet().size(), unreachableStores);
+        new StatsHeader(StatsHeader.StatsDescription.QUOTA, SystemTime.getInstance().milliseconds(),
+            storeMap.keySet().size(), storeMap.keySet().size(), unreachableStores);
     File outputFile = new File(outputFileString);
     if (outputFile.exists()) {
       outputFile.createNewFile();
@@ -155,7 +155,7 @@ public class StatsManagerTest {
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
-    assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue().longValue());
+    assertEquals("Aggregated StatsSnapshot should not contain any value", 0L, actualSnapshot.getValue());
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
     // test for the scenario where some stores are healthy and some are bad
     Map<PartitionId, Store> mixedStoreMap = new HashMap<>(storeMap);
@@ -169,7 +169,7 @@ public class StatsManagerTest {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
-        preAggregatedSnapshot.equals(actualSnapshot));
+        StatsSnapshot.isEqual(preAggregatedSnapshot, actualSnapshot));
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
   }
 
