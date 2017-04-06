@@ -44,4 +44,28 @@ public class MockDiskId implements DiskId {
   public void onDiskOk() {
     /* no-op for now */
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    MockDiskId that = (MockDiskId) o;
+
+    if (!mountPath.equals(that.mountPath)) {
+      return false;
+    }
+    return dataNode.equals(that.dataNode);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = mountPath.hashCode();
+    result = 31 * result + dataNode.hashCode();
+    return result;
+  }
 }

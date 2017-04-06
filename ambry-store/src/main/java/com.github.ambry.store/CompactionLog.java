@@ -27,6 +27,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -37,6 +39,8 @@ class CompactionLog implements Closeable {
   private static final long UNINITIALIZED_TIMESTAMP = -1;
   private static final String COMPACTION_LOG_SUFFIX = "_compactionLog";
   private static final short VERSION_0 = 0;
+
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
    * The {@link Phase} of the current compaction cycle.
@@ -79,6 +83,7 @@ class CompactionLog implements Closeable {
     cycleLogs = new ArrayList<>();
     cycleLogs.add(new CycleLog(compactionDetails));
     flush();
+    logger.trace("Created compaction log: {}", file);
   }
 
   /**
@@ -115,6 +120,7 @@ class CompactionLog implements Closeable {
         default:
           throw new IllegalArgumentException("Unrecognized version");
       }
+      logger.trace("Loaded compaction log: {}", file);
     }
   }
 
@@ -158,6 +164,7 @@ class CompactionLog implements Closeable {
     }
     cycleLog.safeToken = safeToken;
     flush();
+    logger.trace("{}: Set safe token to {} during compaction of {}", file, cycleLog.safeToken, cycleLog.compactionDetails);
   }
 
   /**
@@ -170,6 +177,7 @@ class CompactionLog implements Closeable {
     }
     cycleLog.copyStartTime = time.milliseconds();
     flush();
+    logger.trace("{}: Marked copy as started for {}", file, cycleLog.compactionDetails);
   }
 
   /**
@@ -197,6 +205,7 @@ class CompactionLog implements Closeable {
     getCurrentCycleLog().compactionDetails = new CompactionDetails(currentDetails.getReferenceTimeMs(), updatedList);
     cycleLogs.add(new CycleLog(new CompactionDetails(currentDetails.getReferenceTimeMs(), newList)));
     flush();
+    logger.trace("{}: Split current cycle into two lists: {} and {}", file, updatedList, newList);
   }
 
   /**
@@ -209,6 +218,7 @@ class CompactionLog implements Closeable {
     }
     cycleLog.commitStartTime = time.milliseconds();
     flush();
+    logger.trace("{}: Marked commit as started for {}", file, cycleLog.compactionDetails);
   }
 
   /**
@@ -221,6 +231,7 @@ class CompactionLog implements Closeable {
     }
     cycleLog.cleanupStartTime = time.milliseconds();
     flush();
+    logger.trace("{}: Marked cleanup as started for {}", file, cycleLog.compactionDetails);
   }
 
   /**
@@ -234,6 +245,7 @@ class CompactionLog implements Closeable {
     cycleLog.cycleEndTime = time.milliseconds();
     currentIdx++;
     flush();
+    logger.trace("{}: Marked cycle as complete for {}", file, cycleLog.compactionDetails);
   }
 
   /**

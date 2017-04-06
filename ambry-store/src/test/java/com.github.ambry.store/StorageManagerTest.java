@@ -81,7 +81,10 @@ public class StorageManagerTest {
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
+    assertEquals("Compaction thread count is incorrect", mountPaths.size() - 1,
+        storageManager.getCompactionThreadCount());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
+    assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
 
   /**
@@ -107,7 +110,10 @@ public class StorageManagerTest {
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
+    assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
+        storageManager.getCompactionThreadCount());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
+    assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
 
   /**
@@ -135,7 +141,9 @@ public class StorageManagerTest {
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
       }
     }
+    assertEquals("Compaction thread count is incorrect", mountPaths.size(), storageManager.getCompactionThreadCount());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
+    assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
 
   /**
@@ -154,7 +162,10 @@ public class StorageManagerTest {
     }
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.", storageManager.getStore(invalidPartition));
+    assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
+        storageManager.getCompactionThreadCount());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
+    assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
   }
 
   /**
@@ -165,8 +176,10 @@ public class StorageManagerTest {
    */
   private static StorageManager createAndStartStoreManager(List<ReplicaId> replicas)
       throws StoreException, InterruptedException {
+    Properties properties = new Properties();
+    properties.put("store.enable.compaction", "true");
     StorageManager storageManager =
-        new StorageManager(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
+        new StorageManager(new StoreConfig(new VerifiableProperties(properties)), Utils.newScheduler(1, false),
             new MetricRegistry(), replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
             new DummyMessageStoreHardDelete(), SystemTime.getInstance());
     storageManager.start();

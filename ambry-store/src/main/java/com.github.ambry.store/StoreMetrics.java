@@ -17,8 +17,10 @@ package com.github.ambry.store;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -54,6 +56,10 @@ public class StoreMetrics {
   public final Histogram segmentSizeForExists;
   public final Histogram segmentsAccessedPerBlobCount;
   public final Counter identicalPutAttemptCount;
+
+  // Compaction related metrics
+  public final Counter compactionFixStateCount;
+  public final Meter compactionCopyRateInBytes;
 
   private final MetricRegistry registry;
   private final String name;
@@ -101,6 +107,9 @@ public class StoreMetrics {
         registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
     identicalPutAttemptCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
+
+    compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
+    compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, "CopyRateInBytes"));
   }
 
   MetricRegistry getRegistry() {
@@ -166,5 +175,16 @@ public class StoreMetrics {
       }
     };
     registry.register(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
+  }
+
+  void initializeCompactorGauges(final AtomicBoolean compactionInProgress) {
+    Gauge<Long> compactionInProgressGauge = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return compactionInProgress.get() ? 1L : 0L;
+      }
+    };
+    registry.register(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionInProgress"),
+        compactionInProgressGauge);
   }
 }

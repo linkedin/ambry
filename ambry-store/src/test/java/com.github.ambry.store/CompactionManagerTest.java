@@ -58,7 +58,8 @@ public class CompactionManagerTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
+    compactionManager =
+        new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
   }
 
   /**
@@ -76,8 +77,31 @@ public class CompactionManagerTest {
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
+    compactionManager =
+        new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.enable();
+    assertTrue("Compaction thread should be running", compactionManager.isCompactionExecutorRunning());
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+    assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
+  }
+
+  /**
+   * Tests {@link CompactionManager#disable()} without having called {@link CompactionManager#enable()} first.
+   */
+  @Test
+  public void testDisableWithoutEnable() {
+    // without compaction enabled.
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+
+    // with compaction enabled.
+    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    config = new StoreConfig(new VerifiableProperties(properties));
+    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
+    compactionManager =
+        new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.disable();
     compactionManager.awaitTermination();
   }
@@ -149,7 +173,8 @@ public class CompactionManagerTest {
       MetricRegistry metricRegistry = new MetricRegistry();
       StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-      compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
+      compactionManager =
+          new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
       blobStore.validLogSegments = generateRandomStrings(2);
       if (blobStore.usedCapacity < (config.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0
           * blobStore.capacityInBytes)) {
@@ -175,7 +200,8 @@ public class CompactionManagerTest {
       MetricRegistry metricRegistry = new MetricRegistry();
       StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
       blobStore = new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, DEFAULT_USED_CAPACITY_IN_BYTES);
-      compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), time);
+      compactionManager =
+          new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
       blobStore.validLogSegments = generateRandomStrings(2);
       verifyCompactionDetails(
           new CompactionDetails(time.milliseconds() - messageRetentionDays * Time.SecsPerDay * Time.MsPerSec,
@@ -206,8 +232,9 @@ public class CompactionManagerTest {
       store.validLogSegments = i == 0 ? null : generateRandomStrings(i);
       stores.add(store);
     }
-    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
     compactionManager.enable();
+    assertTrue("Compaction thread should be running", compactionManager.isCompactionExecutorRunning());
     assertTrue("Compaction calls did not come within the expected time",
         compactCallsCountdown.await(1, TimeUnit.SECONDS));
     for (int i = 0; i < numStores; i++) {
@@ -224,6 +251,7 @@ public class CompactionManagerTest {
     }
     compactionManager.disable();
     compactionManager.awaitTermination();
+    assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
   }
 
   /**
@@ -258,8 +286,9 @@ public class CompactionManagerTest {
       }
       stores.add(store);
     }
-    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
     compactionManager.enable();
+    assertTrue("Compaction thread should be running", compactionManager.isCompactionExecutorRunning());
     assertTrue("Compaction calls did not come within the expected time",
         compactCallsCountdown.await(1, TimeUnit.SECONDS));
     for (int i = 0; i < numStores; i++) {
@@ -277,6 +306,7 @@ public class CompactionManagerTest {
     }
     compactionManager.disable();
     compactionManager.awaitTermination();
+    assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
   }
 
   // helper methods

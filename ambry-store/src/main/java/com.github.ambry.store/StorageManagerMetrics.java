@@ -14,8 +14,10 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -28,6 +30,14 @@ public class StorageManagerMetrics {
   public final Counter totalStoreStartFailures;
   public final Counter diskMountPathFailures;
 
+  // CompactionManager related metrics
+  public final Counter compactionManagerTerminateErrorCount;
+  public final Counter compactionErrorCount;
+  public final Counter compactionExecutorErrorCount;
+
+  private final Counter compactionCount;
+  private final AtomicLong compactionsInProgress = new AtomicLong(0);
+
   /**
    * Create a {@link StorageManagerMetrics} object for handling metrics related to the stores on a node.
    * @param registry the {@link MetricRegistry} to use.
@@ -37,6 +47,63 @@ public class StorageManagerMetrics {
     diskStartTime = registry.timer(MetricRegistry.name(StorageManager.class, "DiskStartTime"));
     totalStoreStartFailures = registry.counter(MetricRegistry.name(StorageManager.class, "TotalStoreStartFailures"));
     diskMountPathFailures = registry.counter(MetricRegistry.name(StorageManager.class, "DiskMountPathFailures"));
+
+    compactionCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionCount"));
+    compactionManagerTerminateErrorCount =
+        registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionManagerTerminateErrorCount"));
+    compactionErrorCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionErrorCount"));
+    compactionExecutorErrorCount =
+        registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionExecutorErrorCount"));
+
+    Gauge<Long> compactionsInProgressGauge = new Gauge<Long>() {
+      @Override
+      public Long getValue() {
+        return compactionsInProgress.longValue();
+      }
+    };
+    registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
+        compactionsInProgressGauge);
+  }
+
+  /**
+   * Initializes gauges that track the compaction thread counts.
+   * @param storageManager the {@link StorageManager} instance to use to obtain values.
+   * @param diskCount the number of disks that the {@link StorageManager} handles.
+   */
+  void initializeCompactionThreadsTracker(final StorageManager storageManager, final int diskCount) {
+    Gauge<Integer> compactionThreadsCountGauge = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return storageManager.getCompactionThreadCount();
+      }
+    };
+    registry.register(MetricRegistry.name(StorageManager.class, "CompactionThreadsAlive"), compactionThreadsCountGauge);
+    Gauge<Integer> compactionHealthGauge = new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return storageManager.getCompactionThreadCount() == diskCount ? 1 : 0;
+      }
+    };
+    registry.register(MetricRegistry.name(StorageManager.class, "CompactionHealth"), compactionHealthGauge);
+  }
+
+  /**
+   * Marks the beginning of a compaction.
+   * @param incrementUniqueCompactionsCount {@code true} if this is a new compaction and not the resume of a suspended
+   *                                                    one. {@code false otherwise}
+   */
+  void markCompactionStart(boolean incrementUniqueCompactionsCount) {
+    if (incrementUniqueCompactionsCount) {
+      compactionCount.inc();
+    }
+    compactionsInProgress.incrementAndGet();
+  }
+
+  /**
+   * Marks the end/suspension of a compaction.
+   */
+  void markCompactionStop() {
+    compactionsInProgress.decrementAndGet();
   }
 
   /**

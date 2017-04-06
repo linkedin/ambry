@@ -71,7 +71,7 @@ class DiskManager {
         stores.put(replica.getPartitionId(), store);
       }
     }
-    compactionManager = new CompactionManager(disk.getMountPath(), config, stores.values(), time);
+    compactionManager = new CompactionManager(disk.getMountPath(), config, stores.values(), metrics, time);
   }
 
   /**
@@ -143,6 +143,13 @@ class DiskManager {
   Store getStore(PartitionId id) {
     BlobStore store = stores.get(id);
     return (store != null && store.isStarted()) ? store : null;
+  }
+
+  /**
+   * @return {@code true} if the compaction thread is running. {@code false} otherwise.
+   */
+  boolean isCompactionExecutorRunning() {
+    return compactionManager.isCompactionExecutorRunning();
   }
 
   /**

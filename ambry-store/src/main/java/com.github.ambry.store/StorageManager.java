@@ -118,6 +118,7 @@ public class StorageManager {
     for (Thread startupThread : startupThreads) {
       startupThread.join();
     }
+    metrics.initializeCompactionThreadsTracker(this, diskManagers.size());
     logger.info("Starting storage manager complete");
   }
 
@@ -141,5 +142,18 @@ public class StorageManager {
       diskManager.shutdown();
     }
     logger.info("Shutting down storage manager complete");
+  }
+
+  /**
+   * @return the number of compaction threads running.
+   */
+  int getCompactionThreadCount() {
+    int count = 0;
+    for (DiskManager diskManager : diskManagers) {
+      if (diskManager.isCompactionExecutorRunning()) {
+        count++;
+      }
+    }
+    return count;
   }
 }
