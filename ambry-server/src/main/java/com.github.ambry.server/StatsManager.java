@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +72,7 @@ class StatsManager {
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
+    mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(JsonAutoDetect.Visibility.ANY));
     this.time = time;
   }
 

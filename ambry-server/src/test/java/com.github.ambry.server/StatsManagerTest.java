@@ -123,7 +123,7 @@ public class StatsManagerTest {
       statsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
-        StatsSnapshot.isEqual(preAggregatedSnapshot, actualSnapshot));
+        preAggregatedSnapshot.equals(actualSnapshot));
     StatsHeader statsHeader =
         new StatsHeader(StatsHeader.StatsDescription.QUOTA, SystemTime.getInstance().milliseconds(),
             storeMap.keySet().size(), storeMap.keySet().size(), unreachableStores);
@@ -169,7 +169,7 @@ public class StatsManagerTest {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);
     }
     assertTrue("Actual aggregated StatsSnapshot does not match with expected snapshot",
-        StatsSnapshot.isEqual(preAggregatedSnapshot, actualSnapshot));
+        preAggregatedSnapshot.equals(actualSnapshot));
     assertEquals("Unreachable store count mismatch with expected value", 2, unreachableStores.size());
   }
 

@@ -267,7 +267,7 @@ public class BlobStoreStatsTest {
     StatsSnapshot statsSnapshot = new StatsSnapshot(total, firstSubTreeMap);
     StatsSnapshot convertedStatsSnapshot = BlobStoreStats.convertQuotaToStatsSnapshot(quotaMap);
     assertTrue("Mismatch between the converted StatsSnapshot and expected StatsSnapshot",
-        StatsSnapshot.isEqual(statsSnapshot, convertedStatsSnapshot));
+        statsSnapshot.equals(convertedStatsSnapshot));
   }
 
   /**

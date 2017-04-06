@@ -21,16 +21,16 @@ import java.util.List;
  * A model object that contains metadata information about some reported stats. For example, the kind of stats that is
  * being reported, timestamp and etc.
  */
-public class StatsHeader {
-  public enum StatsDescription {
+class StatsHeader {
+  enum StatsDescription {
     QUOTA
   }
 
-  private StatsDescription description;
-  private long timestamp;
-  private int storeContacted;
-  private int storeResponded;
-  private List<String> unreachableStores;
+  private final StatsDescription description;
+  private final long timestamp;
+  private final int storeContacted;
+  private final int storeResponded;
+  private final List<String> unreachableStores;
 
   StatsHeader(StatsDescription description, long timestamp, int storeContacted, int storeResponded,
       List<String> unreachableStores) {
@@ -39,25 +39,5 @@ public class StatsHeader {
     this.storeContacted = storeContacted;
     this.storeResponded = storeResponded;
     this.unreachableStores = unreachableStores;
-  }
-
-  public StatsDescription getDescription() {
-    return description;
-  }
-
-  public long getTimestamp() {
-    return timestamp;
-  }
-
-  public int getStoreContacted() {
-    return storeContacted;
-  }
-
-  public int getStoreResponded() {
-    return storeResponded;
-  }
-
-  public List<String> getUnreachableStores() {
-    return unreachableStores;
   }
 }

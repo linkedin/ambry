@@ -29,40 +29,6 @@ public class StatsSnapshot {
   private long value;
   private Map<String, StatsSnapshot> subtree;
 
-  /**
-   * Walk through two {@link StatsSnapshot} and check if they are equal. Two {@link StatsSnapshot} are considered equal
-   * if they have the same value and subtree mapping at each level.
-   * @param a the {@link StatsSnapshot} to be compared with b
-   * @param b the {@link StatsSnapshot} to be compared with a
-   * @return
-   */
-  public static boolean isEqual(StatsSnapshot a, StatsSnapshot b) {
-    boolean retVal = true;
-    if (a == null || b == null || a.getValue() != b.getValue()) {
-      retVal = false;
-    } else {
-      boolean aSubtreeIsNull = a.getSubtree() == null;
-      boolean bSubtreeIsNull = b.getSubtree() == null;
-      // either both subtree have to be null or neither, otherwise it's definitely not equal
-      if (aSubtreeIsNull != bSubtreeIsNull) {
-        retVal = false;
-      } else if (!aSubtreeIsNull) {
-        for (Map.Entry<String, StatsSnapshot> entry : a.getSubtree().entrySet()) {
-          if (b.getSubtree().containsKey(entry.getKey())) {
-            retVal = isEqual(entry.getValue(), b.getSubtree().get(entry.getKey()));
-            if (!retVal) {
-              break;
-            }
-          } else {
-            retVal = false;
-            break;
-          }
-        }
-      }
-    }
-    return retVal;
-  }
-
   public StatsSnapshot(Long value, Map<String, StatsSnapshot> subtree) {
     this.value = value;
     this.subtree = subtree;
@@ -76,11 +42,35 @@ public class StatsSnapshot {
     return subtree;
   }
 
-  public void setValue(long value) {
+  void setValue(long value) {
     this.value = value;
   }
 
-  public void setSubtree(Map<String, StatsSnapshot> subtree) {
+  void setSubtree(Map<String, StatsSnapshot> subtree) {
     this.subtree = subtree;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    StatsSnapshot that = (StatsSnapshot) o;
+
+    if (value != that.value) {
+      return false;
+    }
+    return subtree != null ? subtree.equals(that.subtree) : that.subtree == null;
+  }
+
+  @Override
+  public int hashCode() {
+    int result = (int) (value ^ (value >>> 32));
+    result = 31 * result + (subtree != null ? subtree.hashCode() : 0);
+    return result;
   }
 }
