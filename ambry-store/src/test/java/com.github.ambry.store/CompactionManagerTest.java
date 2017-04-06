@@ -105,39 +105,6 @@ public class CompactionManagerTest {
   }
 
   /**
-   * Basic tests for {@link CompactionManager#getCompactionDetails(BlobStore)}
-   * @throws StoreException
-   * @throws InterruptedException
-   */
-  @Test
-  public void testCompactionManager() throws StoreException {
-    // null case
-    CompactionDetails actual = compactionManager.getCompactionDetails(blobStore);
-    assertNull("CompactionDetails expected to be null ", actual);
-
-    // random CompactionDetails
-    blobStore.details = generateRandomCompactionDetails(5);
-    assertEquals("CompactionDetails mismatch", blobStore.details, compactionManager.getCompactionDetails(blobStore));
-  }
-
-  /**
-   * Tests {@link CompactionManager} for failure cases
-   * @throws StoreException
-   */
-  @Test
-  public void testCompactionManagerFailureCases() throws StoreException {
-    blobStore.details = generateRandomCompactionDetails(5);
-    // StoreException thrown
-    blobStore.exceptionToThrowOnGetCompactionDetails =
-        new StoreException("Random StoreException to test", StoreErrorCodes.Unknown_Error);
-    try {
-      compactionManager.getCompactionDetails(blobStore);
-    } catch (StoreException e) {
-      assertEquals("StoreErrorCode mismatch ", StoreErrorCodes.Unknown_Error, e.getErrorCode());
-    }
-  }
-
-  /**
    * Tests that compaction is triggered on all stores provided they do not misbehave. Also includes a store that is
    * not ready for compaction. Ensures that {@link BlobStore#maybeResumeCompaction()} is called before
    * {@link BlobStore#compact(CompactionDetails)} is called.

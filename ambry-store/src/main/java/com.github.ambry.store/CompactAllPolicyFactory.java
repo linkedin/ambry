@@ -19,7 +19,7 @@ import java.util.List;
 
 
 /**
- *  Factory class interface to get {@link CompactAllPolicy}
+ *  Factory class to get {@link CompactAllPolicy}
  */
 public class CompactAllPolicyFactory implements CompactionPolicyFactory {
 

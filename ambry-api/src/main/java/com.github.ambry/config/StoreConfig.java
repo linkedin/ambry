@@ -126,7 +126,8 @@ public class StoreConfig {
   public final String storeCompactionPolicyFactory;
 
   /**
-   * The minimum number of log segments to be reclaimed to trigger compaction
+   * The minimum number of log segments to be reclaimed to trigger compaction.
+   * It is up to the compaction policy implementation to honor this config if need be.
    */
   @Config("store.min.log.segment.count.to.reclaim.to.trigger.compaction")
   @Default("1")
@@ -158,7 +159,7 @@ public class StoreConfig {
     storeCompactionPolicyFactory = verifiableProperties.getString("store.compaction.policy.factory",
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
-        verifiableProperties.getInt("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1);
+        verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
 
   }
 }

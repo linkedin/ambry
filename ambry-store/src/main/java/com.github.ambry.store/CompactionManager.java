@@ -116,7 +116,7 @@ class CompactionManager {
    * {@code null} if compaction is not required
    * @throws StoreException when {@link BlobStore} is not started
    */
-  CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
+  private CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
     return blobStore.getCompactionDetails(compactionPolicy);
   }
 
