@@ -20,6 +20,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,6 +47,9 @@ public class CompactionPolicyTest {
   private static long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
   private static long DEFAULT_MAX_BLOB_SIZE = CAPACITY_IN_BYTES / 100;
   private static long SEGMENT_HEADER_SIZE = CAPACITY_IN_BYTES / 50;
+  private static String COMPACT_ALL_POLICY_FACTORY = "com.github.ambry.store.CompactAllPolicyFactory";
+  private static String DEFAULT_COMPACTION_POLICY_FACTORY = "com.github.ambry.store.DefaultCompactionPolicyFactory";
+
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
   private Time time;
@@ -53,16 +57,7 @@ public class CompactionPolicyTest {
   private StoreConfig config;
   private long messageRetentionTimeInMs;
   private MockBlobStoreStats mockBlobStoreStats;
-  private final CompactionPolicyType type;
   private CompactionPolicy compactionPolicy;
-
-  /**
-   * Refers to different types of {@link CompactionPolicy}
-   */
-  enum CompactionPolicyType {
-    DEFAULT,
-    COMPACT_ALL;
-  }
 
   /**
    * Running for both CompactAll and Default Compaction Policy
@@ -70,26 +65,23 @@ public class CompactionPolicyTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{CompactionPolicyType.DEFAULT}, {CompactionPolicyType.COMPACT_ALL}});
+    return Arrays.asList(new Object[][]{{DEFAULT_COMPACTION_POLICY_FACTORY}, {COMPACT_ALL_POLICY_FACTORY}});
   }
 
   /**
    * Instantiates {@link CompactionPolicyTest} with the required cast
    * @throws InterruptedException
    */
-  public CompactionPolicyTest(CompactionPolicyType type) throws InterruptedException {
+  public CompactionPolicyTest(String compactionPolicyFactoryStr) throws Exception {
     time = new MockTime();
+    properties.setProperty("store.compaction.policy.factory", compactionPolicyFactoryStr);
     Pair<MockBlobStore, StoreConfig> initState = initializeBlobStore(properties, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();
     messageRetentionTimeInMs = config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
-    this.type = type;
-    if (type == CompactionPolicyType.DEFAULT) {
-      compactionPolicy = new DefaultCompactionPolicy(config, time);
-    } else if (type == CompactionPolicyType.COMPACT_ALL) {
-      compactionPolicy = new CompactAllPolicy(config, time);
-    }
+    CompactionPolicyFactory compactionPolicyFactory = Utils.getObj(compactionPolicyFactoryStr, config, time);
+    compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
   }
 
   /**
@@ -100,9 +92,9 @@ public class CompactionPolicyTest {
   @Test
   public void testDifferentUsedCapacities() throws StoreException {
     List<String> bestCandidates = null;
-    if (type.equals(CompactionPolicyType.DEFAULT)) {
+    if (compactionPolicy instanceof DefaultCompactionPolicy) {
       bestCandidates = setUpStateForDefaultCompactionPolicy(blobStore, mockBlobStoreStats);
-    } else if (type.equals(CompactionPolicyType.COMPACT_ALL)) {
+    } else if (compactionPolicy instanceof CompactAllPolicy) {
       blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
       bestCandidates = blobStore.logSegmentsNotInJournal;
     }
@@ -138,9 +130,9 @@ public class CompactionPolicyTest {
     List<String> bestCandidates = null;
     for (int minLogSize : minLogSizeToTriggerCompactionInPercentages) {
       initializeBlobStore(properties, time, minLogSize, -1, DEFAULT_MAX_BLOB_SIZE);
-      if (type.equals(CompactionPolicyType.DEFAULT)) {
+      if (compactionPolicy instanceof DefaultCompactionPolicy) {
         bestCandidates = setUpStateForDefaultCompactionPolicy(blobStore, mockBlobStoreStats);
-      } else if (type.equals(CompactionPolicyType.COMPACT_ALL)) {
+      } else if (compactionPolicy instanceof CompactAllPolicy) {
         blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
         bestCandidates = blobStore.logSegmentsNotInJournal;
       }
@@ -166,10 +158,10 @@ public class CompactionPolicyTest {
       time = new MockTime();
       Pair<MockBlobStore, StoreConfig> initState =
           initializeBlobStore(properties, time, -1, messageRetentionDays, DEFAULT_MAX_BLOB_SIZE);
-      if (type.equals(CompactionPolicyType.DEFAULT)) {
+      if (compactionPolicy instanceof DefaultCompactionPolicy) {
         bestCandidates = setUpStateForDefaultCompactionPolicy(blobStore, mockBlobStoreStats);
         compactionPolicy = new DefaultCompactionPolicy(initState.getSecond(), time);
-      } else if (type.equals(CompactionPolicyType.COMPACT_ALL)) {
+      } else if (compactionPolicy instanceof CompactAllPolicy) {
         blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
         bestCandidates = blobStore.logSegmentsNotInJournal;
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);

@@ -38,10 +38,7 @@ class CostBenefitInfo implements Comparable<CostBenefitInfo> {
     if (compareToVal != 0) {
       return compareToVal;
     }
-    if (benefit != that.benefit) {
-      return benefit > that.benefit ? -1 : 1;
-    }
-    return 0;
+    return Integer.compare(that.benefit, benefit);
   }
 
   /**

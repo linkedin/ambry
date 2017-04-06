@@ -45,12 +45,12 @@ public class DefaultCompactionPolicyTest {
   public DefaultCompactionPolicyTest() throws InterruptedException {
     Pair<MockBlobStore, StoreConfig> initState =
         CompactionPolicyTest.initializeBlobStore(properties, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
-    this.config = initState.getSecond();
-    this.blobStore = initState.getFirst();
-    this.mockBlobStoreStats = blobStore.getBlobStoreStats();
-    this.messageRetentionTimeInMs =
+    config = initState.getSecond();
+    blobStore = initState.getFirst();
+    mockBlobStoreStats = blobStore.getBlobStoreStats();
+    messageRetentionTimeInMs =
         config.storeDeletedMessageRetentionDays * Time.HoursPerDay * Time.SecsPerHour * Time.MsPerSec;
-    this.compactionPolicy = new DefaultCompactionPolicy(config, time);
+    compactionPolicy = new DefaultCompactionPolicy(config, time);
   }
 
   /**
@@ -60,10 +60,11 @@ public class DefaultCompactionPolicyTest {
    */
   @Test
   public void testGetCompactionDetailsTest() throws StoreException, InterruptedException {
-    // null logSegmentsNotInJournal
+    // null logSegmentsNotInJournal to mimic all log segments overlapping with journal
     blobStore.logSegmentsNotInJournal = null;
     CompactionPolicyTest.verifyCompactionDetails(null, blobStore, compactionPolicy);
 
+    // normal case where in some log segments are non overlapping with journal
     long maxLogSegmentCapacity = blobStore.segmentCapacity - blobStore.segmentHeaderSize - DEFAULT_MAX_BLOB_SIZE;
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomStrings((int) logSegmentCount);
@@ -77,7 +78,7 @@ public class DefaultCompactionPolicyTest {
               CompactionPolicyTest.generateValidDataSize(blobStore.logSegmentsNotInJournal, bestCandidates, bestCost,
                   maxLogSegmentCapacity);
           mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
-          if ((j - i) > 0) { // only if benefit is > 0. TODO: fix once the storeConfig is added
+          if ((j - i) >= config.storeMinLogSegmentCountToReclaimToTriggerCompaction) {
             CompactionPolicyTest.verifyCompactionDetails(
                 new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, bestCandidates), blobStore,
                 compactionPolicy);

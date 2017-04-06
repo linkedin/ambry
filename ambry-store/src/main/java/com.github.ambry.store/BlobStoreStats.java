@@ -76,14 +76,6 @@ class BlobStoreStats implements StoreStats {
     this.diskIOScheduler = diskIOScheduler;
   }
 
-  /**
-   * Returns the max blob size that is encountered while generating stats
-   * @return the max blob size that is encountered while generating stats
-   */
-  long getMaxBlobSize() {
-    return MAX_BLOB_SIZE;
-  }
-
   @Override
   public Pair<Long, Long> getValidSize(TimeRange timeRange) throws StoreException {
     Pair<Long, NavigableMap<String, Long>> logSegmentValidSizeResult = getValidDataSizeByLogSegment(timeRange);
@@ -101,6 +93,14 @@ class BlobStoreStats implements StoreStats {
   @Override
   public StatsSnapshot getStatsSnapshot() throws StoreException {
     return convertQuotaToStatsSnapshot(getValidDataSizeByContainer());
+  }
+
+  /**
+   * Returns the max blob size that is encountered while generating stats
+   * @return the max blob size that is encountered while generating stats
+   */
+  long getMaxBlobSize() {
+    return MAX_BLOB_SIZE;
   }
 
   /**
