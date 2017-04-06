@@ -21,6 +21,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.File;
@@ -33,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,18 +63,25 @@ public class DumpDataTool {
   // Path referring to replica root directory
   private final String replicaRootDirecotry;
 
+  // The throttling value in index files per sec
+  private final double indexFilesPerSec;
+
+  private final Throttler throttler;
+
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
 
   public DumpDataTool(VerifiableProperties verifiableProperties) throws Exception {
-    fileToRead = verifiableProperties.getString("file.to.read");
+    fileToRead = verifiableProperties.getString("file.to.read", "");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     typeOfOperation = verifiableProperties.getString("type.of.operation");
-    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
+    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory", "");
+    indexFilesPerSec = verifiableProperties.getDouble("bytes.per.sec", 1);
+    throttler = new Throttler(indexFilesPerSec, 1000, true, SystemTime.getInstance());
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
@@ -115,10 +122,13 @@ public class DumpDataTool {
    * @throws Exception
    */
   private void compareReplicaIndexEntriestoLogContent(String replicaRootDirectory) throws Exception {
+    if (!new File(replicaRootDirectory).exists()) {
+      throw new IllegalArgumentException("Replica root directory does not exist " + replicaRootDirectory);
+    }
     logger.info("Comparing Index entries to Log ");
     File[] indexFiles = new File(replicaRootDirectory).listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
-    if (indexFiles == null) {
-      throw new IllegalStateException("Could not read index files from " + replicaRootDirectory);
+    if (indexFiles == null || indexFiles.length == 0) {
+      throw new IllegalStateException("No index files found in replica root directory " + replicaRootDirectory);
     }
     Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (int i = 0; i < indexFiles.length; i++) {
@@ -132,6 +142,7 @@ public class DumpDataTool {
         checkEndOffset = !currLogSegmentRef.equals(nextLogSegmentRef);
       }
       compareIndexEntriesToLogContent(indexFiles[i], checkEndOffset);
+      throttler.maybeThrottle(1);
     }
   }
 
@@ -168,6 +179,9 @@ public class DumpDataTool {
    * @throws Exception
    */
   private void compareIndexEntriesToLogContent(File indexFile, boolean checkLogEndOffsetMatch) throws Exception {
+    if (!indexFile.exists()) {
+      throw new IllegalArgumentException("File does not exist " + indexFile);
+    }
     logger.info("Dumping index {}", indexFile.getAbsolutePath());
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
@@ -179,39 +193,50 @@ public class DumpDataTool {
     TreeMap<Long, Long> coveredRanges = new TreeMap<>();
     String logFileName = LogSegmentNameHelper.nameToFilename(segment.getLogSegmentName());
     File logFile = new File(indexFile.getParent(), logFileName);
+    if (!logFile.exists()) {
+      throw new IllegalStateException("Log file does not exist " + logFile);
+    }
     RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
+    long logFileSize = randomAccessFile.getChannel().size();
     List<MessageInfo> entries = new ArrayList<>();
     segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
     for (MessageInfo entry : entries) {
       StoreKey key = entry.getStoreKey();
       IndexValue value = segment.find(key);
       boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index);
-      boolean success = readFromLogAndVerify(randomAccessFile, key.getID(), value, coveredRanges);
-      if (success) {
-        if (isDeleted) {
-          long originalOffset = value.getOriginalMessageOffset();
-          if (originalOffset != -1) {
-            if (!coveredRanges.containsKey(originalOffset)) {
-              if (startOffset.getOffset() > originalOffset) {
-                logger.trace("Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
-                    originalOffset, value.getOffset(), startOffset);
-              } else {
-                DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-                    DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap);
-                coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
-                logger.trace("PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
-                    logBlobRecordInfo.blobId, originalOffset, (originalOffset + logBlobRecordInfo.totalRecordSize),
-                    key.getID(), value.getOffset());
-                if (!logBlobRecordInfo.blobId.getID().equals(key.getID())) {
-                  logger.error("BlobId value mismatch between delete record " + key.getID() + " and put record "
-                      + logBlobRecordInfo.blobId.getID());
+      if (value.getOffset().getOffset() < logFileSize) {
+        boolean success = readFromLogAndVerify(randomAccessFile, key.getID(), value, coveredRanges);
+        if (success) {
+          if (isDeleted) {
+            long originalOffset = value.getOriginalMessageOffset();
+            if (originalOffset != -1) {
+              if (!coveredRanges.containsKey(originalOffset)) {
+                if (startOffset.getOffset() > originalOffset) {
+                  logger.trace(
+                      "Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
+                      originalOffset, value.getOffset(), startOffset);
+                } else {
+                  DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
+                      DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap);
+                  coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
+                  logger.trace("PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
+                      logBlobRecordInfo.blobId, originalOffset, (originalOffset + logBlobRecordInfo.totalRecordSize),
+                      key.getID(), value.getOffset());
+                  if (!logBlobRecordInfo.blobId.getID().equals(key.getID())) {
+                    logger.error("BlobId value mismatch between delete record " + key.getID() + " and put record "
+                        + logBlobRecordInfo.blobId.getID());
+                  }
                 }
               }
             }
           }
+        } else {
+          logger.error("Failed for key {} with value {} ", key, value);
         }
       } else {
-        logger.error("Failed for key {} with value {} ", key, value);
+        logger.trace(
+            "Blob's " + key + " offset " + value.getOffset().getOffset() + " is outside of log size " + logFileSize
+                + "," + "with a diff of " + (value.getOffset().getOffset() - logFileSize));
       }
     }
     long indexEndOffset = segment.getEndOffset().getOffset();
@@ -257,7 +282,6 @@ public class DumpDataTool {
           + " while reading blob starting at offset " + offset + " with exception: ", e);
     } catch (EOFException e) {
       logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + " ", e);
-      throw (e);
     } catch (Exception e) {
       logger.error("Unknown exception thrown " + e.getMessage() + " ", e);
     }
@@ -281,9 +305,8 @@ public class DumpDataTool {
     } else if (!logBlobRecordInfo.isDeleted && isExpired != logBlobRecordInfo.isExpired) {
       logger.error(
           "Expiration value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isExpired + ", Log value "
-              + logBlobRecordInfo.isExpired + ", index TTL in ms " + indexValue.getExpiresAtMs()
-              + ", log Time to live in secs " + logBlobRecordInfo.timeToLiveInSeconds + ", in ms "
-              + TimeUnit.SECONDS.toMillis(logBlobRecordInfo.timeToLiveInSeconds));
+              + logBlobRecordInfo.isExpired + ", index expiresAt in ms " + indexValue.getExpiresAtMs()
+              + ", log expiresAt in ms " + logBlobRecordInfo.expiresAtMs);
     } else if (!blobId.equals(logBlobRecordInfo.blobId.getID())) {
       logger.error("BlobId value mismatch for " + logBlobRecordInfo.blobId + " Index value " + blobId + ", Log value "
           + logBlobRecordInfo.blobId);

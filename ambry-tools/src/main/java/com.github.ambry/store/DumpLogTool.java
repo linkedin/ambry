@@ -53,8 +53,10 @@ public class DumpLogTool {
   private final long logStartOffset;
   // The offset in the log until which to dump data
   private final long logEndOffset;
-  // The throttling value in bytes per sec
-  private final long bytesPerSec;
+  // The throttling value in blobs per sec
+  private final long blobsPerSec;
+  // set to true if only error logging is required
+  private final boolean silent;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpLogTool.class);
 
@@ -65,7 +67,8 @@ public class DumpLogTool {
     blobIdList = verifiableProperties.getString("blobId.list", "");
     logStartOffset = verifiableProperties.getInt("log.start.offset", -1);
     logEndOffset = verifiableProperties.getInt("log.end.offset", -1);
-    bytesPerSec = verifiableProperties.getLong("bytes.per.sec", 0);
+    blobsPerSec = verifiableProperties.getLong("bytes.per.sec", 100);
+    silent = verifiableProperties.getBoolean("silent", false);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
@@ -73,10 +76,10 @@ public class DumpLogTool {
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
-    if (bytesPerSec > 0) {
-      this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
-    } else if (bytesPerSec < 0) {
-      throw new IllegalArgumentException("BytesPerSec " + bytesPerSec + " cannot be negative ");
+    if (blobsPerSec > 0) {
+      this.throttler = new Throttler(blobsPerSec, 1000, true, SystemTime.getInstance());
+    } else if (blobsPerSec < 0) {
+      throw new IllegalArgumentException("BlobsPerSec " + blobsPerSec + " cannot be negative ");
     }
   }
 
@@ -100,7 +103,7 @@ public class DumpLogTool {
       logger.info("Blobs to look out for :: " + blobs);
     }
 
-    if (fileToRead != null) {
+    if (fileToRead != null && !silent) {
       logger.info("File to read " + fileToRead);
     }
     dumpLog(new File(fileToRead), logStartOffset, logEndOffset, blobs);
@@ -157,9 +160,9 @@ public class DumpLogTool {
         DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
             DumpDataHelper.readSingleRecordFromLog(randomAccessFile, currentOffset, clusterMap);
         if (throttler != null) {
-          throttler.maybeThrottle(logBlobRecordInfo.totalRecordSize);
+          throttler.maybeThrottle(1);
         }
-        if (lastBlobFailed) {
+        if (lastBlobFailed && !silent) {
           logger.info("Successful record found at " + currentOffset + " after some failures ");
         }
         lastBlobFailed = false;
@@ -171,7 +174,7 @@ public class DumpLogTool {
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
-          } else {
+          } else if (!silent) {
             logger.info("{}\n{}\n{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                 logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput,
                 (currentOffset + logBlobRecordInfo.totalRecordSize));
@@ -186,8 +189,8 @@ public class DumpLogTool {
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
-          } else {
-            logger.trace("{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+          } else if (!silent) {
+            logger.info("{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                 logBlobRecordInfo.deleteMsg, (currentOffset + logBlobRecordInfo.totalRecordSize));
             updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                 !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
@@ -216,7 +219,9 @@ public class DumpLogTool {
         if (!lastBlobFailed) {
           logger.error(
               "Unknown exception thrown with Cause " + e.getCause() + ", Msg :" + e.getMessage() + ", stacktrace ", e);
-          logger.info("Trying out next offset " + (currentOffset + 1));
+          if (!silent) {
+            logger.info("Trying out next offset " + (currentOffset + 1));
+          }
         }
         currentOffset++;
         lastBlobFailed = true;

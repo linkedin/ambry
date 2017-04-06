@@ -21,6 +21,7 @@ import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -28,13 +29,14 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.util.concurrent.TimeUnit;
 
 
 /**
  * Helper class to assist in dumping a single blob record from a log file
  */
 class DumpDataHelper {
+
+  private static final long TIME_MS = SystemTime.getInstance().milliseconds();
 
   /**
    * Fetches one blob record from the log
@@ -54,7 +56,7 @@ class DumpDataHelper {
     String deleteMsg = null;
     boolean isDeleted = false;
     boolean isExpired = false;
-    long timeToLiveInSeconds = -1;
+    long expiresAtMs = -1;
     int totalRecordSize = 0;
     randomAccessFile.seek(currentOffset);
     short version = randomAccessFile.readShort();
@@ -77,8 +79,10 @@ class DumpDataHelper {
       if (header.getBlobPropertiesRecordRelativeOffset()
           != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
         BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-        timeToLiveInSeconds = props.getTimeToLiveInSeconds();
-        isExpired = timeToLiveInSeconds != -1 ? isExpired(TimeUnit.SECONDS.toMillis(timeToLiveInSeconds)) : false;
+        long ttl = props.getTimeToLiveInSeconds();
+        expiresAtMs = ttl == Utils.Infinite_Time ? ttl
+            : props.getCreationTimeInMs() + (props.getTimeToLiveInSeconds() * Time.MsPerSec);
+        isExpired = expiresAtMs != Utils.Infinite_Time && isExpired(expiresAtMs);
         blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
             + ", isExpired " + isExpired;
         ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
@@ -94,7 +98,7 @@ class DumpDataHelper {
       throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
     }
     return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
-        isDeleted, isExpired, timeToLiveInSeconds, totalRecordSize);
+        isDeleted, isExpired, expiresAtMs, totalRecordSize);
   }
 
   /**
@@ -109,11 +113,11 @@ class DumpDataHelper {
     final String deleteMsg;
     final boolean isDeleted;
     final boolean isExpired;
-    final long timeToLiveInSeconds;
+    final long expiresAtMs;
     final int totalRecordSize;
 
     LogBlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata,
-        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds,
+        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long expiresAtMs,
         int totalRecordSize) {
       this.messageHeader = messageHeader;
       this.blobId = blobId;
@@ -123,17 +127,17 @@ class DumpDataHelper {
       this.deleteMsg = deleteMsg;
       this.isDeleted = isDeleted;
       this.isExpired = isExpired;
-      this.timeToLiveInSeconds = timeToLiveInSeconds;
+      this.expiresAtMs = expiresAtMs;
       this.totalRecordSize = totalRecordSize;
     }
   }
 
   /**
-   * Returns if the blob has been expired or not based on the time to live value
-   * @param timeToLive time in milliseconds referring to the time to live for the blob
+   * Returns if the blob has been expired or not, based on {@code expiresAtMs}.
+   * @param expiresAtMs time in milliseconds referring to the time at which the blob expires.
    * @return {@code true} if blob has expired, {@code false} otherwise
    */
-  static boolean isExpired(Long timeToLive) {
-    return timeToLive != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > timeToLive;
+  static boolean isExpired(Long expiresAtMs) {
+    return expiresAtMs != Utils.Infinite_Time && TIME_MS > expiresAtMs;
   }
 }

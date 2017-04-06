@@ -47,6 +47,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpIndex
 file.to.read=[indexFile]
 log.blob.stats=true
+silent=false
 ```
 
 #### Dump index filtering for a list of blobs
@@ -58,6 +59,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpIndex
 file.to.read=[indexFile]
 blobId.list=blobid1,blobid2,blobid3
+silent=false
 ```
 
 #### Dump all indexes in a replica
@@ -122,7 +124,8 @@ java -cp ambry.jar com.github.ambry.store.DumpLogTool --propsFile [Config file p
 hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
-bytes.per.sec=1000
+blobs.per.sec=100
+silent=false
 ```
 
 #### Dump log starting at offset x and ending at offset y
@@ -134,6 +137,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
 log.start.offset=x
 log.end.offset=y
+silent=false
 ```
 
 #### Dump log filtering with a set of blobs
@@ -144,6 +148,7 @@ hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
 blobId.list=blobId1,blobId2,blobId3
+silent=false
 ```
 
 ### Comparison operations

@@ -43,6 +43,9 @@ class StoreToolsUtil {
     OptionSet options = parser.parse(args);
     String propsFilePath = options.valueOf(propsFileOpt);
     Properties properties = Utils.loadProps(propsFilePath);
+    properties.setProperty("clustermap.cluster.name", "dev");
+    properties.setProperty("clustermap.datacenter.name", "DataCenter");
+    properties.setProperty("clustermap.host.name", "localhost");
     return new VerifiableProperties(properties);
   }
 }

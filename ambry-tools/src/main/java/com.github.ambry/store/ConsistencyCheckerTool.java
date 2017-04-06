@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
@@ -33,14 +34,9 @@ import org.slf4j.LoggerFactory;
  */
 public class ConsistencyCheckerTool {
   private final VerifiableProperties verifiableProperties;
-  // File path referring to the hardware layout
-  private final String hardwareLayoutFilePath;
-
-  // File path referring to the partition layout
-  private final String partitionLayoutFilePath;
 
   // Path referring to root directory containing one directory per replica
-  private final String partitionRootDirecotry;
+  private final String partitionRootDirectory;
 
   // True if acceptable inconsistent blobs should be part of the output or not
   private final boolean includeAcceptableInconsistentBlobs;
@@ -48,14 +44,9 @@ public class ConsistencyCheckerTool {
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
 
   private ConsistencyCheckerTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
-    hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
-    partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
-    partitionRootDirecotry = verifiableProperties.getString("partition.root.directory");
+    partitionRootDirectory = verifiableProperties.getString("partition.root.directory");
     includeAcceptableInconsistentBlobs =
         verifiableProperties.getBoolean("include.acceptable.inconsistent.blobs", false);
-    if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
-      throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
-    }
     this.verifiableProperties = verifiableProperties;
   }
 
@@ -66,7 +57,7 @@ public class ConsistencyCheckerTool {
   }
 
   private boolean checkConsistency() throws Exception {
-    File rootDir = new File(partitionRootDirecotry);
+    File rootDir = new File(partitionRootDirectory);
     logger.info("Root directory for Partition" + rootDir);
     ArrayList<String> replicaList = populateReplicaList(rootDir);
     logger.trace("Replica List " + replicaList);
@@ -96,10 +87,13 @@ public class ConsistencyCheckerTool {
         File[] indexFiles = replica.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
         long keysProcessedforReplica = 0;
         Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
+        int totalIndexCount = indexFiles.length;
+        int currentIndexCount = 0;
+        logger.info("Processing index files for replica " + replica.getName());
         for (File indexFile : indexFiles) {
           keysProcessedforReplica +=
               dumpIndexTool.dumpIndex(indexFile, replica.getName(), replicasList, new ArrayList<String>(),
-                  blobIdToStatusMap, indexStats, false);
+                  blobIdToStatusMap, indexStats, false, currentIndexCount++ >= (totalIndexCount - 2));
         }
         logger.debug("Total keys processed for {} is {}", replica.getName(), keysProcessedforReplica);
         totalKeysProcessed.addAndGet(keysProcessedforReplica);
@@ -120,11 +114,15 @@ public class ConsistencyCheckerTool {
       int replicaCount, boolean includeAcceptableInconsistentBlobs) {
     logger.info("Total keys processed " + totalKeysProcessed.get());
     logger.info("\nTotal Blobs Found " + blobIdToStatusMap.size());
+    long earliestRealInconsistentBlobTimeMs = Long.MAX_VALUE;
+    long latestOpTimeMs = Long.MIN_VALUE;
     long inconsistentBlobs = 0;
-    long realInconsistentBlobs = 0;
+    AtomicLong realInconsistentBlobsCount = new AtomicLong(0);
+    AtomicLong inconsistentDueToReplicationCount = new AtomicLong(0);
     long acceptableInconsistentBlobs = 0;
     for (String blobId : blobIdToStatusMap.keySet()) {
       BlobStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
+      latestOpTimeMs = Math.max(latestOpTimeMs, consistencyBlobResult.getOpTime());
       // valid blobs : count of available replicas = total replica count or count of deleted replicas = total replica count
       // acceptable inconsistent blobs : count of deleted + count of unavailable = total replica count
       // rest are all inconsistent blobs
@@ -136,23 +134,80 @@ public class ConsistencyCheckerTool {
             == replicaCount)) {
           if (includeAcceptableInconsistentBlobs) {
             logger.info("Partially deleted (acceptable inconsistency) blob " + blobId + " isDeletedOrExpired "
-                + consistencyBlobResult.getIsDeletedOrExpired() + "\n" + consistencyBlobResult);
+                + consistencyBlobResult.isDeletedOrExpired() + "\n" + consistencyBlobResult);
           }
           acceptableInconsistentBlobs++;
         } else {
-          realInconsistentBlobs++;
-          logger.info(
-              "Inconsistent Blob : " + blobId + " isDeletedOrExpired " + consistencyBlobResult.getIsDeletedOrExpired()
-                  + "\n" + consistencyBlobResult);
+          earliestRealInconsistentBlobTimeMs =
+              Math.min(earliestRealInconsistentBlobTimeMs, consistencyBlobResult.getOpTime());
+          if (!(consistencyBlobResult.getAvailable().size() + consistencyBlobResult.getUnavailableList().size()
+              == replicaCount) && !(
+              consistencyBlobResult.getAvailable().size() + consistencyBlobResult.getDeletedOrExpired().size()
+                  == replicaCount)) {
+            // cases that could happen due to replication lag. If not for below cases, they are real inconsistent blobs
+            // available count + unavailable count = total replica count
+            // available count + deleted count = total replica count
+            logger.error(
+                "Inconsistent Blob : " + blobId + " isDeletedOrExpired " + consistencyBlobResult.isDeletedOrExpired()
+                    + "\n" + consistencyBlobResult);
+            realInconsistentBlobsCount.incrementAndGet();
+          } else {
+            logger.debug("Inconsistent blob found due to replication lag " + blobId + "\n" + consistencyBlobResult);
+            inconsistentDueToReplicationCount.incrementAndGet();
+          }
         }
       }
     }
+    logger.info("The latest op executed at {} ms.", latestOpTimeMs);
     logger.info("Total Inconsistent blobs count : " + inconsistentBlobs);
     if (includeAcceptableInconsistentBlobs) {
       logger.info("Acceptable Inconsistent blobs count : " + acceptableInconsistentBlobs);
     }
-    logger.info("Real Inconsistent blobs count :" + realInconsistentBlobs);
-    return realInconsistentBlobs == 0;
+    logger.info(
+        "Inconsistent due to replication lag : {}. Difference between first inconsistent and lastestOpTime is {} ms",
+        inconsistentDueToReplicationCount.get(), latestOpTimeMs - earliestRealInconsistentBlobTimeMs);
+    logger.info("Real Inconsistent blobs count :" + realInconsistentBlobsCount);
+    if (realInconsistentBlobsCount.get() > 0) {
+      logger.info("The earliest real inconsistent blob had its last operation at {} ms",
+          earliestRealInconsistentBlobTimeMs);
+    }
+    return realInconsistentBlobsCount.get() == 0;
+  }
+
+  /**
+   * Figure out real inconsistent blobs from those due to replication lag and print
+   * @param potentialInConsistentblobs {@link List} of potential inconsistent blobs
+   * @param blobIdToStatusMap {@link Map} of blobId to {@link BlobStatus}
+   * @param replicaCount total replica count
+   * @param earliestRealInconsistentBlobTimeMs earliest time of real inconsistent blob in ms
+   * @param realInconsistentBlobs {@link AtomicLong} to keep track of real inconsistent blob count
+   * @param inconsistentDueToReplicationCount {@link AtomicLong} to keep track of inconsistent blobs count due to
+   *                                                            replication lag
+   */
+  private void logInconsistentBlobs(List<String> potentialInConsistentblobs, Map<String, BlobStatus> blobIdToStatusMap,
+      int replicaCount, long earliestRealInconsistentBlobTimeMs, AtomicLong realInconsistentBlobs,
+      AtomicLong inconsistentDueToReplicationCount) {
+    for (String potentialInConsistentBlob : potentialInConsistentblobs) {
+      BlobStatus consistencyBlobResult = blobIdToStatusMap.get(potentialInConsistentBlob);
+      if (consistencyBlobResult.getOpTime() >= earliestRealInconsistentBlobTimeMs) {
+        if (!(consistencyBlobResult.getAvailable().size() + consistencyBlobResult.getUnavailableList().size()
+            == replicaCount) && !(
+            consistencyBlobResult.getAvailable().size() + consistencyBlobResult.getDeletedOrExpired().size()
+                == replicaCount)) {
+          // cases that could happen due to replication lag. If not for below cases, they are real inconsistent blobs
+          // available count + unavailable count = total replica count
+          // available count + deleted count = total replica count
+          logger.error("Inconsistent Blob : " + potentialInConsistentBlob + " isDeletedOrExpired "
+              + consistencyBlobResult.isDeletedOrExpired() + "\n" + consistencyBlobResult);
+          realInconsistentBlobs.incrementAndGet();
+        } else {
+          logger.debug(
+              "Inconsistent blob found possibly due to replication " + potentialInConsistentBlob + " Status map "
+                  + consistencyBlobResult);
+          inconsistentDueToReplicationCount.incrementAndGet();
+        }
+      }
+    }
   }
 }
 
