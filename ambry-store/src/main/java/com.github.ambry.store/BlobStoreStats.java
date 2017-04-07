@@ -40,6 +40,9 @@ import java.util.concurrent.atomic.AtomicLong;
 class BlobStoreStats implements StoreStats {
   static final String IO_SCHEDULER_JOB_TYPE = "BlobStoreStats";
   static final String IO_SCHEDULER_JOB_ID = "indexSegment_read";
+  // Max blob size thats encountered while generating stats
+  // TODO: make this dynamically generated
+  private static final long MAX_BLOB_SIZE = 4 * 1024 * 1024;
 
   private final PersistentIndex index;
   private final Time time;
@@ -90,6 +93,14 @@ class BlobStoreStats implements StoreStats {
   @Override
   public StatsSnapshot getStatsSnapshot() throws StoreException {
     return convertQuotaToStatsSnapshot(getValidDataSizeByContainer());
+  }
+
+  /**
+   * Returns the max blob size that is encountered while generating stats
+   * @return the max blob size that is encountered while generating stats
+   */
+  long getMaxBlobSize() {
+    return MAX_BLOB_SIZE;
   }
 
   /**

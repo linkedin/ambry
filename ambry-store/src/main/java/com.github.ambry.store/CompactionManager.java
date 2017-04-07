@@ -18,7 +18,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -27,8 +26,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Responsible for managing compaction of a {@link BlobStore}. V0 implementation returns entire log segment range
- * ignoring those overlapping with {@link Journal} as part of CompactionDetails.
+ * Responsible for managing compaction of a {@link BlobStore}.
  */
 class CompactionManager {
   static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
@@ -36,10 +34,10 @@ class CompactionManager {
   private final String mountPath;
   private final StoreConfig storeConfig;
   private final Time time;
-  private final long messageRetentionTimeInMs;
   private final Collection<BlobStore> stores;
   private final CompactionExecutor compactionExecutor;
   private final StorageManagerMetrics metrics;
+  private final CompactionPolicy compactionPolicy;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   private Thread compactionThread;
@@ -59,8 +57,15 @@ class CompactionManager {
     this.stores = stores;
     this.time = time;
     this.metrics = metrics;
-    this.messageRetentionTimeInMs = storeConfig.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
     compactionExecutor = storeConfig.storeEnableCompaction ? new CompactionExecutor() : null;
+    try {
+      CompactionPolicyFactory compactionPolicyFactory =
+          Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
+      compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
+    } catch (Exception e) {
+      throw new IllegalStateException(
+          "Error creating compaction policy using compactionPolicyFactory " + storeConfig.storeCompactionPolicyFactory);
+    }
   }
 
   /**
@@ -111,17 +116,8 @@ class CompactionManager {
    * {@code null} if compaction is not required
    * @throws StoreException when {@link BlobStore} is not started
    */
-  CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
-    long usedCapacity = blobStore.getSizeInBytes();
-    long totalCapacity = blobStore.getCapacityInBytes();
-    CompactionDetails details = null;
-    if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
-      List<String> potentialLogSegments = blobStore.getLogSegmentsNotInJournal();
-      if (potentialLogSegments != null) {
-        details = new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, potentialLogSegments);
-      }
-    }
-    return details;
+  private CompactionDetails getCompactionDetails(BlobStore blobStore) throws StoreException {
+    return blobStore.getCompactionDetails(compactionPolicy);
   }
 
   /**
@@ -227,3 +223,4 @@ class CompactionManager {
     }
   }
 }
+

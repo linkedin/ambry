@@ -1157,13 +1157,6 @@ public class BlobStoreTest {
     }
 
     try {
-      blobStore.getLogSegmentsNotInJournal();
-      fail("Operation should have failed because store is inactive");
-    } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
-    }
-
-    try {
       blobStore.shutdown();
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());

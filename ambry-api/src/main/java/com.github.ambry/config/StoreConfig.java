@@ -118,6 +118,21 @@ public class StoreConfig {
   @Default("50")
   public final int storeMinUsedCapacityToTriggerCompactionInPercentage;
 
+  /**
+   * The factory class used to get the compaction policy
+   */
+  @Config("store.compaction.policy.factory")
+  @Default("com.github.ambry.store.DefaultCompactionPolicyFactory")
+  public final String storeCompactionPolicyFactory;
+
+  /**
+   * The minimum number of log segments to be reclaimed to trigger compaction.
+   * It is up to the compaction policy implementation to honor this config if need be.
+   */
+  @Config("store.min.log.segment.count.to.reclaim.to.trigger.compaction")
+  @Default("1")
+  public final int storeMinLogSegmentCountToReclaimToTriggerCompaction;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -141,6 +156,11 @@ public class StoreConfig {
     storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);
     storeCompactionCheckFrequencyInHours =
         verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1, Integer.MAX_VALUE);
+    storeCompactionPolicyFactory = verifiableProperties.getString("store.compaction.policy.factory",
+        "com.github.ambry.store.DefaultCompactionPolicyFactory");
+    storeMinLogSegmentCountToReclaimToTriggerCompaction =
+        verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
+
   }
 }
 
