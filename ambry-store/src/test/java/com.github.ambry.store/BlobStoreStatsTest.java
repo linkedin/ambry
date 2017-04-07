@@ -71,9 +71,8 @@ public class BlobStoreStatsTest {
     state = new CuratedLogIndexState(isLogSegmented, tempDir);
     logSegmentForecastOffsetMs = state.time.milliseconds();
     bucketCount = 2 * (int) (logSegmentForecastOffsetMs / BUCKET_SPAN_IN_MS);
-    blobStoreStats =
-        new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs / Time.MsPerSec,
-            QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, Utils.newScheduler(1, false), diskIOScheduler, METRICS);
+    blobStoreStats = new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
+        QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, Utils.newScheduler(1, false), diskIOScheduler, METRICS);
   }
 
   /**
@@ -456,8 +455,8 @@ public class BlobStoreStatsTest {
   @Test
   public void testBucketingCoverageTransition() throws InterruptedException, StoreException, IOException {
     int bucketCount = 2;
-    long logSegmentForecastOffsetSecs = 0;
-    blobStoreStats = new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetSecs,
+    long logSegmentForecastOffsetMs = 0;
+    blobStoreStats = new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
         QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, storeStatsScheduler, diskIOScheduler, METRICS);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
     // do not hold the initial scan

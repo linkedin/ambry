@@ -136,8 +136,8 @@ class BlobStore implements Store {
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
         blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMs,
-            config.storeStatsLogSegmentForecastOffsetInSecs, config.storeStatsQueueProcessorPeriodInMs, time,
-            storeStatsScheduler, diskIOScheduler, metrics);
+            config.storeDeletedMessageRetentionDays * Time.MinsPerDay * Time.SecsPerMin * Time.MsPerSec,
+            config.storeStatsQueueProcessorPeriodInMs, time, storeStatsScheduler, diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();

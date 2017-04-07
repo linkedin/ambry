@@ -147,13 +147,6 @@ public class StoreConfig {
   @Default("3600000")
   public final long storeStatsBucketSpanInMs;
 
-  /**
-   * The time offset in seconds to be applied to obtain the delete reference time for log segment valid data size.
-   */
-  @Config("store.stats.log.segment.forecast.offset.in.secs")
-  @Default("604800")
-  public final long storeStatsLogSegmentForecastOffsetInSecs;
-
   @Config("store.stats.queue.processor.period.in.ms")
   @Default("120000")
   public final long storeStatsQueueProcessorPeriodInMs;
@@ -187,8 +180,6 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
     storeStatsBucketCount = verifiableProperties.getInt("store.stats.bucket.count", 24);
     storeStatsBucketSpanInMs = verifiableProperties.getLong("store.stats.bucket.span.in.ms", 3600000);
-    storeStatsLogSegmentForecastOffsetInSecs =
-        verifiableProperties.getLong("store.stats.log.segment.forecast.offset.in.secs", 604800);
     storeStatsQueueProcessorPeriodInMs =
         verifiableProperties.getLong("store.stats.queue.processor.period.in.ms", 120000);
   }

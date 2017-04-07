@@ -26,35 +26,34 @@ import java.util.TreeMap;
  * used to modify and access the stored data structures.
  */
 class ScanResults {
-  final NavigableMap<Long, Map<String, Map<String, Long>>> containerBuckets = new TreeMap<>();
-  final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBuckets = new TreeMap<>();
-  final long containerForecastStartTimeInMs;
-  final long containerLastBucketEndTimeInMs;
-  final long containerForecastEndTimeInMs;
-  final long logSegmentForecastStartTimeInMs;
-  final long logSegmentLastBucketEndTimeInMs;
-  final long logSegmentForecastEndTimeInMs;
+  private final NavigableMap<Long, Map<String, Map<String, Long>>> containerBuckets = new TreeMap<>();
+  private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBuckets = new TreeMap<>();
+  final long containerForecastStartTimeMs;
+  final long containerLastBucketTimeMs;
+  final long containerForecastEndTimeMs;
+  final long logSegmentForecastStartTimeMs;
+  final long logSegmentLastBucketTimeMs;
+  final long logSegmentForecastEndTimeMs;
   Offset lastScannedOffset = null;
 
   /**
    * Create the bucket data structures in advance based on the given scanStartTime and segmentScanTimeOffset.
    */
   ScanResults(long startTimeInMs, long logSegmentForecastOffsetMs, int bucketCount, long bucketSpanInMs) {
-    long containerBucketEndTime = startTimeInMs - startTimeInMs % bucketSpanInMs;
-    long logSegmentStartTimeInMs = startTimeInMs - logSegmentForecastOffsetMs;
-    long logSegmentBucketEndTime = logSegmentStartTimeInMs - logSegmentStartTimeInMs % bucketSpanInMs;
+    long containerBucketTimeMs = startTimeInMs;
+    long logSegmentBucketTimeMs = startTimeInMs - logSegmentForecastOffsetMs;
     for (int i = 0; i < bucketCount; i++) {
-      containerBuckets.put(containerBucketEndTime, new HashMap<String, Map<String, Long>>());
-      logSegmentBuckets.put(logSegmentBucketEndTime, new TreeMap<String, Long>());
-      containerBucketEndTime += bucketSpanInMs;
-      logSegmentBucketEndTime += bucketSpanInMs;
+      containerBuckets.put(containerBucketTimeMs, new HashMap<String, Map<String, Long>>());
+      logSegmentBuckets.put(logSegmentBucketTimeMs, new TreeMap<String, Long>());
+      containerBucketTimeMs += bucketSpanInMs;
+      logSegmentBucketTimeMs += bucketSpanInMs;
     }
-    containerForecastStartTimeInMs = containerBuckets.firstKey();
-    containerLastBucketEndTimeInMs = containerBuckets.lastKey();
-    containerForecastEndTimeInMs = containerLastBucketEndTimeInMs + bucketSpanInMs;
-    logSegmentForecastStartTimeInMs = logSegmentBuckets.firstKey();
-    logSegmentLastBucketEndTimeInMs = logSegmentBuckets.lastKey();
-    logSegmentForecastEndTimeInMs = logSegmentLastBucketEndTimeInMs + bucketSpanInMs;
+    containerForecastStartTimeMs = containerBuckets.firstKey();
+    containerLastBucketTimeMs = containerBuckets.lastKey();
+    containerForecastEndTimeMs = containerLastBucketTimeMs + bucketSpanInMs;
+    logSegmentForecastStartTimeMs = logSegmentBuckets.firstKey();
+    logSegmentLastBucketTimeMs = logSegmentBuckets.lastKey();
+    logSegmentForecastEndTimeMs = logSegmentLastBucketTimeMs + bucketSpanInMs;
   }
 
   Long getContainerBucketKey(long referenceTimeInMs) {

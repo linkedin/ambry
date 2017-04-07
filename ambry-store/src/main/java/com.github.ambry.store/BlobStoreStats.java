@@ -98,7 +98,7 @@ class BlobStoreStats implements StoreStats {
     return new StatsSnapshot(totalSize, accountValidSizeMap);
   }
 
-  BlobStoreStats(PersistentIndex index, int bucketCount, long bucketSpanInMs, long logSegmentForecastOffsetSecs,
+  BlobStoreStats(PersistentIndex index, int bucketCount, long bucketSpanInMs, long logSegmentForecastOffsetMs,
       long queueProcessorPeriodInSecs, Time time, ScheduledExecutorService scheduler, DiskIOScheduler diskIOScheduler,
       StoreMetrics metrics) {
     this.index = index;
@@ -106,7 +106,7 @@ class BlobStoreStats implements StoreStats {
     this.diskIOScheduler = diskIOScheduler;
     this.bucketCount = bucketCount;
     this.bucketSpanInMs = bucketSpanInMs;
-    this.logSegmentForecastOffsetMs = logSegmentForecastOffsetSecs * Time.MsPerSec;
+    this.logSegmentForecastOffsetMs = logSegmentForecastOffsetMs;
     this.queueProcessorPeriodInSecs = queueProcessorPeriodInSecs;
     this.metrics = metrics;
     isBucketingEnabled = bucketCount > 0;
@@ -203,13 +203,13 @@ class BlobStoreStats implements StoreStats {
       throws StoreException {
     Map<String, Map<String, Long>> retValue = null;
     ScanResults currentScanResults = scanResults.get();
-    if (currentScanResults != null && isWithinRange(currentScanResults.containerForecastStartTimeInMs,
-        currentScanResults.containerForecastEndTimeInMs, deleteAndExpirationRefTimeInMs)) {
+    if (currentScanResults != null && isWithinRange(currentScanResults.containerForecastStartTimeMs,
+        currentScanResults.containerForecastEndTimeMs, deleteAndExpirationRefTimeInMs)) {
       retValue = currentScanResults.getValidSizePerContainer(deleteAndExpirationRefTimeInMs);
     }
     if (retValue == null) {
-      if (isScanning && isWithinRange(indexScanner.newScanResults.containerForecastStartTimeInMs,
-          indexScanner.newScanResults.containerForecastEndTimeInMs, deleteAndExpirationRefTimeInMs)) {
+      if (isScanning && isWithinRange(indexScanner.newScanResults.containerForecastStartTimeMs,
+          indexScanner.newScanResults.containerForecastEndTimeMs, deleteAndExpirationRefTimeInMs)) {
         synchronized (scanningLock) {
           while (isScanning) {
             try {
@@ -253,9 +253,8 @@ class BlobStoreStats implements StoreStats {
   void start() {
     if (isBucketingEnabled) {
       indexScanner = new IndexScanner();
-      int futureBucketCount = bucketCount > 1 ? bucketCount - 1 : 1;
       indexScannerAndQueueProcessorScheduler.scheduleAtFixedRate(indexScanner, 0,
-          futureBucketCount * (bucketSpanInMs / Time.MsPerSec), TimeUnit.SECONDS);
+          (bucketCount * bucketSpanInMs) / Time.MsPerSec, TimeUnit.SECONDS);
       queueProcessor = new QueueProcessor();
       indexScannerAndQueueProcessorScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessorPeriodInSecs,
           TimeUnit.SECONDS);
@@ -398,10 +397,10 @@ class BlobStoreStats implements StoreStats {
    * @return the largest shared point in time in milliseconds if there is one, otherwise -1 is returned
    */
   private long getLogSegmentRefTimeMs(ScanResults results, TimeRange timeRange) {
-    long refTimeInMs = results == null || timeRange.getStartTimeInMs() >= results.logSegmentForecastEndTimeInMs
-        || timeRange.getEndTimeInMs() < results.logSegmentForecastStartTimeInMs ? -1 : timeRange.getEndTimeInMs();
-    if (refTimeInMs != -1 && refTimeInMs >= results.logSegmentForecastEndTimeInMs) {
-      refTimeInMs = results.logSegmentLastBucketEndTimeInMs;
+    long refTimeInMs = results == null || timeRange.getStartTimeInMs() >= results.logSegmentForecastEndTimeMs
+        || timeRange.getEndTimeInMs() < results.logSegmentForecastStartTimeMs ? -1 : timeRange.getEndTimeInMs();
+    if (refTimeInMs != -1 && refTimeInMs >= results.logSegmentForecastEndTimeMs) {
+      refTimeInMs = results.logSegmentLastBucketTimeMs;
     }
     return refTimeInMs;
   }
@@ -465,7 +464,7 @@ class BlobStoreStats implements StoreStats {
    */
   private void handleContainerBucketUpdate(ScanResults results, IndexValue indexValue, long expOrDelTimeInMs,
       int operator) {
-    if (isWithinRange(results.containerForecastStartTimeInMs, results.containerLastBucketEndTimeInMs,
+    if (isWithinRange(results.containerForecastStartTimeMs, results.containerLastBucketTimeMs,
         expOrDelTimeInMs)) {
       results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs),
           String.valueOf(indexValue.getServiceId()), String.valueOf(indexValue.getContainerId()),
@@ -482,7 +481,7 @@ class BlobStoreStats implements StoreStats {
    */
   private void handleLogSegmentBucketUpdate(ScanResults results, IndexValue indexValue, long expOrDelTimeInMs,
       int operator) {
-    if (isWithinRange(results.logSegmentForecastStartTimeInMs, results.logSegmentLastBucketEndTimeInMs,
+    if (isWithinRange(results.logSegmentForecastStartTimeMs, results.logSegmentLastBucketTimeMs,
         expOrDelTimeInMs)) {
       results.updateLogSegmentBucket(results.getLogSegmentBucketKey(expOrDelTimeInMs), indexValue.getOffset().getName(),
           indexValue.getSize() * operator);
@@ -495,9 +494,9 @@ class BlobStoreStats implements StoreStats {
    * @param putValue the {@link IndexValue} of the new PUT
    */
   private void processNewPut(ScanResults results, IndexValue putValue) {
-    results.updateContainerBucket(results.containerForecastStartTimeInMs, String.valueOf(putValue.getServiceId()),
+    results.updateContainerBucket(results.containerForecastStartTimeMs, String.valueOf(putValue.getServiceId()),
         String.valueOf(putValue.getContainerId()), putValue.getSize());
-    results.updateLogSegmentBucket(results.logSegmentForecastStartTimeInMs, putValue.getOffset().getName(),
+    results.updateLogSegmentBucket(results.logSegmentForecastStartTimeMs, putValue.getOffset().getName(),
         putValue.getSize());
     handleContainerBucketUpdate(results, putValue, putValue.getExpiresAtMs(), SUBTRACT);
     handleLogSegmentBucketUpdate(results, putValue, putValue.getExpiresAtMs(), SUBTRACT);
@@ -515,7 +514,7 @@ class BlobStoreStats implements StoreStats {
       operationTimeInMs =
           index.getIndexSegments().floorEntry(deleteValue.getOffset()).getValue().getLastModifiedTimeMs();
     }
-    results.updateLogSegmentBucket(results.logSegmentForecastStartTimeInMs, deleteValue.getOffset().getName(),
+    results.updateLogSegmentBucket(results.logSegmentForecastStartTimeMs, deleteValue.getOffset().getName(),
         deleteValue.getSize());
     if (!isExpired(originalPutValue.getExpiresAtMs(), operationTimeInMs)) {
       handleContainerBucketUpdate(results, originalPutValue, operationTimeInMs, SUBTRACT);
@@ -541,7 +540,7 @@ class BlobStoreStats implements StoreStats {
       IndexValue indexValue = indexEntry.getValue();
       if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // put records, delete records does not count towards valid data size for quota (containers)
-        results.updateContainerBucket(results.containerForecastStartTimeInMs, String.valueOf(indexValue.getServiceId()),
+        results.updateContainerBucket(results.containerForecastStartTimeMs, String.valueOf(indexValue.getServiceId()),
             String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
         if (deletedKeys.containsKey(indexEntry.getKey())) {
@@ -566,7 +565,7 @@ class BlobStoreStats implements StoreStats {
       Map<StoreKey, Long> deletedKeys) {
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue indexValue = indexEntry.getValue();
-      results.updateLogSegmentBucket(results.logSegmentForecastStartTimeInMs, indexValue.getOffset().getName(),
+      results.updateLogSegmentBucket(results.logSegmentForecastStartTimeMs, indexValue.getOffset().getName(),
           indexValue.getSize());
       if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // put records
@@ -718,11 +717,11 @@ class BlobStoreStats implements StoreStats {
         Map<StoreKey, Long> deletedKeys) throws StoreException {
       // valid index entries wrt container reference time
       List<IndexEntry> validIndexEntries =
-          getValidIndexEntries(indexSegment, indexEntries, newScanResults.containerForecastStartTimeInMs, deletedKeys);
+          getValidIndexEntries(indexSegment, indexEntries, newScanResults.containerForecastStartTimeMs, deletedKeys);
       processEntriesForContainerBucket(newScanResults, validIndexEntries, deletedKeys);
       // valid index entries wrt log segment reference time
       validIndexEntries =
-          getValidIndexEntries(indexSegment, indexEntries, newScanResults.logSegmentForecastStartTimeInMs, deletedKeys);
+          getValidIndexEntries(indexSegment, indexEntries, newScanResults.logSegmentForecastStartTimeMs, deletedKeys);
       processEntriesForLogSegmentBucket(newScanResults, validIndexEntries, deletedKeys);
     }
 
