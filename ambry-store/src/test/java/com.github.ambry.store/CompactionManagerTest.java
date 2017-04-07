@@ -19,7 +19,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -73,7 +72,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-        blobStore = new MockBlobStore(config, metrics, time, null);
+    blobStore = new MockBlobStore(config, metrics, time, null);
     compactionManager =
         new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
     compactionManager.enable();

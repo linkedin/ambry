@@ -42,13 +42,11 @@ import static org.junit.Assert.*;
 @RunWith(Parameterized.class)
 public class CompactionPolicyTest {
 
-  static long CAPACITY_IN_BYTES = 10 * 1024 * 1024;
-  private static long SEGMENT_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES / 10;
-  private static long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
-  private static long DEFAULT_MAX_BLOB_SIZE = CAPACITY_IN_BYTES / 100;
-  private static long SEGMENT_HEADER_SIZE = CAPACITY_IN_BYTES / 50;
-  private static String COMPACT_ALL_POLICY_FACTORY = "com.github.ambry.store.CompactAllPolicyFactory";
-  private static String DEFAULT_COMPACTION_POLICY_FACTORY = "com.github.ambry.store.DefaultCompactionPolicyFactory";
+  final static long CAPACITY_IN_BYTES = 10 * 1024 * 1024;
+  private static final long SEGMENT_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES / 10;
+  private static final long DEFAULT_USED_CAPACITY_IN_BYTES = CAPACITY_IN_BYTES * 6 / 10;
+  private static final long DEFAULT_MAX_BLOB_SIZE = CAPACITY_IN_BYTES / 100;
+  private static final long SEGMENT_HEADER_SIZE = CAPACITY_IN_BYTES / 50;
 
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
@@ -65,7 +63,8 @@ public class CompactionPolicyTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{DEFAULT_COMPACTION_POLICY_FACTORY}, {COMPACT_ALL_POLICY_FACTORY}});
+    return Arrays.asList(
+        new Object[][]{{DefaultCompactionPolicyFactory.class.getName()}, {CompactAllPolicyFactory.class.getName()}});
   }
 
   /**
