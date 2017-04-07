@@ -121,12 +121,12 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobGetCount;
 
   // AdaptiveOperationTracker metrics
-  public final Histogram getBlobLocalColoLatency;
-  public final Histogram getBlobCrossColoLatency;
+  public final Histogram getBlobLocalColoLatencyMs;
+  public final Histogram getBlobCrossColoLatencyMs;
   public final Counter getBlobPastDueCount;
 
-  public final Histogram getBlobInfoLocalColoLatency;
-  public final Histogram getBlobInfoCrossColoLatency;
+  public final Histogram getBlobInfoLocalColoLatencyMs;
+  public final Histogram getBlobInfoCrossColoLatencyMs;
   public final Counter getBlobInfoPastDueCount;
 
   // Map that stores dataNode-level metrics.
@@ -272,14 +272,16 @@ public class NonBlockingRouterMetrics {
     }
 
     // AdaptiveOperationTracker trackers
-    getBlobLocalColoLatency = metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalColoLatency"));
-    getBlobCrossColoLatency = metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossColoLatency"));
+    getBlobLocalColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalColoLatencyMs"));
+    getBlobCrossColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossColoLatencyMs"));
     getBlobPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "PastDueCount"));
 
-    getBlobInfoLocalColoLatency =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalColoLatency"));
-    getBlobInfoCrossColoLatency =
-        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatency"));
+    getBlobInfoLocalColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalColoLatencyMs"));
+    getBlobInfoCrossColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatencyMs"));
     getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
   }
 

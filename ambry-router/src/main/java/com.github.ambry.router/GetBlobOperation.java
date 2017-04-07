@@ -504,8 +504,8 @@ class GetBlobOperation extends GetOperation {
       chunkOperationTracker =
           new AdaptiveOperationTracker(routerConfig.routerDatacenterName, chunkBlobId.getPartition(),
               routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
-              routerConfig.routerGetRequestParallelism, time, routerMetrics.getBlobLocalColoLatency,
-              routerMetrics.getBlobCrossColoLatency, routerMetrics.getBlobPastDueCount,
+              routerConfig.routerGetRequestParallelism, time, routerMetrics.getBlobLocalColoLatencyMs,
+              routerMetrics.getBlobCrossColoLatencyMs, routerMetrics.getBlobPastDueCount,
               routerConfig.routerLatencyToleranceQuantile);
       state = ChunkState.Ready;
     }
