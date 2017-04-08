@@ -120,6 +120,15 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobPutCount;
   public final Counter compositeBlobGetCount;
 
+  // AdaptiveOperationTracker metrics
+  public final Histogram getBlobLocalColoLatencyMs;
+  public final Histogram getBlobCrossColoLatencyMs;
+  public final Counter getBlobPastDueCount;
+
+  public final Histogram getBlobInfoLocalColoLatencyMs;
+  public final Histogram getBlobInfoCrossColoLatencyMs;
+  public final Counter getBlobInfoPastDueCount;
+
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
 
@@ -261,6 +270,19 @@ public class NonBlockingRouterMetrics {
           dataNodeId.getPort());
       dataNodeToMetrics.put(dataNodeId, new NodeLevelMetrics(metricRegistry, dataNodeName));
     }
+
+    // AdaptiveOperationTracker trackers
+    getBlobLocalColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "LocalColoLatencyMs"));
+    getBlobCrossColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "CrossColoLatencyMs"));
+    getBlobPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "PastDueCount"));
+
+    getBlobInfoLocalColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "LocalColoLatencyMs"));
+    getBlobInfoCrossColoLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatencyMs"));
+    getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
   }
 
   /**

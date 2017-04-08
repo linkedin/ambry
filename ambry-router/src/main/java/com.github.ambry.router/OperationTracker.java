@@ -27,6 +27,23 @@ import java.util.Iterator;
  *
  * When an operation is progressing by receiving responses from replicas, its {@code OperationTracker}
  * needs to be informed by calling {@link #onResponse(ReplicaId, boolean)}.
+ *
+ * Typical usage of an {@code OperationTracker} would be:
+ * <pre>
+ *{@code
+ *
+ *   Operation operationTracker = new OperationTrackerImpl(..);
+ *   //...
+ *   Iterator<ReplicaId> itr = operationTracker.getReplicaIterator();
+ *   while (itr.hasNext()) {
+ *     ReplicaId nextReplica = itr.next();
+ *     //determine request can be sent to the replica, i.e., connection available.
+ *     if(true) {
+ *       itr.remove();
+ *     }
+ *   }
+ *}
+ * </pre>
  */
 interface OperationTracker {
   /**
@@ -55,7 +72,8 @@ interface OperationTracker {
   /**
    * Provide an iterator to the replicas to which requests may be sent. Each time when start to iterate
    * the replicas of an {@code OperationTracker}, an iterator needs to be obtained by calling this
-   * method.
+   * method. If a request is sent to a {@link ReplicaId} obtained from the returned iterator, the {@link ReplicaId}
+   * has to be removed from the iterator in order for it to be tracked.
    *
    * @return An iterator that iterates all possible and valid replicas.
    */

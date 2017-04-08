@@ -56,15 +56,16 @@ import java.util.NoSuchElementException;
  *
  */
 class SimpleOperationTracker implements OperationTracker {
-  private final int successTarget;
-  private final int parallelism;
-  private final LinkedList<ReplicaId> replicaPool = new LinkedList<ReplicaId>();
-  private final OpTrackerIterator otIterator;
+  protected final int successTarget;
+  protected final int parallelism;
+  protected final LinkedList<ReplicaId> replicaPool = new LinkedList<ReplicaId>();
 
-  private int totalReplicaCount = 0;
-  private int inflightCount = 0;
-  private int succeededCount = 0;
-  private int failedCount = 0;
+  protected int totalReplicaCount = 0;
+  protected int inflightCount = 0;
+  protected int succeededCount = 0;
+  protected int failedCount = 0;
+
+  private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
 
   /**
@@ -80,6 +81,9 @@ class SimpleOperationTracker implements OperationTracker {
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
       int parallelism, boolean shuffleReplicas) {
+    if (parallelism < 1) {
+      throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
+    }
     this.successTarget = successTarget;
     this.parallelism = parallelism;
     // Order the replicas so that local healthy replicas are ordered and returned first,
