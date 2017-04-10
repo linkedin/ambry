@@ -11,13 +11,13 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.rest;
+package com.github.ambry.commons;
 
 import org.json.JSONObject;
 
 
 /**
- * A representation of a container. A container virtually groups a number of ambry blobs.
+ * A representation of a container.
  */
 public class Container {
   private final short id;
@@ -34,10 +34,7 @@ public class Container {
    */
   Container(short id, String name, JSONObject metadata, Account parentAccount) {
     if (name == null) {
-      throw new IllegalArgumentException("name cannot be null");
-    }
-    if (metadata == null) {
-      throw new IllegalArgumentException("metadata cannot be null");
+      throw new IllegalArgumentException("containerName cannot be null");
     }
     if (parentAccount == null) {
       throw new IllegalArgumentException("parentAccount cannot be null");
@@ -50,15 +47,15 @@ public class Container {
 
   /**
    * Gets the id of the container.
-   * @return The parentAccount id of the parentAccount.
+   * @return The id of the container.
    */
   public short id() {
     return id;
   }
 
   /**
-   * Gets the String name of the container.
-   * @return The String name of the container.
+   * Gets the name of the container.
+   * @return The name of the container.
    */
   public String name() {
     return name;
@@ -78,5 +75,39 @@ public class Container {
    */
   public Account parentAccount() {
     return parentAccount;
+  }
+
+  /**
+   * Generates a {@link String} representation that uniquely identifies this container. The string
+   * is in the format of {@code Container[id:name]}.
+   * @return The {@link String} representation of this container.
+   */
+  @Override
+  public String toString() {
+    return "Container[" + id() + ":" + name() + "]";
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    Container container = (Container) o;
+
+    if (id != container.id) {
+      return false;
+    }
+    return parentAccount.equals(container.parentAccount);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = (int) id;
+    result = 31 * result + parentAccount.hashCode();
+    return result;
   }
 }
