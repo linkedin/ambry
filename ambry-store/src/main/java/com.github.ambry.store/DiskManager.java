@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,7 @@ class DiskManager {
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
+  private final ScheduledExecutorService longLiveTaskScheduler;
   private final CompactionManager compactionManager;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -64,7 +66,7 @@ class DiskManager {
     this.metrics = metrics;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
-    ScheduledExecutorService longLiveTaskScheduler = Utils.newScheduler(1, true);
+    longLiveTaskScheduler = Utils.newScheduler(1, true);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
@@ -156,6 +158,10 @@ class DiskManager {
       }
       compactionManager.awaitTermination();
       diskIOScheduler.close();
+      longLiveTaskScheduler.shutdown();
+      if (!longLiveTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
+        logger.error("Could not terminate long live tasks after DiskManager shutdown");
+      }
     } finally {
       metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
