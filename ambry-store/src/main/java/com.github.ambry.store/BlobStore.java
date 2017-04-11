@@ -41,7 +41,7 @@ class BlobStore implements Store {
   private final String storeId;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
-  private final ScheduledExecutorService storeStatsScheduler;
+  private final ScheduledExecutorService longLiveTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
@@ -77,14 +77,14 @@ class BlobStore implements Store {
   }
 
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService storeStatsScheduler, DiskIOScheduler diskIOScheduler,
+      ScheduledExecutorService longLiveTaskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
-    this.storeStatsScheduler = storeStatsScheduler;
+    this.longLiveTaskScheduler = longLiveTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
@@ -135,9 +135,12 @@ class BlobStore implements Store {
             sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
-        blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMs,
-            config.storeDeletedMessageRetentionDays * Time.MinsPerDay * Time.SecsPerMin * Time.MsPerSec,
-            config.storeStatsQueueProcessorPeriodInMs, time, storeStatsScheduler, diskIOScheduler, metrics);
+        long logSegmentForecastOffsetMs =
+            config.storeDeletedMessageRetentionDays * Time.MinsPerDay * Time.SecsPerMin * Time.MsPerSec;
+        blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
+            logSegmentForecastOffsetMs, config.storeStatsQueueProcessorPeriodInMinutes, time, longLiveTaskScheduler,
+            taskScheduler, diskIOScheduler, metrics);
+        blobStoreStats.start();
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -408,6 +411,7 @@ class BlobStore implements Store {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
+        blobStoreStats.shutdown();
         compactor.close(30);
         index.close();
         log.close();

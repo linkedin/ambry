@@ -26,15 +26,31 @@ import java.util.TreeMap;
  * used to modify and access the stored data structures.
  */
 class ScanResults {
+  /**
+   * A {@link NavigableMap} that stores buckets for container valid data size. The key of the map is the end time of
+   * each bucket and the value is the corresponding valid data size map. For example, there are two buckets with end
+   * time t1 and t2. Bucket with end time t2 includes all events whose operation time is greater than or equal to t1 but
+   * strictly less than t2.
+   * Each bucket except for the very first one contains the delta in valid data size that occurred prior to the bucket
+   * end time. The very first bucket's end time is the forecast start time for containers and it contains the valid data
+   * size map at the forecast start time. The very first bucket is used as a base value, requested valid data size is
+   * computed by applying the deltas from appropriate buckets on the base value.
+   */
   private final NavigableMap<Long, Map<String, Map<String, Long>>> containerBuckets = new TreeMap<>();
+
+  /**
+   * A {@link NavigableMap} that stores buckets for log segment valid data size. The rest of the structure is similar
+   * to containerBuckets.
+   */
   private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBuckets = new TreeMap<>();
+
   final long containerForecastStartTimeMs;
   final long containerLastBucketTimeMs;
   final long containerForecastEndTimeMs;
   final long logSegmentForecastStartTimeMs;
   final long logSegmentLastBucketTimeMs;
   final long logSegmentForecastEndTimeMs;
-  Offset lastScannedOffset = null;
+  Offset scannedEndOffset = null;
 
   /**
    * Create the bucket data structures in advance based on the given scanStartTime and segmentScanTimeOffset.
@@ -56,14 +72,54 @@ class ScanResults {
     logSegmentForecastEndTimeMs = logSegmentLastBucketTimeMs + bucketSpanInMs;
   }
 
+  /**
+   * Given a reference time, return the appropriate container bucket key (bucket end time) to indicate which bucket will
+   * an event with the given reference time as operation time belong to.
+   * @param referenceTimeInMs the reference time or operation time of an event.
+   * @return the appropriate bucket key (bucket end time) to indicate which bucket will an event with
+   * the given reference time as operation time belong to.
+   */
   Long getContainerBucketKey(long referenceTimeInMs) {
     return containerBuckets.higherKey(referenceTimeInMs);
   }
 
+  /**
+   * Given a reference time, return the appropriate log segment bucket key (bucket end time) to indicate which bucket
+   * will an event with the given reference time as operation time belong to.
+   * @param referenceTimeInMs the reference time or operation time of an event.
+   * @return the appropriate bucket key (bucket end time) to indicate which bucket will an event with
+   * the given reference time as operation time belong to.
+   */
   Long getLogSegmentBucketKey(long referenceTimeInMs) {
     return logSegmentBuckets.higherKey(referenceTimeInMs);
   }
 
+  /**
+   * Helper function to update the container base value bucket with the given value.
+   * @param serviceId the serviceId of the map entry to be updated
+   * @param containerId the containerId of the map entry to be updated
+   * @param value the value to be added
+   */
+  void updateContainerBaseBucket(String serviceId, String containerId, long value) {
+    updateContainerBucket(containerBuckets.firstKey(), serviceId, containerId, value);
+  }
+
+  /**
+   * Helper function to update the log segment base value bucket with the given value.
+   * @param logSegmentName the log segment name of the map entry to be updated
+   * @param value the value to be added
+   */
+  void updateLogSegmentBaseBucket(String logSegmentName, long value) {
+    updateLogSegmentBucket(logSegmentBuckets.firstKey(), logSegmentName, value);
+  }
+
+  /**
+   * Helper function to update a container bucket with the given value.
+   * @param bucketKey the bucket key to specify which bucket will be updated
+   * @param serviceId the serviceId of the map entry to be updated
+   * @param containerId the containerId of the map entry to be updated
+   * @param value the value to be added
+   */
   void updateContainerBucket(Long bucketKey, String serviceId, String containerId, long value) {
     if (bucketKey != null && containerBuckets.containsKey(bucketKey)) {
       Map<String, Map<String, Long>> deltaInValidDataSizePerContainer = containerBuckets.get(bucketKey);
@@ -71,6 +127,12 @@ class ScanResults {
     }
   }
 
+  /**
+   * Helper function to update a log segment bucket with a given value.
+   * @param bucketKey the bucket key to specify which bucket will be updated
+   * @param logSegmentName the log segment name of the map entry to be updated
+   * @param value the value to be added
+   */
   void updateLogSegmentBucket(Long bucketKey, String logSegmentName, long value) {
     if (bucketKey != null && logSegmentBuckets.containsKey(bucketKey)) {
       Map<String, Long> deltaInValidSizePerLogSegment = logSegmentBuckets.get(bucketKey);
@@ -78,6 +140,13 @@ class ScanResults {
     }
   }
 
+  /**
+   * Given a reference time in milliseconds return the corresponding valid data size per log segment map by aggregating
+   * all buckets whose end time is less than or equal to the reference time.
+   * @param referenceTimeInMS the reference time in ms until which deletes and expiration are relevant
+   * @return a {@link Pair} whose first element is the end time of the last bucket that was aggregated and whose second
+   * element is the requested valid data size per log segment {@link NavigableMap}.
+   */
   Pair<Long, NavigableMap<String, Long>> getValidSizePerLogSegment(Long referenceTimeInMS) {
     NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(logSegmentBuckets.firstEntry().getValue());
     NavigableMap<Long, NavigableMap<String, Long>> subMap =
@@ -91,6 +160,13 @@ class ScanResults {
     return new Pair<>(lastReferenceBucketTimeInMs, validSizePerLogSegment);
   }
 
+  /**
+   * Given a reference time in ms return the corresponding valid data size per container map by aggregating all buckets
+   * whose end time is less than or equal to the reference time.
+   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant.
+   * @return a {@link Pair} whose first element is the end time of the last bucket that was aggregated and whose second
+   * element is the requested valid data size per container {@link Map}.
+   */
   Map<String, Map<String, Long>> getValidSizePerContainer(Long referenceTimeInMs) {
     Map<String, Map<String, Long>> validSizePerContainer = new HashMap<>();
     for (Map.Entry<String, Map<String, Long>> accountEntry : containerBuckets.firstEntry().getValue().entrySet()) {

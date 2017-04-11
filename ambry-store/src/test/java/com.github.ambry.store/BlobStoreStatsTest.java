@@ -55,7 +55,8 @@ public class BlobStoreStatsTest {
   private static final StoreMetrics METRICS = new StoreMetrics("test", new MetricRegistry());
   private final Map<String, Throttler> throttlers = new HashMap<>();
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(throttlers);
-  private final ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
+  private final ScheduledExecutorService indexScannerScheduler = Utils.newScheduler(1, true);
+  private final ScheduledExecutorService queueProcessorScheduler = Utils.newScheduler(1, true);
   private final CuratedLogIndexState state;
   private final File tempDir;
   private final long logSegmentForecastOffsetMs;
@@ -72,7 +73,8 @@ public class BlobStoreStatsTest {
     logSegmentForecastOffsetMs = state.time.milliseconds();
     bucketCount = 2 * (int) (logSegmentForecastOffsetMs / BUCKET_SPAN_IN_MS);
     blobStoreStats = new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
-        QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, Utils.newScheduler(1, false), diskIOScheduler, METRICS);
+        QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, indexScannerScheduler, queueProcessorScheduler, diskIOScheduler,
+        METRICS);
   }
 
   /**
@@ -93,6 +95,14 @@ public class BlobStoreStatsTest {
   public void cleanup() throws InterruptedException, IOException, StoreException {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    indexScannerScheduler.shutdown();
+    if (!indexScannerScheduler.awaitTermination(1000, TimeUnit.MILLISECONDS)) {
+      fail("Could not terminate index scanner task after BlobStoreStats shutdown");
+    }
+    queueProcessorScheduler.shutdown();
+    if (!queueProcessorScheduler.awaitTermination(1000, TimeUnit.MILLISECONDS)) {
+      fail("Could not terminate queue processor task after BlobStoreStats shutdown");
+    }
   }
 
   /**
@@ -263,9 +273,6 @@ public class BlobStoreStatsTest {
   }
 
   /**
-   <<<<<<< HEAD
-   * Test the static method that converts the quota stats in the form of a nested {@link Map} to the generic
-   =======
    * Test {@link BlobStoreStats} can start and shutdown properly.
    * @throws InterruptedException
    */
@@ -314,8 +321,8 @@ public class BlobStoreStatsTest {
     // proceed only when the scan is started
     assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
     verifyAndGetContainerValidSize(state.time.milliseconds());
+    // throttle count shouldn't change after the scan is completed if new requests are within the forecast coverage
     long throttleCountBeforeRequests = mockThrottler.throttleCount.get();
-    // requests within the forecast coverage of the ongoing scan will wait for the scan to complete
     for (long i = logSegmentForecastStartTimeMs; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS;
         i += TEST_TIME_INTERVAL_IN_MS) {
       verifyAndGetLogSegmentValidSize(new TimeRange(i, 0L));
@@ -342,7 +349,7 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testBucketingWithNewEntriesAfterScan() throws StoreException, InterruptedException, IOException {
-    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    CountDownLatch scanStartedLatch = new CountDownLatch(1);
     CountDownLatch queueProcessedLatch = new CountDownLatch(1);
     MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
@@ -399,7 +406,10 @@ public class BlobStoreStatsTest {
    * counting or miscounting. The behavior is verified via the following steps:
    * 1. Start the scan.
    * 2. Once the scan is started it will be put on hold and various new entries will be added.
-   * 3. Resume the scan and wait for queue processor to process the new entries.
+   * 3. Resume the scan and wait for the scan to finish the first check point and start working towards the second
+   *    checkpoint. The scan is held again once it starts working towards the second checkpoint.
+   * 5. More new entries will be added.
+   * 6. Resume the scan and wait for all added entries to be processed by the queue processor.
    * 4. Perform various checks to verify the reported stats.
    * @throws StoreException
    * @throws InterruptedException
@@ -407,19 +417,22 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testBucketingWithNewEntriesDuringScan() throws StoreException, InterruptedException, IOException {
-    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
-    // scan will be put on hold once it's started
-    final CountDownLatch scanHoldLatch = new CountDownLatch(1);
-    final CountDownLatch queueProcessedLatch = new CountDownLatch(1);
-    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, new MockThrottler(scanStartedLatch, scanHoldLatch));
+    CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    CountDownLatch scanHoldLatch = new CountDownLatch(1);
+    CountDownLatch secondCheckpointLatch = new CountDownLatch(1);
+    CountDownLatch secondCheckpointHoldLatch = new CountDownLatch(1);
+    int throttleCountAtInterest = state.referenceIndex.size() + 1;
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE,
+        new MockThrottler(scanStartedLatch, scanHoldLatch, secondCheckpointLatch, secondCheckpointHoldLatch,
+            throttleCountAtInterest));
     blobStoreStats.start();
     // proceed only when the scan is started
     assertTrue("IndexScanner took too long to start", scanStartedLatch.await(5, TimeUnit.SECONDS));
-    // 1 new put that will expire in 20 seconds
-    long expiresAtInMs = state.time.milliseconds() + 20 * Time.MsPerSec;
+    // 1 new put that will expire in 30 seconds
+    long expiresAtInMs = state.time.milliseconds() + 30 * Time.MsPerSec;
     List<IndexEntry> newPutEntries = state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, expiresAtInMs);
-    // 3 new puts with no expiry
-    newPutEntries.addAll(state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
+    // 6 new puts with no expiry
+    newPutEntries.addAll(state.addPutEntries(6, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time));
     for (IndexEntry entry : newPutEntries) {
       blobStoreStats.handleNewPut(entry.getValue());
     }
@@ -433,9 +446,29 @@ public class BlobStoreStatsTest {
         newDelete(idToDelete);
       }
     }
-    // a probe put with a latch to inform us about the state of the queue
-    blobStoreStats.handleNewPut(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
+    // continue the scan towards the first checkpoint
     scanHoldLatch.countDown();
+    assertTrue("IndexScanner took too long to start the second checkpoint",
+        secondCheckpointLatch.await(5, TimeUnit.SECONDS));
+    // add more entries after the second checkpoint is taken
+    // 3 new puts with no expiry
+    newPutEntries = state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    for (IndexEntry entry : newPutEntries) {
+      blobStoreStats.handleNewPut(entry.getValue());
+    }
+    newDeletes.clear();
+    // 1 delete from the last index segment
+    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    for (MockId idToDelete : newDeletes) {
+      if (idToDelete != null) {
+        newDelete(idToDelete);
+      }
+    }
+    // continue the scan towards the second checkpoint
+    secondCheckpointHoldLatch.countDown();
+    // a probe put with a latch to inform us about the state of the queue
+    CountDownLatch queueProcessedLatch = new CountDownLatch(1);
+    blobStoreStats.handleNewPut(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
     assertTrue("QueueProcessor took too long to process the new entries",
         queueProcessedLatch.await(5, TimeUnit.SECONDS));
     for (long i = 0; i <= state.time.milliseconds() + TEST_TIME_INTERVAL_IN_MS; i += TEST_TIME_INTERVAL_IN_MS) {
@@ -457,7 +490,8 @@ public class BlobStoreStatsTest {
     int bucketCount = 2;
     long logSegmentForecastOffsetMs = 0;
     blobStoreStats = new BlobStoreStats(state.index, bucketCount, BUCKET_SPAN_IN_MS, logSegmentForecastOffsetMs,
-        QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, storeStatsScheduler, diskIOScheduler, METRICS);
+        QUEUE_PROCESSOR_PERIOD_IN_SECS, state.time, indexScannerScheduler, queueProcessorScheduler, diskIOScheduler,
+        METRICS);
     CountDownLatch scanStartedLatch = new CountDownLatch(1);
     // do not hold the initial scan
     MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
@@ -500,7 +534,7 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testTimeRangeResolutionWithStats() throws InterruptedException, StoreException {
-    final CountDownLatch scanStartedLatch = new CountDownLatch(1);
+    CountDownLatch scanStartedLatch = new CountDownLatch(1);
     MockThrottler mockThrottler = new MockThrottler(scanStartedLatch, new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     // advance time before starting the scan to offset the log segment forecast start time from 0
@@ -543,9 +577,7 @@ public class BlobStoreStatsTest {
   }
 
   /**
-   * Test the static method that converts the quota stats stored in a nested Map to an avro generated
-   >>>>>>> Refactored bucketing for BlobStoreStats
-   * {@link StatsSnapshot} object.
+   * Test the static method that converts the quota stats stored in a nested Map to an {@link StatsSnapshot} object.
    */
   @Test
   public void testConvertQuotaMapToStatsSnapshot() {
@@ -768,11 +800,22 @@ public class BlobStoreStatsTest {
     volatile boolean isThrottlerStarted = false;
     CountDownLatch startedLatch;
     CountDownLatch holdLatch;
+    CountDownLatch throttleCountLatch;
+    CountDownLatch throttleCountHoldLatch;
+    int throttleCountAtInterest;
 
     MockThrottler(CountDownLatch startedLatch, CountDownLatch holdLatch) {
+      this(startedLatch, holdLatch, null, null, 0);
+    }
+
+    MockThrottler(CountDownLatch startedLatch, CountDownLatch holdLatch, CountDownLatch throttleCountLatch,
+        CountDownLatch throttleCountHoldLatch, int throttleCountAtInterest) {
       super(0, 0, true, new MockTime());
       this.startedLatch = startedLatch;
       this.holdLatch = holdLatch;
+      this.throttleCountLatch = throttleCountLatch;
+      this.throttleCountHoldLatch = throttleCountHoldLatch;
+      this.throttleCountAtInterest = throttleCountAtInterest;
     }
 
     @Override
@@ -781,7 +824,11 @@ public class BlobStoreStatsTest {
       if (!isThrottlerStarted) {
         isThrottlerStarted = true;
         startedLatch.countDown();
-        assertTrue("IndexScanner is held for too long", holdLatch.await(3, TimeUnit.SECONDS));
+        assertTrue("IndexScanner is held for too long", holdLatch.await(5, TimeUnit.SECONDS));
+      }
+      if (throttleCountLatch != null && throttleCount.get() == throttleCountAtInterest) {
+        throttleCountLatch.countDown();
+        assertTrue("IndexScanner is held for too long", throttleCountHoldLatch.await(5, TimeUnit.SECONDS));
       }
     }
   }

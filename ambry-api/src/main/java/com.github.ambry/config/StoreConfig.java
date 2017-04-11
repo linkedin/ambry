@@ -141,15 +141,15 @@ public class StoreConfig {
   public final int storeStatsBucketCount;
 
   /**
-   * The time coverage of each buckets in milliseconds.
+   * The time coverage of each bucket in minutes.
    */
-  @Config("store.stats.bucket.span.in.ms")
-  @Default("3600000")
-  public final long storeStatsBucketSpanInMs;
+  @Config("store.stats.bucket.span.in.minutes")
+  @Default("60")
+  public final long storeStatsBucketSpanInMinutes;
 
-  @Config("store.stats.queue.processor.period.in.ms")
-  @Default("120000")
-  public final long storeStatsQueueProcessorPeriodInMs;
+  @Config("store.stats.queue.processor.period.in.minutes")
+  @Default("2")
+  public final long storeStatsQueueProcessorPeriodInMinutes;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -179,9 +179,9 @@ public class StoreConfig {
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
     storeStatsBucketCount = verifiableProperties.getInt("store.stats.bucket.count", 24);
-    storeStatsBucketSpanInMs = verifiableProperties.getLong("store.stats.bucket.span.in.ms", 3600000);
-    storeStatsQueueProcessorPeriodInMs =
-        verifiableProperties.getLong("store.stats.queue.processor.period.in.ms", 120000);
+    storeStatsBucketSpanInMinutes = verifiableProperties.getLong("store.stats.bucket.span.in.minutes", 60);
+    storeStatsQueueProcessorPeriodInMinutes =
+        verifiableProperties.getLong("store.stats.queue.processor.period.in.minutes", 2);
   }
 }
 
