@@ -22,20 +22,25 @@ import org.json.JSONObject;
 
 
 /**
- * A representation of an Ambry account. An account is an internal representation of a user.
+ * A representation of an Ambry user. This class contains general information of a user, which can be used for
+ * user-based operations such as authentication, get a {@link Container} under this account, and access control.
+ * The account name is provided by an Ambry user as an external reference. Account id is an internal identifier
+ * of the user, and is one-to-one mapped to the account name. Account name and id are generated through user
+ * registration process. Account id is part of a blob’s properties, and cannot be modified once the blob is created.
+ * Account metadata is made in JSON, which is generic to contain additional information of the metadata.
  */
 public class Account {
   private final short id;
   private final String name;
   private final JSONObject metadata;
-  private final Map<Short, Container> idContainerMap;
-  private final Map<String, Container> nameContainerMap;
+  private final Map<Short, Container> containerIdToContainerMap;
+  private final Map<String, Container> containerNameToContainerMap;
 
   /**
    * Constructor of Account.
    * @param id The id of the account, which is the internal reference to the account.
    * @param name The name of the account, which is the external reference to the account.
-   * @param metadata The metadata of the account in JSON.
+   * @param metadata The metadata of the account in JSON. Can be {@code null}.
    */
   public Account(short id, String name, JSONObject metadata) {
     if (name == null) {
@@ -44,8 +49,8 @@ public class Account {
     this.id = id;
     this.name = name;
     this.metadata = metadata;
-    idContainerMap = new HashMap<>();
-    nameContainerMap = new HashMap<>();
+    containerIdToContainerMap = new HashMap<>();
+    containerNameToContainerMap = new HashMap<>();
   }
 
   /**
@@ -78,18 +83,18 @@ public class Account {
    * @return The {@link Container} of this account with the specified id, or {@code null} if such a
    *                    container does not exist.
    */
-  public Container getContainerById(short containerId) {
-    return idContainerMap.get(containerId);
+  public Container getContainerByContainerId(short containerId) {
+    return containerIdToContainerMap.get(containerId);
   }
 
   /**
-   * Gets the {@link Container} of this account with the specified name.
+   * Gets the {@link Container} of this account with the specified container name.
    * @param containerName The name of the container to get.
-   * @return The {@link Container} of this account with he specified name, or {@code null} if such a
+   * @return The {@link Container} of this account with the specified name, or {@code null} if such a
    *                    container does not exist.
    */
-  public Container getContainerByName(String containerName) {
-    return nameContainerMap.get(containerName);
+  public Container getContainerByContainerName(String containerName) {
+    return containerNameToContainerMap.get(containerName);
   }
 
   /**
@@ -97,7 +102,7 @@ public class Account {
    * @return All the containers of this account.
    */
   public List<Container> getAllContainers() {
-    return Collections.unmodifiableList(new ArrayList<>(idContainerMap.values()));
+    return Collections.unmodifiableList(new ArrayList<>(containerIdToContainerMap.values()));
   }
 
   /**
@@ -105,8 +110,8 @@ public class Account {
    * @param container The container to this account.
    */
   void addContainer(Container container) {
-    idContainerMap.put(container.id(), container);
-    nameContainerMap.put(container.name(), container);
+    containerIdToContainerMap.put(container.id(), container);
+    containerNameToContainerMap.put(container.name(), container);
   }
 
   /**
