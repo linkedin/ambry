@@ -19,6 +19,7 @@ import com.github.ambry.utils.Utils;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -109,7 +110,18 @@ class CompactionManager {
     return compactionExecutor != null && compactionExecutor.isRunning;
   }
 
+  /*
+   * Schedules the given {@code store} for compaction next.
+   * @param store the {@link BlobStore} to compact.
+   * @return {@code true} if the scheduling was successful. {@code false} if not.
+   */
+  boolean scheduleNextForCompaction(BlobStore store) {
+    return compactionExecutor != null && compactionExecutor.scheduleNextForCompaction(store);
+  }
+
   /**
+
+   /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compation details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
@@ -128,6 +140,7 @@ class CompactionManager {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
     private final Set<BlobStore> storesToSkip = new HashSet<>();
+    private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = storeConfig.storeCompactionCheckFrequencyInHours * Time.SecsPerHour * Time.MsPerSec;
 
     private volatile boolean enabled = true;
@@ -161,38 +174,47 @@ class CompactionManager {
           }
         }
         // continue to do compactions as required.
+        long expectedNextCheckTime = time.milliseconds() + waitTimeMs;
+        storesToCheck.addAll(stores);
         while (enabled) {
           try {
-            long startTimeMs = time.milliseconds();
-            for (BlobStore store : stores) {
+            while (enabled && storesToCheck.peek() != null) {
+              BlobStore store = storesToCheck.poll();
               logger.trace("{} being checked for compaction", store);
+              boolean compactionStarted = false;
               try {
-                if (!enabled) {
-                  logger.trace("Breaking out because compaction thread is disabled for {}", mountPath);
-                  break;
-                }
                 if (store.isStarted() && !storesToSkip.contains(store)) {
                   logger.trace("{} is started and eligible for compaction check", store);
                   CompactionDetails details = getCompactionDetails(store);
                   if (details != null) {
                     logger.trace("Generated {} as details for {}", details, store);
                     metrics.markCompactionStart(true);
+                    compactionStarted = true;
                     store.compact(details);
-                    metrics.markCompactionStop();
                   }
                 }
               } catch (Exception e) {
                 metrics.compactionErrorCount.inc();
                 logger.error("Compaction of store {} failed. Continuing with the next store", store, e);
                 storesToSkip.add(store);
+              } finally {
+                if (compactionStarted) {
+                  metrics.markCompactionStop();
+                }
               }
             }
             lock.lock();
             try {
               if (enabled) {
-                long timeElapsed = time.milliseconds() - startTimeMs;
-                logger.trace("Going to wait for {} ms in compaction thread at {}", waitTimeMs - timeElapsed, mountPath);
-                time.await(waitCondition, waitTimeMs - timeElapsed);
+                if (storesToCheck.peek() == null) {
+                  long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
+                  logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
+                  time.await(waitCondition, actualWaitTimeMs);
+                }
+                if (time.milliseconds() >= expectedNextCheckTime) {
+                  expectedNextCheckTime = time.milliseconds() + waitTimeMs;
+                  storesToCheck.addAll(stores);
+                }
               }
             } finally {
               lock.unlock();
@@ -220,6 +242,26 @@ class CompactionManager {
         lock.unlock();
       }
       logger.info("Disabled compaction thread for {}", mountPath);
+    }
+
+    /**
+     * Schedules the given {@code store} for compaction next.
+     * @param store the {@link BlobStore} to compact.
+     * @return {@code true} if the scheduling was successful. {@code false} if not.
+     */
+    boolean scheduleNextForCompaction(BlobStore store) {
+      if (!enabled || !store.isStarted() || storesToSkip.contains(store)) {
+        return false;
+      }
+      lock.lock();
+      try {
+        storesToCheck.addFirst(store);
+        waitCondition.signal();
+        logger.info("Scheduled {} for compaction");
+      } finally {
+        lock.unlock();
+      }
+      return true;
     }
   }
 }

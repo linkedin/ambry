@@ -38,6 +38,8 @@ import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.AdminRequest;
+import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOption;
@@ -127,6 +129,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case ReplicaMetadataRequest:
           handleReplicaMetadataRequest(request);
+          break;
+        case AdminRequest:
+          handleAdminRequest(request);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -494,6 +499,56 @@ public class AmbryRequests implements RequestAPI {
             metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
   }
 
+  /**
+   * Handles an administration request. These requests can query for or change the internal state of the server.
+   * @param request the request that needs to be handled.
+   * @throws InterruptedException if response sending is interrupted.
+   * @throws IOException if there are I/O errors carrying our the required operation.
+   */
+  private void handleAdminRequest(Request request) throws InterruptedException, IOException {
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+    AdminRequest adminRequest = AdminRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    Histogram processingTimeHistogram = null;
+    Histogram responseQueueTimeHistogram = null;
+    Histogram responseSendTimeHistogram = null;
+    Histogram responseTotalTimeHistogram = null;
+    AdminResponse response = null;
+    try {
+      switch (adminRequest.getType()) {
+        case TriggerCompaction:
+          metrics.triggerCompactionRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.triggerCompactionRequestRate.mark();
+          processingTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
+          responseTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
+          ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), false);
+          if (error != ServerErrorCode.No_Error) {
+            logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
+          } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
+            error = ServerErrorCode.Unknown_Error;
+            logger.error("Triggering compaction failed for {}", adminRequest);
+          }
+          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+      }
+    } catch (Exception e) {
+      logger.error("Unknown exception for admin request {}", adminRequest, e);
+      response =
+          new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), ServerErrorCode.Unknown_Error);
+      metrics.unExpectedAdminOperationError.inc();
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", adminRequest, response, processingTime);
+      processingTimeHistogram.update(processingTime);
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
+            responseTotalTimeHistogram, null, null, totalTimeSpent));
+  }
+
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
       Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
       long blobSize, ServerMetrics metrics) throws InterruptedException {
@@ -605,7 +660,7 @@ public class AmbryRequests implements RequestAPI {
     // 2. ensure the disk for the partition/replica is available
     List<? extends ReplicaId> replicaIds = partition.getReplicaIds();
     for (ReplicaId replica : replicaIds) {
-      if (replica.getDataNodeId().getHostname() == currentNode.getHostname()
+      if (replica.getDataNodeId().getHostname().equals(currentNode.getHostname())
           && replica.getDataNodeId().getPort() == currentNode.getPort()) {
         if (replica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
           metrics.diskUnavailableError.inc();

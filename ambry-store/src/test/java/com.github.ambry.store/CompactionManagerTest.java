@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
@@ -49,8 +50,6 @@ public class CompactionManagerTest {
    */
   public CompactionManagerTest() throws InterruptedException {
     config = new StoreConfig(new VerifiableProperties(properties));
-    long messageRetentionTimeInMs = config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
-    time.sleep(2 * messageRetentionTimeInMs);
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     blobStore = new MockBlobStore(config, metrics, time, null);
@@ -65,6 +64,12 @@ public class CompactionManagerTest {
   public void testEnableDisable() {
     // without compaction enabled.
     compactionManager.enable();
+    // functions should work ok
+    assertNull("Compaction thread should not be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    assertFalse("Compaction Executor should not be running", compactionManager.isCompactionExecutorRunning());
+    assertFalse("Compactions should not be scheduled after termination",
+        compactionManager.scheduleNextForCompaction(blobStore));
     compactionManager.disable();
     compactionManager.awaitTermination();
 
@@ -81,6 +86,8 @@ public class CompactionManagerTest {
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
+    assertFalse("Compactions should not be scheduled after termination",
+        compactionManager.scheduleNextForCompaction(blobStore));
   }
 
   /**
@@ -111,10 +118,11 @@ public class CompactionManagerTest {
    */
   @Test
   public void testCompactionExecutorHappyPath() throws Exception {
-    int numStores = 3;
+    int numStores = 5;
     List<BlobStore> stores = new ArrayList<>();
     // one store with nothing to compact isn't going to get compact calls.
-    CountDownLatch compactCallsCountdown = new CountDownLatch(numStores - 1);
+    // since we are using mock time, wait for compact calls to arrive twice to ensure the time based scheduling works
+    CountDownLatch compactCallsCountdown = new CountDownLatch(2 * (numStores - 1));
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
@@ -131,6 +139,7 @@ public class CompactionManagerTest {
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
     assertTrue("Compaction calls did not come within the expected time",
         compactCallsCountdown.await(1, TimeUnit.SECONDS));
+    assertTrue("Compaction Executor should be running", compactionManager.isCompactionExecutorRunning());
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = (MockBlobStore) stores.get(i);
       if (store.callOrderException != null) {
@@ -161,6 +170,7 @@ public class CompactionManagerTest {
     // another store that throws an exception on resumeCompaction() isn't going to get a compact call.
     CountDownLatch compactCallsCountdown = new CountDownLatch(numStores - 2);
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    properties.setProperty("store.compaction.check.frequency.in.hours", Integer.toString(100));
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
@@ -179,7 +189,9 @@ public class CompactionManagerTest {
       }
       stores.add(store);
     }
-    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
+    // using real time here so that compaction is not scheduled more than once for a store during the test unless
+    // asked for.
+    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, SystemTime.getInstance());
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -198,6 +210,28 @@ public class CompactionManagerTest {
         assertFalse("Compact should not have been called", store.compactCalled);
       }
     }
+
+    // set all compact called to false
+    for (BlobStore store : stores) {
+      ((MockBlobStore) store).compactCalled = false;
+    }
+
+    // stores that are not started or failed on resumeCompaction() and compact() cannot be scheduled for compaction
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = (MockBlobStore) stores.get(i);
+      if (i < 3) {
+        assertFalse("Should not schedule compaction", compactionManager.scheduleNextForCompaction(store));
+        assertFalse("compact() should not have been called", store.compactCalled);
+      } else {
+        store.compactCallsCountdown = new CountDownLatch(1);
+        assertFalse("compactCalled should be reset", store.compactCalled);
+        assertTrue("Should schedule compaction", compactionManager.scheduleNextForCompaction(store));
+        assertTrue("Compaction call did not come within the expected time",
+            store.compactCallsCountdown.await(1, TimeUnit.HOURS));
+        assertTrue("compact() should have been called", store.compactCalled);
+      }
+    }
+
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
@@ -219,7 +253,7 @@ public class CompactionManagerTest {
    * MockBlobStore to assist in testing {@link CompactionManager}
    */
   private class MockBlobStore extends BlobStore {
-    private final CountDownLatch compactCallsCountdown;
+    CountDownLatch compactCallsCountdown;
     CompactionDetails details;
 
     private boolean resumeCompactionCalled = false;

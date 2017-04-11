@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -75,11 +76,14 @@ public class StorageManagerTest {
     deleteDirectory(new File(mountPathToDelete));
     StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
+      PartitionId id = replica.getPartitionId();
       if (replica.getMountPath().equals(mountPathToDelete)) {
-        assertNull("This store should not be accessible.", storageManager.getStore(replica.getPartitionId()));
+        assertNull("This store should not be accessible.", storageManager.getStore(id));
+        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
       } else {
-        Store store = storageManager.getStore(replica.getPartitionId());
+        Store store = storageManager.getStore(id);
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }
 
@@ -106,11 +110,14 @@ public class StorageManagerTest {
     StorageManager storageManager = createAndStartStoreManager(replicas);
     for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
+      PartitionId id = replica.getPartitionId();
       if (badReplicaIndexes.contains(i)) {
-        assertNull("This store should not be accessible.", storageManager.getStore(replica.getPartitionId()));
+        assertNull("This store should not be accessible.", storageManager.getStore(id));
+        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
       } else {
-        Store store = storageManager.getStore(replica.getPartitionId());
+        Store store = storageManager.getStore(id);
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }
     assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
@@ -138,11 +145,14 @@ public class StorageManagerTest {
     }
     StorageManager storageManager = createAndStartStoreManager(replicas);
     for (ReplicaId replica : replicas) {
+      PartitionId id = replica.getPartitionId();
       if (replica.getMountPath().equals(badDiskMountPath)) {
-        assertNull("This store should not be accessible.", storageManager.getStore(replica.getPartitionId()));
+        assertNull("This store should not be accessible.", storageManager.getStore(id));
+        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
       } else {
-        Store store = storageManager.getStore(replica.getPartitionId());
+        Store store = storageManager.getStore(id);
         assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
       }
     }
     assertEquals("Compaction thread count is incorrect", mountPaths.size(),
@@ -165,6 +175,7 @@ public class StorageManagerTest {
     for (ReplicaId replica : replicas) {
       Store store = storageManager.getStore(replica.getPartitionId());
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
+      assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(replica.getPartitionId()));
     }
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.", storageManager.getStore(invalidPartition));
