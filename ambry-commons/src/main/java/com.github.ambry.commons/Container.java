@@ -24,9 +24,9 @@ import org.json.JSONObject;
  * be modified once the blob is created.
  *
  * Container name is provided by a user as an external reference to that container under an {@link Account}. Container
- * id is one-to-one mapped to container name, and serves as an internal identifier of a container. Container name and
- * id name space of different accounts do not conflict. Container metadata is made in JSON, which is generic to contain
- * additional information of the metadata.
+ * id is one-to-one mapped to container name, and serves as an internal identifier of a container. Container name/id
+ * has to be distinct within the same {@link Account}, but can be the same across different {@link Account}s. Container
+ * metadata is made in JSON, which is generic to contain additional information of the metadata.
  */
 public class Container {
   private final short id;

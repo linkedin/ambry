@@ -22,12 +22,13 @@ import org.json.JSONObject;
 
 
 /**
- * A representation of an Ambry user. This class contains general information of a user, which can be used for
- * user-based operations such as authentication, get a {@link Container} under this account, and access control.
- * The account name is provided by an Ambry user as an external reference. Account id is an internal identifier
- * of the user, and is one-to-one mapped to the account name. Account name and id are generated through user
- * registration process. Account id is part of a blob’s properties, and cannot be modified once the blob is created.
- * Account metadata is made in JSON, which is generic to contain additional information of the metadata.
+ * A representation of an Ambry user. A user is an entity (an application or an individual user) who uses ambry
+ * as service. This class contains general information of a user, which can be used for user-based operations
+ * such as authentication, get a {@link Container} under this account, and access control. The account name is
+ * provided by an Ambry user as an external reference. Account id is an internal identifier of the user, and is
+ * one-to-one mapped to the account name. Account name and id are generated through user registration process.
+ * Account id is part of a blob’s properties, and cannot be modified once the blob is created. Account metadata
+ * is made in JSON, which is generic to contain additional information of the metadata.
  */
 public class Account {
   private final short id;
