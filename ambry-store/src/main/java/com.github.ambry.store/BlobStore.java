@@ -41,7 +41,7 @@ class BlobStore implements Store {
   private final String storeId;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
-  private final ScheduledExecutorService longLiveTaskScheduler;
+  private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
@@ -77,14 +77,14 @@ class BlobStore implements Store {
   }
 
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLiveTaskScheduler, DiskIOScheduler diskIOScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
-    this.longLiveTaskScheduler = longLiveTaskScheduler;
+    this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
@@ -136,9 +136,9 @@ class BlobStore implements Store {
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
         long logSegmentForecastOffsetMs =
-            config.storeDeletedMessageRetentionDays * Time.MinsPerDay * Time.SecsPerMin * Time.MsPerSec;
+            config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
         blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
-            logSegmentForecastOffsetMs, config.storeStatsQueueProcessorPeriodInMinutes, time, longLiveTaskScheduler,
+            logSegmentForecastOffsetMs, config.storeStatsQueueProcessorPeriodInMinutes, time, longLivedTaskScheduler,
             taskScheduler, diskIOScheduler, metrics);
         blobStoreStats.start();
         started = true;

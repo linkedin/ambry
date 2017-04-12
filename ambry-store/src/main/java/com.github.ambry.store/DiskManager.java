@@ -42,7 +42,7 @@ class DiskManager {
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
-  private final ScheduledExecutorService longLiveTaskScheduler;
+  private final ScheduledExecutorService longLivedTaskScheduler;
   private final CompactionManager compactionManager;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -66,11 +66,11 @@ class DiskManager {
     this.metrics = metrics;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
-    longLiveTaskScheduler = Utils.newScheduler(1, true);
+    longLivedTaskScheduler = Utils.newScheduler(1, true);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
-        BlobStore store = new BlobStore(storeId, config, scheduler, longLiveTaskScheduler, diskIOScheduler, metrics,
+        BlobStore store = new BlobStore(storeId, config, scheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
             replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
         stores.put(replica.getPartitionId(), store);
       }
