@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -60,9 +61,9 @@ public class IndexValueTest {
     String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
     long size = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long offset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
+    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + SystemTime.getInstance().milliseconds();
     long expectedExpirationTimeV1 = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
-    long operationTimeAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
+    long operationTimeAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + +SystemTime.getInstance().milliseconds();
     long expectedOperationTimeV1 = Utils.getTimeInMsToTheNearestSec(operationTimeAtMs);
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
