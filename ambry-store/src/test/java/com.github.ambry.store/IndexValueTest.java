@@ -63,7 +63,7 @@ public class IndexValueTest {
     long offset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + SystemTime.getInstance().milliseconds();
     long expectedExpirationTimeV1 = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
-    long operationTimeAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + +SystemTime.getInstance().milliseconds();
+    long operationTimeAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + SystemTime.getInstance().milliseconds();
     long expectedOperationTimeV1 = Utils.getTimeInMsToTheNearestSec(operationTimeAtMs);
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);

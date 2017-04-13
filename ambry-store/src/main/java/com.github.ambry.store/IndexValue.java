@@ -104,11 +104,11 @@ class IndexValue {
         size = value.getLong();
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
-        int expiresAt = value.getInt();
-        expiresAtMs = expiresAt != Utils.Infinite_Time ? ((long) expiresAt * Time.MsPerSec) : Utils.Infinite_Time;
+        long expiresAt = value.getInt();
+        expiresAtMs = expiresAt != Utils.Infinite_Time ? (expiresAt * Time.MsPerSec) : Utils.Infinite_Time;
         originalMessageOffset = value.getLong();
-        int operationTimeInSecs = value.getInt();
-        operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? ((long) operationTimeInSecs * Time.MsPerSec)
+        long operationTimeInSecs = value.getInt();
+        operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? (operationTimeInSecs * Time.MsPerSec)
             : Utils.Infinite_Time;
         serviceId = value.getShort();
         containerId = value.getShort();
