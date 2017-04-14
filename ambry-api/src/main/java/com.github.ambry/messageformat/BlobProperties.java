@@ -15,6 +15,7 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -69,8 +70,13 @@ public class BlobProperties {
     this.ownerId = ownerId;
     this.contentType = contentType;
     this.isPrivate = isPrivate;
-    this.timeToLiveInSeconds = timeToLiveInSeconds;
     this.creationTimeInMs = creationTimeInMs;
+    long maxAllowedTTLInMs = Utils.getMaxSupportedTimeInMs() - creationTimeInMs;
+    if (TimeUnit.SECONDS.toMillis(timeToLiveInSeconds) > maxAllowedTTLInMs) {
+      this.timeToLiveInSeconds = -1;
+    } else {
+      this.timeToLiveInSeconds = timeToLiveInSeconds;
+    }
   }
 
   public long getTimeToLiveInSeconds() {

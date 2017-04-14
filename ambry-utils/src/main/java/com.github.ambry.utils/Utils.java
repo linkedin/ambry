@@ -27,8 +27,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,6 +46,11 @@ import org.json.JSONObject;
  * A set of utility methods
  */
 public class Utils {
+
+  // epoch time beyond this date(time) will have issues
+  static String maxAllowableDateForEpochTime = "19-01-2038";
+  static String maxAllowableDateForEpochTimeFormat = "dd-MM-yyyy";
+
   /**
    * Constant to define "infinite" time.
    * <p/>
@@ -50,6 +58,20 @@ public class Utils {
    * time).
    */
   public static final long Infinite_Time = -1;
+
+  /**
+   * Maximum supported time in millis
+   * @return the max supported time in millis
+   */
+  public static long getMaxSupportedTimeInMs() {
+    Date date = null;
+    try {
+      SimpleDateFormat sdf = new SimpleDateFormat(maxAllowableDateForEpochTimeFormat);
+      date = sdf.parse(maxAllowableDateForEpochTime);
+    } catch (ParseException e) {
+    }
+    return date.getTime();
+  }
 
   // The read*String methods assume that the underlying stream is blocking
 
@@ -747,7 +769,7 @@ public class Utils {
    * @return the time in ms to the nearest second(floored) for the given time in ms
    */
   public static long getTimeInMsToTheNearestSec(long timeInMs) {
-    long timeInSecs =  timeInMs / Time.MsPerSec;
+    long timeInSecs = timeInMs / Time.MsPerSec;
     return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
   }
 
