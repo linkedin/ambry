@@ -40,9 +40,18 @@ public class ServerConfig {
   @Default("false")
   public final boolean serverStatsPublishEnabled;
 
+  /**
+   * The period in minutes which cluster wide quota stats is aggregated.
+   */
+  @Config("server.quota.stats.aggregate.period.minutes")
+  @Default("60")
+  public final long serverQuotaStatsAggregatePeriodMinutes;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
     serverStatsPublishEnabled = verifiableProperties.getBoolean("server.stats.publish.enabled", false);
+    serverQuotaStatsAggregatePeriodMinutes =
+        verifiableProperties.getLong("server.quota.stats.aggregate.period.minutes", 60);
   }
 }

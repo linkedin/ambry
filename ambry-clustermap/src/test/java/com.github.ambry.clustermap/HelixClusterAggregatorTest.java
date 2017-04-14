@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +14,18 @@
 
 package com.github.ambry.clustermap;
 
-import com.github.ambry.server.HealthReport;
-import java.io.IOException;
-import java.util.List;
+import org.junit.Test;
 
 
-/**
- * A ClusterParticipant is a component that makes up the Ambry cluster.
- */
-public interface ClusterParticipant extends AutoCloseable {
-  /**
-   * Initialize the participant.
-   */
-  void initialize(String hostname, int port, List<HealthReport> healthReports) throws IOException;
+public class HelixClusterAggregatorTest {
+  private static final long RELEVANT_PERIOD_IN_MINUTES = 60;
+  private final HelixClusterAggregator clusterAggregator;
 
-  /**
-   * Terminate the participant.
-   */
-  @Override
-  void close();
+  public HelixClusterAggregatorTest() {
+    clusterAggregator = new HelixClusterAggregator(RELEVANT_PERIOD_IN_MINUTES);
+  }
+
+  @Test
+  public void testDoWorkBasic() {
+  }
 }

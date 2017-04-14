@@ -157,6 +157,7 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
+      List<HealthReport> healthReports = new ArrayList<>();
       if (serverConfig.serverStatsPublishEnabled) {
         logger.info("Creating StatsManager to publish stats");
         List<PartitionId> partitionIds = new ArrayList<>();
@@ -165,8 +166,10 @@ public class AmbryServer {
         }
         statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
         statsManager.start();
+        healthReports.add(new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregatePeriodMinutes));
       }
-      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port);
+
+      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port, healthReports);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;

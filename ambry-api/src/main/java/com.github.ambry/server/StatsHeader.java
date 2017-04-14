@@ -21,23 +21,31 @@ import java.util.List;
  * A model object that contains metadata information about some reported stats. For example, the kind of stats that is
  * being reported, timestamp and etc.
  */
-class StatsHeader {
+public class StatsHeader {
   enum StatsDescription {
     QUOTA
   }
 
-  private final StatsDescription description;
-  private final long timestamp;
-  private final int storesContactedCount;
-  private final int storesRespondedCount;
-  private final List<String> unreachableStores;
+  private StatsDescription description;
+  private long timestamp;
+  private int storesContactedCount;
+  private int storesRespondedCount;
+  private List<String> unreachableStores;
 
-  StatsHeader(StatsDescription description, long timestamp, int storesContactedCount, int storesRespondedCount,
+  public StatsHeader(StatsDescription description, long timestamp, int storesContactedCount, int storesRespondedCount,
       List<String> unreachableStores) {
     this.description = description;
     this.timestamp = timestamp;
     this.storesContactedCount = storesContactedCount;
     this.storesRespondedCount = storesRespondedCount;
     this.unreachableStores = unreachableStores;
+  }
+
+  public StatsHeader() {
+    // empty constructor for Jackson deserialization
+  }
+
+  public long getTimestamp() {
+    return timestamp;
   }
 }

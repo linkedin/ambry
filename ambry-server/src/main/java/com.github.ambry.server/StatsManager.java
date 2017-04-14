@@ -25,6 +25,7 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -134,7 +135,7 @@ class StatsManager {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot();
-        aggregate(aggregatedSnapshot, statsSnapshot);
+        StatsSnapshot.aggregate(aggregatedSnapshot, statsSnapshot);
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
@@ -142,23 +143,50 @@ class StatsManager {
     }
   }
 
-  /**
-   * Performs recursive aggregation of two {@link StatsSnapshot} and stores the result in the first one.
-   * @param baseSnapshot one of the addends and where the result will be
-   * @param newSnapshot the other addend to be added into the first {@link StatsSnapshot}
-   */
-  private void aggregate(StatsSnapshot baseSnapshot, StatsSnapshot newSnapshot) {
-    baseSnapshot.setValue(baseSnapshot.getValue() + newSnapshot.getValue());
-    if (baseSnapshot.getSubMap() == null) {
-      baseSnapshot.setSubMap(newSnapshot.getSubMap());
-    } else if (newSnapshot.getSubMap() != null) {
-      for (Map.Entry<String, StatsSnapshot> entry : newSnapshot.getSubMap().entrySet()) {
-        if (!baseSnapshot.getSubMap().containsKey(entry.getKey())) {
-          baseSnapshot.getSubMap().put(entry.getKey(), new StatsSnapshot(0L, null));
-        }
-        aggregate(baseSnapshot.getSubMap().get(entry.getKey()), entry.getValue());
+  StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores) {
+    StatsSnapshot statsSnapshot = null;
+    Store store = storageManager.getStore(partitionId);
+    if (store == null) {
+      unreachableStores.add(partitionId.toString());
+    } else {
+      try {
+        statsSnapshot = store.getStoreStats().getStatsSnapshot();
+      } catch (StoreException e) {
+        unreachableStores.add(partitionId.toString());
       }
     }
+    return statsSnapshot;
+  }
+
+  String getNodeStatsInJSON() {
+    String statsWrapperJSON = "";
+    try {
+      long totalFetchAndAggregateStartTimeMs = time.milliseconds();
+      StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
+      long totalValue = 0;
+      List<String> unreachableStores = new ArrayList<>();
+      Iterator<PartitionId> iterator = totalPartitionIds.iterator();
+      while (iterator.hasNext()) {
+        PartitionId partitionId = iterator.next();
+        long fetchSnapshotStartTimeMs = time.milliseconds();
+        StatsSnapshot statsSnapshot = fetchSnapshot(partitionId, unreachableStores);
+        if (statsSnapshot != null) {
+          combinedSnapshot.getSubMap().put(partitionId.toString(), statsSnapshot);
+          totalValue += statsSnapshot.getValue();
+        }
+        metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchSnapshotStartTimeMs);
+      }
+      combinedSnapshot.setValue(totalValue);
+      metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
+      StatsHeader statsHeader =
+          new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), totalPartitionIds.size(),
+              totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
+      statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
+    } catch (Exception | Error e) {
+      metrics.statsAggregationFailureCount.inc();
+      logger.error("Exception while aggregating stats.", e);
+    }
+    return statsWrapperJSON;
   }
 
   /**

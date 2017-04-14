@@ -14,11 +14,22 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.server.HealthReport;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.healthcheck.HealthReportProvider;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
+import org.apache.helix.task.Task;
+import org.apache.helix.task.TaskCallbackContext;
+import org.apache.helix.task.TaskConstants;
+import org.apache.helix.task.TaskFactory;
+import org.apache.helix.task.TaskStateModelFactory;
 import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,17 +73,40 @@ class HelixParticipant implements ClusterParticipant {
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void initialize(String hostName, int port) throws IOException {
+  public void initialize(String hostName, int port, List<HealthReport> healthReports) throws IOException {
     logger.info("Initializing participant");
     String instanceName = ClusterMapUtils.getInstanceName(hostName, port);
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
+    Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
+    for (HealthReport healthReport : healthReports) {
+      if (healthReport.getAggregatePeriodInMinutes() != Utils.Infinite_Time) {
+        // enable cluster wide aggregation for the health report
+        final HelixClusterAggregator aggregator =
+            new HelixClusterAggregator(healthReport.getAggregatePeriodInMinutes());
+        final String healthReportName = healthReport.getReportName();
+        final String fieldName = healthReport.getFieldName();
+        taskFactoryMap.put(HelixAggregateTask.TASK_COMMAND, new TaskFactory() {
+          @Override
+          public Task createNewTask(TaskCallbackContext context) {
+            return new HelixAggregateTask(context, aggregator, healthReportName, fieldName);
+          }
+        });
+      }
+    }
+    if (!taskFactoryMap.isEmpty()) {
+      stateMachineEngine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+          new TaskStateModelFactory(manager, taskFactoryMap));
+    }
     try {
       manager.connect();
       logger.info("Successfully initialized the participant");
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
+    }
+    for (HealthReport healthReport : healthReports) {
+      manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) healthReport);
     }
   }
 
