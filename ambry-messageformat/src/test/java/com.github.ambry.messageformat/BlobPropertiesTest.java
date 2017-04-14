@@ -70,7 +70,7 @@ public class BlobPropertiesTest {
         Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
     for (long ttl : invalidTTLs) {
       blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs);
-      verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, -1);
+      verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, Utils.Infinite_Time);
     }
   }
 
