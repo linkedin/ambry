@@ -31,7 +31,6 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,6 +49,15 @@ public class Utils {
   // epoch time beyond this date(time) will have issues
   static String maxAllowableDateForEpochTime = "19-01-2038";
   static String maxAllowableDateForEpochTimeFormat = "dd-MM-yyyy";
+  public static long maxEpochTimeInMs;
+
+  static {
+    try {
+      maxEpochTimeInMs =
+          new SimpleDateFormat(maxAllowableDateForEpochTimeFormat).parse(maxAllowableDateForEpochTime).getTime();
+    } catch (ParseException e) {
+    }
+  }
 
   /**
    * Constant to define "infinite" time.
@@ -58,20 +66,6 @@ public class Utils {
    * time).
    */
   public static final long Infinite_Time = -1;
-
-  /**
-   * Maximum supported time in millis
-   * @return the max supported time in millis
-   */
-  public static long getMaxSupportedTimeInMs() {
-    Date date = null;
-    try {
-      SimpleDateFormat sdf = new SimpleDateFormat(maxAllowableDateForEpochTimeFormat);
-      date = sdf.parse(maxAllowableDateForEpochTime);
-    } catch (ParseException e) {
-    }
-    return date.getTime();
-  }
 
   // The read*String methods assume that the underlying stream is blocking
 

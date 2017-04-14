@@ -53,7 +53,7 @@ public class BlobPropertiesTest {
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds);
     assertEquals(blobProperties.getCreationTimeInMs(), creationTimeMs);
 
-    long maxSupportedTimeInMs = Utils.getMaxSupportedTimeInMs();
+    long maxSupportedTimeInMs = Utils.maxEpochTimeInMs;
     // valid TTLs
     long[] validTTLs = new long[]{
         1 * Time.SecsPerHour,

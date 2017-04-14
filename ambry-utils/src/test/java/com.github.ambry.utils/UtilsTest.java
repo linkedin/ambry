@@ -18,9 +18,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
@@ -29,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 
 
@@ -41,13 +37,6 @@ public class UtilsTest {
   @Test(expected = IllegalArgumentException.class)
   public void testGetRandomLongException() {
     Utils.getRandomLong(new Random(), 0);
-  }
-
-  @Test
-  public void testGetMaxSupportedTimeInMs() throws ParseException {
-    SimpleDateFormat sdf = new SimpleDateFormat(maxAllowableDateForEpochTimeFormat);
-    Date date = sdf.parse(maxAllowableDateForEpochTime);
-    assertEquals("Time mismatch ", date.getTime(), Utils.getMaxSupportedTimeInMs());
   }
 
   public void whpGetRandomLongRangeTest(int range, int draws) {
