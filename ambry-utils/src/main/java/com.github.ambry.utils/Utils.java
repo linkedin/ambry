@@ -43,6 +43,7 @@ import org.json.JSONObject;
  * A set of utility methods
  */
 public class Utils {
+
   /**
    * Constant to define "infinite" time.
    * <p/>
@@ -747,7 +748,7 @@ public class Utils {
    * @return the time in ms to the nearest second(floored) for the given time in ms
    */
   public static long getTimeInMsToTheNearestSec(long timeInMs) {
-    long timeInSecs =  timeInMs / Time.MsPerSec;
+    long timeInSecs = timeInMs / Time.MsPerSec;
     return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
   }
 
