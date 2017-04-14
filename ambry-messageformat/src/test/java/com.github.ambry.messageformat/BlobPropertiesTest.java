@@ -14,7 +14,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
@@ -53,18 +52,12 @@ public class BlobPropertiesTest {
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds);
     assertEquals(blobProperties.getCreationTimeInMs(), creationTimeMs);
 
-    long maxSupportedTimeInMs = Utils.maxEpochTimeInMs;
+    long creationTimeInSecs = TimeUnit.MILLISECONDS.toSeconds(creationTimeMs);
     // valid TTLs
-    long[] validTTLs = new long[]{
-        1 * Time.SecsPerHour,
-        10 * Time.SecsPerHour,
-        100 * Time.SecsPerHour,
-        1 * Time.SecsPerDay,
-        10 * Time.SecsPerDay,
-        100 * Time.SecsPerDay,
-        12 * 30 * Time.SecsPerDay, 10 * 12 * 30 * Time.SecsPerDay, TimeUnit.MILLISECONDS.toSeconds(
-        maxSupportedTimeInMs - creationTimeMs - 1), TimeUnit.MILLISECONDS.toSeconds(
-        maxSupportedTimeInMs - creationTimeMs)};
+    long[] validTTLs = new long[]{TimeUnit.HOURS.toSeconds(1), TimeUnit.HOURS.toSeconds(10), TimeUnit.HOURS.toSeconds(
+        100), TimeUnit.DAYS.toSeconds(1), TimeUnit.DAYS.toSeconds(10), TimeUnit.DAYS.toSeconds(
+        100), TimeUnit.DAYS.toSeconds(30 * 12), TimeUnit.DAYS.toSeconds(30 * 12 * 10),
+        Integer.MAX_VALUE - creationTimeInSecs - 1, Integer.MAX_VALUE - creationTimeInSecs};
 
     for (long ttl : validTTLs) {
       blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs);
@@ -72,11 +65,9 @@ public class BlobPropertiesTest {
     }
 
     // invalid TTLs
-    long[] invalidTTLs = new long[]{TimeUnit.MILLISECONDS.toSeconds(
-        maxSupportedTimeInMs - creationTimeMs + 1 * Time.MsPerSec), TimeUnit.MILLISECONDS.toSeconds(
-        maxSupportedTimeInMs - creationTimeMs + 10 * Time.MsPerSec), TimeUnit.MILLISECONDS.toSeconds(
-        maxSupportedTimeInMs - creationTimeMs + 100 * Time.MsPerSec), TimeUnit.MILLISECONDS.toSeconds(
-        maxSupportedTimeInMs - creationTimeMs + 1000 * Time.MsPerSec)};
+    long[] invalidTTLs = new long[]{
+        Integer.MAX_VALUE - creationTimeInSecs + 1,
+        Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
     for (long ttl : invalidTTLs) {
       blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs);
       verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, -1);

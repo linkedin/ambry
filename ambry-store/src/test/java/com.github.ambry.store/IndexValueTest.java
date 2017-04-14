@@ -19,7 +19,10 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -61,37 +64,39 @@ public class IndexValueTest {
     String logSegmentName = LogSegmentNameHelper.getName(pos, gen);
     long size = Utils.getRandomLong(TestUtils.RANDOM, 1000);
     long offset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + SystemTime.getInstance().milliseconds();
-    long expectedExpirationTimeV1 = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
     long operationTimeAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + SystemTime.getInstance().milliseconds();
     long expectedOperationTimeV1 = Utils.getTimeInMsToTheNearestSec(operationTimeAtMs);
     short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    IndexValue value =
-        getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, operationTimeAtMs, serviceId, containerId,
-            version);
-    switch (version) {
-      case PersistentIndex.VERSION_0:
-        verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, Utils.Infinite_Time,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
-        break;
-      case PersistentIndex.VERSION_1:
-        verifyIndexValue(value, logSegmentName, size, offset, false, expectedExpirationTimeV1, offset,
-            expectedOperationTimeV1, serviceId, containerId);
-        break;
-    }
-    // test with no expiry
-    value = getIndexValue(size, new Offset(logSegmentName, offset), Utils.Infinite_Time, operationTimeAtMs, serviceId,
-        containerId, version);
-    switch (version) {
-      case PersistentIndex.VERSION_0:
-        verifyIndexValue(value, logSegmentName, size, offset, false, Utils.Infinite_Time, offset, Utils.Infinite_Time,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
-        break;
-      case PersistentIndex.VERSION_1:
-        verifyIndexValue(value, logSegmentName, size, offset, false, Utils.Infinite_Time, offset,
-            expectedOperationTimeV1, serviceId, containerId);
-        break;
+
+    Map<Long, Long> expirationTimes = new HashMap<Long, Long>();
+    // random value
+    long expirationTimeAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000000) + SystemTime.getInstance().milliseconds();
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
+    // no expiry
+    expirationTimes.put(Utils.Infinite_Time, Utils.Infinite_Time);
+    // max value -1
+    expirationTimeAtMs = TimeUnit.SECONDS.toMillis(Integer.MAX_VALUE - 1);
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
+    // max value
+    expirationTimeAtMs = TimeUnit.SECONDS.toMillis(Integer.MAX_VALUE);
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
+
+    for (Map.Entry<Long, Long> expirationTime : expirationTimes.entrySet()) {
+      long expiresAtMs = expirationTime.getKey();
+      IndexValue value =
+          getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, operationTimeAtMs, serviceId,
+              containerId, version);
+      switch (version) {
+        case PersistentIndex.VERSION_0:
+          verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, Utils.Infinite_Time,
+              IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+          break;
+        case PersistentIndex.VERSION_1:
+          verifyIndexValue(value, logSegmentName, size, offset, false, expirationTime.getValue(), offset,
+              expectedOperationTimeV1, serviceId, containerId);
+          break;
+      }
     }
   }
 

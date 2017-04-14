@@ -46,19 +46,6 @@ import org.json.JSONObject;
  */
 public class Utils {
 
-  // epoch time beyond this date(time) will have issues
-  static String maxAllowableDateForEpochTime = "19-01-2038";
-  static String maxAllowableDateForEpochTimeFormat = "dd-MM-yyyy";
-  public static long maxEpochTimeInMs;
-
-  static {
-    try {
-      maxEpochTimeInMs =
-          new SimpleDateFormat(maxAllowableDateForEpochTimeFormat).parse(maxAllowableDateForEpochTime).getTime();
-    } catch (ParseException e) {
-    }
-  }
-
   /**
    * Constant to define "infinite" time.
    * <p/>

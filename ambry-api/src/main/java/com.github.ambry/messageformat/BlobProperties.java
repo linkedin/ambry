@@ -71,8 +71,8 @@ public class BlobProperties {
     this.contentType = contentType;
     this.isPrivate = isPrivate;
     this.creationTimeInMs = creationTimeInMs;
-    long maxAllowedTTLInMs = Utils.maxEpochTimeInMs - creationTimeInMs;
-    if (TimeUnit.SECONDS.toMillis(timeToLiveInSeconds) > maxAllowedTTLInMs) {
+    // expiration value in seconds cannot exceed Integer.MAX_VALUE
+    if (timeToLiveInSeconds + TimeUnit.MILLISECONDS.toSeconds(creationTimeInMs) > Integer.MAX_VALUE) {
       this.timeToLiveInSeconds = Utils.Infinite_Time;
     } else {
       this.timeToLiveInSeconds = timeToLiveInSeconds;
