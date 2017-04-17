@@ -13,9 +13,6 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.utils.Time;
-
-
 /**
  * The configs for the store
  */
@@ -158,8 +155,7 @@ public class StoreConfig {
         verifiableProperties.getInt("store.min.used.capacity.to.trigger.compaction.in.percentage", 50);
     storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);
     storeCompactionCheckFrequencyInHours =
-        verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1,
-            Integer.MAX_VALUE / (Time.SecsPerHour * Time.MsPerSec));
+        verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1, 8760);
     storeCompactionPolicyFactory = verifiableProperties.getString("store.compaction.policy.factory",
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =

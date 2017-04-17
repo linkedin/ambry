@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -141,7 +142,7 @@ class CompactionManager {
     private final Condition waitCondition = lock.newCondition();
     private final Set<BlobStore> storesToSkip = new HashSet<>();
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
-    private final long waitTimeMs = storeConfig.storeCompactionCheckFrequencyInHours * Time.SecsPerHour * Time.MsPerSec;
+    private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
 
     private volatile boolean enabled = true;
 

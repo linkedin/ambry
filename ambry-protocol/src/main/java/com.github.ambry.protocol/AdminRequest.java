@@ -44,6 +44,9 @@ public class AdminRequest extends RequestOrResponse {
    */
   public static AdminRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     Short versionId = stream.readShort();
+    if (!versionId.equals(ADMIN_REQUEST_VERSION_V1)) {
+      throw new IllegalStateException("Unrecognized version for AdminRequest: " + ADMIN_REQUEST_VERSION_V1);
+    }
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     AdminRequestOrResponseType type = AdminRequestOrResponseType.values()[stream.readShort()];
@@ -56,7 +59,6 @@ public class AdminRequest extends RequestOrResponse {
       default:
         throw new IllegalArgumentException("Unrecognized admin request type: " + type);
     }
-    // ignore version for now
     return request;
   }
 
@@ -71,7 +73,7 @@ public class AdminRequest extends RequestOrResponse {
     super(RequestOrResponseType.AdminRequest, ADMIN_REQUEST_VERSION_V1, correlationId, clientId);
     this.type = type;
     this.partitionId = partitionId;
-    sizeInBytes = computeSizeInBytes();
+    sizeInBytes = computeAndGetSizeInBytes();
   }
 
   @Override
@@ -120,7 +122,7 @@ public class AdminRequest extends RequestOrResponse {
   /**
    * @return the size in bytes of the serialized version of the request
    */
-  private long computeSizeInBytes() {
+  private long computeAndGetSizeInBytes() {
     long size = super.sizeInBytes() + REQUEST_TYPE_SIZE;
     switch (type) {
       case TriggerCompaction:

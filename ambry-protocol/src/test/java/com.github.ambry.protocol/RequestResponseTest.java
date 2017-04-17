@@ -388,13 +388,15 @@ public class RequestResponseTest {
         adminRequest.writeTo(writableByteChannel);
       } while (!adminRequest.isSendComplete());
       DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-      requestStream.readLong(); // read length
-      requestStream.readShort(); // read short
-      AdminRequest deserializedDeleteRequest = AdminRequest.readFrom(requestStream, clusterMap);
-      Assert.assertEquals(deserializedDeleteRequest.getCorrelationId(), 1234);
-      Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
-      Assert.assertEquals(deserializedDeleteRequest.getType(), type);
-      Assert.assertTrue(deserializedDeleteRequest.getPartitionId().isEqual(id.toString()));
+      // read length
+      requestStream.readLong();
+      // read version
+      requestStream.readShort();
+      AdminRequest deserializedAdminRequest = AdminRequest.readFrom(requestStream, clusterMap);
+      Assert.assertEquals(deserializedAdminRequest.getCorrelationId(), 1234);
+      Assert.assertEquals(deserializedAdminRequest.getClientId(), "client");
+      Assert.assertEquals(deserializedAdminRequest.getType(), type);
+      Assert.assertTrue(deserializedAdminRequest.getPartitionId().isEqual(id.toString()));
       AdminResponse response = new AdminResponse(1234, "client", ServerErrorCode.No_Error);
       outputStream.reset();
       do {
@@ -402,9 +404,9 @@ public class RequestResponseTest {
       } while (!response.isSendComplete());
       requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
       requestStream.readLong(); // read size
-      AdminResponse deserializedDeleteResponse = AdminResponse.readFrom(requestStream);
-      Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), 1234);
-      Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+      AdminResponse deserializedAdminResponse = AdminResponse.readFrom(requestStream);
+      Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), 1234);
+      Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
     }
   }
 }

@@ -47,6 +47,9 @@ public class AdminResponse extends Response {
       throw new IllegalArgumentException("The type of request response is not compatible (is " + type + ")");
     }
     Short versionId = stream.readShort();
+    if (!versionId.equals(ADMIN_RESPONSE_VERSION_V1)) {
+      throw new IllegalStateException("Unrecognized version for AdminResponse: " + ADMIN_RESPONSE_VERSION_V1);
+    }
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];

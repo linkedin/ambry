@@ -271,15 +271,15 @@ public class ServerMetrics {
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataTotalTime"));
 
     triggerCompactionRequestQueueTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestQueueTimeMs"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestQueueTimeInMs"));
     triggerCompactionRequestProcessingTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestProcessingTimeMs"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestProcessingTimeInMs"));
     triggerCompactionResponseQueueTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionResponseQueueTimeMs"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionResponseQueueTimeInMs"));
     triggerCompactionResponseSendTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionResponseSendTimeMs"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionResponseSendTimeInMs"));
     triggerCompactionRequestTotalTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestTotalTimeMs"));
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestTotalTimeInMs"));
 
     blobSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
