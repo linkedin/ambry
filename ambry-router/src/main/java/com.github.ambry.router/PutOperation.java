@@ -353,8 +353,12 @@ class PutOperation {
       if (chunkFillingCompletedSuccessfully) {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
-          lastChunk.onFillComplete(true);
-          updateChunkFillerWaitTimeMetrics();
+          if (chunkCounter != 0 && lastChunk.buf.position() == 0) {
+            logger.trace("The last chunk received from ReadableStreamChannel has no data, discarding");
+          } else {
+            lastChunk.onFillComplete(true);
+            updateChunkFillerWaitTimeMetrics();
+          }
         }
         routerCallback.onPollReady();
       }
