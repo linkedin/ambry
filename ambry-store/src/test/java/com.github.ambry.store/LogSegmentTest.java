@@ -247,11 +247,11 @@ public class LogSegmentTest {
         }
       }
 
-      // position + buffer.remaining() > endOffset.
+      // position + buffer.remaining() > sizeInBytes.
       long readOverFlowCount = metrics.overflowReadError.getCount();
       try {
-        segment.readInto(readBuf, writeStartOffset + 1);
-        fail("Should have failed to read because position + buffer.remaining() > endOffset");
+        segment.readInto(readBuf, readBuf.remaining() + 1);
+        fail("Should have failed to read because position + buffer.remaining() > sizeInBytes");
       } catch (IndexOutOfBoundsException e) {
         assertEquals("Read overflow should have been reported", readOverFlowCount + 1,
             metrics.overflowReadError.getCount());
