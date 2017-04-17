@@ -57,6 +57,7 @@ public class DumpLogTool {
   private final long blobsPerSec;
   // set to true if only error logging is required
   private final boolean silent;
+  private final long currentTimeInMs;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpLogTool.class);
 
@@ -81,6 +82,7 @@ public class DumpLogTool {
     } else if (blobsPerSec < 0) {
       throw new IllegalArgumentException("BlobsPerSec " + blobsPerSec + " cannot be negative ");
     }
+    currentTimeInMs = SystemTime.getInstance().milliseconds();
   }
 
   public static void main(String args[]) throws Exception {
@@ -158,7 +160,7 @@ public class DumpLogTool {
     while (currentOffset < endOffset) {
       try {
         DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-            DumpDataHelper.readSingleRecordFromLog(randomAccessFile, currentOffset, clusterMap);
+            DumpDataHelper.readSingleRecordFromLog(randomAccessFile, currentOffset, clusterMap, currentTimeInMs);
         if (throttler != null) {
           throttler.maybeThrottle(1);
         }

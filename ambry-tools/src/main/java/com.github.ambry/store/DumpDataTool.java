@@ -22,6 +22,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.File;
@@ -61,12 +62,14 @@ public class DumpDataTool {
   private final String typeOfOperation;
 
   // Path referring to replica root directory
-  private final String replicaRootDirecotry;
+  private final String replicaRootDirectory;
 
   // The throttling value in index files per sec
   private final double indexFilesPerSec;
 
   private final Throttler throttler;
+  private final Time time;
+  private final long currentTimeInMs;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
 
@@ -75,7 +78,7 @@ public class DumpDataTool {
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     typeOfOperation = verifiableProperties.getString("type.of.operation");
-    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory", "");
+    replicaRootDirectory = verifiableProperties.getString("replica.root.directory", "");
     indexFilesPerSec = verifiableProperties.getDouble("bytes.per.sec", 1);
     throttler = new Throttler(indexFilesPerSec, 1000, true, SystemTime.getInstance());
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
@@ -85,6 +88,8 @@ public class DumpDataTool {
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
+    time = SystemTime.getInstance();
+    currentTimeInMs = time.milliseconds();
   }
 
   public static void main(String args[]) throws Exception {
@@ -107,7 +112,7 @@ public class DumpDataTool {
         compareIndexEntriesToLogContent(new File(fileToRead), false);
         break;
       case "CompareReplicaIndexesToLog":
-        compareReplicaIndexEntriestoLogContent(replicaRootDirecotry);
+        compareReplicaIndexEntriestoLogContent(replicaRootDirectory);
         break;
       default:
         logger.error("Unknown typeOfOperation " + typeOfOperation);
@@ -188,7 +193,7 @@ public class DumpDataTool {
     StoreMetrics metrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
     IndexSegment segment =
         new IndexSegment(indexFile, false, storeKeyFactory, config, metrics, new Journal(indexFile.getParent(), 0, 0),
-            SystemTime.getInstance());
+            time);
     Offset startOffset = segment.getStartOffset();
     TreeMap<Long, Long> coveredRanges = new TreeMap<>();
     String logFileName = LogSegmentNameHelper.nameToFilename(segment.getLogSegmentName());
@@ -217,14 +222,15 @@ public class DumpDataTool {
                       originalOffset, value.getOffset(), startOffset);
                 } else {
                   DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-                      DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap);
+                      DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap,
+                          currentTimeInMs);
                   coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
                   logger.trace("PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
                       logBlobRecordInfo.blobId, originalOffset, (originalOffset + logBlobRecordInfo.totalRecordSize),
                       key.getID(), value.getOffset());
                   if (!logBlobRecordInfo.blobId.getID().equals(key.getID())) {
-                    logger.error("BlobId value mismatch between delete record " + key.getID() + " and put record "
-                        + logBlobRecordInfo.blobId.getID());
+                    logger.error("BlobId value mismatch between delete record {} and put record {}", key.getID(),
+                        logBlobRecordInfo.blobId.getID());
                   }
                 }
               }
@@ -234,9 +240,8 @@ public class DumpDataTool {
           logger.error("Failed for key {} with value {} ", key, value);
         }
       } else {
-        logger.trace(
-            "Blob's " + key + " offset " + value.getOffset().getOffset() + " is outside of log size " + logFileSize
-                + "," + "with a diff of " + (value.getOffset().getOffset() - logFileSize));
+        logger.trace("Blob's {} offset {} is outside of log size {}, with a diff of {}", key,
+            value.getOffset().getOffset(), logFileSize, (value.getOffset().getOffset() - logFileSize));
       }
     }
     long indexEndOffset = segment.getEndOffset().getOffset();
@@ -260,7 +265,7 @@ public class DumpDataTool {
     long offset = indexValue.getOffset().getOffset();
     try {
       DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-          DumpDataHelper.readSingleRecordFromLog(randomAccessFile, offset, clusterMap);
+          DumpDataHelper.readSingleRecordFromLog(randomAccessFile, offset, clusterMap, currentTimeInMs);
       if (coveredRanges != null) {
         coveredRanges.put(offset, offset + logBlobRecordInfo.totalRecordSize);
       }
@@ -297,7 +302,7 @@ public class DumpDataTool {
   private void compareIndexValueToLogEntry(String blobId, IndexValue indexValue,
       DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo) {
     boolean isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
-    boolean isExpired = DumpDataHelper.isExpired(indexValue.getExpiresAtMs());
+    boolean isExpired = DumpDataHelper.isExpired(indexValue.getExpiresAtMs(), currentTimeInMs);
     if (isDeleted != logBlobRecordInfo.isDeleted) {
       logger.error(
           "Deleted value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "

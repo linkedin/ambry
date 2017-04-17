@@ -17,7 +17,6 @@ import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -31,15 +30,21 @@ class BlobStatus {
   private long earliestPutTimeMs = Utils.Infinite_Time;
   private long earliestDeleteTimeMs = Utils.Infinite_Time;
   private boolean isDeletedOrExpired;
-  private AtomicBoolean belongsToRecentIndexSegment = new AtomicBoolean(false);
+  private boolean belongsToRecentIndexSegment = false;
 
+  /**
+   * Initializes a {@link BlobStatus} with a list of Replica. ConsistencyChecker uses the {@link BlobStatus} to keep
+   * track of the status of a blob in every replica. "Replica" refers to a directory name where all replicas for a given
+   * partition is present.
+   * @param replicaList {@link List} of replicas for which blob status needs to be collected
+   */
   BlobStatus(List<String> replicaList) {
-    if (replicaList != null && replicaList.size() > 0) {
+    if (replicaList != null) {
       unavailable.addAll(replicaList);
     }
   }
 
-  Set<String> getAvailable() {
+  Set<String> getAvailableList() {
     return available;
   }
 
@@ -51,7 +56,7 @@ class BlobStatus {
     }
   }
 
-  Set<String> getDeletedOrExpired() {
+  Set<String> getDeletedOrExpiredList() {
     return deletedOrExpired;
   }
 
@@ -60,11 +65,11 @@ class BlobStatus {
   }
 
   boolean belongsToRecentIndexSegment() {
-    return belongsToRecentIndexSegment.get();
+    return belongsToRecentIndexSegment;
   }
 
   void setBelongsToRecentIndexSegment(boolean belongsToRecentIndexSegment) {
-    this.belongsToRecentIndexSegment.compareAndSet(false, belongsToRecentIndexSegment);
+    this.belongsToRecentIndexSegment = this.belongsToRecentIndexSegment || belongsToRecentIndexSegment;
   }
 
   void addDeletedOrExpired(String replica, long opTimeMs) {

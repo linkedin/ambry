@@ -235,9 +235,7 @@ public class BlobValidator {
       } else {
         sslProperties = new Properties();
       }
-      sslProperties.setProperty("clustermap.cluster.name", "dev");
-      sslProperties.setProperty("clustermap.datacenter.name", "DataCenter");
-      sslProperties.setProperty("clustermap.host.name", "localhost");
+      ToolUtils.addClusterMapProperties(sslProperties);
 
       Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
       VerifiableProperties vProps = new VerifiableProperties(sslProperties);

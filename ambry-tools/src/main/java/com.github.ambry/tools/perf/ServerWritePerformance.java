@@ -198,6 +198,8 @@ public class ServerWritePerformance {
         sslProperties = new Properties();
       }
 
+      ToolUtils.addClusterMapProperties(sslProperties);
+
       int numberOfWriters = options.valueOf(numberOfWritersOpt);
       int writesPerSecond = options.valueOf(writesPerSecondOpt);
       boolean enableVerboseLogging = options.has(verboseLoggingOpt) ? true : false;

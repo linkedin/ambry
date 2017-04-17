@@ -20,8 +20,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -36,18 +34,18 @@ import java.nio.channels.Channels;
  */
 class DumpDataHelper {
 
-  private static final long TIME_MS = SystemTime.getInstance().milliseconds();
-
   /**
    * Fetches one blob record from the log
    * @param randomAccessFile {@link RandomAccessFile} referring to the log file
    * @param currentOffset the offset at which to read the record from
+   * @param clusterMap the {@link ClusterMap} object to use to generate BlobId
+   * @param currentTimeInMs current time in ms to determine expiration
    * @return the {@link LogBlobRecordInfo} containing the blob record info
    * @throws IOException
    * @throws MessageFormatException
    */
   static LogBlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset,
-      ClusterMap clusterMap) throws IOException, MessageFormatException {
+      ClusterMap clusterMap, long currentTimeInMs) throws IOException, MessageFormatException {
     String messageheader = null;
     BlobId blobId = null;
     String blobProperty = null;
@@ -79,10 +77,8 @@ class DumpDataHelper {
       if (header.getBlobPropertiesRecordRelativeOffset()
           != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
         BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-        long ttl = props.getTimeToLiveInSeconds();
-        expiresAtMs = ttl == Utils.Infinite_Time ? ttl
-            : props.getCreationTimeInMs() + (props.getTimeToLiveInSeconds() * Time.MsPerSec);
-        isExpired = expiresAtMs != Utils.Infinite_Time && isExpired(expiresAtMs);
+        expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
+        isExpired = expiresAtMs != Utils.Infinite_Time && isExpired(expiresAtMs, currentTimeInMs);
         blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
             + ", isExpired " + isExpired;
         ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
@@ -135,9 +131,10 @@ class DumpDataHelper {
   /**
    * Returns if the blob has been expired or not, based on {@code expiresAtMs}.
    * @param expiresAtMs time in milliseconds referring to the time at which the blob expires.
+   * @param currentTimeInMs current time in ms to determine expiration
    * @return {@code true} if blob has expired, {@code false} otherwise
    */
-  static boolean isExpired(Long expiresAtMs) {
-    return expiresAtMs != Utils.Infinite_Time && TIME_MS > expiresAtMs;
+  static boolean isExpired(Long expiresAtMs, long currentTimeInMs) {
+    return expiresAtMs != Utils.Infinite_Time && currentTimeInMs > expiresAtMs;
   }
 }
