@@ -107,7 +107,9 @@ public class LogSegmentTest {
       // check file size and end offset (they will not match)
       assertEquals("End offset is not equal to the cumulative bytes written", writeStartOffset + 3 * writeSize,
           segment.getEndOffset());
-      assertEquals("Size in bytes is not equal to size of the file", STANDARD_SEGMENT_SIZE, segment.sizeInBytes());
+      assertEquals("Size in bytes is not equal to size written", writeStartOffset + 3 * writeSize,
+          segment.sizeInBytes());
+      assertEquals("Capacity is not equal to allocated size ", STANDARD_SEGMENT_SIZE, segment.getCapacityInBytes());
 
       // ensure flush doesn't throw any errors.
       segment.flush();
@@ -240,10 +242,11 @@ public class LogSegmentTest {
       int size = random.nextInt(data.length - position);
       readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
 
-      // position + buffer.remaining == data size written
-      position = (int) segment.getEndOffset() + random.nextInt(data.length - (int) segment.getEndOffset());
-      size = data.length - position;
-      readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
+      // position + buffer.remaining == sizeInBytes
+      segment.setEndOffset(segment.getStartOffset());
+      position = (int) segment.getStartOffset();
+      readAndEnsureMatch(segment, position,
+          Arrays.copyOfRange(data, position - (int) segment.getStartOffset(), data.length));
 
       // error scenarios
       ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
@@ -259,20 +262,18 @@ public class LogSegmentTest {
         }
       }
 
-      // valid position, but position + buffer.remaining() > sizeInBytes.
+      // position + buffer.remaining > sizeInBytes
       long readOverFlowCount = metrics.overflowReadError.getCount();
-      readBuf = ByteBuffer.wrap(new byte[(int) segment.sizeInBytes() - (int) segment.getStartOffset()]);
-      position =
-          (int) segment.getEndOffset() + random.nextInt((int) segment.sizeInBytes() - (int) segment.getEndOffset() + 1);
-      int bufferPosition = data.length - ((int) segment.sizeInBytes() - position + 1);
-      readBuf.position(bufferPosition);
+      readBuf = ByteBuffer.allocate(2);
+      segment.setEndOffset(segment.getStartOffset());
+      position = (int) segment.sizeInBytes() - 1;
       try {
         segment.readInto(readBuf, position);
         fail("Should have failed to read because position + buffer.remaining() > sizeInBytes");
       } catch (IndexOutOfBoundsException e) {
         assertEquals("Read overflow should have been reported", readOverFlowCount + 1,
             metrics.overflowReadError.getCount());
-        assertEquals("Position of buffer has changed", bufferPosition, readBuf.position());
+        assertEquals("Position of buffer has changed", 0, readBuf.position());
       }
 
       segment.close();
@@ -325,7 +326,7 @@ public class LogSegmentTest {
       // write at random locations
       for (int i = 0; i < 10; i++) {
         long offset = writeStartOffset + Utils.getRandomLong(TestUtils.RANDOM,
-            segment.getCapacityInBytes() - bufOne.length - writeStartOffset);
+            segment.sizeInBytes() - bufOne.length - writeStartOffset);
         segment.writeFrom(Channels.newChannel(new ByteBufferInputStream(ByteBuffer.wrap(bufOne))), offset,
             bufOne.length);
         readAndEnsureMatch(segment, offset, bufOne);
@@ -486,7 +487,6 @@ public class LogSegmentTest {
     assertTrue("Segment file could not be created at path " + file.getAbsolutePath(), file.createNewFile());
     file.deleteOnExit();
     try (RandomAccessFile raf = new RandomAccessFile(tempDir + File.separator + segmentName, "rw")) {
-      raf.setLength(capacityInBytes);
       return new LogSegment(segmentName, file, capacityInBytes, metrics, writeHeaders);
     }
   }
