@@ -380,7 +380,8 @@ public class PutManagerTest {
   }
 
   /**
-   * Tests put of blobs with various sizes with channels that do not have all the data at once.
+   * Tests put of blobs with various sizes with channels that do not have all the data at once. This also tests cases
+   * where zero-length buffers are given out by the channel.
    */
   @Test
   public void testDelayedChannelPutSuccess() throws Exception {
@@ -401,6 +402,9 @@ public class PutManagerTest {
 
   /**
    * Helper method to put a blob with a channel that does not have all the data at once.
+   * @param blobSize the size of the blob to put.
+   * @param sendZeroSizedBuffers whether this test should involve making the channel send zero-sized buffers between
+   *                             sending data buffers.
    */
   private void testDelayed(int blobSize, boolean sendZeroSizedBuffers) throws Exception {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
@@ -913,6 +917,8 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
   /**
    * Constructs a MockReadableStreamChannel.
    * @param size the number of bytes that will eventually be written into this channel.
+   * @param sendZeroSizedBuffers if true, this channel will write out a zero-sized buffer at the end, and with
+   *                             50% probability, send out zero-sized buffers after every data buffer.
    */
   MockReadableStreamChannel(long size, boolean sendZeroSizedBuffers) {
     this.size = size;
