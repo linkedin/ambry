@@ -187,7 +187,7 @@ class LogSegment implements Read, Write {
    * @param buffer The buffer into which the data needs to be written
    * @param position The position to start the read from
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws IndexOutOfBoundsException if {@code position} < header size or >= {@link #getEndOffset()} or if
+   * @throws IndexOutOfBoundsException if {@code position} < header size or >= {@link #sizeInBytes()} or if
    * {@code buffer} size is greater than the data available for read.
    */
   @Override

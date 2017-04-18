@@ -261,17 +261,18 @@ public class LogSegmentTest {
 
       // valid position, but position + buffer.remaining() > sizeInBytes.
       long readOverFlowCount = metrics.overflowReadError.getCount();
-      readBuf = ByteBuffer.wrap(new byte[(int) segment.sizeInBytes()]);
+      readBuf = ByteBuffer.wrap(new byte[(int) segment.sizeInBytes() - (int) segment.getStartOffset()]);
       position =
-          (int) segment.getEndOffset() + random.nextInt((int) segment.sizeInBytes() - (int) segment.getEndOffset());
-      readBuf.position((int) segment.sizeInBytes() - position + 1);
+          (int) segment.getEndOffset() + random.nextInt((int) segment.sizeInBytes() - (int) segment.getEndOffset() + 1);
+      int bufferPosition = data.length - ((int) segment.sizeInBytes() - position + 1);
+      readBuf.position(bufferPosition);
       try {
         segment.readInto(readBuf, position);
         fail("Should have failed to read because position + buffer.remaining() > sizeInBytes");
       } catch (IndexOutOfBoundsException e) {
         assertEquals("Read overflow should have been reported", readOverFlowCount + 1,
             metrics.overflowReadError.getCount());
-        assertEquals("Position of buffer has changed", (int) segment.sizeInBytes() - position + 1, readBuf.position());
+        assertEquals("Position of buffer has changed", bufferPosition, readBuf.position());
       }
 
       segment.close();
