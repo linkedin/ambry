@@ -107,7 +107,7 @@ public class ChunkFillTest {
     Random random = new Random();
     byte[] putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
-    final MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    final MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> futureResult = new FutureResult<String>();
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);

@@ -35,6 +35,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -379,24 +380,43 @@ public class PutManagerTest {
   }
 
   /**
-   * Tests put of a blob with a channel that does not have all the data at once.
+   * Tests put of blobs with various sizes with channels that do not have all the data at once. This also tests cases
+   * where zero-length buffers are given out by the channel.
    */
   @Test
   public void testDelayedChannelPutSuccess() throws Exception {
     router = getNonBlockingRouter();
-    int blobSize = chunkSize * random.nextInt(10) + 1;
+    int[] blobSizes = {0, // zero sized blob.
+        chunkSize, // blob size is the same as chunk size.
+        chunkSize + random.nextInt(chunkSize - 1) + 1, // over a chunk but less than 2 chunks.
+        chunkSize * (2 + random.nextInt(10)), // blob size is a multiple of chunk size.
+        chunkSize + (2 + random.nextInt(10)) + random.nextInt(chunkSize - 1) + 1 // multiple of a chunk and over.
+    };
+    for (int blobSize : blobSizes) {
+      testDelayed(blobSize, false);
+      testDelayed(blobSize, true);
+    }
+    assertSuccess();
+    assertCloseCleanup();
+  }
+
+  /**
+   * Helper method to put a blob with a channel that does not have all the data at once.
+   * @param blobSize the size of the blob to put.
+   * @param sendZeroSizedBuffers whether this test should involve making the channel send zero-sized buffers between
+   *                             sending data buffers.
+   */
+  private void testDelayed(int blobSize, boolean sendZeroSizedBuffers) throws Exception {
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
-    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
             putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
-    pushwithDelay(src, putChannel, blobSize, future);
+    pushWithDelay(src, putChannel, blobSize, future);
     future.await();
     requestAndResult.result = future;
-    assertSuccess();
-    assertCloseCleanup();
   }
 
   /**
@@ -409,7 +429,7 @@ public class PutManagerTest {
     int blobSize = chunkSize * random.nextInt(10) + 1;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
-    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
             putChannel, null);
@@ -418,7 +438,7 @@ public class PutManagerTest {
     //Make the channel act bad.
     putChannel.beBad();
 
-    pushwithDelay(src, putChannel, blobSize, future);
+    pushWithDelay(src, putChannel, blobSize, future);
     future.await();
     requestAndResult.result = future;
     Exception expectedException = new Exception("Channel encountered an error");
@@ -464,7 +484,7 @@ public class PutManagerTest {
     int blobSize = chunkSize * 2;
     RequestAndResult requestAndResult = new RequestAndResult(blobSize);
     requestAndResultsList.add(requestAndResult);
-    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize);
+    MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
             putChannel, null);
@@ -503,17 +523,17 @@ public class PutManagerTest {
    * @param future the future associated with the overall operation.
    * @throws Exception if the write to the channel throws an exception.
    */
-  private void pushwithDelay(ByteBuffer src, MockReadableStreamChannel putChannel, int blobSize, Future future)
+  private void pushWithDelay(ByteBuffer src, MockReadableStreamChannel putChannel, int blobSize, Future future)
       throws Exception {
     int pushedSoFar = 0;
-    while (pushedSoFar < blobSize && !future.isDone()) {
+    do {
       int toPush = random.nextInt(blobSize - pushedSoFar + 1);
       ByteBuffer buf = ByteBuffer.allocate(toPush);
       src.get(buf.array());
       putChannel.write(buf);
       Thread.yield();
       pushedSoFar += toPush;
-    }
+    } while (pushedSoFar < blobSize && !future.isDone());
   }
 
   /**
@@ -676,13 +696,25 @@ public class PutManagerTest {
       Assert.assertEquals("Wrong max chunk size in metadata", chunkSize, compositeBlobInfo.getChunkSize());
       Assert.assertEquals("Wrong total size in metadata", originalPutContent.length, compositeBlobInfo.getTotalSize());
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
+      Assert.assertEquals("Number of chunks is not as expected",
+          RouterUtils.getNumChunksForBlobAndChunkSize(originalPutContent.length, chunkSize), dataBlobIds.size());
+      StoreKey lastKey = dataBlobIds.get(dataBlobIds.size() - 1);
       byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
       int offset = 0;
       for (StoreKey key : dataBlobIds) {
         PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
-        Utils.readBytesFromStream(dataBlobPutRequest.getBlobStream(), content, offset,
-            (int) dataBlobPutRequest.getBlobSize());
-        offset += (int) dataBlobPutRequest.getBlobSize();
+        int dataBlobLength = (int) dataBlobPutRequest.getBlobSize();
+        InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
+        Utils.readBytesFromStream(dataBlobStream, content, offset, dataBlobLength);
+        Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
+        if (key != lastKey) {
+          Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength);
+        } else {
+          // If we are here (composite blob), we know that the blob size is non-zero.
+          Assert.assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
+              (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength);
+        }
+        offset += dataBlobLength;
         notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
             dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
       }
@@ -879,13 +911,18 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
   private final long size;
   private long readSoFar;
   private boolean beBad = false;
+  private final boolean sendZeroSizedBuffers;
+  private final Random random = new Random();
 
   /**
    * Constructs a MockReadableStreamChannel.
    * @param size the number of bytes that will eventually be written into this channel.
+   * @param sendZeroSizedBuffers if true, this channel will write out a zero-sized buffer at the end, and with
+   *                             50% probability, send out zero-sized buffers after every data buffer.
    */
-  MockReadableStreamChannel(long size) {
+  MockReadableStreamChannel(long size, boolean sendZeroSizedBuffers) {
     this.size = size;
+    this.sendZeroSizedBuffers = sendZeroSizedBuffers;
     readSoFar = 0;
   }
 
@@ -916,13 +953,29 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
       callback.onCompletion(null, exception);
       return;
     }
-    Future<Long> future = writableChannel.write(buf, null);
-    future.get();
+    writableChannel.write(buf, null).get();
     readSoFar += toRead;
     if (readSoFar == size) {
+      if (sendZeroSizedBuffers) {
+        // Send a final zero sized buffer.
+        sendZeroAndWait();
+      }
       returnedFuture.done(size, null);
       callback.onCompletion(size, null);
+    } else {
+      if (sendZeroSizedBuffers && random.nextInt(2) % 2 == 0) {
+        // Send a zero-sized blob with 50% probability.
+        sendZeroAndWait();
+      }
     }
+  }
+
+  /**
+   * Send a zero sized buffer to the associated {@link AsyncWritableChannel}
+   */
+  private void sendZeroAndWait() throws Exception {
+    ByteBuffer buf = ByteBuffer.allocate(0);
+    writableChannel.write(buf, null).get();
   }
 
   /**
