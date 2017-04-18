@@ -242,12 +242,6 @@ public class LogSegmentTest {
       int size = random.nextInt(data.length - position);
       readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
 
-      // position + buffer.remaining == sizeInBytes
-      segment.setEndOffset(segment.getStartOffset());
-      position = (int) segment.getStartOffset();
-      readAndEnsureMatch(segment, position,
-          Arrays.copyOfRange(data, position - (int) segment.getStartOffset(), data.length));
-
       // error scenarios
       ByteBuffer readBuf = ByteBuffer.wrap(new byte[data.length]);
       // data cannot be read at invalid offsets.
