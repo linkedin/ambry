@@ -907,16 +907,16 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
   private final long size;
   private long readSoFar;
   private boolean beBad = false;
-  private final boolean sendZeroSizedLastChunk;
+  private final boolean sendZeroSizedBuffers;
   private final Random random = new Random();
 
   /**
    * Constructs a MockReadableStreamChannel.
    * @param size the number of bytes that will eventually be written into this channel.
    */
-  MockReadableStreamChannel(long size, boolean sendZeroSizedLastChunk) {
+  MockReadableStreamChannel(long size, boolean sendZeroSizedBuffers) {
     this.size = size;
-    this.sendZeroSizedLastChunk = sendZeroSizedLastChunk;
+    this.sendZeroSizedBuffers = sendZeroSizedBuffers;
     readSoFar = 0;
   }
 
@@ -950,18 +950,16 @@ class MockReadableStreamChannel implements ReadableStreamChannel {
     writableChannel.write(buf, null).get();
     readSoFar += toRead;
     if (readSoFar == size) {
-      if (sendZeroSizedLastChunk) {
+      if (sendZeroSizedBuffers) {
         // Send a final zero sized buffer.
         sendZeroAndWait();
       }
       returnedFuture.done(size, null);
       callback.onCompletion(size, null);
     } else {
-      if (sendZeroSizedLastChunk) {
+      if (sendZeroSizedBuffers && random.nextInt(2) % 2 == 0) {
         // Send a zero-sized blob with 50% probability.
-        if (random.nextInt(2) % 2 == 0) {
-          sendZeroAndWait();
-        }
+        sendZeroAndWait();
       }
     }
   }

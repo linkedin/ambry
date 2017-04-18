@@ -354,7 +354,7 @@ class PutOperation {
         PutChunk lastChunk = getBuildingChunk();
         if (lastChunk != null) {
           if (chunkCounter != 0 && lastChunk.buf.position() == 0) {
-            logger.trace("The last chunk received from ReadableStreamChannel has no data, discarding");
+            logger.trace("The last buffer(s) received from chunkFillerChannel have no data, discarding them.");
           } else {
             lastChunk.onFillComplete(true);
             updateChunkFillerWaitTimeMetrics();
