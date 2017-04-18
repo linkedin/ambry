@@ -192,16 +192,17 @@ class LogSegment implements Read, Write {
    */
   @Override
   public void readInto(ByteBuffer buffer, long position) throws IOException {
-    if (position < startOffset || position >= sizeInBytes()) {
+    long sizeInBytes = sizeInBytes();
+    if (position < startOffset || position >= sizeInBytes) {
       throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
               + "] with size [" + sizeInBytes() + "]");
     }
-    if (position + buffer.remaining() > sizeInBytes()) {
+    if (position + buffer.remaining() > sizeInBytes) {
       metrics.overflowReadError.inc();
       throw new IndexOutOfBoundsException(
           "Cannot read from segment [" + file.getAbsolutePath() + "] from position [" + position + "] for size ["
-              + buffer.remaining() + "] because it exceeds the size [" + sizeInBytes() + "]");
+              + buffer.remaining() + "] because it exceeds the size [" + sizeInBytes + "]");
     }
     long bytesRead = 0;
     int size = buffer.remaining();
