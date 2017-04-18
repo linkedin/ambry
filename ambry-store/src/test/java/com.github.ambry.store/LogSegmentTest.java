@@ -241,7 +241,7 @@ public class LogSegmentTest {
       readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
 
       // position + buffer.remaining == data size written
-      position = (int) segment.getEndOffset();
+      position = (int) segment.getEndOffset() + random.nextInt(data.length - (int) segment.getEndOffset());
       size = data.length - position;
       readAndEnsureMatch(segment, writeStartOffset + position, Arrays.copyOfRange(data, position, position + size));
 

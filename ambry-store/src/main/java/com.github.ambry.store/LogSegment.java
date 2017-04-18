@@ -196,7 +196,7 @@ class LogSegment implements Read, Write {
     if (position < startOffset || position >= sizeInBytes) {
       throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
-              + "] with size [" + sizeInBytes() + "]");
+              + "] with size [" + sizeInBytes + "]");
     }
     if (position + buffer.remaining() > sizeInBytes) {
       metrics.overflowReadError.inc();
