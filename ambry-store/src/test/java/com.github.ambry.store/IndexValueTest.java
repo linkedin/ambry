@@ -84,9 +84,6 @@ public class IndexValueTest {
     // expiry > Integer.MAX_VALUE, expected to be -1
     expirationTimeAtMs = TimeUnit.SECONDS.toMillis((long) Integer.MAX_VALUE + 1);
     expirationTimes.put(expirationTimeAtMs, Utils.Infinite_Time);
-    // expiry > Integer.MAX_VALUE, expected to be -1
-    expirationTimeAtMs = TimeUnit.SECONDS.toMillis(2 * (long) Integer.MAX_VALUE);
-    expirationTimes.put(expirationTimeAtMs, Utils.Infinite_Time);
     // expiry < 0. This is to test how negative expiration values are treated in deser path.
     expirationTimeAtMs = -1 * TimeUnit.DAYS.toMillis(1);
     expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
@@ -210,7 +207,7 @@ public class IndexValueTest {
         expectedExpiryValue = expiresAtMs;
         break;
       case PersistentIndex.VERSION_1:
-        expectedExpiryValue = expiresAtMs < Utils.Infinite_Time ? Utils.Infinite_Time : expiresAtMs;
+        expectedExpiryValue = expiresAtMs >= 0 ? expiresAtMs : Utils.Infinite_Time;
         break;
     }
     verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
