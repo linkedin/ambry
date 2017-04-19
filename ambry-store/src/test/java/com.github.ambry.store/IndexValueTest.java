@@ -91,7 +91,7 @@ public class IndexValueTest {
     expirationTimeAtMs = -1 * TimeUnit.DAYS.toMillis(1);
     expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
     // expiry < 0
-    expirationTimeAtMs = -1 * (long) Integer.MAX_VALUE;
+    expirationTimeAtMs = (long) Integer.MIN_VALUE;
     expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
 
     for (Map.Entry<Long, Long> expirationTime : expirationTimes.entrySet()) {

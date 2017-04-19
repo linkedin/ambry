@@ -107,6 +107,7 @@ class FrontendMetrics {
   public final Counter responseSubmissionError;
   public final Counter resourceReleaseError;
   public final Counter routerCallbackError;
+  public final Counter ttlTooLargeError;
   // DeleteCallback
   public final Counter deleteCallbackProcessingError;
   // HeadCallback
@@ -117,8 +118,6 @@ class FrontendMetrics {
   // PostCallback
   public final Counter postCallbackProcessingError;
   public final Counter outboundIdConversionCallbackProcessingError;
-  // TTL too large error
-  public final Counter ttlTooLargeError;
   // Other
   // AmbryBlobStorageService
   public final Histogram blobStorageServiceStartupTimeInMs;
