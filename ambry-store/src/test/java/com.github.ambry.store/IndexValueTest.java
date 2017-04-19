@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -88,6 +87,12 @@ public class IndexValueTest {
     // expiry > Integer.MAX_VALUE, expected to be -1
     expirationTimeAtMs = TimeUnit.SECONDS.toMillis(2 * (long) Integer.MAX_VALUE);
     expirationTimes.put(expirationTimeAtMs, Utils.Infinite_Time);
+    // expiry < 0
+    expirationTimeAtMs = -1 * TimeUnit.DAYS.toMillis(1);
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
+    // expiry < 0
+    expirationTimeAtMs = -1 * (long) Integer.MAX_VALUE;
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
 
     for (Map.Entry<Long, Long> expirationTime : expirationTimes.entrySet()) {
       long expiresAtMs = expirationTime.getKey();
@@ -105,14 +110,6 @@ public class IndexValueTest {
           break;
       }
     }
-
-    // verify negative expiration value in serialized IndexValue
-    expirationTimeAtMs = -1 * (long) Integer.MAX_VALUE;
-    IndexValue value =
-        getIndexValue(size, new Offset(logSegmentName, offset), (byte) 0, expirationTimeAtMs, offset, version);
-    verifyIndexValue(value, logSegmentName, size, offset, false,
-        version == PersistentIndex.VERSION_0 ? expirationTimeAtMs : Utils.Infinite_Time, offset, Utils.Infinite_Time,
-        IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
   }
 
   /**
@@ -205,7 +202,8 @@ public class IndexValueTest {
       long expiresAtMs, long originalMessageOffset, long operationTimeInMs, short serviceId, short containerId) {
     verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset, operationTimeInMs,
         serviceId, containerId);
-    // serialize and deserialize might change the value of expiry for version1
+    // serialize and deserialize might change the value of expiry for version1. Any expiry value < -1 after
+    // deserialization is considered invalid and expiry value is set to -1
     long expectedExpiryValue = -1;
     switch (version) {
       case PersistentIndex.VERSION_0:
@@ -277,8 +275,7 @@ public class IndexValueTest {
   static IndexValue getIndexValue(long size, Offset offset, long expirationTimeInMs, long operationTimeInMs,
       short serviceId, short containerId, short version) {
     if (version == PersistentIndex.VERSION_0) {
-      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, expirationTimeInMs, offset.getOffset(),
-          version);
+      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, expirationTimeInMs, offset.getOffset());
     } else {
       return new IndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, expirationTimeInMs, operationTimeInMs,
           serviceId, containerId);
@@ -295,8 +292,7 @@ public class IndexValueTest {
    */
   static IndexValue getIndexValue(long size, Offset offset, long operationTimeInMs, short version) {
     if (version == PersistentIndex.VERSION_0) {
-      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, offset.getOffset(),
-          version);
+      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, offset.getOffset());
     } else {
       return new IndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, operationTimeInMs);
     }
@@ -311,7 +307,7 @@ public class IndexValueTest {
   static IndexValue getIndexValue(IndexValue value, short version) {
     if (version == PersistentIndex.VERSION_0) {
       return getIndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          value.getOffset().getOffset(), version);
+          value.getOffset().getOffset());
     } else {
       return new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
           value.getOperationTimeInMs(), value.getServiceId(), value.getContainerId());
@@ -321,44 +317,24 @@ public class IndexValueTest {
   // Instantiation of {@link IndexValue} in version {@link PersistentIndex#VERSION_0}
 
   /**
-   * Constructs IndexValue based on the args passed in, in the version specified
+   * Constructs IndexValue based on the args passed in version {@link PersistentIndex#VERSION_0}
    * @param size the size of the blob that this index value refers to
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
    * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
    *                              in the same log segment. Set to -1 otherwise.
-   * @param version the version of IndexValue which is to be constructed
    * @return the {@link IndexValue} thus constructed
    */
   private static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
-      long originalMessageOffset, short version) {
-    IndexValue indexValue = null;
-    switch (version) {
-      case PersistentIndex.VERSION_0:
-        ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
-        value.putLong(size);
-        value.putLong(offset.getOffset());
-        value.put(flags);
-        value.putLong(expiresAtMs);
-        value.putLong(originalMessageOffset);
-        value.position(0);
-        indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
-        break;
-      case PersistentIndex.VERSION_1:
-        value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1);
-        value.putLong(size);
-        value.putLong(offset.getOffset());
-        value.put(flags);
-        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
-        value.putLong(originalMessageOffset);
-        value.putInt((int) Utils.Infinite_Time);
-        value.putShort(IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
-        value.putShort(IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
-        value.position(0);
-        indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_1);
-        break;
-    }
-    return indexValue;
+      long originalMessageOffset) {
+    ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
+    value.putLong(size);
+    value.putLong(offset.getOffset());
+    value.put(flags);
+    value.putLong(expiresAtMs);
+    value.putLong(originalMessageOffset);
+    value.position(0);
+    return new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
   }
 }
 

@@ -191,8 +191,6 @@ class IndexValue {
     // if expiry in secs > Integer.MAX_VALUE, treat it as permanent blob
     if (TimeUnit.MILLISECONDS.toSeconds(expiresAtMs) > Integer.MAX_VALUE) {
       this.expiresAtMs = Utils.Infinite_Time;
-    } else if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < 0) {
-      this.expiresAtMs = 0;
     } else {
       this.expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
     }
