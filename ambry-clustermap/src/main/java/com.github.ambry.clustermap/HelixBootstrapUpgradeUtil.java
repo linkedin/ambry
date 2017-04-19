@@ -176,7 +176,7 @@ class HelixBootstrapUpgradeUtil {
     for (PartitionId partitionId : staticClusterMap.partitionLayout.getPartitions()) {
       Partition partition = (Partition) partitionId;
       if (existingPartitions.contains(partition.getId())) {
-        updatePartitionStateIfChanged(partition);
+        updatePartitionInfoIfChanged(partition);
       } else {
         partitionsUnderNextResource.add(partition);
         if (partitionsUnderNextResource.size() == maxPartitionsInOneResource) {
@@ -271,33 +271,93 @@ class HelixBootstrapUpgradeUtil {
   }
 
   /**
-   * Goes through each existing partition and changes the {@link PartitionState} for the replicas in each of the
-   * instances that hosts a replica for this partition, if it has changed and is different from the current state
-   * in Helix.
-   * @param partition the partition whose {@link PartitionState} may have to be updated.
+   * Goes through each existing partition and updates the {@link PartitionState} and capacity information for the
+   * replicas in each of the instances that hosts a replica for this partition, if it has changed and is different from
+   * the current information in the static cluster map.
+   * @param partition the partition whose {@link PartitionState} and/or capacity may have to be updated.
    */
-  private void updatePartitionStateIfChanged(Partition partition) {
+  private void updatePartitionInfoIfChanged(Partition partition) {
     for (Map.Entry<String, HelixAdmin> entry : adminForDc.entrySet()) {
       String dcName = entry.getKey();
       HelixAdmin dcAdmin = entry.getValue();
       String partitionName = Long.toString(partition.getId());
+      long replicaCapacityInStatic = partition.getReplicaCapacityInBytes();
       boolean isSealed = partition.getPartitionState().equals(PartitionState.READ_ONLY);
       List<ReplicaId> replicaList = getReplicasInDc(partition, dcName);
       for (ReplicaId replicaId : replicaList) {
         DataNodeId node = replicaId.getDataNodeId();
         String instanceName = getInstanceName(node);
         InstanceConfig instanceConfig = dcAdmin.getInstanceConfig(clusterName, instanceName);
-        List<String> currentSealedPartitions = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
-        List<String> newSealedPartitionsList = new ArrayList<>(currentSealedPartitions);
-        if (isSealed && !currentSealedPartitions.contains(partitionName)) {
-          newSealedPartitionsList.add(partitionName);
-        } else if (!isSealed && currentSealedPartitions.contains(partitionName)) {
-          newSealedPartitionsList.remove(partitionName);
+        boolean shouldSetInstanceConfig = false;
+        if (updateSealedStateIfRequired(partitionName, instanceConfig, isSealed)) {
+          shouldSetInstanceConfig = true;
         }
-        instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, newSealedPartitionsList);
-        dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        if (updateReplicaCapacityIfRequired(partitionName, instanceConfig, replicaId.getMountPath(),
+            replicaCapacityInStatic)) {
+          shouldSetInstanceConfig = true;
+        }
+        if (shouldSetInstanceConfig) {
+          dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        }
       }
     }
+  }
+
+  /**
+   * Update the sealed state of the given partition on the node corresponding to the given {@link InstanceConfig}, if
+   * there has been a change.
+   * @param partitionName the partition
+   * @param instanceConfig the {@link InstanceConfig} of the node.
+   * @param isSealed whether the partition is in SEALED state in the static cluster map.
+   * @return true, if the {@link InstanceConfig} was updated by this method; false otherwise.
+   */
+  private boolean updateSealedStateIfRequired(String partitionName, InstanceConfig instanceConfig, boolean isSealed) {
+    boolean instanceConfigUpdated = false;
+    List<String> currentSealedPartitions = instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+    List<String> newSealedPartitionsList = new ArrayList<>(currentSealedPartitions);
+    if (isSealed && !currentSealedPartitions.contains(partitionName)) {
+      newSealedPartitionsList.add(partitionName);
+    } else if (!isSealed && currentSealedPartitions.contains(partitionName)) {
+      newSealedPartitionsList.remove(partitionName);
+    }
+    if (!currentSealedPartitions.equals(newSealedPartitionsList)) {
+      instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, newSealedPartitionsList);
+      instanceConfigUpdated = true;
+    }
+    return instanceConfigUpdated;
+  }
+
+  /**
+   * Update replica capacity for the given partition on the node corresponding to the given
+   * {@link InstanceConfig}, if there has been a change.
+   * @param partitionName the partition
+   * @param instanceConfig the {@link InstanceConfig} of the node.
+   * @param mountPath the mount path of the replica.
+   * @return true, if the {@link InstanceConfig} was updated by this method; false otherwise.
+   */
+  private boolean updateReplicaCapacityIfRequired(String partitionName, InstanceConfig instanceConfig, String mountPath,
+      long actualReplicaCapacity) {
+    boolean instanceConfigUpdated = false;
+    Map<String, String> diskInfo = instanceConfig.getRecord().getMapField(mountPath);
+    String currentReplicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
+    String newReplicaStr = "";
+    List<String> replicaInfoList = Arrays.asList(currentReplicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR));
+    for (String replicaInfo : replicaInfoList) {
+      String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+      if (info[0].equals(partitionName)) {
+        long capacityInHelix = Long.valueOf(info[1]);
+        if (capacityInHelix != actualReplicaCapacity) {
+          info[1] = Long.toString(actualReplicaCapacity);
+        }
+      }
+      newReplicaStr += info[0] + ClusterMapUtils.REPLICAS_STR_SEPARATOR + info[1] + ClusterMapUtils.REPLICAS_DELIM_STR;
+    }
+    if (!currentReplicasStr.equals(newReplicaStr)) {
+      diskInfo.put(ClusterMapUtils.REPLICAS_STR, newReplicaStr);
+      instanceConfig.getRecord().setMapField(mountPath, diskInfo);
+      instanceConfigUpdated = true;
+    }
+    return instanceConfigUpdated;
   }
 
   /**
