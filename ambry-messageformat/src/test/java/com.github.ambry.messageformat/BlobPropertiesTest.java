@@ -57,20 +57,14 @@ public class BlobPropertiesTest {
     long[] validTTLs = new long[]{TimeUnit.HOURS.toSeconds(1), TimeUnit.HOURS.toSeconds(10), TimeUnit.HOURS.toSeconds(
         100), TimeUnit.DAYS.toSeconds(1), TimeUnit.DAYS.toSeconds(10), TimeUnit.DAYS.toSeconds(
         100), TimeUnit.DAYS.toSeconds(30 * 12), TimeUnit.DAYS.toSeconds(30 * 12 * 10),
-        Integer.MAX_VALUE - creationTimeInSecs - 1, Integer.MAX_VALUE - creationTimeInSecs};
+        Integer.MAX_VALUE - creationTimeInSecs - 1,
+        Integer.MAX_VALUE - creationTimeInSecs,
+        Integer.MAX_VALUE - creationTimeInSecs + 1,
+        Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
 
     for (long ttl : validTTLs) {
       blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs);
       verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl);
-    }
-
-    // invalid TTLs
-    long[] invalidTTLs = new long[]{
-        Integer.MAX_VALUE - creationTimeInSecs + 1,
-        Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
-    for (long ttl : invalidTTLs) {
-      blobProperties = new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs);
-      verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, Utils.Infinite_Time);
     }
   }
 

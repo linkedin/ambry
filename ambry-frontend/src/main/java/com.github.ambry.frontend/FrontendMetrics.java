@@ -117,7 +117,8 @@ class FrontendMetrics {
   // PostCallback
   public final Counter postCallbackProcessingError;
   public final Counter outboundIdConversionCallbackProcessingError;
-
+  // TTL too large error
+  public final Counter ttlTooLargeError;
   // Other
   // AmbryBlobStorageService
   public final Histogram blobStorageServiceStartupTimeInMs;
@@ -265,6 +266,7 @@ class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "PostCallbackProcessingError"));
     outboundIdConversionCallbackProcessingError = metricRegistry.counter(
         MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdConversionCallbackProcessingError"));
+    ttlTooLargeError = metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "TtlTooLargeError"));
 
     // Other
     blobStorageServiceStartupTimeInMs =

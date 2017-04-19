@@ -81,6 +81,18 @@ public class IndexValueTest {
     // max value
     expirationTimeAtMs = TimeUnit.SECONDS.toMillis(Integer.MAX_VALUE);
     expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
+    // expiry > Integer.MAX_VALUE, expected to be -1
+    expirationTimeAtMs = TimeUnit.SECONDS.toMillis((long) Integer.MAX_VALUE + 1);
+    expirationTimes.put(expirationTimeAtMs, Utils.Infinite_Time);
+    // expiry > Integer.MAX_VALUE, expected to be -1
+    expirationTimeAtMs = TimeUnit.SECONDS.toMillis(2 * (long) Integer.MAX_VALUE);
+    expirationTimes.put(expirationTimeAtMs, Utils.Infinite_Time);
+    // expiry < 0
+    expirationTimeAtMs = -1 * TimeUnit.DAYS.toMillis(1);
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
+    // expiry < 0
+    expirationTimeAtMs = -1 * (long) Integer.MAX_VALUE;
+    expirationTimes.put(expirationTimeAtMs, Utils.getTimeInMsToTheNearestSec(expirationTimeAtMs));
 
     for (Map.Entry<Long, Long> expirationTime : expirationTimes.entrySet()) {
       long expiresAtMs = expirationTime.getKey();
@@ -190,8 +202,18 @@ public class IndexValueTest {
       long expiresAtMs, long originalMessageOffset, long operationTimeInMs, short serviceId, short containerId) {
     verifyGetters(value, logSegmentName, size, offset, isDeleted, expiresAtMs, originalMessageOffset, operationTimeInMs,
         serviceId, containerId);
+    // serialize and deserialize might change the value of expiry for version1
+    long expectedExpiryValue = -1;
+    switch (version) {
+      case PersistentIndex.VERSION_0:
+        expectedExpiryValue = expiresAtMs;
+        break;
+      case PersistentIndex.VERSION_1:
+        expectedExpiryValue = expiresAtMs < Utils.Infinite_Time ? Utils.Infinite_Time : expiresAtMs;
+        break;
+    }
     verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, isDeleted,
-        expiresAtMs, originalMessageOffset, operationTimeInMs, serviceId, containerId);
+        expectedExpiryValue, originalMessageOffset, operationTimeInMs, serviceId, containerId);
     verifyInvalidValueSize(value, logSegmentName);
   }
 
