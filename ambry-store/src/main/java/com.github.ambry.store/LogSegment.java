@@ -187,21 +187,22 @@ class LogSegment implements Read, Write {
    * @param buffer The buffer into which the data needs to be written
    * @param position The position to start the read from
    * @throws IOException if data could not be written to the file because of I/O errors
-   * @throws IndexOutOfBoundsException if {@code position} < header size or >= {@link #getEndOffset()} or if
+   * @throws IndexOutOfBoundsException if {@code position} < header size or >= {@link #sizeInBytes()} or if
    * {@code buffer} size is greater than the data available for read.
    */
   @Override
   public void readInto(ByteBuffer buffer, long position) throws IOException {
-    if (position < startOffset || position >= getEndOffset()) {
+    long sizeInBytes = sizeInBytes();
+    if (position < startOffset || position >= sizeInBytes) {
       throw new IndexOutOfBoundsException(
           "Provided position [" + position + "] is out of bounds for the segment [" + file.getAbsolutePath()
-              + "] with end offset [" + getEndOffset() + "]");
+              + "] with size [" + sizeInBytes + "]");
     }
-    if (position + buffer.remaining() > getEndOffset()) {
+    if (position + buffer.remaining() > sizeInBytes) {
       metrics.overflowReadError.inc();
       throw new IndexOutOfBoundsException(
           "Cannot read from segment [" + file.getAbsolutePath() + "] from position [" + position + "] for size ["
-              + buffer.remaining() + "] because it exceeds the end offset [" + endOffset + "]");
+              + buffer.remaining() + "] because it exceeds the size [" + sizeInBytes + "]");
     }
     long bytesRead = 0;
     int size = buffer.remaining();
