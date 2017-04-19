@@ -15,7 +15,6 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -71,12 +70,7 @@ public class BlobProperties {
     this.contentType = contentType;
     this.isPrivate = isPrivate;
     this.creationTimeInMs = creationTimeInMs;
-    // expiration value in seconds cannot exceed Integer.MAX_VALUE
-    if (timeToLiveInSeconds + TimeUnit.MILLISECONDS.toSeconds(creationTimeInMs) > Integer.MAX_VALUE) {
-      this.timeToLiveInSeconds = Utils.Infinite_Time;
-    } else {
-      this.timeToLiveInSeconds = timeToLiveInSeconds;
-    }
+    this.timeToLiveInSeconds = timeToLiveInSeconds;
   }
 
   public long getTimeToLiveInSeconds() {

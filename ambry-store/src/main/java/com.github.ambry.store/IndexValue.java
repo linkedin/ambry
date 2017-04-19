@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -105,10 +106,10 @@ class IndexValue {
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
         long expiresAt = value.getInt();
-        expiresAtMs = expiresAt != Utils.Infinite_Time ? (expiresAt * Time.MsPerSec) : Utils.Infinite_Time;
+        expiresAtMs = expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt) : Utils.Infinite_Time;
         originalMessageOffset = value.getLong();
         long operationTimeInSecs = value.getInt();
-        operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? (operationTimeInSecs * Time.MsPerSec)
+        operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? TimeUnit.SECONDS.toMillis(operationTimeInSecs)
             : Utils.Infinite_Time;
         serviceId = value.getShort();
         containerId = value.getShort();
@@ -187,7 +188,12 @@ class IndexValue {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
-    this.expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
+    // if expiry in secs > Integer.MAX_VALUE, treat it as permanent blob
+    if (TimeUnit.MILLISECONDS.toSeconds(expiresAtMs) > Integer.MAX_VALUE) {
+      this.expiresAtMs = Utils.Infinite_Time;
+    } else {
+      this.expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
+    }
     this.originalMessageOffset = originalMessageOffset;
     this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
     this.serviceId = serviceId;
