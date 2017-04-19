@@ -187,7 +187,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
-        logger.warn("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
+        logger.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
       }
       byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
