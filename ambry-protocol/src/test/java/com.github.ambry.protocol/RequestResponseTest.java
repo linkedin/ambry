@@ -15,6 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
@@ -368,5 +369,44 @@ public class RequestResponseTest {
         ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenFactory(), clusterMap);
     Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), 1234);
     Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Tests the ser/de of {@link AdminRequest} and {@link AdminResponse} and checks for equality of fields with
+   * reference data.
+   * @throws IOException
+   */
+  @Test
+  public void adminRequestResponseTest() throws IOException {
+    for (AdminRequestOrResponseType type : AdminRequestOrResponseType.values()) {
+      MockClusterMap clusterMap = new MockClusterMap();
+      PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+      AdminRequest adminRequest = new AdminRequest(type, id, 1234, "client");
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
+      do {
+        adminRequest.writeTo(writableByteChannel);
+      } while (!adminRequest.isSendComplete());
+      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      // read length
+      requestStream.readLong();
+      // read version
+      requestStream.readShort();
+      AdminRequest deserializedAdminRequest = AdminRequest.readFrom(requestStream, clusterMap);
+      Assert.assertEquals(deserializedAdminRequest.getCorrelationId(), 1234);
+      Assert.assertEquals(deserializedAdminRequest.getClientId(), "client");
+      Assert.assertEquals(deserializedAdminRequest.getType(), type);
+      Assert.assertTrue(deserializedAdminRequest.getPartitionId().isEqual(id.toString()));
+      AdminResponse response = new AdminResponse(1234, "client", ServerErrorCode.No_Error);
+      outputStream.reset();
+      do {
+        response.writeTo(writableByteChannel);
+      } while (!response.isSendComplete());
+      requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      requestStream.readLong(); // read size
+      AdminResponse deserializedAdminResponse = AdminResponse.readFrom(requestStream);
+      Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), 1234);
+      Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    }
   }
 }

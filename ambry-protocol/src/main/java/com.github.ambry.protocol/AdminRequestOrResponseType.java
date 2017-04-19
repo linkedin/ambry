@@ -1,5 +1,5 @@
-/**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,8 @@
 package com.github.ambry.protocol;
 
 /**
- * Type of request response. Do not change this order. Add
- * new entries to the end of the list.
+ * Enum of types of administration requests/responses.
  */
-public enum RequestOrResponseType {
-  PutRequest, PutResponse, GetRequest, GetResponse, DeleteRequest, DeleteResponse, TTLRequest, // Unsupported
-  TTLResponse, // Unsupported
-  ReplicaMetadataRequest, ReplicaMetadataResponse, AdminRequest, AdminResponse
+public enum AdminRequestOrResponseType {
+  TriggerCompaction
 }

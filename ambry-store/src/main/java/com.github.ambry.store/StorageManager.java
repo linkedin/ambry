@@ -133,6 +133,16 @@ public class StorageManager {
   }
 
   /**
+   * Schedules the {@link PartitionId} {@code id} for compaction next.
+   * @param id the {@link PartitionId} of the {@link Store} to compact.
+   * @return {@code true} if the scheduling was successful. {@code false} if not.
+   */
+  public boolean scheduleNextForCompaction(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.scheduleNextForCompaction(id);
+  }
+
+  /**
    * Shutdown the {@link DiskManager}s for the disks on this node.
    * @throws StoreException
    */

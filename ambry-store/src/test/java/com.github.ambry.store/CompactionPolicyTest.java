@@ -208,8 +208,8 @@ public class CompactionPolicyTest {
    */
   private List<String> setUpStateForDefaultCompactionPolicy(MockBlobStore blobStore,
       MockBlobStoreStats mockBlobStoreStats) {
-    long maxLogSegmentCapacity = blobStore.segmentCapacity - blobStore.segmentHeaderSize -
-        mockBlobStoreStats.getMaxBlobSize();
+    long maxLogSegmentCapacity =
+        blobStore.segmentCapacity - blobStore.segmentHeaderSize - mockBlobStoreStats.getMaxBlobSize();
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
     blobStore.logSegmentsNotInJournal = generateRandomStrings((int) logSegmentCount);
 

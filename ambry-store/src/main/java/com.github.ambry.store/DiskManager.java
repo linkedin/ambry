@@ -160,6 +160,16 @@ class DiskManager {
   }
 
   /**
+   * Schedules the {@link PartitionId} {@code id} for compaction next.
+   * @param id the {@link PartitionId} of the {@link BlobStore} to compact.
+   * @return {@code true} if the scheduling was successful. {@code false} if not.
+   */
+  boolean scheduleNextForCompaction(PartitionId id) {
+    BlobStore store = (BlobStore) getStore(id);
+    return store != null && compactionManager.scheduleNextForCompaction(store);
+  }
+
+  /**
    * Gets all the throttlers that the {@link DiskIOScheduler} will be constructed with.
    * @param config the {@link StoreConfig} with configuration values.
    * @param time the {@link Time} instance to use in the throttlers
