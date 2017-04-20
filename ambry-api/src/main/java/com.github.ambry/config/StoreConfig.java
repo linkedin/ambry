@@ -162,6 +162,9 @@ public class StoreConfig {
   @Default("60")
   public final long storeStatsWaitTimeoutInSecs;
 
+  /**
+   * Specifies the number of index segments that can be read per second for stats collection.
+   */
   @Config("store.stats.index.segment.per.secs")
   @Default("1")
   public final int storeStatsIndexSegmentPerSecs;
