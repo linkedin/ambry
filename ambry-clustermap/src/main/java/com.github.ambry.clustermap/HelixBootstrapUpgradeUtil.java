@@ -267,6 +267,7 @@ class HelixBootstrapUpgradeUtil {
           dcAdmin.addInstance(clusterName, instanceConfig);
         }
       }
+      System.out.println("Added all new nodes in datacenter " + dc.getName());
     }
   }
 
@@ -290,14 +291,19 @@ class HelixBootstrapUpgradeUtil {
         InstanceConfig instanceConfig = dcAdmin.getInstanceConfig(clusterName, instanceName);
         boolean shouldSetInstanceConfig = false;
         if (updateSealedStateIfRequired(partitionName, instanceConfig, isSealed)) {
+          System.out.println(
+              "Sealed state change of partition " + partitionName + " will be updated for instance " + instanceName);
           shouldSetInstanceConfig = true;
         }
         if (updateReplicaCapacityIfRequired(partitionName, instanceConfig, replicaId.getMountPath(),
             replicaCapacityInStatic)) {
+          System.out.println(
+              "Replica capacity change of partition " + partitionName + " will be updated for instance" + instanceName);
           shouldSetInstanceConfig = true;
         }
         if (shouldSetInstanceConfig) {
           dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+          System.out.println("Successfully updated InstanceConfig for instance " + instanceName);
         }
       }
     }
@@ -398,6 +404,8 @@ class HelixBootstrapUpgradeUtil {
       resourceISBuilder.setNumReplica(numReplicas);
       IdealState idealState = resourceISBuilder.build();
       dcAdmin.addResource(clusterName, resourceName, idealState);
+      System.out.println(
+          "Added " + partitions.size() + " new partitions under resource " + resourceName + " in datacenter " + dcName);
     }
   }
 
