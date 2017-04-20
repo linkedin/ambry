@@ -61,6 +61,13 @@ public class RestRequestMetricsTrackerTest {
   public void requestMarkingExceptionsTest() {
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     try {
+      requestMetrics.nioMetricsTracker.markFirstByteSent();
+      fail("Marking request as complete before marking it received should have thrown exception");
+    } catch (IllegalStateException e) {
+      // expected. nothing to do.
+    }
+
+    try {
       requestMetrics.nioMetricsTracker.markRequestCompleted();
       fail("Marking request as complete before marking it received should have thrown exception");
     } catch (IllegalStateException e) {

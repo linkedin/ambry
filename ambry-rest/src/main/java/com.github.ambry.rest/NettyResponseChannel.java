@@ -342,6 +342,7 @@ class NettyResponseChannel implements RestResponseChannel {
       writtenThisTime = true;
       long writeProcessingTime = System.currentTimeMillis() - writeProcessingStartTime;
       nettyMetrics.responseMetadataProcessingTimeInMs.update(writeProcessingTime);
+      request.getMetricsTracker().nioMetricsTracker.markFirstByteSent();
     }
     return writtenThisTime;
   }

@@ -13,9 +13,13 @@
  */
 package com.github.ambry.rest;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GenericFutureListener;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +32,7 @@ import org.slf4j.LoggerFactory;
 public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
   private final NettyMetrics metrics;
   private final AtomicLong openConnections;
-  private static ConnectionStatsHandler instance = null;
+  private final GenericFutureListener<Future<Channel>> handshakeListener;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -36,6 +40,12 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
     this.metrics = metrics;
     openConnections = new AtomicLong(0);
     metrics.registerConnectionsStatsHandler(openConnections);
+    handshakeListener = future -> {
+      if (!future.isSuccess()) {
+        logger.info("SSL handshake failed", future.cause());
+        metrics.handshakeFailureCount.inc();
+      }
+    };
   }
 
   @Override
@@ -43,6 +53,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
     logger.trace("Channel Active " + ctx.channel().remoteAddress());
     metrics.connectionsConnectedCount.inc();
     openConnections.incrementAndGet();
+    logHandshakeStatus(ctx);
     super.channelActive(ctx);
   }
 
@@ -52,5 +63,16 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
     metrics.connectionsDisconnectedCount.inc();
     openConnections.decrementAndGet();
     super.channelInactive(ctx);
+  }
+
+  /**
+   * Listen to the handshake future if this is an SSL connection. Log and update metrics if the handshake failed.
+   * @param ctx the {@link ChannelHandlerContext}.
+   */
+  private void logHandshakeStatus(ChannelHandlerContext ctx) {
+    SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
+    if (sslHandler != null) {
+      sslHandler.handshakeFuture().addListener(handshakeListener);
+    }
   }
 }
