@@ -64,6 +64,8 @@ public class IndexTest {
   private final File tempDir;
   private final CuratedLogIndexState state;
 
+  // TODO: test that verifies that files with "_index" are not picked up if the corresponding log segment is not in log
+
   /**
    * Running for both segmented and non-segmented log.
    * @return an array with both {@code false} and {@code true}.

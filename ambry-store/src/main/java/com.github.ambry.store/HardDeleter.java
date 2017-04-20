@@ -566,7 +566,7 @@ public class HardDeleter implements Runnable {
           BlobReadOptions readInfo = index.getBlobReadInfo(info.getStoreKey(), getOptions);
           readOptionsList.add(readInfo);
         } catch (StoreException e) {
-          logger.error("Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
+          logger.debug("Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
               info.getStoreKey(), e);
           metrics.hardDeleteExceptionsCount.inc();
         }

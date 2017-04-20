@@ -1081,6 +1081,7 @@ public class BlobStoreCompactorTest {
       assertEquals("There should be no target segments since valid size is 0", 0, targetSegmentNames.size());
     }
     assertEquals("Segments not under compaction missing", unaffectedSegments, nonTargetSegmentNames);
+    // TODO: verify that the number of index segments in mem == on disk.
     Offset lastIndexSegmentStartOffset = state.index.getIndexSegments().lastKey();
     for (Map.Entry<Offset, IndexSegment> indexSegmentEntry : state.index.getIndexSegments().entrySet()) {
       Offset indexSegmentStartOffset = indexSegmentEntry.getKey();

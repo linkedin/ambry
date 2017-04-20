@@ -660,9 +660,11 @@ class PersistentIndex {
                 putValue.getSize(), deletedBlobInfo.getSize(), key);
             metrics.putEntryDeletedInfoMismatchCount.inc();
           }
-          if (putValue.getExpiresAtMs() != Utils.getTimeInMsToTheNearestSec(deletedBlobInfo.getExpirationTimeInMs())) {
+          long putValueExpiresAtMs = Utils.getTimeInMsToTheNearestSec(putValue.getExpiresAtMs());
+          long deletedBlobInfoExpiresAtMs = Utils.getTimeInMsToTheNearestSec(deletedBlobInfo.getExpirationTimeInMs());
+          if (putValueExpiresAtMs != deletedBlobInfoExpiresAtMs) {
             logger.error("Expire time in PUT index entry {} is different from that in the PUT record {} for ID {}",
-                putValue.getExpiresAtMs(), deletedBlobInfo.getExpirationTimeInMs(), key);
+                putValueExpiresAtMs, deletedBlobInfoExpiresAtMs, key);
             metrics.putEntryDeletedInfoMismatchCount.inc();
           }
         }
