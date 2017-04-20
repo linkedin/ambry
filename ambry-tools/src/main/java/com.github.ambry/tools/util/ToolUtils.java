@@ -85,7 +85,7 @@ public final class ToolUtils {
   }
 
   /**
-   * Adds cluster map properties for tools to function
+   * Adds cluster map properties with dummy values for tools to function
    * @param properties the {@link Properties} that need to be updated
    */
   public static void addClusterMapProperties(Properties properties) {

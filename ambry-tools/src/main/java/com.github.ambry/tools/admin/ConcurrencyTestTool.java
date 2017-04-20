@@ -30,6 +30,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.router.RouterFactory;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -99,6 +100,7 @@ public class ConcurrencyTestTool {
   public static void main(String args[]) throws Exception {
     InvocationOptions options = new InvocationOptions(args);
     Properties properties = Utils.loadProps(options.routerPropsFilePath);
+    ToolUtils.addClusterMapProperties(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,

@@ -71,7 +71,9 @@ public class ServerTool {
   private DataNodeId dataNodeId = null;
 
   public ServerTool() throws Exception {
-    VerifiableProperties vProps = new VerifiableProperties(new Properties());
+    Properties properties = new Properties();
+    ToolUtils.addClusterMapProperties(properties);
+    VerifiableProperties vProps = new VerifiableProperties(properties);
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
     SSLConfig sslConfig = new SSLConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);

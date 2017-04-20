@@ -74,6 +74,10 @@ public class ConsistencyCheckerTool {
     consistencyCheckerTool.checkConsistency();
   }
 
+  /**
+   * Executes the operation with the help of properties passed during initialization of {@link DumpDataTool}
+   * @throws Exception
+   */
   private void checkConsistency() throws Exception {
     File rootDir = new File(partitionRootDirectory);
     logger.info("Root directory for Partition" + rootDir);

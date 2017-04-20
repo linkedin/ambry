@@ -79,7 +79,7 @@ public class DumpDataTool {
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     typeOfOperation = verifiableProperties.getString("type.of.operation");
     replicaRootDirectory = verifiableProperties.getString("replica.root.directory", "");
-    indexFilesPerSec = verifiableProperties.getDouble("bytes.per.sec", 1);
+    indexFilesPerSec = verifiableProperties.getDouble("index.files.per.sec", 1);
     throttler = new Throttler(indexFilesPerSec, 1000, true, SystemTime.getInstance());
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
@@ -99,14 +99,11 @@ public class DumpDataTool {
   }
 
   /**
-   * Executes the operation with the help of properties passed
-   * @throws IOException
+   * Executes the operation with the help of properties passed during initialization of {@link DumpDataTool}
+   * @throws Exception
    */
   public void doOperation() throws Exception {
     logger.info("Type of Operation " + typeOfOperation);
-    if (fileToRead != null) {
-      logger.info("File to read " + fileToRead);
-    }
     switch (typeOfOperation) {
       case "CompareIndexToLog":
         compareIndexEntriesToLogContent(new File(fileToRead), false);

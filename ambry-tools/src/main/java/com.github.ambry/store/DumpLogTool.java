@@ -69,7 +69,7 @@ public class DumpLogTool {
     logStartOffset = verifiableProperties.getInt("log.start.offset", -1);
     logEndOffset = verifiableProperties.getInt("log.end.offset", -1);
     blobsPerSec = verifiableProperties.getLong("bytes.per.sec", 100);
-    silent = verifiableProperties.getBoolean("silent", false);
+    silent = verifiableProperties.getBoolean("silent", true);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
