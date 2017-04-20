@@ -307,7 +307,7 @@ class MockBlobStore extends BlobStore {
 
   MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
       long segmentCapacity, long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
-    super("", config, null, null, metrics, null, 0, null, null, null, time);
+    super("", config, null, null, null, metrics, null, 0, null, null, null, time);
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;
@@ -335,7 +335,7 @@ class MockBlobStoreStats extends BlobStoreStats {
   private long maxBlobSize;
 
   MockBlobStoreStats(long maxBlobSize) {
-    super(null, null, null);
+    super(null, 0, 0, 0, 0, 0, null, null, null, null, null);
     this.maxBlobSize = maxBlobSize;
   }
 

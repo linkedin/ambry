@@ -93,7 +93,6 @@ class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.time = time;
-    blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
   }
 
   @Override
