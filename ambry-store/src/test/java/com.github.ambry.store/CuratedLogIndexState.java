@@ -921,27 +921,29 @@ class CuratedLogIndexState {
   List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
       long expiryReferenceTimeMs) {
     List<IndexEntry> validEntries = new ArrayList<>();
-    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
-      MockId key = indexSegmentEntry.getKey();
-      IndexValue value = indexSegmentEntry.getValue();
-      if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        // delete record is always valid
-        validEntries.add(new IndexEntry(key, value));
-        if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-            && value.getOriginalMessageOffset() != value.getOffset().getOffset()
-            && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset() && !isDeletedAt(key,
-            deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)) {
-          // delete is irrelevant but it's in the same index segment as the put and the put is still valid
-          validEntries.add(new IndexEntry(key, allKeys.get(key).getFirst()));
-        }
-      } else if (!isExpiredAt(key, expiryReferenceTimeMs)) {
-        // unexpired
-        if (!deletedKeys.contains(key)) {
-          // non expired, non deleted PUT
+    if (referenceIndex.containsKey(indexSegmentStartOffset)) {
+      for (Map.Entry<MockId, IndexValue> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset).entrySet()) {
+        MockId key = indexSegmentEntry.getKey();
+        IndexValue value = indexSegmentEntry.getValue();
+        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          // delete record is always valid
           validEntries.add(new IndexEntry(key, value));
-        } else if (!isDeletedAt(key, deleteReferenceTimeMs)) {
-          // delete does not count
-          validEntries.add(new IndexEntry(key, value));
+          if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+              && value.getOriginalMessageOffset() != value.getOffset().getOffset()
+              && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset() && !isDeletedAt(key,
+              deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)) {
+            // delete is irrelevant but it's in the same index segment as the put and the put is still valid
+            validEntries.add(new IndexEntry(key, allKeys.get(key).getFirst()));
+          }
+        } else if (!isExpiredAt(key, expiryReferenceTimeMs)) {
+          // unexpired
+          if (!deletedKeys.contains(key)) {
+            // non expired, non deleted PUT
+            validEntries.add(new IndexEntry(key, value));
+          } else if (!isDeletedAt(key, deleteReferenceTimeMs)) {
+            // delete does not count
+            validEntries.add(new IndexEntry(key, value));
+          }
         }
       }
     }

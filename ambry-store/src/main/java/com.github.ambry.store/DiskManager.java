@@ -212,6 +212,9 @@ class DiskManager {
     // compaction
     Throttler compactionCopyThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, 1000, true, time);
     throttlers.put(BlobStoreCompactor.LOG_SEGMENT_COPY_JOB_NAME, compactionCopyThrottler);
+    // stats
+    Throttler statsIndexScanThrottler = new Throttler(config.storeStatsIndexSegmentPerSecs, 1000, true, time);
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, statsIndexScanThrottler);
     return throttlers;
   }
 }

@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -135,12 +136,11 @@ class BlobStore implements Store {
             sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
-        long logSegmentForecastOffsetMs =
-            config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
+        long logSegmentForecastOffsetMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
         blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
-            logSegmentForecastOffsetMs, config.storeStatsQueueProcessorPeriodInMinutes, time, longLivedTaskScheduler,
-            taskScheduler, diskIOScheduler, metrics);
-        blobStoreStats.start();
+            logSegmentForecastOffsetMs, config.storeStatsWaitTimeoutInSecs,
+            config.storeStatsQueueProcessorPeriodInMinutes, time, longLivedTaskScheduler, taskScheduler,
+            diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -250,7 +250,7 @@ class BlobStore implements Store {
             FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
             index.addToIndex(indexEntries, fileSpan);
             for (IndexEntry newEntry : indexEntries) {
-              blobStoreStats.handleNewPut(newEntry.getValue());
+              blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
           }
@@ -325,7 +325,7 @@ class BlobStore implements Store {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan);
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          blobStoreStats.handleNewDelete(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex));
+          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex));
           correspondingPutIndex++;
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
@@ -411,7 +411,7 @@ class BlobStore implements Store {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
-        blobStoreStats.shutdown();
+        blobStoreStats.close();
         compactor.close(30);
         index.close();
         log.close();

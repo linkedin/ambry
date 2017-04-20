@@ -141,15 +141,30 @@ public class StoreConfig {
   public final int storeStatsBucketCount;
 
   /**
-   * The time coverage of each bucket in minutes.
+   * The time span of each bucket in minutes.
    */
   @Config("store.stats.bucket.span.in.minutes")
   @Default("60")
   public final long storeStatsBucketSpanInMinutes;
 
+  /**
+   * Period in minutes to specify how frequent is the queue processor executed.
+   */
   @Config("store.stats.queue.processor.period.in.minutes")
   @Default("2")
   public final long storeStatsQueueProcessorPeriodInMinutes;
+
+  /**
+   * The upper limit in seconds for requests to wait for a ongoing construction of buckets (that contains the answer)
+   * to complete.
+   */
+  @Config("store.stats.wait.timeout.in.secs")
+  @Default("60")
+  public final long storeStatsWaitTimeoutInSecs;
+
+  @Config("store.stats.index.segment.per.secs")
+  @Default("1")
+  public final int storeStatsIndexSegmentPerSecs;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -182,6 +197,8 @@ public class StoreConfig {
     storeStatsBucketSpanInMinutes = verifiableProperties.getLong("store.stats.bucket.span.in.minutes", 60);
     storeStatsQueueProcessorPeriodInMinutes =
         verifiableProperties.getLong("store.stats.queue.processor.period.in.minutes", 2);
+    storeStatsWaitTimeoutInSecs = verifiableProperties.getLong("store.stats.wait.timeout.in.secs", 60);
+    storeStatsIndexSegmentPerSecs = verifiableProperties.getInt("store.stats.index.segment.per.secs", 1);
   }
 }
 

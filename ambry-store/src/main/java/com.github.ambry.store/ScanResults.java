@@ -22,7 +22,7 @@ import java.util.TreeMap;
 
 
 /**
- * Hold the data structures needed by {@link BlobStoreStats} to serve requests. The class also holds helper methods
+ * Hold the data structures needed by {@link BlobStoreStats} to serve requests. The class also exposes helper methods
  * used to modify and access the stored data structures.
  */
 class ScanResults {
@@ -122,8 +122,8 @@ class ScanResults {
    */
   void updateContainerBucket(Long bucketKey, String serviceId, String containerId, long value) {
     if (bucketKey != null && containerBuckets.containsKey(bucketKey)) {
-      Map<String, Map<String, Long>> deltaInValidDataSizePerContainer = containerBuckets.get(bucketKey);
-      updateNestedMapHelper(deltaInValidDataSizePerContainer, serviceId, containerId, value);
+      Map<String, Map<String, Long>> deltaInValidDataSize = containerBuckets.get(bucketKey);
+      updateNestedMapHelper(deltaInValidDataSize, serviceId, containerId, value);
     }
   }
 
@@ -135,8 +135,8 @@ class ScanResults {
    */
   void updateLogSegmentBucket(Long bucketKey, String logSegmentName, long value) {
     if (bucketKey != null && logSegmentBuckets.containsKey(bucketKey)) {
-      Map<String, Long> deltaInValidSizePerLogSegment = logSegmentBuckets.get(bucketKey);
-      updateMapHelper(deltaInValidSizePerLogSegment, logSegmentName, value);
+      Map<String, Long> deltaInValidSize = logSegmentBuckets.get(bucketKey);
+      updateMapHelper(deltaInValidSize, logSegmentName, value);
     }
   }
 

@@ -354,7 +354,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public StatsSnapshot getStatsSnapshot(long deleteAndExpirationRefTimeInMs) throws StoreException {
+    public StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException {
       if (throwStoreException) {
         throw new StoreException("Test", StoreErrorCodes.Unknown_Error);
       }

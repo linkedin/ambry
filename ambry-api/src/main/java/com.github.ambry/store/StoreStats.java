@@ -41,9 +41,9 @@ public interface StoreStats {
 
   /**
    * Fetches stats for the corresponding {@link Store} as a {@link StatsSnapshot}.
-   * @param deleteAndExpirationRefTimeInMs the reference time in ms until which deletes and expiration are relevant
+   * @param referenceTimeInMs the reference time in ms until which deletes and expiration are relevant
    * @return a {@link StatsSnapshot} with relevant stats
    * @throws StoreException
    */
-  StatsSnapshot getStatsSnapshot(long deleteAndExpirationRefTimeInMs) throws StoreException;
+  StatsSnapshot getStatsSnapshot(long referenceTimeInMs) throws StoreException;
 }
