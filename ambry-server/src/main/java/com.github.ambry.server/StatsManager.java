@@ -143,6 +143,12 @@ class StatsManager {
     }
   }
 
+  /**
+   * Fetch the {@link StatsSnapshot} for the given {@link PartitionId}.
+   * @param partitionId the {@link PartitionId} to try to fetch the {@link StatsSnapshot} from
+   * @param unreachableStores a list of partitionIds to keep track of the unreachable stores (partitions)
+   * @return
+   */
   StatsSnapshot fetchSnapshot(PartitionId partitionId, List<String> unreachableStores) {
     StatsSnapshot statsSnapshot = null;
     Store store = storageManager.getStore(partitionId);
@@ -158,6 +164,10 @@ class StatsManager {
     return statsSnapshot;
   }
 
+  /**
+   * Get the combined {@link StatsSnapshot} of all partitions in this node.
+   * @return a combined {@link StatsSnapshot} of this node
+   */
   String getNodeStatsInJSON() {
     String statsWrapperJSON = "";
     try {

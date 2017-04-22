@@ -17,19 +17,26 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.HealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.healthcheck.HealthReportProvider;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
+import org.apache.helix.task.JobConfig;
+import org.apache.helix.task.ScheduleConfig;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskCallbackContext;
+import org.apache.helix.task.TaskConfig;
 import org.apache.helix.task.TaskConstants;
+import org.apache.helix.task.TaskDriver;
 import org.apache.helix.task.TaskFactory;
 import org.apache.helix.task.TaskStateModelFactory;
+import org.apache.helix.task.Workflow;
 import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +47,7 @@ import org.slf4j.LoggerFactory;
  */
 class HelixParticipant implements ClusterParticipant {
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static long WORKFLOW_EXPIRY = TimeUnit.SECONDS.toMillis(30);
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
@@ -87,12 +95,13 @@ class HelixParticipant implements ClusterParticipant {
             new HelixClusterAggregator(healthReport.getAggregatePeriodInMinutes());
         final String healthReportName = healthReport.getReportName();
         final String fieldName = healthReport.getFieldName();
-        taskFactoryMap.put(HelixAggregateTask.TASK_COMMAND, new TaskFactory() {
-          @Override
-          public Task createNewTask(TaskCallbackContext context) {
-            return new HelixAggregateTask(context, aggregator, healthReportName, fieldName);
-          }
-        });
+        taskFactoryMap.put(String.format("%s_%s", HelixAggregateTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+            new TaskFactory() {
+              @Override
+              public Task createNewTask(TaskCallbackContext context) {
+                return new HelixAggregateTask(context, aggregator, healthReportName, fieldName);
+              }
+            });
       }
     }
     if (!taskFactoryMap.isEmpty()) {
@@ -107,6 +116,11 @@ class HelixParticipant implements ClusterParticipant {
     }
     for (HealthReport healthReport : healthReports) {
       manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) healthReport);
+      if (healthReport.getAggregatePeriodInMinutes() != Utils.Infinite_Time) {
+        addRecurrentWorkflow(healthReport.getReportName(),
+            String.format("%s_%s", HelixAggregateTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+            healthReport.getAggregatePeriodInMinutes());
+      }
     }
   }
 
@@ -118,6 +132,29 @@ class HelixParticipant implements ClusterParticipant {
     if (manager != null) {
       manager.disconnect();
       manager = null;
+    }
+  }
+
+  /**
+   * Add a recurrent workflow if it does not exist yet with a generic task specified by the given parameters.
+   * @param workflowName the name of the recurrent workflow
+   * @param taskCommand the task command for the generic task
+   * @param recurrentPeriodInMinutes the period in minutes for the recurrent workflow
+   */
+  private void addRecurrentWorkflow(String workflowName, String taskCommand, long recurrentPeriodInMinutes) {
+    TaskDriver taskDriver = new TaskDriver(manager);
+    if (taskDriver.getWorkflows() != null && !taskDriver.getWorkflows().containsKey(workflowName)) {
+      Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);
+      ScheduleConfig scheduleConfig = ScheduleConfig.recurringFromNow(TimeUnit.MINUTES, recurrentPeriodInMinutes);
+      workflowBuilder.setExpiry(WORKFLOW_EXPIRY).setScheduleConfig(scheduleConfig);
+      JobConfig.Builder jobConfigBuilder = new JobConfig.Builder();
+      List<TaskConfig> taskConfigs = new ArrayList<>();
+      taskConfigs.add(
+          new TaskConfig.Builder().setTaskId(String.format("%s_task", workflowName)).setCommand(taskCommand).build());
+      jobConfigBuilder.addTaskConfigs(taskConfigs);
+      workflowBuilder.addJob(String.format("%s_job", workflowName), jobConfigBuilder);
+      Workflow workflow = workflowBuilder.build();
+      taskDriver.start(workflow);
     }
   }
 }

@@ -29,7 +29,7 @@ import org.apache.helix.task.UserContentStore;
 
 
 class HelixAggregateTask extends UserContentStore implements Task {
-  static final String TASK_COMMAND = "clusterWideAggregate";
+  public static final String TASK_COMMAND_PREFIX = "aggregate";
   private static final String RAW_VALID_SIZE_FIELD_NAME = "raw_valid_data_size";
   private static final String VALID_SIZE_FIELD_NAME = "valid_data_size";
   private final HelixManager manager;
