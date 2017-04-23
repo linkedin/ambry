@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
@@ -40,12 +41,14 @@ class DumpDataHelper {
    * @param currentOffset the offset at which to read the record from
    * @param clusterMap the {@link ClusterMap} object to use to generate BlobId
    * @param currentTimeInMs current time in ms to determine expiration
+   * @param metrics {@link StoreToolsMetrics} instance
    * @return the {@link LogBlobRecordInfo} containing the blob record info
    * @throws IOException
    * @throws MessageFormatException
    */
   static LogBlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset,
-      ClusterMap clusterMap, long currentTimeInMs) throws IOException, MessageFormatException {
+      ClusterMap clusterMap, long currentTimeInMs, StoreToolsMetrics metrics)
+      throws IOException, MessageFormatException {
     String messageheader = null;
     BlobId blobId = null;
     String blobProperty = null;
@@ -56,45 +59,50 @@ class DumpDataHelper {
     boolean isExpired = false;
     long expiresAtMs = -1;
     int totalRecordSize = 0;
-    randomAccessFile.seek(currentOffset);
-    short version = randomAccessFile.readShort();
-    if (version == 1) {
-      ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-      buffer.putShort(version);
-      randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-      buffer.clear();
-      MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-      messageheader =
-          " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
-              + currentOffset + " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset()
-              + " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
-              + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
-      totalRecordSize += header.getMessageSize() + buffer.capacity();
-      // read blob id
-      InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-      blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
-      totalRecordSize += blobId.sizeInBytes();
-      if (header.getBlobPropertiesRecordRelativeOffset()
-          != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-        BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-        expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
-        isExpired = expiresAtMs != Utils.Infinite_Time && isExpired(expiresAtMs, currentTimeInMs);
-        blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
-            + ", isExpired " + isExpired;
-        ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-        usermetadata = " Metadata - size " + metadata.capacity();
-        BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
-        blobDataOutput = "Blob - size " + blobData.getSize();
+    final Timer.Context context = metrics.readSingleBlobRecordFromLogTime.time();
+    try {
+      randomAccessFile.seek(currentOffset);
+      short version = randomAccessFile.readShort();
+      if (version == 1) {
+        ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+        buffer.putShort(version);
+        randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+        buffer.clear();
+        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+        messageheader =
+            " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
+                + currentOffset + " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset()
+                + " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
+                + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
+        totalRecordSize += header.getMessageSize() + buffer.capacity();
+        // read blob id
+        InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
+        blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
+        totalRecordSize += blobId.sizeInBytes();
+        if (header.getBlobPropertiesRecordRelativeOffset()
+            != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+          expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
+          isExpired = expiresAtMs != Utils.Infinite_Time && isExpired(expiresAtMs, currentTimeInMs);
+          blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
+              + ", isExpired " + isExpired;
+          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+          usermetadata = " Metadata - size " + metadata.capacity();
+          BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+          blobDataOutput = "Blob - size " + blobData.getSize();
+        } else {
+          boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
+          isDeleted = true;
+          deleteMsg = "delete change " + deleteFlag;
+        }
       } else {
-        boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
-        isDeleted = true;
-        deleteMsg = "delete change " + deleteFlag;
+        throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
       }
-    } else {
-      throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
+      return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
+          isDeleted, isExpired, expiresAtMs, totalRecordSize);
+    } finally {
+      context.stop();
     }
-    return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
-        isDeleted, isExpired, expiresAtMs, totalRecordSize);
   }
 
   /**

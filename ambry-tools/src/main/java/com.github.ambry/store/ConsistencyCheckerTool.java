@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -59,19 +61,35 @@ public class ConsistencyCheckerTool {
   // True if acceptable inconsistent blobs should be part of the output or not
   private final boolean includeAcceptableInconsistentBlobs;
 
+  private final StoreToolsMetrics metrics;
+
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
 
-  private ConsistencyCheckerTool(VerifiableProperties verifiableProperties) throws IOException, JSONException {
+  private ConsistencyCheckerTool(VerifiableProperties verifiableProperties, StoreToolsMetrics metrics)
+      throws IOException, JSONException {
     partitionRootDirectory = verifiableProperties.getString("partition.root.directory");
     includeAcceptableInconsistentBlobs =
         verifiableProperties.getBoolean("include.acceptable.inconsistent.blobs", false);
     this.verifiableProperties = verifiableProperties;
+    this.metrics = metrics;
   }
 
   public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-    ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties);
-    consistencyCheckerTool.checkConsistency();
+    String storeId = verifiableProperties.getString("storeId", "dummy");
+    MetricRegistry registry = new MetricRegistry();
+    StoreToolsMetrics metrics = new StoreToolsMetrics(registry, storeId);
+    JmxReporter reporter = null;
+    try {
+      reporter = JmxReporter.forRegistry(registry).build();
+      reporter.start();
+      ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties, metrics);
+      consistencyCheckerTool.checkConsistency();
+    } finally {
+      if (reporter != null) {
+        reporter.stop();
+      }
+    }
   }
 
   /**
@@ -117,7 +135,7 @@ public class ConsistencyCheckerTool {
    */
   private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
       AtomicLong totalKeysProcessed) throws Exception {
-    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties);
+    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties, metrics);
     Time time = SystemTime.getInstance();
     long currentTimeInMs = time.milliseconds();
     IndexStats indexStats = new IndexStats();
@@ -257,7 +275,7 @@ public class ConsistencyCheckerTool {
    * @throws Exception
    */
   private void dumpInconsistentBlobs(File[] replicas, List<String> blobIdList) throws Exception {
-    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties);
+    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties, metrics);
     for (File replica : replicas) {
       try {
         dumpIndexTool.dumpIndexesForReplica(replica.getAbsolutePath(), blobIdList, 1);

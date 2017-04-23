@@ -13,7 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
@@ -67,13 +69,14 @@ public class DumpDataTool {
   // The throttling value in index files per sec
   private final double indexFilesPerSec;
 
+  private final StoreToolsMetrics metrics;
   private final Throttler throttler;
   private final Time time;
   private final long currentTimeInMs;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpDataTool.class);
 
-  public DumpDataTool(VerifiableProperties verifiableProperties) throws Exception {
+  public DumpDataTool(VerifiableProperties verifiableProperties, StoreToolsMetrics metrics) throws Exception {
     fileToRead = verifiableProperties.getString("file.to.read", "");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
@@ -90,12 +93,25 @@ public class DumpDataTool {
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
     time = SystemTime.getInstance();
     currentTimeInMs = time.milliseconds();
+    this.metrics = metrics;
   }
 
   public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-    DumpDataTool dumpDataTool = new DumpDataTool(verifiableProperties);
-    dumpDataTool.doOperation();
+    String storeId = verifiableProperties.getString("storeId", "dummy");
+    MetricRegistry registry = new MetricRegistry();
+    StoreToolsMetrics metrics = new StoreToolsMetrics(registry, storeId);
+    JmxReporter reporter = null;
+    try {
+      reporter = JmxReporter.forRegistry(registry).build();
+      reporter.start();
+      DumpDataTool dumpDataTool = new DumpDataTool(verifiableProperties, metrics);
+      dumpDataTool.doOperation();
+    } finally {
+      if (reporter != null) {
+        reporter.stop();
+      }
+    }
   }
 
   /**
@@ -127,24 +143,29 @@ public class DumpDataTool {
     if (!new File(replicaRootDirectory).exists()) {
       throw new IllegalArgumentException("Replica root directory does not exist " + replicaRootDirectory);
     }
-    logger.info("Comparing Index entries to Log ");
-    File[] indexFiles = new File(replicaRootDirectory).listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
-    if (indexFiles == null || indexFiles.length == 0) {
-      throw new IllegalStateException("No index files found in replica root directory " + replicaRootDirectory);
-    }
-    Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
-    for (int i = 0; i < indexFiles.length; i++) {
-      // check end offset if this is the last index segment
-      boolean checkEndOffset = i == indexFiles.length - 1;
-      if (!checkEndOffset) {
-        // check end offset if the log segment represented by this index segment is different from the one represented
-        // by the next one
-        String currLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i].getName()).getName();
-        String nextLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i + 1].getName()).getName();
-        checkEndOffset = !currLogSegmentRef.equals(nextLogSegmentRef);
+    final Timer.Context context = metrics.compareReplicaIndexFilesToLogTime.time();
+    try {
+      logger.info("Comparing Index entries to Log ");
+      File[] indexFiles = new File(replicaRootDirectory).listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
+      if (indexFiles == null || indexFiles.length == 0) {
+        throw new IllegalStateException("No index files found in replica root directory " + replicaRootDirectory);
       }
-      compareIndexEntriesToLogContent(indexFiles[i], checkEndOffset);
-      throttler.maybeThrottle(1);
+      Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
+      for (int i = 0; i < indexFiles.length; i++) {
+        // check end offset if this is the last index segment
+        boolean checkEndOffset = i == indexFiles.length - 1;
+        if (!checkEndOffset) {
+          // check end offset if the log segment represented by this index segment is different from the one represented
+          // by the next one
+          String currLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i].getName()).getName();
+          String nextLogSegmentRef = IndexSegment.getIndexSegmentStartOffset(indexFiles[i + 1].getName()).getName();
+          checkEndOffset = !currLogSegmentRef.equals(nextLogSegmentRef);
+        }
+        compareIndexEntriesToLogContent(indexFiles[i], checkEndOffset);
+        throttler.maybeThrottle(1);
+      }
+    } finally {
+      context.stop();
     }
   }
 
@@ -161,6 +182,7 @@ public class DumpDataTool {
       Map.Entry<Long, Long> curEntry = iterator.next();
       logger.trace("Record startOffset {} , endOffset {} ", curEntry.getKey(), curEntry.getValue());
       if (prevEntry.getValue().compareTo(curEntry.getKey()) != 0) {
+        metrics.logRangeNotFoundInIndexError.inc();
         logger.error("Cannot find entries in Index ranging from " + prevEntry.getValue() + " to " + curEntry.getKey()
             + " with a hole of size " + (curEntry.getKey() - prevEntry.getValue()) + " in the Log");
       }
@@ -184,68 +206,92 @@ public class DumpDataTool {
     if (!indexFile.exists()) {
       throw new IllegalArgumentException("File does not exist " + indexFile);
     }
-    logger.info("Dumping index {}", indexFile.getAbsolutePath());
-    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-    StoreMetrics metrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
-    IndexSegment segment =
-        new IndexSegment(indexFile, false, storeKeyFactory, config, metrics, new Journal(indexFile.getParent(), 0, 0),
-            time);
-    Offset startOffset = segment.getStartOffset();
-    TreeMap<Long, Long> coveredRanges = new TreeMap<>();
-    String logFileName = LogSegmentNameHelper.nameToFilename(segment.getLogSegmentName());
-    File logFile = new File(indexFile.getParent(), logFileName);
-    if (!logFile.exists()) {
-      throw new IllegalStateException("Log file does not exist " + logFile);
-    }
-    RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
-    long logFileSize = randomAccessFile.getChannel().size();
-    List<MessageInfo> entries = new ArrayList<>();
-    segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
-    for (MessageInfo entry : entries) {
-      StoreKey key = entry.getStoreKey();
-      IndexValue value = segment.find(key);
-      boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index);
-      if (value.getOffset().getOffset() < logFileSize) {
-        boolean success = readFromLogAndVerify(randomAccessFile, key.getID(), value, coveredRanges);
-        if (success) {
-          if (isDeleted) {
-            long originalOffset = value.getOriginalMessageOffset();
-            if (originalOffset != -1) {
-              if (!coveredRanges.containsKey(originalOffset)) {
-                if (startOffset.getOffset() > originalOffset) {
-                  logger.trace(
-                      "Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
-                      originalOffset, value.getOffset(), startOffset);
-                } else {
-                  DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-                      DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap,
-                          currentTimeInMs);
-                  coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
-                  logger.trace("PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
-                      logBlobRecordInfo.blobId, originalOffset, (originalOffset + logBlobRecordInfo.totalRecordSize),
-                      key.getID(), value.getOffset());
-                  if (!logBlobRecordInfo.blobId.getID().equals(key.getID())) {
-                    logger.error("BlobId value mismatch between delete record {} and put record {}", key.getID(),
-                        logBlobRecordInfo.blobId.getID());
+    final Timer.Context context = metrics.compareIndexFileToLogTime.time();
+    try {
+      logger.info("Dumping index {}", indexFile.getAbsolutePath());
+      StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+      StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
+      StoreMetrics storeMetrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
+      IndexSegment segment = new IndexSegment(indexFile, false, storeKeyFactory, config, storeMetrics,
+          new Journal(indexFile.getParent(), 0, 0), time);
+      Offset startOffset = segment.getStartOffset();
+      TreeMap<Long, Long> coveredRanges = new TreeMap<>();
+      String logFileName = LogSegmentNameHelper.nameToFilename(segment.getLogSegmentName());
+      File logFile = new File(indexFile.getParent(), logFileName);
+      if (!logFile.exists()) {
+        throw new IllegalStateException("Log file does not exist " + logFile);
+      }
+      RandomAccessFile randomAccessFile = new RandomAccessFile(logFile, "r");
+      long logFileSize = randomAccessFile.getChannel().size();
+      List<MessageInfo> entries = new ArrayList<>();
+      segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
+      for (MessageInfo entry : entries) {
+        StoreKey key = entry.getStoreKey();
+        IndexValue value = segment.find(key);
+        boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index);
+        if (value.getOffset().getOffset() < logFileSize) {
+          boolean success = readFromLogAndVerify(randomAccessFile, key.getID(), value, coveredRanges);
+          if (success) {
+            if (isDeleted) {
+              long originalOffset = value.getOriginalMessageOffset();
+              if (originalOffset != -1) {
+                if (!coveredRanges.containsKey(originalOffset)) {
+                  if (startOffset.getOffset() > originalOffset) {
+                    logger.trace(
+                        "Put Record at {} with delete msg offset {} ignored because it is prior to startOffset {}",
+                        originalOffset, value.getOffset(), startOffset);
+                  } else {
+                    try {
+                      DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
+                          DumpDataHelper.readSingleRecordFromLog(randomAccessFile, originalOffset, clusterMap,
+                              currentTimeInMs, metrics);
+                      coveredRanges.put(originalOffset, originalOffset + logBlobRecordInfo.totalRecordSize);
+                      logger.trace(
+                          "PUT Record {} with start offset {} and end offset {} for a delete msg {} at offset {} ",
+                          logBlobRecordInfo.blobId, originalOffset,
+                          (originalOffset + logBlobRecordInfo.totalRecordSize), key.getID(), value.getOffset());
+                      if (!logBlobRecordInfo.blobId.getID().equals(key.getID())) {
+                        logger.error("BlobId value mismatch between delete record {} and put record {}", key.getID(),
+                            logBlobRecordInfo.blobId.getID());
+                      }
+                    } catch (IllegalArgumentException e) {
+                      metrics.logDeserializationError.inc();
+                      logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
+                          + "while reading blob starting at offset " + originalOffset + " with exception: ", e);
+                    } catch (MessageFormatException e) {
+                      metrics.logDeserializationError.inc();
+                      logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
+                          + " while reading blob starting at offset " + originalOffset + " with exception: ", e);
+                    } catch (EOFException e) {
+                      metrics.endOfFileOnDumpLogError.inc();
+                      logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + " ", e);
+                    } catch (Exception e) {
+                      metrics.unknownErrorOnDumpIndex.inc();
+                      logger.error("Unknown exception thrown " + e.getMessage() + " ", e);
+                    }
                   }
                 }
               }
             }
+          } else {
+            metrics.indexToLogBlobRecordComparisonFailure.inc();
+            logger.error("Failed for key {} with value {} ", key, value);
           }
         } else {
-          logger.error("Failed for key {} with value {} ", key, value);
+          logger.trace("Blob's {} offset {} is outside of log size {}, with a diff of {}", key,
+              value.getOffset().getOffset(), logFileSize, (value.getOffset().getOffset() - logFileSize));
         }
-      } else {
-        logger.trace("Blob's {} offset {} is outside of log size {}, with a diff of {}", key,
-            value.getOffset().getOffset(), logFileSize, (value.getOffset().getOffset() - logFileSize));
       }
+      long indexEndOffset = segment.getEndOffset().getOffset();
+      if (checkLogEndOffsetMatch && indexEndOffset != randomAccessFile.length()) {
+        metrics.indexLogEndOffsetMisMatchError.inc();
+        logger.error("Log end offset {} and index end offset {} do not match", randomAccessFile.length(),
+            indexEndOffset);
+      }
+      logRangesNotCovered(coveredRanges, indexEndOffset);
+    } finally {
+      context.stop();
     }
-    long indexEndOffset = segment.getEndOffset().getOffset();
-    if (checkLogEndOffsetMatch && indexEndOffset != randomAccessFile.length()) {
-      logger.error("Log end offset {} and index end offset {} do not match", randomAccessFile.length(), indexEndOffset);
-    }
-    logRangesNotCovered(coveredRanges, indexEndOffset);
   }
 
   /**
@@ -259,10 +305,11 @@ public class DumpDataTool {
    */
   private boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
       Map<Long, Long> coveredRanges) throws Exception {
+    final Timer.Context context = metrics.readFromLogAndVerifyTime.time();
     long offset = indexValue.getOffset().getOffset();
     try {
       DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-          DumpDataHelper.readSingleRecordFromLog(randomAccessFile, offset, clusterMap, currentTimeInMs);
+          DumpDataHelper.readSingleRecordFromLog(randomAccessFile, offset, clusterMap, currentTimeInMs, metrics);
       if (coveredRanges != null) {
         coveredRanges.put(offset, offset + logBlobRecordInfo.totalRecordSize);
       }
@@ -277,15 +324,21 @@ public class DumpDataTool {
       }
       return true;
     } catch (IllegalArgumentException e) {
+      metrics.logDeserializationError.inc();
       logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
           + "while reading blob starting at offset " + offset + " with exception: ", e);
     } catch (MessageFormatException e) {
+      metrics.logDeserializationError.inc();
       logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
           + " while reading blob starting at offset " + offset + " with exception: ", e);
     } catch (EOFException e) {
+      metrics.endOfFileOnDumpLogError.inc();
       logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + " ", e);
     } catch (Exception e) {
+      metrics.unknownErrorOnDumpLog.inc();
       logger.error("Unknown exception thrown " + e.getMessage() + " ", e);
+    } finally {
+      context.stop();
     }
     return false;
   }
@@ -301,15 +354,18 @@ public class DumpDataTool {
     boolean isDeleted = indexValue.isFlagSet(IndexValue.Flags.Delete_Index);
     boolean isExpired = DumpDataHelper.isExpired(indexValue.getExpiresAtMs(), currentTimeInMs);
     if (isDeleted != logBlobRecordInfo.isDeleted) {
+      metrics.indexToLogDeleteFlagMisMatchError.inc();
       logger.error(
           "Deleted value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isDeleted + ", Log value "
               + logBlobRecordInfo.isDeleted);
     } else if (!logBlobRecordInfo.isDeleted && isExpired != logBlobRecordInfo.isExpired) {
+      metrics.indexToLogExpiryMisMatchError.inc();
       logger.error(
           "Expiration value mismatch for " + logBlobRecordInfo.blobId + " Index value " + isExpired + ", Log value "
               + logBlobRecordInfo.isExpired + ", index expiresAt in ms " + indexValue.getExpiresAtMs()
               + ", log expiresAt in ms " + logBlobRecordInfo.expiresAtMs);
     } else if (!blobId.equals(logBlobRecordInfo.blobId.getID())) {
+      metrics.indexToLogBlobIdMisMatchError.inc();
       logger.error("BlobId value mismatch for " + logBlobRecordInfo.blobId + " Index value " + blobId + ", Log value "
           + logBlobRecordInfo.blobId);
     }
