@@ -22,7 +22,7 @@ import java.util.List;
  * being reported, timestamp and etc.
  */
 public class StatsHeader {
-  enum StatsDescription {
+  public enum StatsDescription {
     QUOTA
   }
 

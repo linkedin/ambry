@@ -37,7 +37,8 @@ class HelixAggregateTask extends UserContentStore implements Task {
   private final String healthReportId;
   private final String fieldName;
 
-  HelixAggregateTask(TaskCallbackContext context, HelixClusterAggregator aggregator, String healthReportId, String fieldName) {
+  HelixAggregateTask(TaskCallbackContext context, HelixClusterAggregator aggregator, String healthReportId,
+      String fieldName) {
     manager = context.getManager();
     clusterAggregator = aggregator;
     this.healthReportId = healthReportId;
