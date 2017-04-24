@@ -168,8 +168,7 @@ public class SocketServer implements NetworkServer {
 
     Port sslPort = ports.get(PortType.SSL);
     if (sslPort != null) {
-      SSLAcceptor sslAcceptor =
-          new SSLAcceptor(sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
+      SSLAcceptor sslAcceptor = new SSLAcceptor(sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
       acceptors.add(sslAcceptor);
       Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
     }
