@@ -59,7 +59,7 @@ class DumpDataHelper {
     boolean isExpired = false;
     long expiresAtMs = -1;
     int totalRecordSize = 0;
-    final Timer.Context context = metrics.readSingleBlobRecordFromLogTime.time();
+    final Timer.Context context = metrics.readSingleBlobRecordFromLogTimeMs.time();
     try {
       randomAccessFile.seek(currentOffset);
       short version = randomAccessFile.readShort();
@@ -83,7 +83,7 @@ class DumpDataHelper {
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
           BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
           expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
-          isExpired = expiresAtMs != Utils.Infinite_Time && isExpired(expiresAtMs, currentTimeInMs);
+          isExpired = isExpired(expiresAtMs, currentTimeInMs);
           blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
               + ", isExpired " + isExpired;
           ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);

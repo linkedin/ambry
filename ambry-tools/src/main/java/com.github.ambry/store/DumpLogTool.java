@@ -138,7 +138,7 @@ public class DumpLogTool {
    */
   private void dumpLog(File logFile, long startOffset, long endOffset, ArrayList<String> blobs) throws IOException {
     Map<String, LogBlobStatus> blobIdToLogRecord = new HashMap<>();
-    final Timer.Context context = metrics.dumpLogTime.time();
+    final Timer.Context context = metrics.dumpLogTimeMs.time();
     try {
       dumpLog(logFile, startOffset, endOffset, blobs, blobIdToLogRecord);
       long totalInConsistentBlobs = 0;

@@ -22,14 +22,14 @@ import com.codahale.metrics.Timer;
  * Metrics for all store tools
  */
 public class StoreToolsMetrics {
-  final Timer dumpIndexTime;
-  final Timer dumpReplicaIndexesTime;
-  final Timer dumpLogTime;
-  final Timer findAllEntriesPerIndexTime;
-  final Timer readSingleBlobRecordFromLogTime;
-  final Timer readFromLogAndVerifyTime;
-  final Timer compareIndexFileToLogTime;
-  final Timer compareReplicaIndexFilesToLogTime;
+  final Timer dumpIndexTimeMs;
+  final Timer dumpReplicaIndexesTimeMs;
+  final Timer dumpLogTimeMs;
+  final Timer findAllEntriesPerIndexTimeMs;
+  final Timer readSingleBlobRecordFromLogTimeMs;
+  final Timer readFromLogAndVerifyTimeMs;
+  final Timer compareIndexFileToLogTimeMs;
+  final Timer compareReplicaIndexFilesToLogTimeMs;
 
   final Counter logDeserializationError;
   final Counter endOfFileOnDumpLogError;
@@ -44,20 +44,20 @@ public class StoreToolsMetrics {
 
   StoreToolsMetrics(MetricRegistry registry, String storeId) {
     String metricsPrefix = storeId + ".";
-    dumpIndexTime = registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "DumpIndexTime"));
-    dumpReplicaIndexesTime =
-        registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "DumpReplicaIndexesTime"));
-    dumpLogTime = registry.timer(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "dumpLogTime"));
-    findAllEntriesPerIndexTime =
-        registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "findAllEntriesPerIndexTime"));
-    readSingleBlobRecordFromLogTime =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "readSingleBlobRecordFromLogTime"));
-    readFromLogAndVerifyTime =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "readFromLogAndVerifyTime"));
-    compareIndexFileToLogTime =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "compareIndexFileToLogTime"));
-    compareReplicaIndexFilesToLogTime =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "compareReplicaIndexFilesToLogTime"));
+    dumpIndexTimeMs = registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "DumpIndexTimeMs"));
+    dumpReplicaIndexesTimeMs =
+        registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "DumpReplicaIndexesTimeMs"));
+    dumpLogTimeMs = registry.timer(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "DumpLogTimeMs"));
+    findAllEntriesPerIndexTimeMs =
+        registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "FindAllEntriesPerIndexTimeMs"));
+    readSingleBlobRecordFromLogTimeMs =
+        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "ReadSingleBlobRecordFromLogTimeMs"));
+    readFromLogAndVerifyTimeMs =
+        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "ReadFromLogAndVerifyTimeMs"));
+    compareIndexFileToLogTimeMs =
+        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "CompareIndexFileToLogTimeMs"));
+    compareReplicaIndexFilesToLogTimeMs =
+        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "CompareReplicaIndexFilesToLogTimeMs"));
 
     logDeserializationError =
         registry.counter(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "LogDeserializationErrorCount"));

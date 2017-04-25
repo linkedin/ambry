@@ -72,7 +72,6 @@ public class DumpIndexTool {
   private final long indexFilesPerSec;
   // StoreToolMetrics
   private final StoreToolsMetrics metrics;
-  private JmxReporter reporter = null;
   private final Time time;
   private final long currentTimeInMs;
 
@@ -182,7 +181,7 @@ public class DumpIndexTool {
   long dumpIndex(File indexFileToDump, String replica, List<String> replicaList, List<String> blobList,
       Map<String, BlobStatus> blobIdToStatusMap, IndexStats indexStats, boolean recentIndexSegment, Time time,
       long currentTimeInMs) throws Exception {
-    final Timer.Context context = metrics.dumpIndexTime.time();
+    final Timer.Context context = metrics.dumpIndexTimeMs.time();
     try {
       Map<String, IndexValue> blobIdToMessageMapPerIndexFile = new HashMap<>();
       logger.trace("Dumping index {} for {}", indexFileToDump.getName(), replica);
@@ -263,7 +262,7 @@ public class DumpIndexTool {
    */
   public Map<String, BlobStatus> dumpIndexesForReplica(String replicaRootDirectory, List<String> blobList,
       long indexFilesPerSec) throws Exception {
-    final Timer.Context context = metrics.dumpReplicaIndexesTime.time();
+    final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
       long totalKeysProcessed = 0;
       File replicaDirectory = new File(replicaRootDirectory);
@@ -473,7 +472,7 @@ public class DumpIndexTool {
         new Journal(indexFileToDump.getParent(), 0, 0), time);
     lastModifiedTimeMs.set(segment.getLastModifiedTimeMs());
     List<MessageInfo> entries = new ArrayList<>();
-    final Timer.Context context = metrics.findAllEntriesPerIndexTime.time();
+    final Timer.Context context = metrics.findAllEntriesPerIndexTimeMs.time();
     try {
       segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
     } finally {

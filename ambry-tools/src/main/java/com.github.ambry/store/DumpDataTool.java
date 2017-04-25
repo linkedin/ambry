@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -143,7 +144,7 @@ public class DumpDataTool {
     if (!new File(replicaRootDirectory).exists()) {
       throw new IllegalArgumentException("Replica root directory does not exist " + replicaRootDirectory);
     }
-    final Timer.Context context = metrics.compareReplicaIndexFilesToLogTime.time();
+    final Timer.Context context = metrics.compareReplicaIndexFilesToLogTimeMs.time();
     try {
       logger.info("Comparing Index entries to Log ");
       File[] indexFiles = new File(replicaRootDirectory).listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
@@ -206,10 +207,10 @@ public class DumpDataTool {
     if (!indexFile.exists()) {
       throw new IllegalArgumentException("File does not exist " + indexFile);
     }
-    final Timer.Context context = metrics.compareIndexFileToLogTime.time();
+    final Timer.Context context = metrics.compareIndexFileToLogTimeMs.time();
     try {
       logger.info("Dumping index {}", indexFile.getAbsolutePath());
-      StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+      StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
       StoreMetrics storeMetrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
       IndexSegment segment = new IndexSegment(indexFile, false, storeKeyFactory, config, storeMetrics,
@@ -305,7 +306,7 @@ public class DumpDataTool {
    */
   private boolean readFromLogAndVerify(RandomAccessFile randomAccessFile, String blobId, IndexValue indexValue,
       Map<Long, Long> coveredRanges) throws Exception {
-    final Timer.Context context = metrics.readFromLogAndVerifyTime.time();
+    final Timer.Context context = metrics.readFromLogAndVerifyTimeMs.time();
     long offset = indexValue.getOffset().getOffset();
     try {
       DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
