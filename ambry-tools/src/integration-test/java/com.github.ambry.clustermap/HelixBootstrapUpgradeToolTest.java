@@ -135,11 +135,12 @@ public class HelixBootstrapUpgradeToolTest {
     testHardwareLayout.addNewDataNodes(numNewNodes);
     testPartitionLayout.addNewPartitions(numNewPartitions);
 
-    // Next, mark all previous partitions as READ_ONLY
+    // Next, mark all previous partitions as READ_ONLY, and change their replica capacities.
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
       if (partitionIdsBeforeAddition.contains(((Partition) partitionId).getId())) {
         Partition partition = (Partition) partitionId;
         partition.partitionState = PartitionState.READ_ONLY;
+        partition.replicaCapacityInBytes += 1;
       }
     }
 
