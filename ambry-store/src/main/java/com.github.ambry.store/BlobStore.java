@@ -136,10 +136,11 @@ class BlobStore implements Store {
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
         long logSegmentForecastOffsetMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
-        blobStoreStats = new BlobStoreStats(index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
-            logSegmentForecastOffsetMs, config.storeStatsWaitTimeoutInSecs,
-            config.storeStatsQueueProcessorPeriodInMinutes, time, longLivedTaskScheduler, taskScheduler,
-            diskIOScheduler, metrics);
+        blobStoreStats =
+            new BlobStoreStats(storeId, index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
+                logSegmentForecastOffsetMs, config.storeStatsWaitTimeoutInSecs,
+                config.storeStatsRecentEntryProcessingIntervalInMinutes, time, longLivedTaskScheduler, taskScheduler,
+                diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -324,8 +325,7 @@ class BlobStore implements Store {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan);
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex));
-          correspondingPutIndex++;
+          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }

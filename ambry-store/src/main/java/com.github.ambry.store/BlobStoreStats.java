@@ -18,6 +18,7 @@ import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -49,28 +50,26 @@ import org.slf4j.LoggerFactory;
  * a forecast boundary. Stats related requests are either served via these buckets or a separate scan that will walk
  * through the entire index if the request is outside of the forecast boundary.
  */
-class BlobStoreStats implements StoreStats {
+class BlobStoreStats implements StoreStats, Closeable {
   static final String IO_SCHEDULER_JOB_TYPE = "BlobStoreStats";
   static final String IO_SCHEDULER_JOB_ID = "indexSegment_read";
-  // Max blob size thats encountered while generating stats
+  // Max blob size that's encountered while generating stats
   // TODO: make this dynamically generated
   private static final long MAX_BLOB_SIZE = 4 * 1024 * 1024;
-  private static final long WAIT_FOR_SCAN_TIMEOUT = 30 * Time.MsPerSec;
   private static final int ADD = 1;
   private static final int SUBTRACT = -1;
   private static final long REF_TIME_OUT_OF_BOUNDS = -1;
   private static final Logger logger = LoggerFactory.getLogger(BlobStoreStats.class);
 
+  private final String storeId;
   private final PersistentIndex index;
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
   private final boolean bucketingEnabled;
   private final int bucketCount;
-  private final long bucketSpanInMs;
+  private final long bucketSpanTimeInMs;
   private final long logSegmentForecastOffsetMs;
   private final long waitTimeoutInSecs;
-  private final ScheduledExecutorService indexScannerScheduler;
-  private final ScheduledExecutorService queueProcessorScheduler;
   private final StoreMetrics metrics;
   private final ReentrantLock scanLock = new ReentrantLock();
   private final Condition waitCondition = scanLock.newCondition();
@@ -106,28 +105,27 @@ class BlobStoreStats implements StoreStats {
     return new StatsSnapshot(totalSize, accountValidSizeMap);
   }
 
-  BlobStoreStats(PersistentIndex index, int bucketCount, long bucketSpanInMs, long logSegmentForecastOffsetMs,
-      long queueProcessorPeriodInSecs, long waitTimeoutInSecs, Time time,
+  BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
+      long logSegmentForecastOffsetMs, long queueProcessorPeriodInSecs, long waitTimeoutInSecs, Time time,
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
+    this.storeId = storeId;
     this.index = index;
     this.time = time;
     this.diskIOScheduler = diskIOScheduler;
     this.bucketCount = bucketCount;
-    this.bucketSpanInMs = bucketSpanInMs;
+    this.bucketSpanTimeInMs = bucketSpanTimeInMs;
     this.logSegmentForecastOffsetMs = logSegmentForecastOffsetMs;
     this.waitTimeoutInSecs = waitTimeoutInSecs;
     this.metrics = metrics;
     bucketingEnabled = bucketCount > 0;
-    indexScannerScheduler = longLiveTaskScheduler;
-    queueProcessorScheduler = shortLiveTaskScheduler;
 
     if (bucketingEnabled) {
       indexScanner = new IndexScanner();
-      indexScannerScheduler.scheduleAtFixedRate(indexScanner, 0, (bucketCount * bucketSpanInMs) / Time.MsPerSec,
-          TimeUnit.SECONDS);
+      longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
+          TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
       queueProcessor = new QueueProcessor();
-      queueProcessorScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessorPeriodInSecs, TimeUnit.SECONDS);
+      shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessorPeriodInSecs, TimeUnit.SECONDS);
     }
   }
 
@@ -178,7 +176,8 @@ class BlobStoreStats implements StoreStats {
    */
   Pair<Long, NavigableMap<String, Long>> getValidDataSizeByLogSegment(TimeRange timeRange) throws StoreException {
     if (!enabled.get()) {
-      throw new StoreException("BlobStoreStats is not enabled or closing", StoreErrorCodes.Store_Shutting_Down);
+      throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
+          StoreErrorCodes.Store_Shutting_Down);
     }
     ScanResults currentScanResults = scanResults.get();
     Pair<Long, NavigableMap<String, Long>> retValue = null;
@@ -187,24 +186,26 @@ class BlobStoreStats implements StoreStats {
       retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs);
     } else {
       if (isScanning && getLogSegmentRefTimeMs(indexScanner.newScanResults, timeRange) != REF_TIME_OUT_OF_BOUNDS) {
+        scanLock.lock();
         try {
-          boolean waitSuccess;
-          scanLock.lock();
           if (isScanning) {
-            waitSuccess = waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS);
-          } else {
-            waitSuccess = true;
-          }
-          scanLock.unlock();
-          if (!waitSuccess) {
-            metrics.blobStoreStatsErrorCount.inc();
-            logger.error("BlobStoreStats index scan took too long to finish");
-          } else {
-            retValue = getValidDataSizeByLogSegment(timeRange);
+            if (waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
+              currentScanResults = scanResults.get();
+              referenceTimeInMs = getLogSegmentRefTimeMs(currentScanResults, timeRange);
+              if (referenceTimeInMs != REF_TIME_OUT_OF_BOUNDS) {
+                retValue = currentScanResults.getValidSizePerLogSegment(referenceTimeInMs);
+              }
+            } else {
+              metrics.blobStoreStatsIndexScannerErrorCount.inc();
+              logger.error("BlobStoreStats index scan took too long to finish for store {}", storeId);
+            }
           }
         } catch (InterruptedException e) {
-          metrics.blobStoreStatsErrorCount.inc();
-          throw new IllegalStateException("Illegal state, wait for scan to complete is interrupted", e);
+          metrics.blobStoreStatsIndexScannerErrorCount.inc();
+          throw new IllegalStateException(
+              String.format("Illegal state, wait for scan to complete is interrupted for store %s", storeId), e);
+        } finally {
+          scanLock.unlock();
         }
       }
       if (retValue == null) {
@@ -228,7 +229,8 @@ class BlobStoreStats implements StoreStats {
    */
   Map<String, Map<String, Long>> getValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
     if (!enabled.get()) {
-      throw new StoreException("BlobStoreStats is not enabled or closing", StoreErrorCodes.Store_Shutting_Down);
+      throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
+          StoreErrorCodes.Store_Shutting_Down);
     }
     Map<String, Map<String, Long>> retValue = null;
     ScanResults currentScanResults = scanResults.get();
@@ -238,24 +240,26 @@ class BlobStoreStats implements StoreStats {
     } else {
       if (isScanning && isWithinRange(indexScanner.newScanResults.containerForecastStartTimeMs,
           indexScanner.newScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
+        scanLock.lock();
         try {
-          boolean waitSuccess;
-          scanLock.lock();
           if (isScanning) {
-            waitSuccess = waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS);
-          } else {
-            waitSuccess = true;
-          }
-          scanLock.unlock();
-          if (!waitSuccess) {
-            metrics.blobStoreStatsErrorCount.inc();
-            logger.error("BlobStoreStats index scan took too long to finish");
-          } else {
-            retValue = getValidDataSizeByContainer(referenceTimeInMs);
+            if (waitCondition.await(waitTimeoutInSecs, TimeUnit.SECONDS)) {
+              currentScanResults = scanResults.get();
+              if (isWithinRange(currentScanResults.containerForecastStartTimeMs,
+                  currentScanResults.containerForecastEndTimeMs, referenceTimeInMs)) {
+                retValue = currentScanResults.getValidSizePerContainer(referenceTimeInMs);
+              }
+            } else {
+              metrics.blobStoreStatsIndexScannerErrorCount.inc();
+              logger.error("BlobStoreStats index scan took too long to finish for store {}", storeId);
+            }
           }
         } catch (InterruptedException e) {
-          metrics.blobStoreStatsErrorCount.inc();
-          throw new IllegalStateException("Illegal state, wait for scan to complete is interrupted", e);
+          metrics.blobStoreStatsIndexScannerErrorCount.inc();
+          throw new IllegalStateException(
+              String.format("Illegal state, wait for scan to complete is interrupted for store %s", storeId), e);
+        } finally {
+          scanLock.unlock();
         }
       }
       if (retValue == null) {
@@ -283,7 +287,7 @@ class BlobStoreStats implements StoreStats {
    */
   void handleNewDeleteEntry(IndexValue deleteValue, IndexValue originalPutValue) {
     if (bucketingEnabled && recentEntryQueueEnabled) {
-      recentEntryQueue.offer(new Pair<IndexValue, IndexValue>(deleteValue, originalPutValue));
+      recentEntryQueue.offer(new Pair<>(deleteValue, originalPutValue));
       metrics.statsRecentEntryQueueSize.update(queueEntryCount.incrementAndGet());
     }
   }
@@ -292,7 +296,8 @@ class BlobStoreStats implements StoreStats {
    * Disable this {@link BlobStoreStats} and cancel any ongoing and scheduled index scan.
    * @throws InterruptedException
    */
-  void close() throws InterruptedException {
+  @Override
+  public void close() {
     enabled.set(false);
     if (indexScanner != null) {
       indexScanner.cancel();
@@ -313,7 +318,8 @@ class BlobStoreStats implements StoreStats {
     Map<String, Map<String, Long>> validDataSizePerContainer = new HashMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {
-        throw new StoreException("BlobStoreStats is not enabled or closing", StoreErrorCodes.Store_Shutting_Down);
+        throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
+            StoreErrorCodes.Store_Shutting_Down);
       }
       long indexSegmentStartProcessTimeMs = time.milliseconds();
       List<IndexEntry> validIndexEntries =
@@ -344,7 +350,8 @@ class BlobStoreStats implements StoreStats {
     NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>();
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {
-        throw new StoreException("BlobStoreStats is not enabled or closing", StoreErrorCodes.Store_Shutting_Down);
+        throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
+            StoreErrorCodes.Store_Shutting_Down);
       }
       long indexSegmentStartProcessTimeMs = time.milliseconds();
       List<IndexEntry> validIndexEntries =
@@ -375,7 +382,9 @@ class BlobStoreStats implements StoreStats {
       indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), indexEntries,
           new AtomicLong(0));
     } catch (IOException e) {
-      throw new StoreException("I/O exception while getting entries from index segment", e, StoreErrorCodes.IOError);
+      throw new StoreException(
+          String.format("I/O exception while getting entries from index segment for store %s", storeId), e,
+          StoreErrorCodes.IOError);
     }
     return indexEntries;
   }
@@ -550,11 +559,10 @@ class BlobStoreStats implements StoreStats {
    * @param originalPutValue the {@link IndexValue} of the original PUT that is getting deleted
    */
   private void processNewDelete(ScanResults results, IndexValue deleteValue, IndexValue originalPutValue) {
-    long operationTimeInMs = deleteValue.getOperationTimeInMs();
-    if (operationTimeInMs == Utils.Infinite_Time) {
-      operationTimeInMs =
-          index.getIndexSegments().floorEntry(deleteValue.getOffset()).getValue().getLastModifiedTimeMs();
-    }
+    long operationTimeInMs = deleteValue.getOperationTimeInMs() == Utils.Infinite_Time ? index.getIndexSegments()
+        .floorEntry(deleteValue.getOffset())
+        .getValue()
+        .getLastModifiedTimeMs() : deleteValue.getOperationTimeInMs();
     results.updateLogSegmentBaseBucket(deleteValue.getOffset().getName(), deleteValue.getSize());
     if (!isExpired(originalPutValue.getExpiresAtMs(), operationTimeInMs)) {
       handleContainerBucketUpdate(results, originalPutValue, operationTimeInMs, SUBTRACT);
@@ -657,14 +665,12 @@ class BlobStoreStats implements StoreStats {
           entryCount = queueEntryCount.get();
         }
         long processStartTimeMs = time.milliseconds();
-        for (int i = 0; i < entryCount; i++) {
-          if (cancelled) {
-            return;
-          }
+        for (int i = 0; i < entryCount && !cancelled; i++) {
           Pair<IndexValue, IndexValue> entry = recentEntryQueue.poll();
           if (entry == null) {
             throw new IllegalStateException(
-                "Invalid queue state. Expected entryCount " + entryCount + " current index: " + i);
+                String.format("Invalid queue state in store %s. Expected entryCount %d, current index: %d", storeId,
+                    entryCount, i));
           }
           metrics.statsRecentEntryQueueSize.update(queueEntryCount.decrementAndGet());
           IndexValue newValue = entry.getFirst();
@@ -683,8 +689,8 @@ class BlobStoreStats implements StoreStats {
         metrics.statsRecentEntryQueueProcessTimeMs.update(time.milliseconds() - processStartTimeMs,
             TimeUnit.MILLISECONDS);
       } catch (Exception e) {
-        logger.error("Unexpected exception while running QueueProcessor", e);
-        metrics.blobStoreStatsErrorCount.inc();
+        logger.error("Unexpected exception while running QueueProcessor in store {}", storeId, e);
+        metrics.blobStoreStatsQueueProcessorErrorCount.inc();
       }
     }
 
@@ -713,24 +719,27 @@ class BlobStoreStats implements StoreStats {
         queueEntryCount.set(0);
         metrics.statsRecentEntryQueueSize.update(0);
         startTimeInMs = time.milliseconds();
-        newScanResults = new ScanResults(startTimeInMs, logSegmentForecastOffsetMs, bucketCount, bucketSpanInMs);
+        newScanResults = new ScanResults(startTimeInMs, logSegmentForecastOffsetMs, bucketCount, bucketSpanTimeInMs);
         scanLock.lock();
-        isScanning = true;
-        scanLock.unlock();
+        try {
+          isScanning = true;
+        } finally {
+          scanLock.unlock();
+        }
         Offset firstCheckpoint = index.getCurrentEndOffset();
         ConcurrentNavigableMap<Offset, IndexSegment> indexSegments = index.getIndexSegments();
         Map<StoreKey, Long> deletedKeys = new HashMap<>();
         // process the active index segment based on the firstCheckpoint in case index segment rolled over after the
         // checkpoint is taken
-        if (indexSegments.size() > 0) {
+        if (!cancelled && indexSegments.size() > 0) {
           Map.Entry<Offset, IndexSegment> activeIndexSegmentEntry = indexSegments.floorEntry(firstCheckpoint);
           long indexSegmentStartProcessTime = time.milliseconds();
           List<IndexEntry> activeIndexEntries =
-              getFilteredIndexEntries(activeIndexSegmentEntry.getValue(), firstCheckpoint);
+              getIndexEntriesBeforeOffset(activeIndexSegmentEntry.getValue(), firstCheckpoint);
           processIndexSegmentEntriesBackward(activeIndexSegmentEntry.getValue(), activeIndexEntries, deletedKeys);
           metrics.statsBucketingScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTime,
               TimeUnit.MILLISECONDS);
-          if (indexSegments.size() > 1) {
+          if (!cancelled && indexSegments.size() > 1) {
             ConcurrentNavigableMap<Offset, IndexSegment> sealedIndexSegments =
                 indexSegments.subMap(index.getStartOffset(), activeIndexSegmentEntry.getKey());
             for (IndexSegment indexSegment : sealedIndexSegments.descendingMap().values()) {
@@ -755,19 +764,22 @@ class BlobStoreStats implements StoreStats {
         newScanResults.scannedEndOffset = secondCheckpoint;
         scanResults.set(newScanResults);
       } catch (Exception e) {
-        logger.error("Exception while scanning index for stats bucketing", e);
-        metrics.blobStoreStatsErrorCount.inc();
+        logger.error("Exception thrown while scanning index for bucketing stats in store {}", storeId, e);
+        metrics.blobStoreStatsIndexScannerErrorCount.inc();
       } finally {
         scanLock.lock();
-        isScanning = false;
-        waitCondition.signalAll();
-        scanLock.unlock();
+        try {
+          isScanning = false;
+          waitCondition.signalAll();
+        } finally {
+          scanLock.unlock();
+        }
         metrics.statsBucketingScanTotalTimeMs.update(time.milliseconds() - startTimeInMs, TimeUnit.MILLISECONDS);
       }
     }
 
     /**
-     * Perform a forward scan (order to newest entries) from the given start offset to the given end offset. This
+     * Perform a forward scan (older to newest entries) from the given start offset to the given end offset. This
      * forward scan is used to process any new entries that were added to the index while scanning to the first
      * checkpoint.
      * @param startOffset the start offset defining the start of the scan range, inclusive (greater than or equal to)
@@ -777,11 +789,13 @@ class BlobStoreStats implements StoreStats {
     private void forwardScan(Offset startOffset, Offset endOffset) throws StoreException {
       SortedMap<Offset, IndexSegment> tailIndexSegments =
           index.getIndexSegments().subMap(index.getIndexSegments().floorKey(startOffset), endOffset);
+      int forwardScanEntryCount = 0;
       for (IndexSegment indexSegment : tailIndexSegments.values()) {
         if (cancelled) {
           return;
         }
         List<IndexEntry> indexEntries = getIndexEntries(indexSegment);
+        forwardScanEntryCount += indexEntries.size();
         for (IndexEntry entry : indexEntries) {
           IndexValue indexValue = entry.getValue();
           if (indexValue.getOffset().compareTo(startOffset) >= 0 && indexValue.getOffset().compareTo(endOffset) < 0) {
@@ -813,6 +827,7 @@ class BlobStoreStats implements StoreStats {
           }
         }
       }
+      metrics.statsForwardScanEntryCount.update(forwardScanEntryCount);
     }
 
     /**
@@ -845,7 +860,7 @@ class BlobStoreStats implements StoreStats {
      * the given endOffset
      * @throws StoreException
      */
-    private List<IndexEntry> getFilteredIndexEntries(IndexSegment indexSegment, Offset endOffset)
+    private List<IndexEntry> getIndexEntriesBeforeOffset(IndexSegment indexSegment, Offset endOffset)
         throws StoreException {
       List<IndexEntry> filteredIndexEntries = new ArrayList<>();
       List<IndexEntry> indexEntries = getIndexEntries(indexSegment);

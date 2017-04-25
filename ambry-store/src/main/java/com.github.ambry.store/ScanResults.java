@@ -73,8 +73,8 @@ class ScanResults {
   }
 
   /**
-   * Given a reference time, return the appropriate container bucket key (bucket end time) to indicate which bucket will
-   * an event with the given reference time as operation time belong to.
+   * Given a reference time, return the key of the appropriate container bucket whose end time is strictly greater than
+   * the reference time.
    * @param referenceTimeInMs the reference time or operation time of an event.
    * @return the appropriate bucket key (bucket end time) to indicate which bucket will an event with
    * the given reference time as operation time belong to.
@@ -84,8 +84,8 @@ class ScanResults {
   }
 
   /**
-   * Given a reference time, return the appropriate log segment bucket key (bucket end time) to indicate which bucket
-   * will an event with the given reference time as operation time belong to.
+   * Given a reference time, return the key of the appropriate log segment bucket whose end time is strictly greater
+   * than the reference time.
    * @param referenceTimeInMs the reference time or operation time of an event.
    * @return the appropriate bucket key (bucket end time) to indicate which bucket will an event with
    * the given reference time as operation time belong to.

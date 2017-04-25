@@ -150,9 +150,9 @@ public class StoreConfig {
   /**
    * Period in minutes to specify how frequent is the queue processor executed.
    */
-  @Config("store.stats.queue.processor.period.in.minutes")
+  @Config("store.stats.recent.entry.processing.interval.in.minutes")
   @Default("2")
-  public final long storeStatsQueueProcessorPeriodInMinutes;
+  public final long storeStatsRecentEntryProcessingIntervalInMinutes;
 
   /**
    * The upper limit in seconds for requests to wait for a ongoing construction of buckets (that contains the answer)
@@ -196,12 +196,15 @@ public class StoreConfig {
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
-    storeStatsBucketCount = verifiableProperties.getInt("store.stats.bucket.count", 24);
-    storeStatsBucketSpanInMinutes = verifiableProperties.getLong("store.stats.bucket.span.in.minutes", 60);
-    storeStatsQueueProcessorPeriodInMinutes =
-        verifiableProperties.getLong("store.stats.queue.processor.period.in.minutes", 2);
-    storeStatsWaitTimeoutInSecs = verifiableProperties.getLong("store.stats.wait.timeout.in.secs", 60);
-    storeStatsIndexSegmentPerSecs = verifiableProperties.getInt("store.stats.index.segment.per.secs", 1);
+    storeStatsBucketCount = verifiableProperties.getIntInRange("store.stats.bucket.count", 24, 0, 10000);
+    storeStatsBucketSpanInMinutes =
+        verifiableProperties.getLongInRange("store.stats.bucket.span.in.minutes", 60, 1, 10000);
+    storeStatsRecentEntryProcessingIntervalInMinutes =
+        verifiableProperties.getLongInRange("store.stats.recent.entry.processing.interval.in.minutes", 2, 1, 60);
+    storeStatsWaitTimeoutInSecs =
+        verifiableProperties.getLongInRange("store.stats.wait.timeout.in.secs", 2 * 60, 0, 30 * 60);
+    storeStatsIndexSegmentPerSecs =
+        verifiableProperties.getIntInRange("store.stats.index.segment.per.secs", 1, 1, 1000);
   }
 }
 

@@ -335,7 +335,7 @@ class MockBlobStoreStats extends BlobStoreStats {
   private long maxBlobSize;
 
   MockBlobStoreStats(long maxBlobSize) {
-    super(null, 0, 0, 0, 0, 0, null, null, null, null, null);
+    super("", null, 0, 0, 0, 0, 0, null, null, null, null, null);
     this.maxBlobSize = maxBlobSize;
   }
 
