@@ -162,14 +162,13 @@ public class SocketServer implements NetworkServer {
 
     // start accepting connections
     logger.info("Starting acceptor threads");
-    Acceptor plainTextAcceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize, metrics);
+    Acceptor plainTextAcceptor = new Acceptor(port, processors, sendBufferSize, recvBufferSize, metrics);
     this.acceptors.add(plainTextAcceptor);
     Utils.newThread("ambry-acceptor", plainTextAcceptor, false).start();
 
     Port sslPort = ports.get(PortType.SSL);
     if (sslPort != null) {
-      SSLAcceptor sslAcceptor =
-          new SSLAcceptor(host, sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
+      SSLAcceptor sslAcceptor = new SSLAcceptor(sslPort.getPort(), processors, sendBufferSize, recvBufferSize, metrics);
       acceptors.add(sslAcceptor);
       Utils.newThread("ambry-sslacceptor", sslAcceptor, false).start();
     }
@@ -254,8 +253,6 @@ abstract class AbstractServerThread implements Runnable {
  * Thread that accepts and configures new connections.
  */
 class Acceptor extends AbstractServerThread {
-  private final String host;
-  private final int port;
   private final ArrayList<Processor> processors;
   private final int sendBufferSize;
   private final int recvBufferSize;
@@ -265,14 +262,12 @@ class Acceptor extends AbstractServerThread {
   private final ServerNetworkMetrics metrics;
   protected Logger logger = LoggerFactory.getLogger(getClass());
 
-  public Acceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
+  public Acceptor(int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
       ServerNetworkMetrics metrics) throws IOException {
-    this.host = host;
-    this.port = port;
     this.processors = processors;
     this.sendBufferSize = sendBufferSize;
     this.recvBufferSize = recvBufferSize;
-    this.serverChannel = openServerSocket(this.host, this.port);
+    this.serverChannel = openServerSocket(port);
     this.nioSelector = java.nio.channels.Selector.open();
     this.metrics = metrics;
   }
@@ -325,13 +320,8 @@ class Acceptor extends AbstractServerThread {
   /*
    * Create a server socket to listen for connections on.
    */
-  private ServerSocketChannel openServerSocket(String host, int port) throws IOException {
-    InetSocketAddress address = null;
-    if (host == null || host.trim().isEmpty()) {
-      address = new InetSocketAddress(port);
-    } else {
-      address = new InetSocketAddress(host, port);
-    }
+  private ServerSocketChannel openServerSocket(int port) throws IOException {
+    InetSocketAddress address = new InetSocketAddress(port);
     ServerSocketChannel serverChannel = ServerSocketChannel.open();
     serverChannel.configureBlocking(false);
     serverChannel.socket().bind(address);
@@ -373,9 +363,9 @@ class Acceptor extends AbstractServerThread {
  */
 class SSLAcceptor extends Acceptor {
 
-  public SSLAcceptor(String host, int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
+  public SSLAcceptor(int port, ArrayList<Processor> processors, int sendBufferSize, int recvBufferSize,
       ServerNetworkMetrics metrics) throws IOException {
-    super(host, port, processors, sendBufferSize, recvBufferSize, metrics);
+    super(port, processors, sendBufferSize, recvBufferSize, metrics);
   }
 
   /*
