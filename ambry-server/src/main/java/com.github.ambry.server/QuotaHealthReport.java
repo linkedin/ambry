@@ -22,9 +22,9 @@ import org.apache.helix.healthcheck.HealthReportProvider;
 /**
  * Customized Helix Health Report for collecting quota stats per node (instance).
  */
-class QuotaHealthReport extends HealthReportProvider implements HealthReport {
-  private static final String REPORT_NAME = "QuotaReport";
-  private static final String FIELD_NAME = "QuotaStats";
+class QuotaHealthReport extends HealthReportProvider implements AmbryHealthReport {
+  private static final String QUOTA_REPORT_NAME = "QuotaReport";
+  private static final String QUOTA_FIELD_NAME = "QuotaStats";
   private final StatsManager statsManager;
   private final long aggregatePeriodInMinutes;
 
@@ -40,22 +40,22 @@ class QuotaHealthReport extends HealthReportProvider implements HealthReport {
   @Override
   public Map<String, String> getRecentHealthReport() {
     Map<String, String> report = new HashMap<>();
-    report.put(FIELD_NAME, statsManager.getNodeStatsInJSON());
+    report.put(QUOTA_FIELD_NAME, statsManager.getNodeStatsInJSON());
     return report;
   }
 
   @Override
   public String getReportName() {
-    return REPORT_NAME;
+    return QUOTA_REPORT_NAME;
   }
 
   @Override
   public String getFieldName() {
-    return FIELD_NAME;
+    return QUOTA_FIELD_NAME;
   }
 
   @Override
-  public long getAggregatePeriodInMinutes() {
+  public long getAggregateIntervalInMinutes() {
     return aggregatePeriodInMinutes;
   }
 

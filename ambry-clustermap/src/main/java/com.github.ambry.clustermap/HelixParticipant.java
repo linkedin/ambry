@@ -14,13 +14,12 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.server.HealthReport;
+import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.healthcheck.HealthReportProvider;
@@ -41,7 +40,6 @@ import org.slf4j.LoggerFactory;
  */
 class HelixParticipant implements ClusterParticipant {
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private static long WORKFLOW_EXPIRY = TimeUnit.SECONDS.toMillis(30);
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
@@ -72,44 +70,52 @@ class HelixParticipant implements ClusterParticipant {
    * cluster.
    * @param hostName the hostname to use when registering as a participant.
    * @param port the port to use when registering as a participant.
+   * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void initialize(String hostName, int port, List<HealthReport> healthReports) throws IOException {
+  public void initialize(String hostName, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException {
     logger.info("Initializing participant");
     String instanceName = ClusterMapUtils.getInstanceName(hostName, port);
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
+    registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
+    try {
+      manager.connect();
+    } catch (Exception e) {
+      throw new IOException("Exception while connecting to the Helix manager", e);
+    }
+    for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
+      manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
+    }
+  }
+
+  /**
+   * Register {@link HelixHealthReportAggregatorTask}s for appropriate {@link AmbryHealthReport}s.
+   * @param engine the {@link StateMachineEngine} to register the task state model.
+   * @param healthReports the {@link List} of {@link AmbryHealthReport}s that may require the registration of
+   * corresponding {@link HelixHealthReportAggregatorTask}s.
+   */
+  private void registerHealthReportTasks(StateMachineEngine engine, List<AmbryHealthReport> healthReports) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
-    for (HealthReport healthReport : healthReports) {
-      if (healthReport.getAggregatePeriodInMinutes() != Utils.Infinite_Time) {
-        // enable cluster wide aggregation for the health report
-        final HelixClusterAggregator aggregator =
-            new HelixClusterAggregator(healthReport.getAggregatePeriodInMinutes());
-        final String healthReportName = healthReport.getReportName();
-        final String fieldName = healthReport.getFieldName();
-        taskFactoryMap.put(String.format("%s_%s", HelixAggregateTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
+    for (final AmbryHealthReport healthReport : healthReports) {
+      if (healthReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
+        // register cluster wide aggregation task for the health report
+        taskFactoryMap.put(
+            String.format("%s_%s", HelixHealthReportAggregatorTask.TASK_COMMAND_PREFIX, healthReport.getReportName()),
             new TaskFactory() {
               @Override
               public Task createNewTask(TaskCallbackContext context) {
-                return new HelixAggregateTask(context, aggregator, healthReportName, fieldName);
+                return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
+                    healthReport.getReportName(), healthReport.getFieldName());
               }
             });
       }
     }
     if (!taskFactoryMap.isEmpty()) {
-      stateMachineEngine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
+      engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
           new TaskStateModelFactory(manager, taskFactoryMap));
-    }
-    try {
-      manager.connect();
-      logger.info("Successfully initialized the participant");
-    } catch (Exception e) {
-      throw new IOException("Exception while connecting to the Helix manager", e);
-    }
-    for (HealthReport healthReport : healthReports) {
-      manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) healthReport);
     }
   }
 

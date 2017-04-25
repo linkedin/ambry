@@ -157,19 +157,20 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
-      List<HealthReport> healthReports = new ArrayList<>();
+      logger.info("Creating StatsManager to publish stats");
+      List<PartitionId> partitionIds = new ArrayList<>();
+      for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
+        partitionIds.add(replicaId.getPartitionId());
+      }
+      statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
+      statsManager.start();
+
+      List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       if (serverConfig.serverStatsPublishEnabled) {
-        logger.info("Creating StatsManager to publish stats");
-        List<PartitionId> partitionIds = new ArrayList<>();
-        for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
-          partitionIds.add(replicaId.getPartitionId());
-        }
-        statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
-        statsManager.start();
-        healthReports.add(new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregatePeriodMinutes));
+        ambryHealthReports.add(new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
       }
 
-      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port, healthReports);
+      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port, ambryHealthReports);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;

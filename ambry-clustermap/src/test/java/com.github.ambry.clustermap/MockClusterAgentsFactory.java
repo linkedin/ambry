@@ -13,7 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.server.HealthReport;
+import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.List;
 
@@ -47,7 +47,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override
-        public void initialize(String hostname, int port, List<HealthReport> healthReports) {
+        public void initialize(String hostname, int port, List<AmbryHealthReport> ambryHealthReports) {
 
         }
 

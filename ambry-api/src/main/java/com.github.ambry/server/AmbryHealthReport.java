@@ -14,10 +14,13 @@
 
 package com.github.ambry.server;
 
+import java.util.Map;
+
+
 /**
  * Health report for reporting various stats within a node.
  */
-public interface HealthReport {
+public interface AmbryHealthReport {
   /**
    * Get the field name (accessor) for the stats in the health report.
    * @return the key in the health report that holds the stats
@@ -31,8 +34,14 @@ public interface HealthReport {
   String getReportName();
 
   /**
+   * Get the most recent health report in the form of a {@link Map}.
+   * @return a {@link Map} of String to String containing the content of the health report
+   */
+  public Map<String, String> getRecentHealthReport();
+
+  /**
    * Get the cluster wide aggregate period for the health report in minutes.
    * @return the cluster wide aggregate period in minutes
    */
-  long getAggregatePeriodInMinutes();
+  long getAggregateIntervalInMinutes();
 }

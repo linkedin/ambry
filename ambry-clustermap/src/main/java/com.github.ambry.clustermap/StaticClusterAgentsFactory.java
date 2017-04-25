@@ -15,7 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.server.HealthReport;
+import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.List;
 import org.json.JSONException;
@@ -73,7 +73,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override
-        public void initialize(String hostname, int port, List<HealthReport> healthReports) {
+        public void initialize(String hostname, int port, List<AmbryHealthReport> ambryHealthReports) {
 
         }
 

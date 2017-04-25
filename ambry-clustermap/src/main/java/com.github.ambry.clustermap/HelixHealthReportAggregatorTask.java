@@ -15,8 +15,10 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixProperty;
@@ -28,19 +30,20 @@ import org.apache.helix.task.TaskResult;
 import org.apache.helix.task.UserContentStore;
 
 
-class HelixAggregateTask extends UserContentStore implements Task {
+class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   public static final String TASK_COMMAND_PREFIX = "aggregate";
   private static final String RAW_VALID_SIZE_FIELD_NAME = "raw_valid_data_size";
   private static final String VALID_SIZE_FIELD_NAME = "valid_data_size";
+  private static final String TIMESTAMP_FIELD_NAME = "timestamp";
   private final HelixManager manager;
   private final HelixClusterAggregator clusterAggregator;
   private final String healthReportId;
   private final String fieldName;
 
-  HelixAggregateTask(TaskCallbackContext context, HelixClusterAggregator aggregator, String healthReportId,
+  HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportId,
       String fieldName) {
     manager = context.getManager();
-    clusterAggregator = aggregator;
+    clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
     this.healthReportId = healthReportId;
     this.fieldName = fieldName;
   }
@@ -63,8 +66,9 @@ class HelixAggregateTask extends UserContentStore implements Task {
       ZNRecord znRecord = new ZNRecord(resultId);
       znRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, results.getFirst());
       znRecord.setSimpleField(VALID_SIZE_FIELD_NAME, results.getSecond());
+      znRecord.setSimpleField(TIMESTAMP_FIELD_NAME, String.valueOf(SystemTime.getInstance().milliseconds()));
       String path = String.format("/%s", resultId);
-      manager.getHelixPropertyStore().set(path, znRecord, 1);
+      manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
     } catch (Exception e) {
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
