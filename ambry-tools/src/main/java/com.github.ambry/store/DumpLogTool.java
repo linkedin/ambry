@@ -92,9 +92,8 @@ public class DumpLogTool {
 
   public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-    String storeId = verifiableProperties.getString("storeId", "dummy");
     MetricRegistry registry = new MetricRegistry();
-    StoreToolsMetrics metrics = new StoreToolsMetrics(registry, storeId);
+    StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
     JmxReporter reporter = null;
     try {
       reporter = JmxReporter.forRegistry(registry).build();

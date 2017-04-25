@@ -80,9 +80,8 @@ public class ConsistencyCheckerTool {
 
   public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-    String storeId = verifiableProperties.getString("storeId", "dummy");
     MetricRegistry registry = new MetricRegistry();
-    StoreToolsMetrics metrics = new StoreToolsMetrics(registry, storeId);
+    StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
     JmxReporter reporter = null;
     try {
       reporter = JmxReporter.forRegistry(registry).build();
@@ -206,24 +205,9 @@ public class ConsistencyCheckerTool {
           acceptableInconsistentBlobs++;
         } else {
           if (consistencyBlobResult.belongsToRecentIndexSegment()) {
-            // if blob belongs to recent index segments, then possible inconsistent due to replication lag.
-            if ((consistencyBlobResult.getAvailableList().size() + consistencyBlobResult.getUnavailableList().size()
-                != replicaCount) && (
-                consistencyBlobResult.getAvailableList().size() + consistencyBlobResult.getDeletedOrExpiredList().size()
-                    != replicaCount)) {
-              // cases that could happen due to replication lag. If not for below cases, they are real inconsistent blobs
-              // available count + unavailable count = total replica count
-              // available count + deleted count = total replica count
-              logger.error("Inconsistent Blob in recent index segment : {}  isDeletedOrExpired \n {}", blobId,
-                  consistencyBlobResult.isDeletedOrExpired(), consistencyBlobResult);
-              realInconsistentBlobs.add(blobId);
-              earliestRealInconsistentBlobTimeMs =
-                  Math.min(earliestRealInconsistentBlobTimeMs, consistencyBlobResult.getOpTime());
-            } else {
-              logger.debug("Inconsistent blob found possibly due to replication {} Status map {} ", blobId,
-                  consistencyBlobResult);
-              inconsistentDueToReplicationCount.incrementAndGet();
-            }
+            logger.debug("Inconsistent blob found possibly due to replication {} Status map {} ", blobId,
+                consistencyBlobResult);
+            inconsistentDueToReplicationCount.incrementAndGet();
           } else {
             logger.error("Inconsistent blob found {} Status map {}", blobId, consistencyBlobResult);
             realInconsistentBlobs.add(blobId);

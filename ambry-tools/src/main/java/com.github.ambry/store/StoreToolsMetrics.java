@@ -42,42 +42,36 @@ public class StoreToolsMetrics {
   final Counter logRangeNotFoundInIndexError;
   final Counter indexLogEndOffsetMisMatchError;
 
-  StoreToolsMetrics(MetricRegistry registry, String storeId) {
-    String metricsPrefix = storeId + ".";
-    dumpIndexTimeMs = registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "DumpIndexTimeMs"));
-    dumpReplicaIndexesTimeMs =
-        registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "DumpReplicaIndexesTimeMs"));
-    dumpLogTimeMs = registry.timer(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "DumpLogTimeMs"));
+  StoreToolsMetrics(MetricRegistry registry) {
+    dumpIndexTimeMs = registry.timer(MetricRegistry.name(DumpIndexTool.class, "DumpIndexTimeMs"));
+    dumpReplicaIndexesTimeMs = registry.timer(MetricRegistry.name(DumpIndexTool.class, "DumpReplicaIndexesTimeMs"));
+    dumpLogTimeMs = registry.timer(MetricRegistry.name(DumpLogTool.class, "DumpLogTimeMs"));
     findAllEntriesPerIndexTimeMs =
-        registry.timer(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "FindAllEntriesPerIndexTimeMs"));
+        registry.timer(MetricRegistry.name(DumpIndexTool.class, "FindAllEntriesPerIndexTimeMs"));
     readSingleBlobRecordFromLogTimeMs =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "ReadSingleBlobRecordFromLogTimeMs"));
-    readFromLogAndVerifyTimeMs =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "ReadFromLogAndVerifyTimeMs"));
+        registry.timer(MetricRegistry.name(DumpDataTool.class, "ReadSingleBlobRecordFromLogTimeMs"));
+    readFromLogAndVerifyTimeMs = registry.timer(MetricRegistry.name(DumpDataTool.class, "ReadFromLogAndVerifyTimeMs"));
     compareIndexFileToLogTimeMs =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "CompareIndexFileToLogTimeMs"));
+        registry.timer(MetricRegistry.name(DumpDataTool.class, "CompareIndexFileToLogTimeMs"));
     compareReplicaIndexFilesToLogTimeMs =
-        registry.timer(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "CompareReplicaIndexFilesToLogTimeMs"));
+        registry.timer(MetricRegistry.name(DumpDataTool.class, "CompareReplicaIndexFilesToLogTimeMs"));
 
-    logDeserializationError =
-        registry.counter(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "LogDeserializationErrorCount"));
-    endOfFileOnDumpLogError =
-        registry.counter(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "EndOfFileOnDumpLogErrorCount"));
+    logDeserializationError = registry.counter(MetricRegistry.name(DumpLogTool.class, "LogDeserializationErrorCount"));
+    endOfFileOnDumpLogError = registry.counter(MetricRegistry.name(DumpLogTool.class, "EndOfFileOnDumpLogErrorCount"));
     unknownErrorOnDumpIndex =
-        registry.counter(MetricRegistry.name(DumpIndexTool.class, metricsPrefix + "UnknownErrorOnDumpIndexCount"));
-    unknownErrorOnDumpLog =
-        registry.counter(MetricRegistry.name(DumpLogTool.class, metricsPrefix + "UnknownErrorOnDumpLogCount"));
-    indexToLogDeleteFlagMisMatchError = registry.counter(
-        MetricRegistry.name(DumpDataTool.class, metricsPrefix + "IndexToLogDeleteFlagMisMatchErrorCount"));
+        registry.counter(MetricRegistry.name(DumpIndexTool.class, "UnknownErrorOnDumpIndexCount"));
+    unknownErrorOnDumpLog = registry.counter(MetricRegistry.name(DumpLogTool.class, "UnknownErrorOnDumpLogCount"));
+    indexToLogDeleteFlagMisMatchError =
+        registry.counter(MetricRegistry.name(DumpDataTool.class, "IndexToLogDeleteFlagMisMatchErrorCount"));
     indexToLogExpiryMisMatchError =
-        registry.counter(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "IndexToLogExpiryMisMatchErrorCount"));
+        registry.counter(MetricRegistry.name(DumpDataTool.class, "IndexToLogExpiryMisMatchErrorCount"));
     indexToLogBlobIdMisMatchError =
-        registry.counter(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "IndexToLogBlobIdMisMatchErrorCount"));
-    indexToLogBlobRecordComparisonFailure = registry.counter(
-        MetricRegistry.name(DumpDataTool.class, metricsPrefix + "IndexToLogBlobRecordComparisonFailureCount"));
+        registry.counter(MetricRegistry.name(DumpDataTool.class, "IndexToLogBlobIdMisMatchErrorCount"));
+    indexToLogBlobRecordComparisonFailure =
+        registry.counter(MetricRegistry.name(DumpDataTool.class, "IndexToLogBlobRecordComparisonFailureCount"));
     logRangeNotFoundInIndexError =
-        registry.counter(MetricRegistry.name(DumpDataTool.class, metricsPrefix + "LogRangeNotFoundInIndexErrorCount"));
-    indexLogEndOffsetMisMatchError = registry.counter(
-        MetricRegistry.name(DumpDataTool.class, metricsPrefix + "IndexLogEndOffsetMisMatchErrorCount"));
+        registry.counter(MetricRegistry.name(DumpDataTool.class, "LogRangeNotFoundInIndexErrorCount"));
+    indexLogEndOffsetMisMatchError =
+        registry.counter(MetricRegistry.name(DumpDataTool.class, "IndexLogEndOffsetMisMatchErrorCount"));
   }
 }
