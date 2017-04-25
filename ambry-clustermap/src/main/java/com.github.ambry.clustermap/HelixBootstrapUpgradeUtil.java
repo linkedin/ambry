@@ -346,7 +346,7 @@ class HelixBootstrapUpgradeUtil {
     boolean instanceConfigUpdated = false;
     Map<String, String> diskInfo = instanceConfig.getRecord().getMapField(mountPath);
     String currentReplicasStr = diskInfo.get(ClusterMapUtils.REPLICAS_STR);
-    String newReplicaStr = "";
+    StringBuilder newReplicaStrBuilder = new StringBuilder();
     List<String> replicaInfoList = Arrays.asList(currentReplicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR));
     for (String replicaInfo : replicaInfoList) {
       String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
@@ -356,8 +356,12 @@ class HelixBootstrapUpgradeUtil {
           info[1] = Long.toString(actualReplicaCapacity);
         }
       }
-      newReplicaStr += info[0] + ClusterMapUtils.REPLICAS_STR_SEPARATOR + info[1] + ClusterMapUtils.REPLICAS_DELIM_STR;
+      newReplicaStrBuilder.append(info[0])
+          .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
+          .append(info[1])
+          .append(ClusterMapUtils.REPLICAS_DELIM_STR);
     }
+    String newReplicaStr = newReplicaStrBuilder.toString();
     if (!currentReplicasStr.equals(newReplicaStr)) {
       diskInfo.put(ClusterMapUtils.REPLICAS_STR, newReplicaStr);
       instanceConfig.getRecord().setMapField(mountPath, diskInfo);
