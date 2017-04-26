@@ -33,7 +33,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,14 +69,14 @@ public class DumpLogTool {
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     blobIdList = verifiableProperties.getString("blobId.list", "");
-    logStartOffset = verifiableProperties.getInt("log.start.offset", -1);
-    logEndOffset = verifiableProperties.getInt("log.end.offset", -1);
+    logStartOffset = verifiableProperties.getLong("log.start.offset", -1);
+    logEndOffset = verifiableProperties.getLong("log.end.offset", -1);
     blobsPerSec = verifiableProperties.getLong("bytes.per.sec", 100);
     silent = verifiableProperties.getBoolean("silent", true);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
@@ -184,7 +183,7 @@ public class DumpLogTool {
             DumpDataHelper.readSingleRecordFromLog(randomAccessFile, currentOffset, clusterMap, currentTimeInMs,
                 metrics);
         if (throttler != null) {
-          throttler.maybeThrottle(1);
+          throttler.maybeThrottle(logBlobRecordInfo.totalRecordSize);
         }
         if (lastBlobFailed && !silent) {
           logger.info("Successful record found at " + currentOffset + " after some failures ");
@@ -193,7 +192,7 @@ public class DumpLogTool {
         if (!logBlobRecordInfo.isDeleted) {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              logger.trace("{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+              logger.info("{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                   logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
@@ -208,7 +207,7 @@ public class DumpLogTool {
         } else {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              logger.trace("{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+              logger.info("{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                   logBlobRecordInfo.deleteMsg);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
