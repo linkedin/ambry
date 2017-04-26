@@ -213,7 +213,8 @@ public class IndexTest {
           verifyBlobReadOptions(id, getOptions, expectedErrorCode);
         } else if (state.deletedKeys.contains(id)) {
           StoreErrorCodes expectedErrorCode =
-              getOptions.contains(StoreGetOptions.Store_Include_Deleted) ? null : StoreErrorCodes.ID_Deleted;
+              state.getExpectedValue(id, true) != null && getOptions.contains(StoreGetOptions.Store_Include_Deleted)
+                  ? null : StoreErrorCodes.ID_Deleted;
           verifyBlobReadOptions(id, getOptions, expectedErrorCode);
         }
       }
@@ -397,13 +398,14 @@ public class IndexTest {
   @Test
   public void expirationTest() throws InterruptedException, IOException, StoreException {
 
-    // add a PUT entry that will expire if time advances by 1 second
+    // add a PUT entry that will expire if time advances
     // advance time so that time moves to whole second with no residual milliseconds
     state.time.sleep(Time.MsPerSec - state.time.milliseconds());
-    state.addPutEntries(1, 1, state.time.milliseconds());
+    long expiresAtMs = state.time.milliseconds() + CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS + 1000;
+    state.addPutEntries(1, 1, expiresAtMs);
     MockId id = state.logOrder.lastEntry().getValue().getFirst();
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), null);
-    state.advanceTime(Time.MsPerSec);
+    state.advanceTime(expiresAtMs - state.time.milliseconds() + TimeUnit.SECONDS.toMillis(1));
     verifyBlobReadOptions(id, EnumSet.noneOf(StoreGetOptions.class), StoreErrorCodes.TTL_Expired);
   }
 
@@ -663,9 +665,6 @@ public class IndexTest {
     // recovery info contains a DELETE for a key that has been deleted
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true);
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
-    // recovery info that contains a DELETE for a key that has no PUT record
-    info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true);
-    doRecoveryFailureTest(info, StoreErrorCodes.ID_Not_Found);
     // recovery info that contains a PUT beyond the end offset of the log segment
     info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE);
     doRecoveryFailureTest(info, StoreErrorCodes.Index_Creation_Failure);
@@ -1446,7 +1445,7 @@ public class IndexTest {
     LogSegment activeSegment = state.log.getSegment(indexEndOffsetBeforeRecovery.getName());
     // recover a few messages across segments
     final List<MessageInfo> activeSegmentInfos = new ArrayList<>();
-    // 1 PUT record that will be deleted in the next segment
+    // 1 PUT record that will be deleted in the next log segment
     MockId idToCreateAndDeleteAcrossSegments = state.getUniqueId();
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
     activeSegmentInfos.add(new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE));
@@ -1503,7 +1502,7 @@ public class IndexTest {
    */
   private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos(MockId idToCreateAndDelete) throws IOException {
     List<MessageInfo> infos = new ArrayList<>();
-    state.appendToLog(2 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE);
+    state.appendToLog(3 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // 1 DELETE for a PUT not in the infos
     infos.add(new MessageInfo(state.getIdToDeleteFromLogSegment(state.log.getFirstSegment()),
         CuratedLogIndexState.DELETE_RECORD_SIZE, true));
@@ -1515,6 +1514,8 @@ public class IndexTest {
     infos.add(new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true));
     // 1 expired PUT
     infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE, 0));
+    // 1 delete for PUT that does not exist in the index
+    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true));
     return infos;
   }
 
@@ -1813,10 +1814,11 @@ public class IndexTest {
       if (putDelete.getSecond() == null) {
         assertEquals("Inconsistent size", value.getSize(), info.getSize());
       }
+      long expiresAtMs = value != null ? value.getExpiresAtMs() : putDelete.getSecond().getExpiresAtMs();
       // if a key is deleted, it doesn't matter if we reached the delete record or not, the delete state will be
       // the one that is returned.
       assertEquals("Inconsistent delete state ", putDelete.getSecond() != null, info.isDeleted());
-      assertEquals("Inconsistent expiresAtMs", value.getExpiresAtMs(), info.getExpirationTimeInMs());
+      assertEquals("Inconsistent expiresAtMs", expiresAtMs, info.getExpirationTimeInMs());
       keysExamined.add(info.getStoreKey());
     }
     assertEquals("All keys should be present", expectedKeys, keysExamined);
