@@ -158,8 +158,8 @@ class DiskManager {
       }
       compactionManager.awaitTermination();
       diskIOScheduler.close();
-      longLiveTaskScheduler.shutdown();
-      if (!longLiveTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
+      longLivedTaskScheduler.shutdown();
+      if (!longLivedTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
         logger.error("Could not terminate long live tasks after DiskManager shutdown");
       }
     } finally {
@@ -213,7 +213,7 @@ class DiskManager {
     Throttler compactionCopyThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, 1000, true, time);
     throttlers.put(BlobStoreCompactor.LOG_SEGMENT_COPY_JOB_NAME, compactionCopyThrottler);
     // stats
-    Throttler statsIndexScanThrottler = new Throttler(config.storeStatsIndexSegmentPerSecs, 1000, true, time);
+    Throttler statsIndexScanThrottler = new Throttler(config.storeStatsIndexEntriesPerSecond, 1000, true, time);
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, statsIndexScanThrottler);
     return throttlers;
   }

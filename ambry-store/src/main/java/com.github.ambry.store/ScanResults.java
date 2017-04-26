@@ -26,22 +26,18 @@ import java.util.TreeMap;
  * used to modify and access the stored data structures.
  */
 class ScanResults {
-  /**
-   * A {@link NavigableMap} that stores buckets for container valid data size. The key of the map is the end time of
-   * each bucket and the value is the corresponding valid data size map. For example, there are two buckets with end
-   * time t1 and t2. Bucket with end time t2 includes all events whose operation time is greater than or equal to t1 but
-   * strictly less than t2.
-   * Each bucket except for the very first one contains the delta in valid data size that occurred prior to the bucket
-   * end time. The very first bucket's end time is the forecast start time for containers and it contains the valid data
-   * size map at the forecast start time. The very first bucket is used as a base value, requested valid data size is
-   * computed by applying the deltas from appropriate buckets on the base value.
-   */
+  // A NavigableMap that stores buckets for container valid data size. The key of the map is the end time of each
+  // bucket and the value is the corresponding valid data size map. For example, there are two buckets with end time
+  // t1 and t2. Bucket with end time t2 includes all events whose operation time is greater than or equal to t1 but
+  // strictly less than t2.
+  // Each bucket except for the very first one contains the delta in valid data size that occurred prior to the bucket
+  // end time. The very first bucket's end time is the forecast start time for containers and it contains the valid data
+  // size map at the forecast start time. The very first bucket is used as a base value, requested valid data size is
+  // computed by applying the deltas from appropriate buckets on the base value.
   private final NavigableMap<Long, Map<String, Map<String, Long>>> containerBuckets = new TreeMap<>();
 
-  /**
-   * A {@link NavigableMap} that stores buckets for log segment valid data size. The rest of the structure is similar
-   * to containerBuckets.
-   */
+  // A NavigableMap that stores buckets for log segment valid data size. The rest of the structure is similar
+  // to containerBuckets.
   private final NavigableMap<Long, NavigableMap<String, Long>> logSegmentBuckets = new TreeMap<>();
 
   final long containerForecastStartTimeMs;
@@ -122,8 +118,8 @@ class ScanResults {
    */
   void updateContainerBucket(Long bucketKey, String serviceId, String containerId, long value) {
     if (bucketKey != null && containerBuckets.containsKey(bucketKey)) {
-      Map<String, Map<String, Long>> deltaInValidDataSize = containerBuckets.get(bucketKey);
-      updateNestedMapHelper(deltaInValidDataSize, serviceId, containerId, value);
+      Map<String, Map<String, Long>> existingBucketEntry = containerBuckets.get(bucketKey);
+      updateNestedMapHelper(existingBucketEntry, serviceId, containerId, value);
     }
   }
 
@@ -135,8 +131,8 @@ class ScanResults {
    */
   void updateLogSegmentBucket(Long bucketKey, String logSegmentName, long value) {
     if (bucketKey != null && logSegmentBuckets.containsKey(bucketKey)) {
-      Map<String, Long> deltaInValidSize = logSegmentBuckets.get(bucketKey);
-      updateMapHelper(deltaInValidSize, logSegmentName, value);
+      Map<String, Long> existingBucketEntry = logSegmentBuckets.get(bucketKey);
+      updateMapHelper(existingBucketEntry, logSegmentName, value);
     }
   }
 

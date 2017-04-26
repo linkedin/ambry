@@ -139,8 +139,8 @@ class BlobStore implements Store {
         blobStoreStats =
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
                 logSegmentForecastOffsetMs, config.storeStatsWaitTimeoutInSecs,
-                config.storeStatsRecentEntryProcessingIntervalInMinutes, time, longLivedTaskScheduler, taskScheduler,
-                diskIOScheduler, metrics);
+                TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes), time,
+                longLivedTaskScheduler, taskScheduler, diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();

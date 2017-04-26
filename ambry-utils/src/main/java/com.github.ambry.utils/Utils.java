@@ -240,7 +240,6 @@ public class Utils {
         new ScheduledThreadPoolExecutor(numThreads, new SchedulerThreadFactory(threadNamePrefix, isDaemon));
     scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
     scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-    scheduler.setRemoveOnCancelPolicy(true);
     return scheduler;
   }
 

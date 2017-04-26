@@ -137,7 +137,7 @@ public class StoreConfig {
    * The number of buckets for stats bucketing, a value of 0 will disable bucketing.
    */
   @Config("store.stats.bucket.count")
-  @Default("24")
+  @Default("0")
   public final int storeStatsBucketCount;
 
   /**
@@ -159,15 +159,15 @@ public class StoreConfig {
    * to complete.
    */
   @Config("store.stats.wait.timeout.in.secs")
-  @Default("60")
+  @Default("2*60")
   public final long storeStatsWaitTimeoutInSecs;
 
   /**
-   * Specifies the number of index segments that can be read per second for stats collection.
+   * Specifies the number of index entries that can be read per second for stats collection.
    */
-  @Config("store.stats.index.segment.per.secs")
-  @Default("1")
-  public final int storeStatsIndexSegmentPerSecs;
+  @Config("store.stats.index.entries.per.second")
+  @Default("2400000")
+  public final int storeStatsIndexEntriesPerSecond;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -196,15 +196,15 @@ public class StoreConfig {
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
-    storeStatsBucketCount = verifiableProperties.getIntInRange("store.stats.bucket.count", 24, 0, 10000);
+    storeStatsBucketCount = verifiableProperties.getIntInRange("store.stats.bucket.count", 0, 0, 10000);
     storeStatsBucketSpanInMinutes =
         verifiableProperties.getLongInRange("store.stats.bucket.span.in.minutes", 60, 1, 10000);
     storeStatsRecentEntryProcessingIntervalInMinutes =
         verifiableProperties.getLongInRange("store.stats.recent.entry.processing.interval.in.minutes", 2, 1, 60);
     storeStatsWaitTimeoutInSecs =
         verifiableProperties.getLongInRange("store.stats.wait.timeout.in.secs", 2 * 60, 0, 30 * 60);
-    storeStatsIndexSegmentPerSecs =
-        verifiableProperties.getIntInRange("store.stats.index.segment.per.secs", 1, 1, 1000);
+    storeStatsIndexEntriesPerSecond =
+        verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 2400000, 1, Integer.MAX_VALUE);
   }
 }
 
