@@ -44,7 +44,7 @@ class BlobStatus {
     }
   }
 
-  Set<String> getAvailableList() {
+  Set<String> getAvailableReplicaSet() {
     return available;
   }
 
@@ -56,11 +56,11 @@ class BlobStatus {
     }
   }
 
-  Set<String> getDeletedOrExpiredList() {
+  Set<String> getDeletedOrExpiredReplicaSet() {
     return deletedOrExpired;
   }
 
-  Set<String> getUnavailableList() {
+  Set<String> getUnavailableReplicaSet() {
     return unavailable;
   }
 

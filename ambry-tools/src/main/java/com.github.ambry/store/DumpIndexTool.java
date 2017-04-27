@@ -213,18 +213,18 @@ public class DumpIndexTool {
             BlobStatus mapValue = blobIdToStatusMap.get(key);
             mapValue.setBelongsToRecentIndexSegment(recentIndexSegment);
             if (isDeleted(indexValue) || DumpDataHelper.isExpired(indexValue.getExpiresAtMs(), currentTimeInMs)) {
-              if (mapValue.getAvailableList().contains(replica)) {
+              if (mapValue.getAvailableReplicaSet().contains(replica)) {
                 indexStats.incrementTotalDeleteRecords();
-              } else if (mapValue.getDeletedOrExpiredList().contains(replica)) {
+              } else if (mapValue.getDeletedOrExpiredReplicaSet().contains(replica)) {
                 indexStats.incrementTotalDuplicateDeleteRecords();
               }
               mapValue.addDeletedOrExpired(replica, lastModifiedTimeMs.get());
             } else {
-              if (mapValue.getDeletedOrExpiredList().contains(replica)) {
+              if (mapValue.getDeletedOrExpiredReplicaSet().contains(replica)) {
                 logger.error("Put Record found after delete record for {} in replica ", key, replica);
                 indexStats.incrementTotalPutAfterDeleteRecords();
               }
-              if (mapValue.getAvailableList().contains(replica)) {
+              if (mapValue.getAvailableReplicaSet().contains(replica)) {
                 logger.error("Duplicate Put record found for {} in replica ", key, replica);
                 indexStats.incrementTotalDuplicatePutRecords();
               }

@@ -299,7 +299,7 @@ public class BlobValidator {
   private void validate(String[] values) {
     for (String value : values) {
       if (value == null) {
-        logger.error("Value " + value + " has to be set");
+        logger.error("Value {} has to be set ", value);
         System.exit(0);
       }
     }
@@ -331,7 +331,7 @@ public class BlobValidator {
         BlobId blobId = new BlobId(blobIdStr, map);
         blobIdSet.add(blobId);
       } catch (Exception e) {
-        logger.error("Exception thrown for blobId " + blobIdStr, e);
+        logger.error("Exception thrown for blobId {}", blobIdStr, e);
         invalidBlobs.put(blobIdStr, e);
       }
     }
@@ -341,11 +341,11 @@ public class BlobValidator {
   private void validateBlobOnAllReplicas(Set<BlobId> blobIdSet, ClusterMap clusterMap, boolean expiredBlobs)
       throws InterruptedException {
     for (BlobId blobId : blobIdSet) {
-      logger.info("Validating blob " + blobId + " on all replicas");
+      logger.info("Validating blob {} on all replicas", blobId);
       validateBlobOnAllReplicas(blobId, clusterMap, expiredBlobs);
     }
     if (invalidBlobs.size() != 0) {
-      logger.error("Invalid blobIds " + invalidBlobs);
+      logger.error("Invalid blobIds {}", invalidBlobs);
     }
   }
 
@@ -378,15 +378,15 @@ public class BlobValidator {
       errorLoggingRequired = true;
     }
     if (errorLoggingRequired) {
-      logger.error("Summary of responses for " + blobId);
+      logger.error("Summary of responses for {}", blobId);
     } else {
-      logger.debug("Summary of responses for " + blobId);
+      logger.debug("Summary of responses for {}", blobId);
     }
     for (ServerErrorCode serverErrorCode : responseMap.keySet()) {
       if (errorLoggingRequired) {
-        logger.error(serverErrorCode + ": " + responseMap.get(serverErrorCode));
+        logger.error("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
       } else {
-        logger.debug(serverErrorCode + ": " + responseMap.get(serverErrorCode));
+        logger.debug("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
       }
     }
   }
@@ -394,7 +394,7 @@ public class BlobValidator {
   private void validateBlobOnDatacenter(Set<BlobId> blobIdSet, ClusterMap clusterMap, String datacenter,
       boolean expiredBlobs) {
     for (BlobId blobId : blobIdSet) {
-      logger.debug("Validating blob " + blobId + " on datacenter " + datacenter);
+      logger.debug("Validating blob {} on datacenter {}", blobId, datacenter);
       validateBlobOnDatacenter(blobId, clusterMap, datacenter, expiredBlobs);
     }
   }
@@ -429,15 +429,15 @@ public class BlobValidator {
       errorLoggingRequired = true;
     }
     if (errorLoggingRequired) {
-      logger.error("Summary of responses for " + blobId);
+      logger.error("Summary of responses for {}", blobId);
     } else {
-      logger.debug("Summary of responses for " + blobId);
+      logger.debug("Summary of responses for {}", blobId);
     }
     for (ServerErrorCode serverErrorCode : responseMap.keySet()) {
       if (errorLoggingRequired) {
-        logger.error(serverErrorCode + ": " + responseMap.get(serverErrorCode));
+        logger.error("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
       } else {
-        logger.debug(serverErrorCode + ": " + responseMap.get(serverErrorCode));
+        logger.debug("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
       }
     }
   }
@@ -480,14 +480,14 @@ public class BlobValidator {
       if (targetReplicaId == null) {
         throw new Exception("Can not find blob " + blobId.getID() + " in host " + replicaHost);
       }
-      logger.debug("Validating blob " + blobId + " on replica " + replicaHost + ":" + replicaPort + "\n");
+      logger.debug("Validating blob {} on replica {}:{}\n", blobId, replicaHost, replicaPort);
       ServerErrorCode response = null;
       try {
         response = validateBlobOnReplica(blobId, clusterMap, targetReplicaId, expiredBlobs, replicaIdBlobContentMap);
         if (response == ServerErrorCode.No_Error) {
           logger.trace("Successfully read the blob {}", blobId);
         } else {
-          logger.error("Failed to read the blob " + blobId + " due to " + response);
+          logger.error("Failed to read the blob {} due to {}", blobId, response);
         }
         resultMap.put(blobId, response);
       } catch (MessageFormatException e) {
@@ -500,7 +500,7 @@ public class BlobValidator {
     }
     logger.debug("Overall Summary");
     for (BlobId blobId : resultMap.keySet()) {
-      logger.debug(blobId + " :: " + resultMap.get(blobId));
+      logger.debug("{} :: {}", blobId, resultMap.get(blobId));
     }
   }
 
@@ -707,46 +707,46 @@ public class BlobValidator {
         return false;
       }
       if (blobProperties.getBlobSize() != that.blobProperties.getBlobSize()) {
-        logger.error("Size Mismatch " + blobProperties.getBlobSize() + ", " + that.blobProperties.getBlobSize());
+        logger.error("Size Mismatch {} , ", blobProperties.getBlobSize(), that.blobProperties.getBlobSize());
         return false;
       }
       if (blobProperties.getTimeToLiveInSeconds() != that.blobProperties.getTimeToLiveInSeconds()) {
-        logger.error("TTL Mismatch " + blobProperties.getTimeToLiveInSeconds() + ", "
-            + that.blobProperties.getTimeToLiveInSeconds());
+        logger.error("TTL Mismatch {} , ", blobProperties.getTimeToLiveInSeconds(),
+            that.blobProperties.getTimeToLiveInSeconds());
         return false;
       }
       if (blobProperties.getCreationTimeInMs() != that.blobProperties.getCreationTimeInMs()) {
-        logger.error("CreationTime Mismatch " + blobProperties.getCreationTimeInMs() + ", "
-            + that.blobProperties.getCreationTimeInMs());
+        logger.error("CreationTime Mismatch {} , ", blobProperties.getCreationTimeInMs(),
+            that.blobProperties.getCreationTimeInMs());
 
         return false;
       }
       if (blobProperties.getContentType() != null && that.blobProperties.getContentType() != null
           && (!blobProperties.getContentType().equals(that.blobProperties.getContentType()))) {
-        logger.error(
-            "Content type Mismatch " + blobProperties.getContentType() + ", " + that.blobProperties.getContentType());
+        logger.error("Content type Mismatch {} , ", blobProperties.getContentType(),
+            that.blobProperties.getContentType());
         return false;
       } else if (blobProperties.getContentType() == null || that.blobProperties.getContentType() == null) {
-        logger.error(
-            "ContentType Mismatch " + blobProperties.getContentType() + ", " + that.blobProperties.getContentType());
+        logger.error("ContentType Mismatch {} , ", blobProperties.getContentType(),
+            that.blobProperties.getContentType());
         return false;
       }
 
       if (blobProperties.getOwnerId() != null && that.blobProperties.getOwnerId() != null
           && (!blobProperties.getOwnerId().equals(that.blobProperties.getOwnerId()))) {
-        logger.error("OwnerId Mismatch " + blobProperties.getOwnerId() + ", " + that.blobProperties.getOwnerId());
+        logger.error("OwnerId Mismatch {}, ", blobProperties.getOwnerId(), that.blobProperties.getOwnerId());
         return false;
       } else if (blobProperties.getOwnerId() == null || that.blobProperties.getOwnerId() == null) {
-        logger.error("OwnerId Mismatch " + blobProperties.getOwnerId() + ", " + that.blobProperties.getOwnerId());
+        logger.error("OwnerId Mismatch {} , ", blobProperties.getOwnerId(), that.blobProperties.getOwnerId());
         return false;
       }
 
       if (blobProperties.getServiceId() != null && that.blobProperties.getServiceId() != null
           && (!blobProperties.getServiceId().equals(that.blobProperties.getServiceId()))) {
-        logger.error("ServiceId Mismatch " + blobProperties.getServiceId() + ", " + that.blobProperties.getServiceId());
+        logger.error("ServiceId Mismatch {} , ", blobProperties.getServiceId(), that.blobProperties.getServiceId());
         return false;
       } else if (blobProperties.getServiceId() == null || that.blobProperties.getServiceId() == null) {
-        logger.error("ServiceId Mismatch " + blobProperties.getServiceId() + ", " + that.blobProperties.getServiceId());
+        logger.error("ServiceId Mismatch {} , ", blobProperties.getServiceId(), that.blobProperties.getServiceId());
         return false;
       }
       return true;

@@ -191,12 +191,12 @@ public class ConsistencyCheckerTool {
       BlobStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
       latestOpTimeMs = Math.max(latestOpTimeMs, consistencyBlobResult.getOpTime());
       // valid blobs : count of available replicas = total replica count or count of deleted replicas = total replica count
-      boolean isValid = consistencyBlobResult.getAvailableList().size() == replicaCount
-          || consistencyBlobResult.getDeletedOrExpiredList().size() == replicaCount;
+      boolean isValid = consistencyBlobResult.getAvailableReplicaSet().size() == replicaCount
+          || consistencyBlobResult.getDeletedOrExpiredReplicaSet().size() == replicaCount;
       if (!isValid) {
         totalInconsistentBlobs++;
-        if ((consistencyBlobResult.getDeletedOrExpiredList().size() + consistencyBlobResult.getUnavailableList().size()
-            == replicaCount)) {
+        if ((consistencyBlobResult.getDeletedOrExpiredReplicaSet().size()
+            + consistencyBlobResult.getUnavailableReplicaSet().size() == replicaCount)) {
           // acceptable inconsistent blobs : count of deleted + count of unavailable = total replica count
           if (includeAcceptableInconsistentBlobs) {
             logger.error("Partially deleted (acceptable inconsistency) blob {}  isDeletedOrExpired {} \n {}", blobId,
@@ -228,7 +228,7 @@ public class ConsistencyCheckerTool {
     logger.info("Real Inconsistent blobs count : {} ", realInconsistentBlobs.size());
     if (realInconsistentBlobs.size() > 0) {
       logger.info(
-          "The earliest real inconsistent blob had its last operation at {} ms and diffenrence wrt lateast operation time is {} ms",
+          "The earliest real inconsistent blob had its last operation at {} ms and diffenrence wrt latest operation time is {} ms",
           earliestRealInconsistentBlobTimeMs, latestOpTimeMs - earliestRealInconsistentBlobTimeMs);
     }
   }
