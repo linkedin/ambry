@@ -585,6 +585,7 @@ class PersistentIndex {
       // TODO: change service ID and container ID once the MessageInfo has that info.
       newValue = new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), Utils.Infinite_Time,
           IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+      newValue.clearOriginalMessageOffset();
     } else {
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
           value.getServiceId(), value.getContainerId());
