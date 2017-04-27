@@ -34,6 +34,7 @@ import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -635,7 +636,7 @@ public class Utils {
     if (deltaTimeInSeconds == Infinite_Time || epochTimeInMs == Infinite_Time) {
       return Infinite_Time;
     }
-    return epochTimeInMs + (deltaTimeInSeconds * Time.MsPerSec);
+    return epochTimeInMs + (TimeUnit.MILLISECONDS.toSeconds(deltaTimeInSeconds));
   }
 
   /**

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
@@ -20,7 +21,6 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -28,7 +28,6 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -40,12 +39,16 @@ class DumpDataHelper {
    * Fetches one blob record from the log
    * @param randomAccessFile {@link RandomAccessFile} referring to the log file
    * @param currentOffset the offset at which to read the record from
+   * @param clusterMap the {@link ClusterMap} object to use to generate BlobId
+   * @param currentTimeInMs current time in ms to determine expiration
+   * @param metrics {@link StoreToolsMetrics} instance
    * @return the {@link LogBlobRecordInfo} containing the blob record info
    * @throws IOException
    * @throws MessageFormatException
    */
   static LogBlobRecordInfo readSingleRecordFromLog(RandomAccessFile randomAccessFile, long currentOffset,
-      ClusterMap clusterMap) throws IOException, MessageFormatException {
+      ClusterMap clusterMap, long currentTimeInMs, StoreToolsMetrics metrics)
+      throws IOException, MessageFormatException {
     String messageheader = null;
     BlobId blobId = null;
     String blobProperty = null;
@@ -54,47 +57,52 @@ class DumpDataHelper {
     String deleteMsg = null;
     boolean isDeleted = false;
     boolean isExpired = false;
-    long timeToLiveInSeconds = -1;
+    long expiresAtMs = -1;
     int totalRecordSize = 0;
-    randomAccessFile.seek(currentOffset);
-    short version = randomAccessFile.readShort();
-    if (version == 1) {
-      ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-      buffer.putShort(version);
-      randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
-      buffer.clear();
-      MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
-      messageheader =
-          " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
-              + currentOffset + " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset()
-              + " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
-              + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
-      totalRecordSize += header.getMessageSize() + buffer.capacity();
-      // read blob id
-      InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-      blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
-      totalRecordSize += blobId.sizeInBytes();
-      if (header.getBlobPropertiesRecordRelativeOffset()
-          != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-        BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-        timeToLiveInSeconds = props.getTimeToLiveInSeconds();
-        isExpired = timeToLiveInSeconds != -1 ? isExpired(TimeUnit.SECONDS.toMillis(timeToLiveInSeconds)) : false;
-        blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
-            + ", isExpired " + isExpired;
-        ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-        usermetadata = " Metadata - size " + metadata.capacity();
-        BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
-        blobDataOutput = "Blob - size " + blobData.getSize();
+    final Timer.Context context = metrics.readSingleBlobRecordFromLogTimeMs.time();
+    try {
+      randomAccessFile.seek(currentOffset);
+      short version = randomAccessFile.readShort();
+      if (version == 1) {
+        ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+        buffer.putShort(version);
+        randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+        buffer.clear();
+        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+        messageheader =
+            " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
+                + currentOffset + " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset()
+                + " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
+                + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
+        totalRecordSize += header.getMessageSize() + buffer.capacity();
+        // read blob id
+        InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
+        blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
+        totalRecordSize += blobId.sizeInBytes();
+        if (header.getBlobPropertiesRecordRelativeOffset()
+            != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+          expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
+          isExpired = isExpired(expiresAtMs, currentTimeInMs);
+          blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
+              + ", isExpired " + isExpired;
+          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+          usermetadata = " Metadata - size " + metadata.capacity();
+          BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+          blobDataOutput = "Blob - size " + blobData.getSize();
+        } else {
+          boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
+          isDeleted = true;
+          deleteMsg = "delete change " + deleteFlag;
+        }
       } else {
-        boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
-        isDeleted = true;
-        deleteMsg = "delete change " + deleteFlag;
+        throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
       }
-    } else {
-      throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
+      return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
+          isDeleted, isExpired, expiresAtMs, totalRecordSize);
+    } finally {
+      context.stop();
     }
-    return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
-        isDeleted, isExpired, timeToLiveInSeconds, totalRecordSize);
   }
 
   /**
@@ -109,11 +117,11 @@ class DumpDataHelper {
     final String deleteMsg;
     final boolean isDeleted;
     final boolean isExpired;
-    final long timeToLiveInSeconds;
+    final long expiresAtMs;
     final int totalRecordSize;
 
     LogBlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata,
-        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long timeToLiveInSeconds,
+        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long expiresAtMs,
         int totalRecordSize) {
       this.messageHeader = messageHeader;
       this.blobId = blobId;
@@ -123,17 +131,18 @@ class DumpDataHelper {
       this.deleteMsg = deleteMsg;
       this.isDeleted = isDeleted;
       this.isExpired = isExpired;
-      this.timeToLiveInSeconds = timeToLiveInSeconds;
+      this.expiresAtMs = expiresAtMs;
       this.totalRecordSize = totalRecordSize;
     }
   }
 
   /**
-   * Returns if the blob has been expired or not based on the time to live value
-   * @param timeToLive time in milliseconds referring to the time to live for the blob
+   * Returns if the blob has been expired or not, based on {@code expiresAtMs}.
+   * @param expiresAtMs time in milliseconds referring to the time at which the blob expires.
+   * @param currentTimeInMs current time in ms to determine expiration
    * @return {@code true} if blob has expired, {@code false} otherwise
    */
-  static boolean isExpired(Long timeToLive) {
-    return timeToLive != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > timeToLive;
+  static boolean isExpired(Long expiresAtMs, long currentTimeInMs) {
+    return expiresAtMs != Utils.Infinite_Time && currentTimeInMs > expiresAtMs;
   }
 }

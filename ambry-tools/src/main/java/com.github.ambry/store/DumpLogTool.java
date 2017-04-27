@@ -13,6 +13,9 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
@@ -30,7 +33,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,37 +55,55 @@ public class DumpLogTool {
   private final long logStartOffset;
   // The offset in the log until which to dump data
   private final long logEndOffset;
-  // The throttling value in bytes per sec
-  private final long bytesPerSec;
+  // The throttling value in blobs per sec
+  private final long blobsPerSec;
+  // set to true if only error logging is required
+  private final boolean silent;
+  private final long currentTimeInMs;
+  private final StoreToolsMetrics metrics;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpLogTool.class);
 
-  public DumpLogTool(VerifiableProperties verifiableProperties) throws Exception {
+  public DumpLogTool(VerifiableProperties verifiableProperties, StoreToolsMetrics metrics) throws Exception {
     fileToRead = verifiableProperties.getString("file.to.read");
     hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     blobIdList = verifiableProperties.getString("blobId.list", "");
-    logStartOffset = verifiableProperties.getInt("log.start.offset", -1);
-    logEndOffset = verifiableProperties.getInt("log.end.offset", -1);
-    bytesPerSec = verifiableProperties.getLong("bytes.per.sec", 0);
+    logStartOffset = verifiableProperties.getLong("log.start.offset", -1);
+    logEndOffset = verifiableProperties.getLong("log.end.offset", -1);
+    blobsPerSec = verifiableProperties.getLong("bytes.per.sec", 100);
+    silent = verifiableProperties.getBoolean("silent", true);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
-    if (bytesPerSec > 0) {
-      this.throttler = new Throttler(bytesPerSec, 100, true, SystemTime.getInstance());
-    } else if (bytesPerSec < 0) {
-      throw new IllegalArgumentException("BytesPerSec " + bytesPerSec + " cannot be negative ");
+    if (blobsPerSec > 0) {
+      this.throttler = new Throttler(blobsPerSec, 1000, true, SystemTime.getInstance());
+    } else if (blobsPerSec < 0) {
+      throw new IllegalArgumentException("BlobsPerSec " + blobsPerSec + " cannot be negative ");
     }
+    currentTimeInMs = SystemTime.getInstance().milliseconds();
+    this.metrics = metrics;
   }
 
   public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
-    DumpLogTool dumpLogTool = new DumpLogTool(verifiableProperties);
-    dumpLogTool.doOperation();
+    MetricRegistry registry = new MetricRegistry();
+    StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
+    JmxReporter reporter = null;
+    try {
+      reporter = JmxReporter.forRegistry(registry).build();
+      reporter.start();
+      DumpLogTool dumpLogTool = new DumpLogTool(verifiableProperties, metrics);
+      dumpLogTool.doOperation();
+    } finally {
+      if (reporter != null) {
+        reporter.stop();
+      }
+    }
   }
 
   /**
@@ -100,7 +120,7 @@ public class DumpLogTool {
       logger.info("Blobs to look out for :: " + blobs);
     }
 
-    if (fileToRead != null) {
+    if (fileToRead != null && !silent) {
       logger.info("File to read " + fileToRead);
     }
     dumpLog(new File(fileToRead), logStartOffset, logEndOffset, blobs);
@@ -116,16 +136,21 @@ public class DumpLogTool {
    */
   private void dumpLog(File logFile, long startOffset, long endOffset, ArrayList<String> blobs) throws IOException {
     Map<String, LogBlobStatus> blobIdToLogRecord = new HashMap<>();
-    dumpLog(logFile, startOffset, endOffset, blobs, blobIdToLogRecord);
-    long totalInConsistentBlobs = 0;
-    for (String blobId : blobIdToLogRecord.keySet()) {
-      LogBlobStatus logBlobStatus = blobIdToLogRecord.get(blobId);
-      if (!logBlobStatus.isConsistent) {
-        totalInConsistentBlobs++;
-        logger.error("Inconsistent blob " + blobId + " " + logBlobStatus);
+    final Timer.Context context = metrics.dumpLogTimeMs.time();
+    try {
+      dumpLog(logFile, startOffset, endOffset, blobs, blobIdToLogRecord);
+      long totalInConsistentBlobs = 0;
+      for (String blobId : blobIdToLogRecord.keySet()) {
+        LogBlobStatus logBlobStatus = blobIdToLogRecord.get(blobId);
+        if (!logBlobStatus.isConsistent) {
+          totalInConsistentBlobs++;
+          logger.error("Inconsistent blob " + blobId + " " + logBlobStatus);
+        }
       }
+      logger.info("Total inconsistent blob count " + totalInConsistentBlobs);
+    } finally {
+      context.stop();
     }
-    logger.info("Total inconsistent blob count " + totalInConsistentBlobs);
   }
 
   /**
@@ -155,23 +180,24 @@ public class DumpLogTool {
     while (currentOffset < endOffset) {
       try {
         DumpDataHelper.LogBlobRecordInfo logBlobRecordInfo =
-            DumpDataHelper.readSingleRecordFromLog(randomAccessFile, currentOffset, clusterMap);
+            DumpDataHelper.readSingleRecordFromLog(randomAccessFile, currentOffset, clusterMap, currentTimeInMs,
+                metrics);
         if (throttler != null) {
           throttler.maybeThrottle(logBlobRecordInfo.totalRecordSize);
         }
-        if (lastBlobFailed) {
+        if (lastBlobFailed && !silent) {
           logger.info("Successful record found at " + currentOffset + " after some failures ");
         }
         lastBlobFailed = false;
         if (!logBlobRecordInfo.isDeleted) {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              logger.trace("{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+              logger.info("{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                   logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
-          } else {
+          } else if (!silent) {
             logger.info("{}\n{}\n{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                 logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput,
                 (currentOffset + logBlobRecordInfo.totalRecordSize));
@@ -181,13 +207,13 @@ public class DumpLogTool {
         } else {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              logger.trace("{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+              logger.info("{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                   logBlobRecordInfo.deleteMsg);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
-          } else {
-            logger.trace("{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+          } else if (!silent) {
+            logger.info("{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
                 logBlobRecordInfo.deleteMsg, (currentOffset + logBlobRecordInfo.totalRecordSize));
             updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                 !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
@@ -196,6 +222,7 @@ public class DumpLogTool {
         currentOffset += (logBlobRecordInfo.totalRecordSize);
       } catch (IllegalArgumentException e) {
         if (!lastBlobFailed) {
+          metrics.logDeserializationError.inc();
           logger.error("Illegal arg exception thrown at  " + randomAccessFile.getChannel().position() + ", "
               + "while reading blob starting at offset " + currentOffset + "with exception: ", e);
         }
@@ -203,20 +230,25 @@ public class DumpLogTool {
         lastBlobFailed = true;
       } catch (MessageFormatException e) {
         if (!lastBlobFailed) {
+          metrics.logDeserializationError.inc();
           logger.error("MessageFormat exception thrown at  " + randomAccessFile.getChannel().position()
               + " while reading blob starting at offset " + currentOffset + " with exception: ", e);
         }
         currentOffset++;
         lastBlobFailed = true;
       } catch (EOFException e) {
+        metrics.endOfFileOnDumpLogError.inc();
         logger.error("EOFException thrown at " + randomAccessFile.getChannel().position() + ", Cause :" + e.getCause()
             + ", Msg :" + e.getMessage() + ", stacktrace ", e);
         throw (e);
       } catch (Exception e) {
         if (!lastBlobFailed) {
+          metrics.unknownErrorOnDumpLog.inc();
           logger.error(
               "Unknown exception thrown with Cause " + e.getCause() + ", Msg :" + e.getMessage() + ", stacktrace ", e);
-          logger.info("Trying out next offset " + (currentOffset + 1));
+          if (!silent) {
+            logger.info("Trying out next offset " + (currentOffset + 1));
+          }
         }
         currentOffset++;
         lastBlobFailed = true;

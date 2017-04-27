@@ -85,6 +85,16 @@ public final class ToolUtils {
   }
 
   /**
+   * Adds cluster map properties with dummy values for tools to function
+   * @param properties the {@link Properties} that need to be updated
+   */
+  public static void addClusterMapProperties(Properties properties) {
+    properties.setProperty("clustermap.cluster.name", "dev");
+    properties.setProperty("clustermap.datacenter.name", "DataCenter");
+    properties.setProperty("clustermap.host.name", "localhost");
+  }
+
+  /**
    * Ensure that the given argument list has all the required arguments. If not, exit.
    * @param requiredArgs the list of required arguments.
    * @param actualArgs the set of actual arguments.

@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.Properties;
@@ -43,6 +44,7 @@ class StoreToolsUtil {
     OptionSet options = parser.parse(args);
     String propsFilePath = options.valueOf(propsFileOpt);
     Properties properties = Utils.loadProps(propsFilePath);
+    ToolUtils.addClusterMapProperties(properties);
     return new VerifiableProperties(properties);
   }
 }

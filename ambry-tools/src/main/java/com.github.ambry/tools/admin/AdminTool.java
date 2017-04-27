@@ -174,6 +174,7 @@ public class AdminTool {
       } else {
         sslProperties = new Properties();
       }
+      ToolUtils.addClusterMapProperties(sslProperties);
       Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));

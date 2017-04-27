@@ -185,7 +185,7 @@ public class ServerReadPerformance {
       } else {
         sslProperties = new Properties();
       }
-
+      ToolUtils.addClusterMapProperties(sslProperties);
       String logToRead = options.valueOf(logToReadOpt);
 
       int readsPerSecond = options.valueOf(readsPerSecondOpt);

@@ -46,7 +46,7 @@ hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpIndex
 file.to.read=[indexFile]
-log.blob.stats=true
+silent=false
 ```
 
 #### Dump index filtering for a list of blobs
@@ -58,6 +58,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpIndex
 file.to.read=[indexFile]
 blobId.list=blobid1,blobid2,blobid3
+silent=false
 ```
 
 #### Dump all indexes in a replica
@@ -79,6 +80,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpIndex
 file.to.read=[indexFile]
 active.blobs.only=true
+silent=false
 ```
 
 #### Dump all active blobs in a replica
@@ -90,6 +92,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpIndexesForReplica
 replica.root.directory=[replicaRootDirecotry]
 active.blobs.only=true
+silent=false
 ```
 
 #### Dump N Random active blobs for a given replica
@@ -101,7 +104,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=DumpNRandomActiveBlobsForReplica
 replica.root.directory=[replicaRootDirecotry]
 active.blobs.count=1000
-log.blob.stats=true
+silent=false
 ```
 
 ### Dumping Log
@@ -113,6 +116,7 @@ java -cp ambry.jar com.github.ambry.store.DumpLogTool  --propsFile [Config file 
 hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
+silent=false
 ```
 
 #### Dump log file with throttling
@@ -122,7 +126,8 @@ java -cp ambry.jar com.github.ambry.store.DumpLogTool --propsFile [Config file p
 hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
-bytes.per.sec=1000
+blobs.per.sec=100
+silent=false
 ```
 
 #### Dump log starting at offset x and ending at offset y
@@ -134,6 +139,7 @@ partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
 log.start.offset=x
 log.end.offset=y
+silent=false
 ```
 
 #### Dump log filtering with a set of blobs
@@ -144,6 +150,7 @@ hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 file.to.read=[LogFile]
 blobId.list=blobId1,blobId2,blobId3
+silent=false
 ```
 
 ### Comparison operations
@@ -166,8 +173,8 @@ java -cp ambry.jar com.github.ambry.store.DumpDataTool  --propsFile [Config file
 hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
 type.of.operation=CompareReplicaIndexesToLog
-file.to.read=[indexFile]
 replica.root.directory=[replicaRootDirecotry]
+index.files.per.sec=1 // number of index files to process per sec
 ```
 
 ### Dumping ReplicaToken file
@@ -221,17 +228,15 @@ java -cp ambry.jar com.github.ambry.tools.admin.AdminTool --hardwareLayout [Hard
 
 #### Check for consistency among replicas for a partition
 ```bash
-java -cp ambry.jar com.github.ambry.store.ConsistencyCheckerTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --rootDirectoryForPartition [rootDirectory which contains replicas which in
-turn contains all index files] --outFile [outFile]
+java -cp ambry.jar com.github.ambry.store.ConsistencyCheckerTool  --propsFile [Config file path]
+//Contents of config file
+hardware.layout.file.path=[HardwareLayoutFile]
+partition.layout.file.path=[PartitionLayoutFile]
+partition.root.directory=[Root directory which contains one directory per replica. Each replica's directory is expected 
+to contain all index files for the respective replica. Diretory's name is considered to be replica name for logging 
+purposes]
 ```
 
-#### Check for consistency of index file boundaries on all replicas of a partition
-```bash
-java -cp ambry.jar com.github.ambry.store.ConsistencyCheckerTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --rootDirectoryForPartition [rootDirectory which contains replicas which in
-turn contains all index files] --subject index --outFile [outFile]
-```
 
 ```
 Root Directory for Partition should contains N sub-directories pertaining to N replicas. Each sub-directory's name
