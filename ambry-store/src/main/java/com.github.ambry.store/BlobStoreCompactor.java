@@ -643,8 +643,8 @@ class BlobStoreCompactor {
           logger.trace("Fetching the PUT entry of a deleted blob with entry {} in index segment with start offset {} in"
               + " {} because it needs to be retained", indexEntry, indexSegmentStartOffset, storeId);
           long putRecordOffset = value.getOriginalMessageOffset();
-          if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-              && indexSegmentStartOffset.getOffset() <= putRecordOffset) {
+          if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != value.getOffset()
+              .getOffset() && indexSegmentStartOffset.getOffset() <= putRecordOffset) {
             BlobReadOptions options =
                 srcIndex.getBlobReadInfo(indexEntry.getKey(), EnumSet.allOf(StoreGetOptions.class));
             Offset offset = new Offset(indexSegmentStartOffset.getName(), putRecordOffset);

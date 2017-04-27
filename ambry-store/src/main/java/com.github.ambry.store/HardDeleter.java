@@ -380,6 +380,7 @@ public class HardDeleter implements Runnable {
 
   void shutdown() throws InterruptedException, StoreException, IOException {
     if (enabled.get()) {
+      logger.info("Hard delete shutdown initiated");
       enabled.set(false);
       hardDeleteLock.lock();
       try {
@@ -387,8 +388,9 @@ public class HardDeleter implements Runnable {
       } finally {
         hardDeleteLock.unlock();
       }
-      throttler.close();
       shutdownLatch.await();
+      logger.info("Hard delete shutdown complete");
+      throttler.close();
       pruneHardDeleteRecoveryRange();
       persistCleanupToken();
     }

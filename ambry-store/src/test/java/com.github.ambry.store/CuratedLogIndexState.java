@@ -31,6 +31,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -232,7 +233,7 @@ class CuratedLogIndexState {
       } else {
         liveKeys.add(id);
       }
-      index.addToIndex(entry, fileSpan);
+      index.addToIndex(Collections.singletonList(entry), fileSpan);
       lastModifiedTimesInSecs.put(indexSegmentStartOffset, time.seconds());
       expectedJournalLastOffset = fileSpan.getStartOffset();
       endOffsetOfPrevMsg = fileSpan.getEndOffset();
@@ -255,12 +256,22 @@ class CuratedLogIndexState {
     Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.DELETE_RECORD_SIZE);
 
-    IndexValue value = getExpectedValue(idToDelete, true);
-    IndexValue newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-        Utils.Infinite_Time);
+    boolean forcePut = false;
+    IndexValue newValue;
+    if (allKeys.containsKey(idToDelete)) {
+      IndexValue value = getExpectedValue(idToDelete, true);
+      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
+          Utils.Infinite_Time);
+      newValue.setNewOffset(fileSpan.getStartOffset());
+      newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
+    } else {
+      newValue =
+          new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+      indexSegmentStartOffsets.put(idToDelete, new Pair<Offset, Offset>(null, null));
+      allKeys.put(idToDelete, new Pair<IndexValue, IndexValue>(null, null));
+      forcePut = true;
+    }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
-    newValue.setNewOffset(fileSpan.getStartOffset());
-    newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
 
     logOrder.put(fileSpan.getStartOffset(), new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
     Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
@@ -275,7 +286,11 @@ class CuratedLogIndexState {
     }
     referenceIndex.get(indexSegmentStartOffset).put(idToDelete, newValue);
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
-    index.markAsDeleted(idToDelete, fileSpan);
+    if (forcePut) {
+      index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);
+    } else {
+      index.markAsDeleted(idToDelete, fileSpan);
+    }
     lastModifiedTimesInSecs.put(indexSegmentStartOffset, time.seconds());
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
     assertEquals("Journal's last offset not as expected", fileSpan.getStartOffset(), index.journal.getLastOffset());
@@ -461,15 +476,17 @@ class CuratedLogIndexState {
   void verifyEntriesForHardDeletes(Set<MockId> deletedIds) throws IOException {
     for (MockId id : deletedIds) {
       IndexValue putValue = allKeys.get(id).getFirst();
-      Offset offset = putValue.getOffset();
-      LogSegment segment = log.getSegment(offset.getName());
-      long size = putValue.getSize() - CuratedLogIndexState.HARD_DELETE_START_OFFSET
-          - CuratedLogIndexState.HARD_DELETE_LAST_PART_SIZE;
-      ByteBuffer readBuf = ByteBuffer.allocate((int) size);
-      segment.readInto(readBuf, offset.getOffset() + CuratedLogIndexState.HARD_DELETE_START_OFFSET);
-      readBuf.flip();
-      while (readBuf.hasRemaining()) {
-        assertEquals("Hard delete has not zeroed out the data", (byte) 0, readBuf.get());
+      if (putValue != null) {
+        Offset offset = putValue.getOffset();
+        LogSegment segment = log.getSegment(offset.getName());
+        long size = putValue.getSize() - CuratedLogIndexState.HARD_DELETE_START_OFFSET
+            - CuratedLogIndexState.HARD_DELETE_LAST_PART_SIZE;
+        ByteBuffer readBuf = ByteBuffer.allocate((int) size);
+        segment.readInto(readBuf, offset.getOffset() + CuratedLogIndexState.HARD_DELETE_START_OFFSET);
+        readBuf.flip();
+        while (readBuf.hasRemaining()) {
+          assertEquals("Hard delete has not zeroed out the data", (byte) 0, readBuf.get());
+        }
       }
     }
   }
@@ -797,6 +814,8 @@ class CuratedLogIndexState {
     // 1 DELETE for the PUT in the same segment
     idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey());
     addDeleteEntry(idToDelete);
+    // 1 DELETE for a PUT entry that does not exist
+    addDeleteEntry(getUniqueId());
     // 1 PUT entry that spans the rest of the data in the segment
     long size = sizeToMakeIndexEntriesFor - index.getCurrentEndOffset().getOffset();
     addPutEntries(1, size, Utils.Infinite_Time);
@@ -907,9 +926,10 @@ class CuratedLogIndexState {
       if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // delete record is always valid
         validEntries.add(new IndexEntry(key, value));
-        if (!isDeletedAt(key, deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)
-            && value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-            && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset()) {
+        if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+            && value.getOriginalMessageOffset() != value.getOffset().getOffset()
+            && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset() && !isDeletedAt(key,
+            deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)) {
           // delete is irrelevant but it's in the same index segment as the put and the put is still valid
           validEntries.add(new IndexEntry(key, allKeys.get(key).getFirst()));
         }

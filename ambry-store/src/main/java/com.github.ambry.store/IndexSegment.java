@@ -543,6 +543,20 @@ class IndexSegment {
           writer.writeShort(resetKey.getSecond().ordinal());
         }
 
+        // NOTE: In the event of a crash, it is possible that there is a part of the log that is not covered by the
+        // index. This happens due to the fact that a DELETE that occurs in the same segment as a PUT overwrites the
+        // PUT entry. Consider the following case:-
+        // (entries are of the form ID:TYPE:START_OFFSET-END_OFFSET)
+        // This is the order of operations
+        // A:PUT:0-100
+        // B:PUT:101-200
+        // A:DELETE:201-250
+        // These are the entries in the index segment
+        // A:DELETE:201-250
+        // B:PUT:101-200
+        // If safeEndPoint < 250, then B:PUT:101-200 will be written but not A:DELETE:201-250. If the process were to
+        // crash at this point, the index end offset would be 200 and the span 0-100 would not be represented in the
+        // index.
         // write the entries
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           if (entry.getValue().getOffset().getOffset() + entry.getValue().getSize() <= safeEndPoint.getOffset()) {
@@ -681,7 +695,8 @@ class IndexSegment {
               // regenerate the bloom filter for in memory indexes
               bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
               // add to the journal
-              if (offsetInLogSegment != -1 && offsetInLogSegment != blobValue.getOriginalMessageOffset()
+              if (blobValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+                  && offsetInLogSegment != blobValue.getOriginalMessageOffset()
                   && blobValue.getOriginalMessageOffset() >= startOffset.getOffset()) {
                 // we add an entry for the original message offset if it is within the same index segment
                 journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);

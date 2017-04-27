@@ -202,8 +202,9 @@ public class BlobStoreStatsTest {
    */
   @Test
   public void testValidDataSizeAfterDeletes() throws InterruptedException, StoreException, IOException {
-    // 5 puts to be deleted
-    state.addPutEntries(5, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
+    int numEntries = CuratedLogIndexState.MAX_IN_MEM_ELEMENTS - state.referenceIndex.lastEntry().getValue().size()
+        + CuratedLogIndexState.MAX_IN_MEM_ELEMENTS - 2;
+    state.addPutEntries(numEntries, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     TimeRange timeBeforeDeletes = new TimeRange(state.time.milliseconds(), 0L);
     long totalLogSegmentValidSizeBeforeDeletes = verifyAndGetLogSegmentValidSize(timeBeforeDeletes);

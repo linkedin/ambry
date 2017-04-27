@@ -294,9 +294,9 @@ class PersistentIndex {
         Offset infoEndOffset = new Offset(runningOffset.getName(), runningOffset.getOffset() + info.getSize());
         IndexValue value = findKey(info.getStoreKey());
         if (info.isDeleted()) {
-          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset));
-          logger.info("Index : {} updated message with key {} size {} ttl {} deleted {}", dataDir, info.getStoreKey(),
-              value.getSize(), value.getExpiresAtMs(), info.isDeleted());
+          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info);
+          logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
+              info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
         } else if (value != null) {
           throw new StoreException("Illegal message state during recovery. Duplicate PUT record",
               StoreErrorCodes.Initialization_Error);
@@ -558,19 +558,40 @@ class PersistentIndex {
    * @throws StoreException
    */
   void markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
+    markAsDeleted(id, fileSpan, null);
+  }
+
+  /**
+   * Marks the index entry represented by the key for delete
+   * @param id The id of the entry that needs to be deleted
+   * @param fileSpan The file span represented by this entry in the log
+   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise.
+   * @throws StoreException
+   */
+  private void markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info) throws StoreException {
     validateFileSpan(fileSpan, true);
     IndexValue value = findKey(id);
-    if (value == null) {
+    if (value == null && info == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " already deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     }
-    IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
-            value.getServiceId(), value.getContainerId());
+    long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
+    IndexValue newValue;
+    if (value == null) {
+      // it is possible that during recovery, the PUT record need not exist because it had been replaced by a
+      // delete record in the map in IndexSegment but not written yet because the safe end point hadn't been reached
+      // SEE: NOTE in IndexSegment::writeIndexSegmentToFile()
+      // TODO: change service ID and container ID once the MessageInfo has that info.
+      newValue = new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+      newValue.clearOriginalMessageOffset();
+    } else {
+      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
+          value.getServiceId(), value.getContainerId());
+      newValue.setNewOffset(fileSpan.getStartOffset());
+      newValue.setNewSize(size);
+    }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
-    newValue.setNewOffset(fileSpan.getStartOffset());
-    newValue.setNewSize(fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset());
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
   }
 
@@ -617,7 +638,8 @@ class PersistentIndex {
       IndexValue putValue =
           findKey(key, new FileSpan(getStartOffset(indexSegments), value.getOffset()), IndexEntryType.PUT,
               indexSegments);
-      if (value.getOriginalMessageOffset() != -1) {
+      if (value.getOriginalMessageOffset() != value.getOffset().getOffset()
+          && value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET) {
         // PUT record in the same log segment.
         String logSegmentName = value.getOffset().getName();
         // The delete entry in the index might not contain the information about the size of the original blob. So we
@@ -638,7 +660,7 @@ class PersistentIndex {
                 putValue.getSize(), deletedBlobInfo.getSize(), key);
             metrics.putEntryDeletedInfoMismatchCount.inc();
           }
-          if (putValue.getExpiresAtMs() != deletedBlobInfo.getExpirationTimeInMs()) {
+          if (putValue.getExpiresAtMs() != Utils.getTimeInMsToTheNearestSec(deletedBlobInfo.getExpirationTimeInMs())) {
             logger.error("Expire time in PUT index entry {} is different from that in the PUT record {} for ID {}",
                 putValue.getExpiresAtMs(), deletedBlobInfo.getExpirationTimeInMs(), key);
             metrics.putEntryDeletedInfoMismatchCount.inc();

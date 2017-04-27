@@ -443,7 +443,7 @@ public class BlobStoreCompactorTest {
 
   /**
    * Tests the case where deletes and expired blobs are interspersed and the expired blobs are eligible for cleanup
-   * but deleted blobs (also includes blobs that have been put and deleted in the same index segment).
+   * but deleted blobs (also includes blobs that have been put and deleted in the same index segment) are not.
    * @throws Exception
    */
   @Test
@@ -501,6 +501,11 @@ public class BlobStoreCompactorTest {
     // won't be cleaned up.
     MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
     state.addDeleteEntry(idFromAnotherSegment);
+
+    // 9. Delete entry for an Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
+    // cleanup
+    // the delete record itself won't be cleaned up
+    state.addDeleteEntry(state.getUniqueId());
 
     // fill up the rest of the segment + one more
     writeDataToMeetRequiredSegmentCount(numFinalSegmentsCount, null);
@@ -1121,8 +1126,9 @@ public class BlobStoreCompactorTest {
         options.close();
         checkIndexValue(id);
       } else if (state.deletedKeys.contains(id)) {
-        boolean shouldBeCompacted =
-            idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id, deleteReferenceTimeMs);
+        boolean shouldBeAbsent =
+            state.getExpectedValue(id, true) == null || (idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id,
+                deleteReferenceTimeMs));
         try {
           state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
           fail("Should not be able to GET " + id);
@@ -1132,7 +1138,7 @@ public class BlobStoreCompactorTest {
         }
         try {
           BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.allOf(StoreGetOptions.class));
-          if (shouldBeCompacted) {
+          if (shouldBeAbsent) {
             fail("Should not be able to GET " + id);
           } else {
             checkRecord(id, options);
@@ -1140,7 +1146,7 @@ public class BlobStoreCompactorTest {
             checkIndexValue(id);
           }
         } catch (StoreException e) {
-          assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
+          assertTrue("Blob for " + id + " should have been retrieved", shouldBeAbsent);
           assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.ID_Deleted,
               e.getErrorCode());
         }

@@ -218,7 +218,8 @@ class BlobStoreStats implements StoreStats {
           // delete is relevant
           deletedKeys.add(indexEntry.getKey());
         } else if (!isExpired(indexValue.getExpiresAtMs(), expirationReferenceTimeInMs)
-            && indexValue.getOriginalMessageOffset() != -1
+            && indexValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+            && indexValue.getOriginalMessageOffset() != indexValue.getOffset().getOffset()
             && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()) {
           // delete is irrelevant but it's in the same index segment as the put and the put is still valid
           BlobReadOptions originalPut =
