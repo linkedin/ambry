@@ -135,7 +135,7 @@ public class RouterConfig {
    * The OperationTracker to use for GET operations.
    */
   @Config("router.get.operation.tracker.type")
-  @Default("com.github.ambry.router.SimpleOperationTracker")
+  @Default("SimpleOperationTracker")
   public final String routerGetOperationTrackerType;
 
   /**
@@ -176,8 +176,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.get.request.parallelism", 2, 1, Integer.MAX_VALUE);
     routerGetSuccessTarget = verifiableProperties.getIntInRange("router.get.success.target", 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
-    routerGetOperationTrackerType = verifiableProperties.getString("router.get.operation.tracker.type",
-        "com.github.ambry.router.SimpleOperationTracker");
+    routerGetOperationTrackerType =
+        verifiableProperties.getString("router.get.operation.tracker.type", "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
   }

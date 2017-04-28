@@ -202,11 +202,11 @@ abstract class GetOperation {
   protected OperationTracker getOperationTracker(PartitionId partitionId) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
-    if (trackerType.equals(SimpleOperationTracker.class.getCanonicalName())) {
+    if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
       operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
           routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
           routerConfig.routerGetRequestParallelism);
-    } else if (trackerType.equals(AdaptiveOperationTracker.class.getCanonicalName())) {
+    } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, partitionId,
           routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
           routerConfig.routerGetRequestParallelism, time, localColoTracker, crossColoTracker, pastDueCounter,
@@ -222,8 +222,8 @@ abstract class GetOperation {
    */
   private void validateTrackerType() {
     String trackerType = routerConfig.routerGetOperationTrackerType;
-    if (!trackerType.equals(SimpleOperationTracker.class.getCanonicalName()) && !trackerType.equals(
-        AdaptiveOperationTracker.class.getCanonicalName())) {
+    if (!trackerType.equals(SimpleOperationTracker.class.getSimpleName()) && !trackerType.equals(
+        AdaptiveOperationTracker.class.getSimpleName())) {
       throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
     }
   }

@@ -148,7 +148,7 @@ public class GetBlobOperationTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getCanonicalName()}, {AdaptiveOperationTracker.class.getCanonicalName()}});
+        new Object[][]{{SimpleOperationTracker.class.getSimpleName()}, {AdaptiveOperationTracker.class.getSimpleName()}});
   }
 
   /**
@@ -231,7 +231,7 @@ public class GetBlobOperationTest {
 
     // test the case where the tracker type is bad
     Properties properties = getDefaultNonBlockingRouterProperties();
-    properties.setProperty("router.get.operation.tracker.type", "com.github.ambry.NonExistentTracker");
+    properties.setProperty("router.get.operation.tracker.type", "NonExistentTracker");
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
