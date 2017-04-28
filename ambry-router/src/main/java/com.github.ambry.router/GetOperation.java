@@ -13,7 +13,10 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -45,6 +48,9 @@ abstract class GetOperation {
   protected final BlobId blobId;
   protected final GetBlobOptionsInternal options;
   protected final Time time;
+  private final Histogram localColoTracker;
+  private final Histogram crossColoTracker;
+  private final Counter pastDueCounter;
   protected volatile boolean operationCompleted = false;
   protected final AtomicReference<Exception> operationException = new AtomicReference<>();
   protected GetBlobResultInternal operationResult;
@@ -61,21 +67,29 @@ abstract class GetOperation {
    * @param blobIdStr the blobId of the associated blob in string form.
    * @param options the {@link GetBlobOptionsInternal} associated with this operation.
    * @param getOperationCallback the callback that is to be called when the operation completes.
+   * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
+   * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests.
+   * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> getOperationCallback, Time time) throws RouterException {
+      Callback<GetBlobResultInternal> getOperationCallback, Histogram localColoTracker, Histogram crossColoTracker,
+      Counter pastDueCounter, Time time) throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.options = options;
     this.getOperationCallback = getOperationCallback;
+    this.localColoTracker = localColoTracker;
+    this.crossColoTracker = crossColoTracker;
+    this.pastDueCounter = pastDueCounter;
     this.time = time;
     submissionTimeMs = time.milliseconds();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+    validateTrackerType();
   }
 
   /**
@@ -178,6 +192,40 @@ abstract class GetOperation {
         Collections.singletonList(new PartitionRequestInfo(blobId.getPartition(), blobIds));
     return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, flag,
         partitionRequestInfoList, getOption);
+  }
+
+  /**
+   * Gets an {@link OperationTracker} based on the config and {@code partitionId}.
+   * @param partitionId the {@link PartitionId} for which a tracker is required.
+   * @return an {@link OperationTracker} based on the config and {@code partitionId}.
+   */
+  protected OperationTracker getOperationTracker(PartitionId partitionId) {
+    OperationTracker operationTracker;
+    String trackerType = routerConfig.routerGetOperationTrackerType;
+    if (trackerType.equals(SimpleOperationTracker.class.getCanonicalName())) {
+      operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
+          routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
+          routerConfig.routerGetRequestParallelism);
+    } else if (trackerType.equals(AdaptiveOperationTracker.class.getCanonicalName())) {
+      operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, partitionId,
+          routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
+          routerConfig.routerGetRequestParallelism, time, localColoTracker, crossColoTracker, pastDueCounter,
+          routerConfig.routerLatencyToleranceQuantile);
+    } else {
+      throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
+    }
+    return operationTracker;
+  }
+
+  /**
+   * Validates the tracker type in config.
+   */
+  private void validateTrackerType() {
+    String trackerType = routerConfig.routerGetOperationTrackerType;
+    if (!trackerType.equals(SimpleOperationTracker.class.getCanonicalName()) && !trackerType.equals(
+        AdaptiveOperationTracker.class.getCanonicalName())) {
+      throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
+    }
   }
 }
 

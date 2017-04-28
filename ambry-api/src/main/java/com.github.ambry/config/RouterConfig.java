@@ -132,6 +132,13 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
+   * The OperationTracker to use for GET operations.
+   */
+  @Config("router.get.operation.tracker.type")
+  @Default("com.github.ambry.router.SimpleOperationTracker")
+  public final String routerGetOperationTrackerType;
+
+  /**
    * If an adaptive operation tracker is being used, a request is discounted from the parallelism count if it has been
    * outstanding for more than the quantile defined here (compared to latencies of other requests of the same class).
    */
@@ -169,6 +176,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.get.request.parallelism", 2, 1, Integer.MAX_VALUE);
     routerGetSuccessTarget = verifiableProperties.getIntInRange("router.get.success.target", 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
+    routerGetOperationTrackerType = verifiableProperties.getString("router.get.operation.tracker.type",
+        "com.github.ambry.router.SimpleOperationTracker");
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
   }

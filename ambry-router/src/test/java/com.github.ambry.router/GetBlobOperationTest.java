@@ -56,6 +56,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
 
@@ -71,6 +73,7 @@ import static com.github.ambry.router.RouterTestHelpers.*;
  * Many of the variables are made member variables, so that they can be shared between the router and the
  * {@link GetBlobOperation}s.
  */
+@RunWith(Parameterized.class)
 public class GetBlobOperationTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -89,6 +92,7 @@ public class GetBlobOperationTest {
   private final NonBlockingRouter router;
   private final MockNetworkClient mockNetworkClient;
   private final RouterCallback routerCallback;
+  private final String operationTrackerType;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -138,10 +142,22 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
+   * @return an array with both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(
+        new Object[][]{{SimpleOperationTracker.class.getCanonicalName()}, {AdaptiveOperationTracker.class.getCanonicalName()}});
+  }
+
+  /**
    * Instantiate a router, perform a put, close the router. The blob that was put will be saved in the MockServer,
    * and can be queried by the getBlob operations in the test.
+   * @param operationTrackerType the type of {@link OperationTracker} to use.
    */
-  public GetBlobOperationTest() throws Exception {
+  public GetBlobOperationTest(String operationTrackerType) throws Exception {
+    this.operationTrackerType = operationTrackerType;
     // Defaults. Tests may override these and do new puts as appropriate.
     maxChunkSize = random.nextInt(1024 * 1024) + 1;
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
@@ -212,6 +228,19 @@ public class GetBlobOperationTest {
 
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
+
+    // test the case where the tracker type is bad
+    Properties properties = getDefaultNonBlockingRouterProperties();
+    properties.setProperty("router.get.operation.tracker.type", "com.github.ambry.NonExistentTracker");
+    RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
+    try {
+      new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
+          new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), getRouterCallback, routerCallback,
+          blobIdFactory, time);
+      Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
   }
 
   /**
@@ -981,6 +1010,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(maxChunkSize));
     properties.setProperty("router.get.request.parallelism", Integer.toString(2));
     properties.setProperty("router.get.success.target", Integer.toString(1));
+    properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     return properties;
   }
 }
