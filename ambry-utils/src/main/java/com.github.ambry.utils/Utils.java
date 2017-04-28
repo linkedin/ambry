@@ -628,15 +628,16 @@ public class Utils {
   /**
    * Adds some number of seconds to an epoch time in ms.
    *
-   * @param epochTimeInMs
-   * @param deltaTimeInSeconds
-   * @return epoch time in milliseconds or Infinite_Time.
+   * @param epochTimeInMs Epoch time in ms to which {@code deltaTimeInSeconds} needs to be added
+   * @param deltaTimeInSeconds delta time in seconds which needs to be added to {@code epochTimeInMs}
+   * @return epoch time in milliseconds after adding {@code deltaTimeInSeconds} to {@code epochTimeInMs} or
+   * {@link Utils#Infinite_Time} if either of them is {@link Utils#Infinite_Time}
    */
   public static long addSecondsToEpochTime(long epochTimeInMs, long deltaTimeInSeconds) {
     if (deltaTimeInSeconds == Infinite_Time || epochTimeInMs == Infinite_Time) {
       return Infinite_Time;
     }
-    return epochTimeInMs + (TimeUnit.MILLISECONDS.toSeconds(deltaTimeInSeconds));
+    return epochTimeInMs + (TimeUnit.SECONDS.toMillis(deltaTimeInSeconds));
   }
 
   /**
