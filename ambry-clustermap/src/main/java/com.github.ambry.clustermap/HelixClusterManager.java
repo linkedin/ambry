@@ -89,7 +89,9 @@ class HelixClusterManager implements ClusterMap {
         String zkConnectStr = entry.getValue();
         HelixManager manager =
             helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+        logger.info("Connecting to Helix manager at {}", zkConnectStr);
         manager.connect();
+        logger.info("Established connection");
         ClusterChangeListener clusterChangeListener = new ClusterChangeListener();
         DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeListener);
         dcToDcZkInfo.put(dcName, dcZkInfo);
@@ -98,10 +100,13 @@ class HelixClusterManager implements ClusterMap {
       initialize();
       // Now register listeners to get notified on change.
       for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
+        logger.info("Registering listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
         dcZkInfo.helixManager.addExternalViewChangeListener(dcZkInfo.clusterChangeListener);
         dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeListener);
         dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeListener);
+        logger.info("Registered, now waiting for initial calls");
         dcZkInfo.clusterChangeListener.waitForInitialization();
+        logger.info("Received initial calls for every listener from this Helix manager");
       }
     } catch (Exception e) {
       helixClusterManagerMetrics.initializeInstantiationMetric(false);
@@ -123,8 +128,10 @@ class HelixClusterManager implements ClusterMap {
    */
   private void initialize() throws Exception {
     for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
+      logger.info("Initializing cluster information from {}", dcZkInfo.zkConnectStr);
       HelixAdmin admin = dcZkInfo.helixManager.getClusterManagmentTool();
       for (String instanceName : admin.getInstancesInCluster(clusterName)) {
+        logger.info("Adding node {} and its disks and replicas", instanceName);
         InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
         AmbryDataNode datanode = new AmbryDataNode(dcZkInfo.dcName, clusterMapConfig, instanceConfig.getHostName(),
             Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
@@ -132,6 +139,7 @@ class HelixClusterManager implements ClusterMap {
         instanceNameToAmbryDataNode.put(instanceName, datanode);
         dcZkInfo.clusterChangeListener.allInstances.add(instanceName);
       }
+      logger.info("Initialized cluster information from {}", dcZkInfo.zkConnectStr);
     }
     for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
       for (AmbryDisk disk : disks) {
@@ -357,6 +365,9 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       synchronized (notificationLock) {
+        if (changeContext.getType() == NotificationContext.Type.INIT) {
+          logger.info("Received initial notification for live instance change");
+        }
         logger.trace("Live instance change triggered with: {}", liveInstances);
         Set<String> liveInstancesSet = new HashSet<>();
         for (LiveInstance liveInstance : liveInstances) {
@@ -380,6 +391,9 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onExternalViewChange(List<ExternalView> externalViewList, NotificationContext changeContext) {
       synchronized (notificationLock) {
+        if (changeContext.getType() == NotificationContext.Type.INIT) {
+          logger.info("Received initial notification for external view change");
+        }
         logger.trace("ExternalView change triggered with: {}", externalViewList);
 
         // No action taken at this time.
@@ -395,6 +409,9 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
       synchronized (notificationLock) {
+        if (changeContext.getType() == NotificationContext.Type.INIT) {
+          logger.info("Received initial notification for instance config change");
+        }
         logger.trace("Config change triggered with: {}", configs);
 
         // No action taken at this time. Going forward, changes like marking partitions back to read-write will go here.
