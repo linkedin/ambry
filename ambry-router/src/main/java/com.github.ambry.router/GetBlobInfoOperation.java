@@ -64,12 +64,10 @@ class GetBlobInfoOperation extends GetOperation {
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, Time time) throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
-    operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
-        routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
-        routerConfig.routerGetRequestParallelism, time, routerMetrics.getBlobInfoLocalColoLatencyMs,
-        routerMetrics.getBlobInfoCrossColoLatencyMs, routerMetrics.getBlobInfoPastDueCount,
-        routerConfig.routerLatencyToleranceQuantile);
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
+        routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
+        routerMetrics.getBlobInfoPastDueCount, time);
+    operationTracker = getOperationTracker(blobId.getPartition());
   }
 
   @Override

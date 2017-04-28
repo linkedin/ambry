@@ -36,6 +36,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -46,11 +47,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 /**
  * Tests for {@link GetBlobInfoOperation}
  */
+@RunWith(Parameterized.class)
 public class GetBlobInfoOperationTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -77,6 +81,7 @@ public class GetBlobInfoOperationTest {
   private final BlobProperties blobProperties;
   private final byte[] userMetadata;
   private final byte[] putContent;
+  private final String operationTrackerType;
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final GetBlobOptionsInternal options = new GetBlobOptionsInternal(
@@ -92,7 +97,22 @@ public class GetBlobInfoOperationTest {
     }
   }
 
-  public GetBlobInfoOperationTest() throws Exception {
+  /**
+   * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
+   * @return an array with both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(
+        new Object[][]{{SimpleOperationTracker.class.getSimpleName()}, {AdaptiveOperationTracker.class.getSimpleName()}});
+  }
+
+  /**
+   * @param operationTrackerType @param operationTrackerType the type of {@link OperationTracker} to use.
+   * @throws Exception
+   */
+  public GetBlobInfoOperationTest(String operationTrackerType) throws Exception {
+    this.operationTrackerType = operationTrackerType;
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
@@ -154,6 +174,18 @@ public class GetBlobInfoOperationTest {
 
     Assert.assertEquals("Callback must match", getOperationCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
+
+    // test the case where the tracker type is bad
+    Properties properties = getNonBlockingRouterProperties();
+    properties.setProperty("router.get.operation.tracker.type", "NonExistentTracker");
+    RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
+    try {
+      new GetBlobInfoOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
+          getOperationCallback, time);
+      Assert.fail("Instantiation of GetBlobInfoOperation with an invalid tracker type must fail");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
   }
 
   /**
@@ -462,6 +494,7 @@ public class GetBlobInfoOperationTest {
     properties.setProperty("router.datacenter.name", "DC1");
     properties.setProperty("router.get.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     return properties;
   }
 }

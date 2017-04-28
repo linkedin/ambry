@@ -125,7 +125,9 @@ class GetBlobOperation extends GetOperation {
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory, Time time)
       throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback, time);
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
+        routerMetrics.getBlobLocalColoLatencyMs, routerMetrics.getBlobCrossColoLatencyMs,
+        routerMetrics.getBlobPastDueCount, time);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
     firstChunk = new FirstGetChunk();
@@ -501,12 +503,7 @@ class GetBlobOperation extends GetOperation {
     void initialize(int index, BlobId id) {
       chunkIndex = index;
       chunkBlobId = id;
-      chunkOperationTracker =
-          new AdaptiveOperationTracker(routerConfig.routerDatacenterName, chunkBlobId.getPartition(),
-              routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
-              routerConfig.routerGetRequestParallelism, time, routerMetrics.getBlobLocalColoLatencyMs,
-              routerMetrics.getBlobCrossColoLatencyMs, routerMetrics.getBlobPastDueCount,
-              routerConfig.routerLatencyToleranceQuantile);
+      chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition());
       state = ChunkState.Ready;
     }
 
