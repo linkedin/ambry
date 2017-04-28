@@ -17,6 +17,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -45,7 +46,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   private final Counter pastDueCounter;
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
-  private final LinkedHashMap<ReplicaId, Long> unexpiredRequestSendTimes = new LinkedHashMap<>();
+  private final LinkedHashMap<ReplicaId, Pair<Boolean, Long>> unexpiredRequestSendTimes = new LinkedHashMap<>();
   private final Map<ReplicaId, Long> expiredRequestSendTimes = new HashMap<>();
 
   private ReplicaId lastReturned = null;
@@ -82,7 +83,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     super.onResponse(replicaId, isSuccessFul);
     long elapsedTime;
     if (unexpiredRequestSendTimes.containsKey(replicaId)) {
-      elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId);
+      elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId).getSecond();
     } else {
       elapsedTime = time.milliseconds() - expiredRequestSendTimes.remove(replicaId);
     }
@@ -123,14 +124,14 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
     @Override
     public void remove() {
       replicaIterator.remove();
-      if (inflightCount >= parallelism) {
+      if (inflightCount >= parallelism && unexpiredRequestSendTimes.size() > 0) {
         // we are here because oldest request is past due
-        Map.Entry<ReplicaId, Long> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
-        expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue());
+        Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
+        expiredRequestSendTimes.put(oldestEntry.getKey(), oldestEntry.getValue().getSecond());
         unexpiredRequestSendTimes.remove(oldestEntry.getKey());
         pastDueCounter.inc();
       }
-      unexpiredRequestSendTimes.put(lastReturned, time.milliseconds());
+      unexpiredRequestSendTimes.put(lastReturned, new Pair<>(false, time.milliseconds()));
       inflightCount++;
     }
 
@@ -148,10 +149,20 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
      * @throws IllegalStateException if no requests have been sent yet.
      */
     private boolean isOldestRequestPastDue() {
-      Map.Entry<ReplicaId, Long> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
-      Histogram latencyTracker = getLatencyHistogram(oldestEntry.getKey());
-      return (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (time.milliseconds() - oldestEntry.getValue()
-          >= latencyTracker.getSnapshot().getValue(quantile));
+      boolean isPastDue = true;
+      if (unexpiredRequestSendTimes.size() > 0) {
+        Map.Entry<ReplicaId, Pair<Boolean, Long>> oldestEntry = unexpiredRequestSendTimes.entrySet().iterator().next();
+        if (!oldestEntry.getValue().getFirst()) {
+          Histogram latencyTracker = getLatencyHistogram(oldestEntry.getKey());
+          isPastDue = (latencyTracker.getCount() >= MIN_DATA_POINTS_REQUIRED) && (
+              time.milliseconds() - oldestEntry.getValue().getSecond() >= latencyTracker.getSnapshot()
+                  .getValue(quantile));
+          if (isPastDue) {
+            oldestEntry.setValue(new Pair<>(true, oldestEntry.getValue().getSecond()));
+          }
+        }
+      }
+      return isPastDue;
     }
   }
 }
