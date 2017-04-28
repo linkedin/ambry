@@ -97,9 +97,10 @@ public class AmbryServer {
 
   public void startup() throws InstantiationException {
     try {
-      clusterMap = clusterAgentsFactory.getClusterMap();
-      clusterParticipant = clusterAgentsFactory.getClusterParticipant();
       logger.info("starting");
+      clusterMap = clusterAgentsFactory.getClusterMap();
+      logger.info("Initialized clusterMap");
+      clusterParticipant = clusterAgentsFactory.getClusterParticipant();
       logger.info("Setting up JMX.");
       long startTime = SystemTime.getInstance().milliseconds();
       registry = clusterMap.getMetricRegistry();

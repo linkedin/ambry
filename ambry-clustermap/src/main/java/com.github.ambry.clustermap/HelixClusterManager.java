@@ -104,7 +104,9 @@ class HelixClusterManager implements ClusterMap {
         dcZkInfo.helixManager.addExternalViewChangeListener(dcZkInfo.clusterChangeListener);
         dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeListener);
         dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeListener);
+        logger.info("Registered, now waiting for initial calls");
         dcZkInfo.clusterChangeListener.waitForInitialization();
+        logger.info("Received initial calls for every listener from this Helix manager");
       }
     } catch (Exception e) {
       helixClusterManagerMetrics.initializeInstantiationMetric(false);
@@ -137,6 +139,7 @@ class HelixClusterManager implements ClusterMap {
         instanceNameToAmbryDataNode.put(instanceName, datanode);
         dcZkInfo.clusterChangeListener.allInstances.add(instanceName);
       }
+      logger.info("Initialized cluster information from {}", dcZkInfo.zkConnectStr);
     }
     for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
       for (AmbryDisk disk : disks) {
@@ -362,6 +365,9 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       synchronized (notificationLock) {
+        if (changeContext.getType() == NotificationContext.Type.INIT) {
+          logger.info("Received initial notification for live instance change");
+        }
         logger.trace("Live instance change triggered with: {}", liveInstances);
         Set<String> liveInstancesSet = new HashSet<>();
         for (LiveInstance liveInstance : liveInstances) {
@@ -385,6 +391,9 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onExternalViewChange(List<ExternalView> externalViewList, NotificationContext changeContext) {
       synchronized (notificationLock) {
+        if (changeContext.getType() == NotificationContext.Type.INIT) {
+          logger.info("Received initial notification for external view change");
+        }
         logger.trace("ExternalView change triggered with: {}", externalViewList);
 
         // No action taken at this time.
@@ -400,6 +409,9 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
       synchronized (notificationLock) {
+        if (changeContext.getType() == NotificationContext.Type.INIT) {
+          logger.info("Received initial notification for instance config change");
+        }
         logger.trace("Config change triggered with: {}", configs);
 
         // No action taken at this time. Going forward, changes like marking partitions back to read-write will go here.

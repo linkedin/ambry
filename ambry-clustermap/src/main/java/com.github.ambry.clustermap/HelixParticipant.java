@@ -20,12 +20,15 @@ import org.apache.helix.InstanceType;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
 import org.json.JSONException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * An implementation of {@link ClusterParticipant} that registers registers as a participant to a Helix cluster.
  */
 class HelixParticipant implements ClusterParticipant {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
@@ -60,12 +63,14 @@ class HelixParticipant implements ClusterParticipant {
    */
   @Override
   public void initialize(String hostName, int port) throws IOException {
+    logger.info("Initializing participant");
     String instanceName = ClusterMapUtils.getInstanceName(hostName, port);
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     try {
       manager.connect();
+      logger.info("Successfully initialized the participant");
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
     }
