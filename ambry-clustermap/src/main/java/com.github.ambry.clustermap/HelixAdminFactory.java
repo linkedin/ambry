@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 
+
 /**
  * A factory class to construct and get a reference to a {@link HelixAdmin}
  */
@@ -25,7 +26,7 @@ public class HelixAdminFactory {
    * @param zkAddr the address identifying the zk service to which this request is to be made.
    * @return the reference to the {@link HelixAdmin}.
    */
-  HelixAdmin getHelixAdmin(String zkAddr) {
+  public HelixAdmin getHelixAdmin(String zkAddr) {
     return new ZKHelixAdmin(zkAddr);
   }
 }

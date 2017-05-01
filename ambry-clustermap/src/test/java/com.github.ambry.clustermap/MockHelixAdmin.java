@@ -43,6 +43,7 @@ class MockHelixAdmin implements HelixAdmin {
   private long totalDiskCount = 0;
   private final List<MockHelixManager> helixManagersForThisAdmin = new ArrayList<>();
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
+  private Map<String, PartitionState> partitionStates = new HashMap<>();
   private long totalDiskCapacity;
 
   @Override
@@ -82,6 +83,7 @@ class MockHelixAdmin implements HelixAdmin {
       if (partitionToInstances.get(partition) == null) {
         Set<String> instanceSet = new HashSet<>();
         partitionToInstances.put(partition, instanceSet);
+        partitionStates.put(partition, PartitionState.READ_WRITE);
       }
       partitionToInstances.get(partition).addAll(idealstate.getInstanceSet(partition));
     }
@@ -164,6 +166,21 @@ class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * Sets the state of a partition
+   * @param partition partition for which state needs to be updated
+   * @param partitionState {@link PartitionState} that needs to be set
+   */
+  void setPartitionState(String partition, PartitionState partitionState) {
+    for (IdealState entry : resourcesToIdealStates.values()) {
+      for (String partitionStr : entry.getPartitionSet()) {
+        if (partitionStr.equals(partition) && partitionStates.containsKey(partition)) {
+          partitionStates.put(partition, partitionState);
+        }
+      }
+    }
+  }
+
+  /**
    * Trigger a live instance change notification.
    */
   private void triggerLiveInstanceChangeNotification() {
@@ -180,23 +197,40 @@ class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
-   * @return all partitions registered via this Helix admin.
+   * @return all writable partitions registered via this Helix admin.
    */
-  Set<String> getUpPartitions() {
-    Set<String> upPartitions = new HashSet<>();
+  Set<String> getWritablePartitions() {
+    Set<String> writablePartitions = new HashSet<>();
+    Set<String> healthWritablePartitions = new HashSet<>();
     for (Map.Entry<String, Set<String>> entry : partitionToInstances.entrySet()) {
-      boolean up = true;
-      for (String instance : entry.getValue()) {
-        if (!getUpInstances().contains(instance)) {
-          up = false;
-          break;
+      if (partitionStates.get(entry.getKey()).equals(PartitionState.READ_WRITE)) {
+        writablePartitions.add(entry.getKey());
+        boolean up = true;
+        for (String instance : entry.getValue()) {
+          if (!getUpInstances().contains(instance)) {
+            up = false;
+            break;
+          }
+        }
+        if (up) {
+          healthWritablePartitions.add(entry.getKey());
         }
       }
-      if (up) {
-        upPartitions.add(entry.getKey());
+    }
+    return healthWritablePartitions.isEmpty() ? writablePartitions : healthWritablePartitions;
+  }
+
+  /**
+   * @return all writable partitions registered via this Helix admin.
+   */
+  Set<String> getAllWritablePartitions() {
+    Set<String> writablePartitions = new HashSet<>();
+    for (Map.Entry<String, Set<String>> entry : partitionToInstances.entrySet()) {
+      if (partitionStates.get(entry.getKey()).equals(PartitionState.READ_WRITE)) {
+        writablePartitions.add(entry.getKey());
       }
     }
-    return upPartitions;
+    return writablePartitions;
   }
 
   /**
@@ -452,7 +486,7 @@ class MockHelixAdminFactory extends HelixAdminFactory {
   Map<String, MockHelixAdmin> helixAdminMap = new HashMap<>();
 
   @Override
-  MockHelixAdmin getHelixAdmin(String zkAddr) {
+  public MockHelixAdmin getHelixAdmin(String zkAddr) {
     if (helixAdminMap.containsKey(zkAddr)) {
       return helixAdminMap.get(zkAddr);
     } else {

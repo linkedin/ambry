@@ -172,6 +172,11 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public List<PartitionId> getAllPartitions() {
+    return new ArrayList<>(partitions.values());
+  }
+
+  @Override
   public boolean hasDatacenter(String datacenterName) {
     return dataCentersInClusterMap.contains(datacenterName);
   }

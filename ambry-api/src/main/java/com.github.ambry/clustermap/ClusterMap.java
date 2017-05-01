@@ -37,6 +37,12 @@ public interface ClusterMap extends AutoCloseable {
   List<? extends PartitionId> getWritablePartitionIds();
 
   /**
+   * Gets a list of all partitions in the cluster
+   * @return a list of all partitions in the cluster
+   */
+  List<? extends PartitionId> getAllPartitions();
+
+  /**
    * Checks if datacenter name corresponds to some datacenter in this cluster map's hardware layout.
    *
    * @param datacenterName name of datacenter

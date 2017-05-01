@@ -131,9 +131,9 @@ public class MockHelixCluster {
    * @param instanceName the instance to be brought down.
    */
   void bringInstanceDown(String instanceName) {
-    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
-      if (helixAdmin.getInstancesInCluster(clusterName).contains(instanceName)) {
-        helixAdmin.bringInstanceDown(instanceName);
+    for (Map.Entry<String, MockHelixAdmin> helixAdmin : helixAdmins.entrySet()) {
+      if (helixAdmin.getValue().getInstancesInCluster(clusterName).contains(instanceName)) {
+        helixAdmin.getValue().bringInstanceDown(instanceName);
       }
     }
   }
@@ -150,12 +150,27 @@ public class MockHelixCluster {
   }
 
   /**
+   * Set the state of a partition
+   * @param partition partition for which state needs to be updated
+   * @param partitionState {@link PartitionState} that needs to be set
+   */
+  void setPartitionState(String partition, PartitionState partitionState) {
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+      helixAdmin.setPartitionState(partition, partitionState);
+    }
+  }
+
+  /**
    * @return the set of all partitions in this cluster.
    */
   Set<String> getPartitions() {
-    Set<String> partitions = new HashSet<>();
+    Set<String> partitions = null;
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
-      partitions.addAll(helixAdmin.getPartitions());
+      if (partitions == null) {
+        partitions = new HashSet<>(helixAdmin.getPartitions());
+      } else {
+        partitions.retainAll(helixAdmin.getPartitions());
+      }
     }
     return partitions;
   }
@@ -163,16 +178,31 @@ public class MockHelixCluster {
   /**
    * @return the set of all partitions in this cluster that are up.
    */
-  Set<String> getUpPartitions() {
-    Set<String> upPartitions = null;
+  Set<String> getWritablePartitions() {
+    Set<String> writablePartitions = null;
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
-      if (upPartitions == null) {
-        upPartitions = new HashSet<>(helixAdmin.getUpPartitions());
+      if (writablePartitions == null) {
+        writablePartitions = new HashSet<>(helixAdmin.getWritablePartitions());
       } else {
-        upPartitions.retainAll(helixAdmin.getUpPartitions());
+        writablePartitions.retainAll(helixAdmin.getWritablePartitions());
       }
     }
-    return upPartitions;
+    return writablePartitions;
+  }
+
+  /**
+   * @return the set of all partitions in this cluster that are up.
+   */
+  Set<String> getAllWritablePartitions() {
+    Set<String> writablePartitions = null;
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+      if (writablePartitions == null) {
+        writablePartitions = new HashSet<>(helixAdmin.getAllWritablePartitions());
+      } else {
+        writablePartitions.retainAll(helixAdmin.getAllWritablePartitions());
+      }
+    }
+    return writablePartitions;
   }
 
   /**

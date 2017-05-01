@@ -78,6 +78,11 @@ public class StaticClusterManagerTest {
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
+    // add one partition with read_only state. This doesnt exactly mimic real behavior as a new partition added will
+    // always be in read_write state. This is just to test getWritablePartitions() and getAllPartitions()
+    testPartitionLayout.partitionState = PartitionState.READ_ONLY;
+    testPartitionLayout.addNewPartitions(1);
+    testPartitionLayout.partitionState = PartitionState.READ_WRITE;
 
     ClusterMap clusterMapManager =
         (new StaticClusterAgentsFactory(null, testPartitionLayout.getPartitionLayout())).getClusterMap();
@@ -85,8 +90,17 @@ public class StaticClusterManagerTest {
       System.out.println(metricName);
     }
 
-    List<? extends PartitionId> partitionIds = clusterMapManager.getWritablePartitionIds();
+    List<? extends PartitionId> writablePartitionIds = clusterMapManager.getWritablePartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMapManager.getAllPartitions();
+    assertEquals(writablePartitionIds.size(), testPartitionLayout.getPartitionCount() - 1);
     assertEquals(partitionIds.size(), testPartitionLayout.getPartitionCount());
+    for (PartitionId partitionId : partitionIds) {
+      if (partitionId.getPartitionState().equals(PartitionState.READ_WRITE)) {
+        assertTrue("Partition not found in writable set ", writablePartitionIds.contains(partitionId));
+      } else {
+        assertFalse("READ_ONLY Partition found in writable set ", writablePartitionIds.contains(partitionId));
+      }
+    }
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
       assertEquals(partitionId.getReplicaIds().size(), testPartitionLayout.getTotalReplicaCount());

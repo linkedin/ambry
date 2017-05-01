@@ -64,7 +64,7 @@ class CompositeClusterManager implements ClusterMap {
   /**
    * Get writable partition ids from both the underlying {@link StaticClusterManager} and the underlying
    * {@link HelixClusterManager}. Compare the two and if there is a mismatch, update a metric.
-   * @return a list of partition ids from the underlying {@link StaticClusterManager}.
+   * @return a list of writable partition ids from the underlying {@link StaticClusterManager}.
    */
   @Override
   public List<PartitionId> getWritablePartitionIds() {
@@ -85,6 +85,32 @@ class CompositeClusterManager implements ClusterMap {
       }
     }
     return staticWritablePartitionIds;
+  }
+
+  /**
+   * Get all partition ids from both the underlying {@link StaticClusterManager} and the underlying
+   * {@link HelixClusterManager}. Compare the two and if there is a mismatch, update a metric.
+   * @return a list of partition ids from the underlying {@link StaticClusterManager}.
+   */
+  @Override
+  public List<PartitionId> getAllPartitions() {
+    List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitions();
+    if (helixClusterManager != null) {
+      Set<String> staticPartitionIdStrings = new HashSet<>();
+      for (PartitionId partitionId : staticPartitionIds) {
+        staticPartitionIdStrings.add(partitionId.toString());
+      }
+
+      Set<String> helixPartitionIdStrings = new HashSet<>();
+      for (PartitionId partitionId : helixClusterManager.getAllPartitions()) {
+        helixPartitionIdStrings.add(partitionId.toString());
+      }
+
+      if (!staticPartitionIdStrings.equals(helixPartitionIdStrings)) {
+        helixClusterManagerMetrics.getAllPartitionsMismatchCount.inc();
+      }
+    }
+    return staticPartitionIds;
   }
 
   /**
