@@ -34,6 +34,9 @@ public class StoreMetrics {
   public final Timer findMissingKeysResponse;
   public final Timer isKeyDeletedResponse;
   public final Timer storeStartTime;
+  public final Histogram storeShutdownTimeInMs;
+  public final Histogram indexShutdownTimeInMs;
+  public final Histogram hardDeleteShutdownTimeInMs;
   public final Counter storeStartFailure;
   public final Counter overflowWriteError;
   public final Counter overflowReadError;
@@ -76,6 +79,11 @@ public class StoreMetrics {
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindMissingKeyResponse"));
     isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "IsKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreStartTime"));
+    storeShutdownTimeInMs = registry.histogram(MetricRegistry.name(BlobStore.class, name + "StoreShutdownTimeInMs"));
+    indexShutdownTimeInMs =
+        registry.histogram(MetricRegistry.name(PersistentIndex.class, name + "IndexShutdownTimeInMs"));
+    hardDeleteShutdownTimeInMs =
+        registry.histogram(MetricRegistry.name(HardDeleter.class, name + "HardDeleteShutdownTimeInMs"));
     storeStartFailure = registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreStartFailure"));
     overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowWriteError"));
     overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowReadError"));

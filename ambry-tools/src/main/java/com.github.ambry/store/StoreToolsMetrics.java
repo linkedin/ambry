@@ -42,7 +42,7 @@ public class StoreToolsMetrics {
   final Counter logRangeNotFoundInIndexError;
   final Counter indexLogEndOffsetMisMatchError;
 
-  StoreToolsMetrics(MetricRegistry registry) {
+  public StoreToolsMetrics(MetricRegistry registry) {
     dumpIndexTimeMs = registry.timer(MetricRegistry.name(DumpIndexTool.class, "DumpIndexTimeMs"));
     dumpReplicaIndexesTimeMs = registry.timer(MetricRegistry.name(DumpIndexTool.class, "DumpReplicaIndexesTimeMs"));
     dumpLogTimeMs = registry.timer(MetricRegistry.name(DumpLogTool.class, "DumpLogTimeMs"));

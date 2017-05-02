@@ -1176,18 +1176,23 @@ class PersistentIndex {
    * @throws StoreException
    */
   void close() throws StoreException {
-    persistor.write();
-    if (hardDeleter != null) {
-      try {
-        hardDeleter.shutdown();
-      } catch (Exception e) {
-        logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
-      }
-    }
+    long startTimeInMs = time.milliseconds();
     try {
-      cleanShutdownFile.createNewFile();
-    } catch (IOException e) {
-      logger.error("Index : " + dataDir + " error while creating clean shutdown file ", e);
+      persistor.write();
+      if (hardDeleter != null) {
+        try {
+          hardDeleter.shutdown();
+        } catch (Exception e) {
+          logger.error("Index : " + dataDir + " error while persisting cleanup token ", e);
+        }
+      }
+      try {
+        cleanShutdownFile.createNewFile();
+      } catch (IOException e) {
+        logger.error("Index : " + dataDir + " error while creating clean shutdown file ", e);
+      }
+    } finally {
+      metrics.indexShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
     }
   }
 
