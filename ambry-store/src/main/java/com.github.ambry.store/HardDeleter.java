@@ -32,6 +32,7 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -379,20 +380,27 @@ public class HardDeleter implements Runnable {
   }
 
   void shutdown() throws InterruptedException, StoreException, IOException {
-    if (enabled.get()) {
-      logger.info("Hard delete shutdown initiated");
-      enabled.set(false);
-      hardDeleteLock.lock();
-      try {
-        pauseCondition.signal();
-      } finally {
-        hardDeleteLock.unlock();
+    final Timer.Context context = metrics.hardDeleteShutdownTimeInMs.time();
+    try {
+      if (enabled.get()) {
+        logger.info("Hard delete shutdown initiated");
+        enabled.set(false);
+        hardDeleteLock.lock();
+        try {
+          pauseCondition.signal();
+        } finally {
+          hardDeleteLock.unlock();
+        }
+        if (!shutdownLatch.await(5, TimeUnit.SECONDS)) {
+          logger.error("HardDelete shutdown took more than 5 secs ");
+        }
+        logger.info("Hard delete shutdown complete");
+        throttler.close();
+        pruneHardDeleteRecoveryRange();
+        persistCleanupToken();
       }
-      shutdownLatch.await();
-      logger.info("Hard delete shutdown complete");
-      throttler.close();
-      pruneHardDeleteRecoveryRange();
-      persistCleanupToken();
+    } finally {
+      context.stop();
     }
   }
 

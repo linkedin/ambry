@@ -390,6 +390,7 @@ class BlobStore implements Store {
 
   @Override
   public void shutdown() throws StoreException {
+    final Timer.Context context = metrics.storeShutdownTimeInMs.time();
     synchronized (lock) {
       checkStarted();
       try {
@@ -406,6 +407,7 @@ class BlobStore implements Store {
         } catch (IOException e) {
           logger.error("Store : " + dataDir + " IO Exception while trying to close the file lock", e);
         }
+        context.stop();
       }
     }
   }
