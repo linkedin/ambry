@@ -1176,7 +1176,7 @@ class PersistentIndex {
    * @throws StoreException
    */
   void close() throws StoreException {
-    final Timer.Context context = metrics.indexShutdownTimeInMs.time();
+    long startTimeInMs = time.milliseconds();
     try {
       persistor.write();
       if (hardDeleter != null) {
@@ -1192,7 +1192,7 @@ class PersistentIndex {
         logger.error("Index : " + dataDir + " error while creating clean shutdown file ", e);
       }
     } finally {
-      context.close();
+      metrics.indexShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
     }
   }
 
