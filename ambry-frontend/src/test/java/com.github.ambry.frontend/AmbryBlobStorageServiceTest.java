@@ -334,13 +334,14 @@ public class AmbryBlobStorageServiceTest {
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
     JSONObject headers = new JSONObject();
-    setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId);
     Map<String, String> userMetadata = new HashMap<String, String>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
     String blobId = postBlobAndVerify(headers, content);
 
+    headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, headers, content);
     getHeadAndVerify(blobId, null, headers);
 
@@ -535,7 +536,6 @@ public class AmbryBlobStorageServiceTest {
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param headers the {@link JSONObject} where the headers should be set.
-   * @param contentLength sets the {@link RestUtils.Headers#BLOB_SIZE} header. Required.
    * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
    *                  expiry.
    * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
@@ -547,10 +547,9 @@ public class AmbryBlobStorageServiceTest {
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    * @throws JSONException
    */
-  private void setAmbryHeaders(JSONObject headers, long contentLength, long ttlInSecs, boolean isPrivate,
-      String serviceId, String contentType, String ownerId) throws JSONException {
-    if (headers != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
-      headers.put(RestUtils.Headers.BLOB_SIZE, contentLength);
+  private void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
+      String contentType, String ownerId) throws JSONException {
+    if (headers != null && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       headers.put(RestUtils.Headers.TTL, ttlInSecs);
       headers.put(RestUtils.Headers.PRIVATE, isPrivate);
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
@@ -659,7 +658,7 @@ public class AmbryBlobStorageServiceTest {
           break;
         case POST:
           JSONObject headers = new JSONObject();
-          setAmbryHeaders(headers, 0, Utils.Infinite_Time, false, "test-serviceID", "text/plain", "test-ownerId");
+          setAmbryHeadersForPut(headers, Utils.Infinite_Time, false, "test-serviceID", "text/plain", "test-ownerId");
           restRequest = createRestRequest(restMethod, "/", headers, null);
           doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");
@@ -710,7 +709,7 @@ public class AmbryBlobStorageServiceTest {
    * @param expectedContent the expected content of the blob.
    * @throws Exception
    */
-  public void getBlobAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders, ByteBuffer expectedContent)
+  private void getBlobAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders, ByteBuffer expectedContent)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, createRequestHeaders(range), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -747,7 +746,7 @@ public class AmbryBlobStorageServiceTest {
    * @param blobId the blob ID of the blob to GET.
    * @throws Exception
    */
-  public void getNotModifiedBlobAndVerify(String blobId) throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId) throws Exception {
     JSONObject headers = new JSONObject();
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
     dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -1019,7 +1018,7 @@ public class AmbryBlobStorageServiceTest {
       JSONObject headers = new JSONObject();
       List<ByteBuffer> contents = null;
       if (restMethod.equals(RestMethod.POST)) {
-        setAmbryHeaders(headers, 0, 7200, false, "doExternalServicesBadInputTest", "application/octet-stream",
+        setAmbryHeadersForPut(headers, 7200, false, "doExternalServicesBadInputTest", "application/octet-stream",
             "doExternalServicesBadInputTest");
         contents = new ArrayList<ByteBuffer>(1);
         contents.add(null);
@@ -1060,7 +1059,7 @@ public class AmbryBlobStorageServiceTest {
         case POST:
           testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
           JSONObject headers = new JSONObject();
-          setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
+          setAmbryHeadersForPut(headers, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
               "routerExceptionPipelineTest");
           checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
           break;

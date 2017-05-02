@@ -200,7 +200,7 @@ class NettyMultipartRequest extends NettyRequest {
               RestServiceErrorCode.BadRequest);
         } else {
           hasBlob = true;
-          if (fileUpload.length() != getSize()) {
+          if (getSize() != -1 && fileUpload.length() != getSize()) {
             nettyMetrics.multipartRequestSizeMismatchError.inc();
             throw new RestServiceException(
                 "Request size [" + fileUpload.length() + "] does not match Content-Length [" + getSize() + "]",

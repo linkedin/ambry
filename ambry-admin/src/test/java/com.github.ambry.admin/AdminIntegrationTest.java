@@ -307,7 +307,7 @@ public class AdminIntegrationTest {
     String contentType = "application/octet-stream";
     String ownerId = "getHeadDeleteOwnerID";
     HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId);
     headers.set(HttpHeaderNames.CONTENT_LENGTH, content.capacity());
     String blobId;
     byte[] usermetadata = null;
@@ -318,6 +318,7 @@ public class AdminIntegrationTest {
       headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     }
     blobId = putBlob(headers, content, usermetadata);
+    headers.add(RestUtils.Headers.BLOB_SIZE, (long) content.capacity());
     getBlobAndVerify(blobId, null, headers, content);
     getNotModifiedBlobAndVerify(blobId, null, false);
     getUserMetadataAndVerify(blobId, null, headers, usermetadata);
@@ -333,7 +334,6 @@ public class AdminIntegrationTest {
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param httpHeaders the {@link HttpHeaders} where the headers should be set.
-   * @param contentLength sets the {@link RestUtils.Headers#BLOB_SIZE} header. Required.
    * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
    *                  expiry.
    * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
@@ -345,10 +345,9 @@ public class AdminIntegrationTest {
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    * @throws org.json.JSONException
    */
-  private void setAmbryHeaders(HttpHeaders httpHeaders, long contentLength, long ttlInSecs, boolean isPrivate,
-      String serviceId, String contentType, String ownerId) throws JSONException {
-    if (httpHeaders != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
-      httpHeaders.add(RestUtils.Headers.BLOB_SIZE, contentLength);
+  private void setAmbryHeadersForPut(HttpHeaders httpHeaders, long ttlInSecs, boolean isPrivate, String serviceId,
+      String contentType, String ownerId) throws JSONException {
+    if (httpHeaders != null && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       httpHeaders.add(RestUtils.Headers.TTL, ttlInSecs);
       httpHeaders.add(RestUtils.Headers.PRIVATE, isPrivate);
       httpHeaders.add(RestUtils.Headers.SERVICE_ID, serviceId);

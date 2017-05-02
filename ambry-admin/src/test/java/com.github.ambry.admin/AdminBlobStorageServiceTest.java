@@ -330,10 +330,11 @@ public class AdminBlobStorageServiceTest {
     String contentType = "application/octet-stream";
     String ownerId = "getHeadDeleteOwnerID";
     Map<String, Object> headers = new HashMap<>();
-    setAmbryHeaders(headers, CONTENT_LENGTH, 7200, false, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId);
     headers.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     headers.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     String blobId = putBlobInRouter(headers, content);
+    headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, headers, content);
     getNotModifiedBlobAndVerify(blobId, null);
     getUserMetadataAndVerify(blobId, null, headers);
@@ -546,7 +547,6 @@ public class AdminBlobStorageServiceTest {
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param headers the {@link Map} where the headers should be set.
-   * @param contentLength sets the {@link RestUtils.Headers#BLOB_SIZE} header. Required.
    * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
    *                  expiry.
    * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
@@ -557,10 +557,9 @@ public class AdminBlobStorageServiceTest {
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    */
-  private static void setAmbryHeaders(Map<String, Object> headers, long contentLength, long ttlInSecs,
-      boolean isPrivate, String serviceId, String contentType, String ownerId) {
-    if (headers != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
-      headers.put(RestUtils.Headers.BLOB_SIZE, contentLength);
+  private static void setAmbryHeadersForPut(Map<String, Object> headers, long ttlInSecs, boolean isPrivate,
+      String serviceId, String contentType, String ownerId) {
+    if (headers != null && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       headers.put(RestUtils.Headers.TTL, ttlInSecs);
       headers.put(RestUtils.Headers.PRIVATE, isPrivate);
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
@@ -702,7 +701,7 @@ public class AdminBlobStorageServiceTest {
    * @param expectedContent the expected content of the blob.
    * @throws Exception
    */
-  public void getBlobAndVerify(String blobId, GetOption getOption, Map<String, Object> expectedHeaders,
+  private void getBlobAndVerify(String blobId, GetOption getOption, Map<String, Object> expectedHeaders,
       ByteBuffer expectedContent) throws Exception {
     JSONObject headers = new JSONObject();
     if (getOption != null) {

@@ -183,19 +183,6 @@ public class RestUtils {
    *                                    expected.
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
-    String blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
-    long blobSize;
-    try {
-      blobSize = Long.parseLong(blobSizeStr);
-      if (blobSize < 0) {
-        throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSize + "] is less than 0",
-            RestServiceErrorCode.InvalidArgs);
-      }
-    } catch (NumberFormatException e) {
-      throw new RestServiceException(Headers.BLOB_SIZE + "[" + blobSizeStr + "] could not parsed into a number",
-          RestServiceErrorCode.InvalidArgs);
-    }
-
     long ttl = Utils.Infinite_Time;
     String ttlStr = getHeader(args, Headers.TTL, false);
     if (ttlStr != null) {
@@ -227,7 +214,7 @@ public class RestUtils {
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
 
-    return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl);
+    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl);
   }
 
   /**
