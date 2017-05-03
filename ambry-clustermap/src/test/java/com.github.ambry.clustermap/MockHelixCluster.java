@@ -131,9 +131,9 @@ public class MockHelixCluster {
    * @param instanceName the instance to be brought down.
    */
   void bringInstanceDown(String instanceName) {
-    for (Map.Entry<String, MockHelixAdmin> helixAdmin : helixAdmins.entrySet()) {
-      if (helixAdmin.getValue().getInstancesInCluster(clusterName).contains(instanceName)) {
-        helixAdmin.getValue().bringInstanceDown(instanceName);
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
+      if (helixAdmin.getInstancesInCluster(clusterName).contains(instanceName)) {
+        helixAdmin.bringInstanceDown(instanceName);
       }
     }
   }
@@ -163,7 +163,7 @@ public class MockHelixCluster {
   /**
    * @return the set of all partitions in this cluster.
    */
-  Set<String> getPartitions() {
+  Set<String> getAllPartitions() {
     Set<String> partitions = null;
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       if (partitions == null) {
@@ -187,7 +187,7 @@ public class MockHelixCluster {
         writablePartitions.retainAll(helixAdmin.getWritablePartitions());
       }
     }
-    return writablePartitions;
+    return writablePartitions.isEmpty() ? getAllWritablePartitions() : writablePartitions;
   }
 
   /**

@@ -78,10 +78,9 @@ public class StaticClusterManagerTest {
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
-    // add one partition with read_only state. This doesnt exactly mimic real behavior as a new partition added will
-    // always be in read_write state. This is just to test getWritablePartitions() and getAllPartitions()
+    // add 3 partitions with read_only state.
     testPartitionLayout.partitionState = PartitionState.READ_ONLY;
-    testPartitionLayout.addNewPartitions(1);
+    testPartitionLayout.addNewPartitions(3);
     testPartitionLayout.partitionState = PartitionState.READ_WRITE;
 
     ClusterMap clusterMapManager =
@@ -92,7 +91,7 @@ public class StaticClusterManagerTest {
 
     List<? extends PartitionId> writablePartitionIds = clusterMapManager.getWritablePartitionIds();
     List<? extends PartitionId> partitionIds = clusterMapManager.getAllPartitions();
-    assertEquals(writablePartitionIds.size(), testPartitionLayout.getPartitionCount() - 1);
+    assertEquals(writablePartitionIds.size(), testPartitionLayout.getPartitionCount() - 3);
     assertEquals(partitionIds.size(), testPartitionLayout.getPartitionCount());
     for (PartitionId partitionId : partitionIds) {
       if (partitionId.getPartitionState().equals(PartitionState.READ_WRITE)) {
