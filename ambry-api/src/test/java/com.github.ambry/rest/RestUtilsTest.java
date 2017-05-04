@@ -141,6 +141,12 @@ public class RestUtilsTest {
     setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, null);
     headers.put(RestUtils.Headers.BLOB_SIZE, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
+
+    // blobSize negative (should succeed)
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, null);
+    headers.put(RestUtils.Headers.BLOB_SIZE, -1);
+    verifyBlobPropertiesConstructionSuccess(headers);
   }
 
   /**

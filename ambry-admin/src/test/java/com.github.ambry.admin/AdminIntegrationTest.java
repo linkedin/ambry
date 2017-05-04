@@ -308,7 +308,6 @@ public class AdminIntegrationTest {
     String ownerId = "getHeadDeleteOwnerID";
     HttpHeaders headers = new DefaultHttpHeaders();
     setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId);
-    headers.set(HttpHeaderNames.CONTENT_LENGTH, content.capacity());
     String blobId;
     byte[] usermetadata = null;
     if (multipartPost) {
