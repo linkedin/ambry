@@ -26,8 +26,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class StorageManagerMetrics {
   private final MetricRegistry registry;
 
+  public final Timer storageManagerStartTime;
+  public final Timer storageManagerShutdownTime;
   public final Timer diskStartTime;
+  public final Timer diskShutdownTime;
   public final Counter totalStoreStartFailures;
+  public final Counter totalStoreShutdownFailures;
   public final Counter diskMountPathFailures;
 
   // CompactionManager related metrics
@@ -44,9 +48,14 @@ public class StorageManagerMetrics {
    */
   public StorageManagerMetrics(MetricRegistry registry) {
     this.registry = registry;
-    diskStartTime = registry.timer(MetricRegistry.name(StorageManager.class, "DiskStartTime"));
-    totalStoreStartFailures = registry.counter(MetricRegistry.name(StorageManager.class, "TotalStoreStartFailures"));
-    diskMountPathFailures = registry.counter(MetricRegistry.name(StorageManager.class, "DiskMountPathFailures"));
+    storageManagerStartTime = registry.timer(MetricRegistry.name(StorageManager.class, "StorageManagerStartTime"));
+    storageManagerShutdownTime =
+        registry.timer(MetricRegistry.name(StorageManager.class, "StorageManagerShutdownTime"));
+    diskStartTime = registry.timer(MetricRegistry.name(DiskManager.class, "DiskStartTime"));
+    diskShutdownTime = registry.timer(MetricRegistry.name(DiskManager.class, "DiskShutdownTime"));
+    totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));
+    totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
+    diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));
 
     compactionCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionCount"));
     compactionManagerTerminateErrorCount =

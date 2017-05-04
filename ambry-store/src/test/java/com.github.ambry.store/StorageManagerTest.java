@@ -164,11 +164,11 @@ public class StorageManagerTest {
 
   /**
    * Test that stores for all partitions on a node have been started and partitions not present on this node are
-   * inaccessible.
+   * inaccessible. Also tests all stores are shutdown on shutting down the storage manager
    * @throws Exception
    */
   @Test
-  public void successfulStartTest() throws Exception {
+  public void successfulStartupShutdownTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     StorageManager storageManager = createAndStartStoreManager(replicas);
@@ -209,9 +209,10 @@ public class StorageManagerTest {
    * @param storageManager the {@link StorageManager} to shutdown.
    * @param replicas the {@link ReplicaId}s to check for store inaccessibility.
    * @throws StoreException
+   * @throws InterruptedException
    */
   private static void shutdownAndAssertStoresInaccessible(StorageManager storageManager, List<ReplicaId> replicas)
-      throws StoreException {
+      throws StoreException, InterruptedException {
     storageManager.shutdown();
     for (ReplicaId replica : replicas) {
       assertNull(storageManager.getStore(replica.getPartitionId()));
