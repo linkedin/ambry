@@ -193,6 +193,25 @@ class AdminBlobStorageService implements BlobStorageService {
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * PUT is not supported by {@link AdminBlobStorageService}.
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   */
+  @Override
+  public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    handlePrechecks(restRequest, restResponseChannel);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? adminMetrics.putBlobSSLMetrics : adminMetrics.putBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    Exception exception =
+        isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
+            : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
+    submitResponse(restRequest, restResponseChannel, null, exception);
+  }
+
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     long processingStartTime = System.currentTimeMillis();

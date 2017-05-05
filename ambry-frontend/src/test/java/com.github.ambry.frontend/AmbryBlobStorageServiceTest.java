@@ -175,6 +175,7 @@ public class AmbryBlobStorageServiceTest {
   public void nullInputsForFunctionsTest() throws Exception {
     doNullInputsForFunctionsTest("handleGet");
     doNullInputsForFunctionsTest("handlePost");
+    doNullInputsForFunctionsTest("handlePut");
     doNullInputsForFunctionsTest("handleDelete");
     doNullInputsForFunctionsTest("handleHead");
   }
@@ -193,6 +194,7 @@ public class AmbryBlobStorageServiceTest {
 
     doRuntimeExceptionRouterTest(RestMethod.GET);
     doRuntimeExceptionRouterTest(RestMethod.POST);
+    doRuntimeExceptionRouterTest(RestMethod.PUT);
     doRuntimeExceptionRouterTest(RestMethod.DELETE);
     doRuntimeExceptionRouterTest(RestMethod.HEAD);
   }
@@ -228,6 +230,13 @@ public class AmbryBlobStorageServiceTest {
     ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
     // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
     Exception e = restResponseChannel.getException();
+    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
+
+    responseHandler.reset();
+    restResponseChannel = new MockRestResponseChannel();
+    ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
+    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
+    e = restResponseChannel.getException();
     assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
 
     responseHandler.reset();
@@ -576,6 +585,9 @@ public class AmbryBlobStorageServiceTest {
       case POST:
         ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
         break;
+      case PUT:
+        ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
+        break;
       case GET:
         ambryBlobStorageService.handleGet(restRequest, restResponseChannel);
         break;
@@ -658,11 +670,12 @@ public class AmbryBlobStorageServiceTest {
           fail(restMethod + " should have detected a RestServiceException because of a bad router");
           break;
         case POST:
+        case PUT:
           JSONObject headers = new JSONObject();
           setAmbryHeaders(headers, 0, Utils.Infinite_Time, false, "test-serviceID", "text/plain", "test-ownerId");
           restRequest = createRestRequest(restMethod, "/", headers, null);
           doOperation(restRequest, restResponseChannel);
-          fail("POST should have detected a RestServiceException because of a bad router");
+          fail("POST/PUT should have detected a RestServiceException because of a bad router");
           break;
         default:
           throw new IllegalArgumentException("Unrecognized RestMethod: " + restMethod);
@@ -991,10 +1004,11 @@ public class AmbryBlobStorageServiceTest {
       if (mode.equals(FrontendTestSecurityServiceFactory.Mode.Request)) {
         restMethods = RestMethod.values();
       } else {
-        restMethods = new RestMethod[3];
+        restMethods = new RestMethod[4];
         restMethods[0] = RestMethod.GET;
         restMethods[1] = RestMethod.HEAD;
         restMethods[2] = RestMethod.POST;
+        restMethods[3] = RestMethod.PUT;
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
@@ -1018,7 +1032,7 @@ public class AmbryBlobStorageServiceTest {
       }
       JSONObject headers = new JSONObject();
       List<ByteBuffer> contents = null;
-      if (restMethod.equals(RestMethod.POST)) {
+      if (restMethod.equals(RestMethod.POST) || restMethod.equals(RestMethod.PUT)) {
         setAmbryHeaders(headers, 0, 7200, false, "doExternalServicesBadInputTest", "application/octet-stream",
             "doExternalServicesBadInputTest");
         contents = new ArrayList<ByteBuffer>(1);
@@ -1058,6 +1072,7 @@ public class AmbryBlobStorageServiceTest {
           checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", null, null));
           break;
         case POST:
+        case PUT:
           testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
           JSONObject headers = new JSONObject();
           setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",

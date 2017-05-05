@@ -145,6 +145,12 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
             break;
+          case PUT:
+            responseChannel.setStatus(ResponseStatus.Created);
+            responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+            responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
+                new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+            break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,
                 RestServiceErrorCode.InternalServerError);

@@ -281,7 +281,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         try {
           // We need to maintain state about the request itself for the subsequent parts (if any) that come in. We will
           // attach content to the request as the content arrives.
-          if (HttpMethod.POST.equals(httpRequest.method()) && HttpPostRequestDecoder.isMultipart(httpRequest)) {
+          if ((HttpMethod.POST.equals(httpRequest.method()) || HttpMethod.PUT.equals(httpRequest.method()))
+              && HttpPostRequestDecoder.isMultipart(httpRequest)) {
             nettyMetrics.multipartPostRequestRate.mark();
             request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics);
           } else {
@@ -295,7 +296,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           // With any other method that we support, we do not expect any valid content. LastHttpContent is a Netty thing.
           // So we wait for LastHttpContent (throw an error if we don't receive it or receive something else) and then
           // schedule the other methods for handling in handleContent().
-          if (request.getRestMethod().equals(RestMethod.POST) && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
+          if ((request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT))
+              && !HttpPostRequestDecoder.isMultipart(httpRequest)) {
             requestHandler.handleRequest(request, responseChannel);
           }
         } catch (RestServiceException e) {
@@ -350,8 +352,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
         request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
-      if (success && (!request.getRestMethod().equals(RestMethod.POST) || (request.isMultipart()
-          && requestContentFullyReceived))) {
+      if (success && ((!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT))
+          || (request.isMultipart() && requestContentFullyReceived))) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {
