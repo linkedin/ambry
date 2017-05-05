@@ -15,8 +15,8 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -26,10 +26,10 @@ import java.util.concurrent.atomic.AtomicLong;
 public class StorageManagerMetrics {
   private final MetricRegistry registry;
 
-  public final Timer storageManagerStartTime;
-  public final Timer storageManagerShutdownTime;
-  public final Timer diskStartTime;
-  public final Timer diskShutdownTime;
+  public final Histogram storageManagerStartTimeMs;
+  public final Histogram storageManagerShutdownTimeMs;
+  public final Histogram diskStartTimeMs;
+  public final Histogram diskShutdownTimeMs;
   public final Counter totalStoreStartFailures;
   public final Counter totalStoreShutdownFailures;
   public final Counter diskMountPathFailures;
@@ -48,11 +48,12 @@ public class StorageManagerMetrics {
    */
   public StorageManagerMetrics(MetricRegistry registry) {
     this.registry = registry;
-    storageManagerStartTime = registry.timer(MetricRegistry.name(StorageManager.class, "StorageManagerStartTime"));
-    storageManagerShutdownTime =
-        registry.timer(MetricRegistry.name(StorageManager.class, "StorageManagerShutdownTime"));
-    diskStartTime = registry.timer(MetricRegistry.name(DiskManager.class, "DiskStartTime"));
-    diskShutdownTime = registry.timer(MetricRegistry.name(DiskManager.class, "DiskShutdownTime"));
+    storageManagerStartTimeMs =
+        registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerStartTimeMs"));
+    storageManagerShutdownTimeMs =
+        registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerShutdownTimeMs"));
+    diskStartTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskStartTimeMs"));
+    diskShutdownTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskShutdownTimeMs"));
     totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));
     totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
     diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));

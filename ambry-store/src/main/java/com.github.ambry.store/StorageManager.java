@@ -15,7 +15,6 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -39,6 +38,7 @@ public class StorageManager {
   private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
   private final List<DiskManager> diskManagers = new ArrayList<>();
   private final StorageManagerMetrics metrics;
+  private final Time time;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -57,6 +57,7 @@ public class StorageManager {
       MessageStoreHardDelete hardDelete, Time time) throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
+    this.time = time;
 
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -100,7 +101,7 @@ public class StorageManager {
    * @throws InterruptedException
    */
   public void start() throws InterruptedException {
-    Timer.Context context = metrics.storageManagerStartTime.time();
+    long startTimeMs = time.milliseconds();
     try {
       logger.info("Starting storage manager");
       List<Thread> startupThreads = new ArrayList<>();
@@ -125,7 +126,7 @@ public class StorageManager {
       metrics.initializeCompactionThreadsTracker(this, diskManagers.size());
       logger.info("Starting storage manager complete");
     } finally {
-      context.stop();
+      metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
     }
   }
 
@@ -155,7 +156,7 @@ public class StorageManager {
    * @throws InterruptedException
    */
   public void shutdown() throws InterruptedException {
-    Timer.Context context = metrics.storageManagerShutdownTime.time();
+    long startTimeMs = time.milliseconds();
     try {
       logger.info("Shutting down storage manager");
       List<Thread> shutdownThreads = new ArrayList<>();
@@ -179,7 +180,7 @@ public class StorageManager {
       }
       logger.info("Shutting down storage manager complete");
     } finally {
-      context.stop();
+      metrics.storageManagerShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
   }
 

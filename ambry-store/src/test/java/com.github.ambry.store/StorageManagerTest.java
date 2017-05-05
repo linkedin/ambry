@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -31,6 +32,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -44,6 +46,7 @@ import static org.junit.Assert.*;
 public class StorageManagerTest {
   private static final Random RANDOM = new Random();
   private MockClusterMap clusterMap;
+  private MetricRegistry metricRegistry;
 
   /**
    * Startup the {@link MockClusterMap} for a test.
@@ -52,6 +55,7 @@ public class StorageManagerTest {
   @Before
   public void initializeCluster() throws IOException {
     clusterMap = new MockClusterMap(false, 1, 3, 3);
+    this.metricRegistry = clusterMap.getMetricRegistry();
   }
 
   /**
@@ -73,8 +77,17 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
     String mountPathToDelete = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
+    int downReplicaCount = 0;
+    for (ReplicaId replica : replicas) {
+      if (replica.getMountPath().equals(mountPathToDelete)) {
+        downReplicaCount++;
+      }
+    }
     deleteDirectory(new File(mountPathToDelete));
-    StorageManager storageManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertEquals(1, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     for (ReplicaId replica : replicas) {
       PartitionId id = replica.getPartitionId();
       if (replica.getMountPath().equals(mountPathToDelete)) {
@@ -92,6 +105,8 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, mountPaths.size() - 1);
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
+    assertEquals(downReplicaCount,
+        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -107,7 +122,10 @@ public class StorageManagerTest {
     for (Integer badReplicaIndex : badReplicaIndexes) {
       new File(replicas.get(badReplicaIndex).getReplicaPath()).setReadable(false);
     }
-    StorageManager storageManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(2, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
       PartitionId id = replica.getPartitionId();
@@ -125,6 +143,7 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
+    assertEquals(2, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -138,12 +157,17 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
     String badDiskMountPath = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
+    int downReplicaCount = 0;
     for (ReplicaId replica : replicas) {
       if (replica.getMountPath().equals(badDiskMountPath)) {
         new File(replica.getReplicaPath()).setReadable(false);
+        downReplicaCount++;
       }
     }
-    StorageManager storageManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
+    Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     for (ReplicaId replica : replicas) {
       PartitionId id = replica.getPartitionId();
       if (replica.getMountPath().equals(badDiskMountPath)) {
@@ -160,6 +184,8 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, mountPaths.size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
+    assertEquals(downReplicaCount,
+        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -171,12 +197,15 @@ public class StorageManagerTest {
   public void successfulStartupShutdownTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    StorageManager storageManager = createAndStartStoreManager(replicas);
+    StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
     for (ReplicaId replica : replicas) {
       Store store = storageManager.getStore(replica.getPartitionId());
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
       assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(replica.getPartitionId()));
     }
+    Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.", storageManager.getStore(invalidPartition));
     assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
@@ -184,21 +213,23 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
+    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
    * Create a {@link StorageManager} and start stores for the passed in set of replicas.
    * @param replicas the list of replicas for the {@link StorageManager} to use.
+   * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
    * @return a started {@link StorageManager}
    * @throws StoreException
    */
-  private static StorageManager createAndStartStoreManager(List<ReplicaId> replicas)
+  private StorageManager createAndStartStoreManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
       throws StoreException, InterruptedException {
     Properties properties = new Properties();
     properties.put("store.enable.compaction", "true");
     StorageManager storageManager =
         new StorageManager(new StoreConfig(new VerifiableProperties(properties)), Utils.newScheduler(1, false),
-            new MetricRegistry(), replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
+            metricRegistry, replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
             new DummyMessageStoreHardDelete(), SystemTime.getInstance());
     storageManager.start();
     return storageManager;
@@ -217,6 +248,17 @@ public class StorageManagerTest {
     for (ReplicaId replica : replicas) {
       assertNull(storageManager.getStore(replica.getPartitionId()));
     }
+  }
+
+  /**
+   * Get the counter value for the metric in {@link StorageManagerMetrics} for the given class and suffix.
+   * @param counters Map of counter metrics to use
+   * @param className the class to which the metric belongs to
+   * @param suffix the suffix of the metric that distinguishes it from other metrics in the class.
+   * @return the value of the counter.
+   */
+  private long getCounterValue(Map<String, Counter> counters, String className, String suffix) {
+    return counters.get(className + "." + suffix).getCount();
   }
 
   /**
