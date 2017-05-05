@@ -63,12 +63,10 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_GET_RESPONSE_SECURITY = "GET Response Security";
   private static final String OPERATION_TYPE_HEAD_RESPONSE_SECURITY = "HEAD Response Security";
   private static final String OPERATION_TYPE_POST_RESPONSE_SECURITY = "POST Response Security";
-  private static final String OPERATION_TYPE_PUT_RESPONSE_SECURITY = "PUT Response Security";
   private static final String OPERATION_TYPE_GET = "GET";
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
   private static final String OPERATION_TYPE_POST = "POST";
-  private static final String OPERATION_TYPE_PUT = "PUT";
 
   private final RestResponseHandler responseHandler;
   private final Router router;
@@ -211,38 +209,8 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    long processingStartTime = System.currentTimeMillis();
-    long preProcessingTime = 0;
-    handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(frontendMetrics.putBlobMetrics);
-    RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? frontendMetrics.putBlobSSLMetrics : frontendMetrics.putBlobMetrics;
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-    try {
-      logger.trace("Handling PUT request - {}", restRequest.getUri());
-      checkAvailable();
-      long propsBuildStartTime = System.currentTimeMillis();
-      BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
-      if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
-          blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
-        logger.debug("TTL set to very large value in PUT request with BlobProperties {}", blobProperties);
-        frontendMetrics.ttlTooLargeError.inc();
-      }
-      byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
-      frontendMetrics.putBlobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
-      logger.trace("Blob properties of blob being PUTed - {}", blobProperties);
-      PutCallback routerCallback =
-          new PutCallback(restRequest, restResponseChannel, new BlobInfo(blobProperties, usermetadata));
-      preProcessingTime = System.currentTimeMillis() - processingStartTime;
-      SecurityProcessRequestCallback securityCallback =
-          new SecurityProcessRequestCallback(restRequest, restResponseChannel, blobProperties, usermetadata,
-              routerCallback);
-      securityService.processRequest(restRequest, securityCallback);
-    } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, e);
-    } finally {
-      frontendMetrics.putPreProcessingTimeInMs.update(preProcessingTime);
-    }
+    submitResponse(restRequest, restResponseChannel, null,
+        new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod));
   }
 
   @Override
@@ -445,7 +413,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     private static final String PROCESS_GET = "GET Request Security";
     private static final String PROCESS_HEAD = "HEAD Request Security";
     private static final String PROCESS_POST = "POST Request Security";
-    private static final String PROCESS_PUT = "PUT Request Security";
     private static final String PROCESS_DELETE = "DELETE Request Security";
 
     private final RestRequest restRequest;
@@ -455,7 +422,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     private GetCallback getCallback;
     private HeadCallback headCallback;
     private PostCallback postCallback;
-    private PutCallback putCallback;
     private DeleteCallback deleteCallback;
 
     private BlobProperties blobProperties;
@@ -485,15 +451,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        BlobProperties blobProperties, byte[] userMetadata, PutCallback callback) {
-      this(restRequest, restResponseChannel, PROCESS_PUT, frontendMetrics.postSecurityRequestTimeInMs,
-          frontendMetrics.postSecurityRequestCallbackProcessingTimeInMs);
-      this.blobProperties = blobProperties;
-      this.userMetadata = userMetadata;
-      this.putCallback = callback;
-    }
-
-    SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         DeleteCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_DELETE, frontendMetrics.deleteSecurityRequestTimeInMs,
           frontendMetrics.deleteSecurityRequestCallbackProcessingTimeInMs);
@@ -514,7 +471,6 @@ class AmbryBlobStorageService implements BlobStorageService {
      * In case of exception, response is immediately submitted to the {@link RestResponseHandler}.
      * In case of GET, HEAD and DELETE, ID conversion is triggered.
      * In case of POST, request is forwarded to the {@link Router}.
-     * In case of PUT, request is forwarded to the {@link Router}.
      * @param result The result of the request. This would be non null when the request executed successfully
      * @param exception The exception that was reported on execution of the request
      */
@@ -543,10 +499,6 @@ class AmbryBlobStorageService implements BlobStorageService {
             case POST:
               postCallback.markStartTime();
               router.putBlob(blobProperties, userMetadata, restRequest, postCallback);
-              break;
-            case PUT:
-              putCallback.markStartTime();
-              router.putBlob(blobProperties, userMetadata, restRequest, putCallback);
               break;
             case DELETE:
               receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
@@ -831,104 +783,6 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       } catch (Exception e) {
         frontendMetrics.postCallbackProcessingError.inc();
-        routerException = e;
-      } finally {
-        if (routerException != null) {
-          submitResponse(restRequest, restResponseChannel, null, routerException);
-        }
-        callbackTracker.markCallbackProcessingEnd();
-      }
-    }
-
-    /**
-     * Marks the start time of the operation.
-     */
-    void markStartTime() {
-      callbackTracker.markOperationStart();
-    }
-  }
-
-  /**
-   * Callback for PUT operations. Sends the response received to the client. Submits response either to handle
-   * exceptions or to clean up after a response.
-   */
-  private class PutCallback implements Callback<String> {
-    private final RestRequest restRequest;
-    private final RestResponseChannel restResponseChannel;
-    private final BlobInfo blobInfo;
-    private final CallbackTracker callbackTracker;
-    private final Logger logger = LoggerFactory.getLogger(getClass());
-
-    /**
-     * Create a PUT callback.
-     * @param restRequest the {@link RestRequest} for whose response this is a callback.
-     * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be
-     *                            sent.
-     * @param blobInfo the {@link BlobInfo} of the blob that was asked to be PUTed.
-     */
-    PutCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, BlobInfo blobInfo) {
-      this.restRequest = restRequest;
-      this.restResponseChannel = restResponseChannel;
-      this.blobInfo = blobInfo;
-      callbackTracker = new CallbackTracker(restRequest, OPERATION_TYPE_PUT, frontendMetrics.putTimeInMs,
-          frontendMetrics.putCallbackProcessingTimeInMs);
-    }
-
-    /**
-     * If there was no exception, updates the header with the location of the object. Submits the response either for
-     * exception handling or for cleanup.
-     * @param routerResult The result of the request. This is the blob ID of the blob. This is non null if the request
-     *               executed successfully.
-     * @param routerException The exception that was reported on execution of the request (if any).
-     */
-    @Override
-    public void onCompletion(String routerResult, Exception routerException) {
-      callbackTracker.markOperationEnd();
-      if (routerResult == null && routerException == null) {
-        throw new IllegalStateException("Both response and exception are null");
-      }
-      try {
-        if (routerException == null) {
-          logger.trace("Successful PUT of {}", routerResult);
-          final CallbackTracker idConversionCallbackTracker =
-              new CallbackTracker(restRequest, OPERATION_TYPE_OUTBOUND_ID_CONVERSION,
-                  frontendMetrics.outboundPutIdConversionTimeInMs,
-                  frontendMetrics.outboundPutIdConversionCallbackProcessingTimeInMs);
-          final CallbackTracker securityCallbackTracker =
-              new CallbackTracker(restRequest, OPERATION_TYPE_PUT_RESPONSE_SECURITY,
-                  frontendMetrics.putSecurityResponseTimeInMs,
-                  frontendMetrics.putSecurityResponseCallbackProcessingTimeInMs);
-          idConversionCallbackTracker.markOperationStart();
-          idConverter.convert(restRequest, routerResult, new Callback<String>() {
-            @Override
-            public void onCompletion(String idConversionResult, Exception idConversionException) {
-              idConversionCallbackTracker.markOperationEnd();
-              if (idConversionException != null) {
-                submitResponse(restRequest, restResponseChannel, null, idConversionException);
-              } else {
-                try {
-                  restResponseChannel.setHeader(RestUtils.Headers.LOCATION, idConversionResult);
-                  securityCallbackTracker.markOperationStart();
-                  securityService.processResponse(restRequest, restResponseChannel, blobInfo, new Callback<Void>() {
-                    @Override
-                    public void onCompletion(Void securityResult, Exception securityException) {
-                      securityCallbackTracker.markOperationEnd();
-                      submitResponse(restRequest, restResponseChannel, null, securityException);
-                      securityCallbackTracker.markCallbackProcessingEnd();
-                    }
-                  });
-                } catch (Exception e) {
-                  frontendMetrics.outboundIdConversionCallbackProcessingError.inc();
-                  submitResponse(restRequest, restResponseChannel, null, e);
-                } finally {
-                  idConversionCallbackTracker.markCallbackProcessingEnd();
-                }
-              }
-            }
-          });
-        }
-      } catch (Exception e) {
-        frontendMetrics.putCallbackProcessingError.inc();
         routerException = e;
       } finally {
         if (routerException != null) {

@@ -454,7 +454,7 @@ public class AdminBlobStorageServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
       doOperation(restRequest, restResponseChannel);
-      fail("PUT should ahve failed because Admin does not support it");
+      fail("PUT should have failed because Admin does not support it");
     } catch (RestServiceException e) {
       assertEquals("PUT is an unsupported method", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
     }

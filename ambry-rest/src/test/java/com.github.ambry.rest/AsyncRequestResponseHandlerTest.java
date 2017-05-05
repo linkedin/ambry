@@ -207,7 +207,8 @@ public class AsyncRequestResponseHandlerTest {
   public void allRestMethodsSuccessTest() throws Exception {
     for (int i = 0; i < 25; i++) {
       for (RestMethod restMethod : RestMethod.values()) {
-        if (restMethod != RestMethod.UNKNOWN) {
+        // PUT is not supported, so it always fails.
+        if (restMethod != RestMethod.UNKNOWN && restMethod != RestMethod.PUT) {
           doHandleRequestSuccessTest(restMethod, asyncRequestResponseHandler);
         }
       }
@@ -250,6 +251,7 @@ public class AsyncRequestResponseHandlerTest {
   @Test
   public void handleRequestFailureOnDequeueTest() throws Exception {
     unknownRestMethodTest(asyncRequestResponseHandler);
+    putRestMethodTest(asyncRequestResponseHandler);
     delayedHandleRequestThatThrowsRestException(asyncRequestResponseHandler);
     delayedHandleRequestThatThrowsRuntimeException(asyncRequestResponseHandler);
   }
@@ -653,6 +655,27 @@ public class AsyncRequestResponseHandlerTest {
       // it's ok if this conversion fails - the test should fail anyway.
       RestServiceException e = (RestServiceException) restResponseChannel.getException();
       assertEquals("Did not get expected RestServiceErrorCode", RestServiceErrorCode.UnsupportedRestMethod,
+          e.getErrorCode());
+      assertTrue("AsyncRequestResponseHandler is dead", requestResponseHandler.isRunning());
+    }
+  }
+
+  /**
+   * Sends a {@link RestRequest} with an PUT {@link RestMethod}. The failure will happen once the request is
+   * dequeued.
+   * @param requestResponseHandler The {@link AsyncRequestResponseHandler} instance to use.
+   * @throws Exception
+   */
+  private void putRestMethodTest(AsyncRequestResponseHandler requestResponseHandler) throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, "/", null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    sendRequestAwaitResponse(requestResponseHandler, restRequest, restResponseChannel);
+    if (restResponseChannel.getException() == null) {
+      fail("Request handling would have failed and an exception should have been generated");
+    } else {
+      // it's ok if this conversion fails - the test should fail anyway.
+      RestServiceException e = (RestServiceException) restResponseChannel.getException();
+      assertEquals("Did not get expected RestServiceErrorCode", RestServiceErrorCode.UnsupportedHttpMethod,
           e.getErrorCode());
       assertTrue("AsyncRequestResponseHandler is dead", requestResponseHandler.isRunning());
     }

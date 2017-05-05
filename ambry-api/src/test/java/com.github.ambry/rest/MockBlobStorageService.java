@@ -108,18 +108,11 @@ public class MockBlobStorageService implements BlobStorageService {
     }
   }
 
+  /* Make sure PUT is not supported  */
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    if (shouldProceed(restRequest, restResponseChannel)) {
-      try {
-        BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
-        byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
-        router.putBlob(blobProperties, usermetadata, restRequest,
-            new MockPutCallback(this, restRequest, restResponseChannel, blobProperties));
-      } catch (RestServiceException e) {
-        handleResponse(restRequest, restResponseChannel, null, e);
-      }
-    }
+    Exception exception = new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod);
+    handleResponse(restRequest, restResponseChannel, null, exception);
   }
 
   @Override
@@ -364,67 +357,6 @@ class MockPostCallback implements Callback<String> {
    * @param createdBlobProperties the {@link BlobProperties} of the blob that was asked to be POSTed.
    */
   public MockPostCallback(MockBlobStorageService mockBlobStorageService, RestRequest restRequest,
-      RestResponseChannel restResponseChannel, BlobProperties createdBlobProperties) {
-    this.mockBlobStorageService = mockBlobStorageService;
-    this.restRequest = restRequest;
-    this.restResponseChannel = restResponseChannel;
-    this.blobProperties = createdBlobProperties;
-  }
-
-  /**
-   * If there was no exception, updates the header with the location of the object.
-   * @param result The result of the request. This is the blob ID of the blob. This is non null if the request executed
-   *               successfully.
-   * @param exception The exception that was reported on execution of the request (if any).
-   */
-  @Override
-  public void onCompletion(String result, Exception exception) {
-    try {
-      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-      if (exception == null && result != null) {
-        setResponseHeaders(result);
-      } else if (exception != null && exception instanceof RouterException) {
-        exception = new RestServiceException(exception,
-            RestServiceErrorCode.getRestServiceErrorCode(((RouterException) exception).getErrorCode()));
-      }
-    } catch (Exception e) {
-      exception = exception == null ? e : exception;
-    } finally {
-      mockBlobStorageService.handleResponse(restRequest, restResponseChannel, null, exception);
-    }
-  }
-
-  /**
-   * Sets the required headers in the response.
-   * @param location the location of the created resource.
-   * @throws RestServiceException if there was any problem setting the headers.
-   */
-  private void setResponseHeaders(String location) throws RestServiceException {
-    restResponseChannel.setStatus(ResponseStatus.Created);
-    restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
-    restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-    restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
-  }
-}
-
-
-/**
- * Callback for PUT operations. Sends the blob ID of the created blob to the client.
- */
-class MockPutCallback implements Callback<String> {
-  private final MockBlobStorageService mockBlobStorageService;
-  private final RestRequest restRequest;
-  private final RestResponseChannel restResponseChannel;
-  private final BlobProperties blobProperties;
-
-  /**
-   * Create a PUT callback.
-   * @param mockBlobStorageService the {@link MockBlobStorageService} to use to submit responses.
-   * @param restRequest the {@link RestRequest} for whose response this is a callback.
-   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
-   * @param createdBlobProperties the {@link BlobProperties} of the blob that was asked to be PUTed.
-   */
-  public MockPutCallback(MockBlobStorageService mockBlobStorageService, RestRequest restRequest,
       RestResponseChannel restResponseChannel, BlobProperties createdBlobProperties) {
     this.mockBlobStorageService = mockBlobStorageService;
     this.restRequest = restRequest;

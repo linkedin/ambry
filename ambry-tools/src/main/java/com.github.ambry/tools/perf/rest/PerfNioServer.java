@@ -223,7 +223,7 @@ class PerfNioServer implements NioServer {
     public PerfRestRequest(RestMethod restMethod, String usermetadata, byte[] chunk, long totalBlobSize) {
       this.restMethod = restMethod;
       Map<String, Object> inFluxArgs = new HashMap<String, Object>();
-      if (restMethod.equals(RestMethod.POST) || restMethod.equals(RestMethod.PUT)) {
+      if (restMethod.equals(RestMethod.POST)) {
         readableStreamChannel = new PerfRSC(chunk, totalBlobSize);
         addValueForHeader(inFluxArgs, RestUtils.Headers.BLOB_SIZE, Long.toString(totalBlobSize));
         addValueForHeader(inFluxArgs, RestUtils.Headers.SERVICE_ID, "PerfNioServer");

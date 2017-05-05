@@ -45,9 +45,7 @@ class FrontendMetrics {
   // POST
   public final RestRequestMetrics postBlobMetrics;
   public final RestRequestMetrics postBlobSSLMetrics;
-  // PUT
-  public final RestRequestMetrics putBlobMetrics;
-  public final RestRequestMetrics putBlobSSLMetrics;
+
   // Rates
   // AmbrySecurityService
   public final Meter securityServiceProcessRequestRate;
@@ -66,9 +64,6 @@ class FrontendMetrics {
   // POST
   public final Histogram blobPropsBuildTimeInMs;
   public final Histogram postPreProcessingTimeInMs;
-  // PUT
-  public final Histogram putBlobPropsBuildTimeInMs;
-  public final Histogram putPreProcessingTimeInMs;
   // DeleteCallback
   public final Histogram deleteCallbackProcessingTimeInMs;
   public final Histogram deleteTimeInMs;
@@ -89,13 +84,6 @@ class FrontendMetrics {
   public final Histogram postTimeInMs;
   public final Histogram postSecurityResponseTimeInMs;
   public final Histogram postSecurityResponseCallbackProcessingTimeInMs;
-  // PutCallback
-  public final Histogram outboundPutIdConversionCallbackProcessingTimeInMs;
-  public final Histogram outboundPutIdConversionTimeInMs;
-  public final Histogram putCallbackProcessingTimeInMs;
-  public final Histogram putTimeInMs;
-  public final Histogram putSecurityResponseTimeInMs;
-  public final Histogram putSecurityResponseCallbackProcessingTimeInMs;
   // InboundIdConverterCallback
   public final Histogram inboundIdConversionCallbackProcessingTimeInMs;
   public final Histogram inboundIdConversionTimeInMs;
@@ -129,8 +117,6 @@ class FrontendMetrics {
   public final Counter getSecurityResponseCallbackProcessingError;
   // PostCallback
   public final Counter postCallbackProcessingError;
-  // PutCallback
-  public final Counter putCallbackProcessingError;
   public final Counter outboundIdConversionCallbackProcessingError;
   // Other
   // AmbryBlobStorageService
@@ -162,9 +148,7 @@ class FrontendMetrics {
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
     postBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
-    // PUT
-    putBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PutBlob", metricRegistry);
-    putBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PutBlob" + SSL_SUFFIX, metricRegistry);
+
     // Rates
     // AmbrySecurityService
     securityServiceProcessRequestRate =
@@ -190,11 +174,6 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "BlobPropsBuildTimeInMs"));
     postPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostPreProcessingTimeInMs"));
-    // PUT
-    putBlobPropsBuildTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PutBlobPropsBuildTimeInMs"));
-    putPreProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PutPreProcessingTimeInMs"));
     // DeleteCallback
     deleteCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackProcessingTimeInMs"));
@@ -231,19 +210,6 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityResponseTimeInMs"));
     postSecurityResponseCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityResponseCallbackProcessingTimeInMs"));
-    // PutCallback
-    outboundPutIdConversionCallbackProcessingTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(AmbryBlobStorageService.class, "OutboundPutIdCallbackProcessingTimeInMs"));
-    outboundPutIdConversionTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OutboundPutIdConversionTimeInMs"));
-    putCallbackProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PutCallbackProcessingTimeInMs"));
-    putTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PutCallbackResultTimeInMs"));
-    putSecurityResponseTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PutSecurityResponseTimeInMs"));
-    putSecurityResponseCallbackProcessingTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(AmbryBlobStorageService.class, "PutSecurityResponseCallbackProcessingTimeInMs"));
     // InboundIdConverterCallback
     inboundIdConversionCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "InboundIdCallbackProcessingTimeInMs"));
@@ -297,9 +263,6 @@ class FrontendMetrics {
     // PostCallback
     postCallbackProcessingError =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "PostCallbackProcessingError"));
-    // PutCallback
-    putCallbackProcessingError =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "PutCallbackProcessingError"));
     outboundIdConversionCallbackProcessingError = metricRegistry.counter(
         MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdConversionCallbackProcessingError"));
     ttlTooLargeError = metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "TtlTooLargeError"));

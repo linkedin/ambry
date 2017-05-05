@@ -47,9 +47,7 @@ class AdminMetrics {
   // POST
   public final RestRequestMetrics postBlobMetrics;
   public final RestRequestMetrics postBlobSSLMetrics;
-  // PUT
-  public final RestRequestMetrics putBlobMetrics;
-  public final RestRequestMetrics putBlobSSLMetrics;
+
   // Rates
   // AdminSecurityService
   public final Meter securityServiceProcessRequestRate;
@@ -145,9 +143,6 @@ class AdminMetrics {
     // POST
     postBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PostBlob", metricRegistry);
     postBlobSSLMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
-    // PUT
-    putBlobMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PutBlob", metricRegistry);
-    putBlobSSLMetrics = new RestRequestMetrics(AdminBlobStorageService.class, "PutBlob" + SSL_SUFFIX, metricRegistry);
 
     // Rates
     // AdminSecurityService

@@ -203,9 +203,6 @@ class AdminBlobStorageService implements BlobStorageService {
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     handlePrechecks(restRequest, restResponseChannel);
-    RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? adminMetrics.putBlobSSLMetrics : adminMetrics.putBlobMetrics;
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     Exception exception =
         isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
             : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
