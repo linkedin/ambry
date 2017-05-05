@@ -204,6 +204,11 @@ public class CompactionVerifier implements Closeable {
         >= cLog.cycleLogs.size() : "There should be at least one segmented compacted in each cycle";
     deleteRefTimeMs = cLog.cycleLogs.get(0).compactionDetails.getReferenceTimeMs();
 
+    LOGGER.info("Segments compacted: {}", segmentsCompactedNames);
+    LOGGER.info("Compaction start time: {} ms", compactionStartTimeMs);
+    LOGGER.info("Compaction end time: {} ms", compactionEndTimeMs);
+    LOGGER.info("Delete ref time: {} ms", deleteRefTimeMs);
+
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics srcMetrics = new StoreMetrics(verifierConfig.storeId + "-src", metricRegistry);
     StoreMetrics tgtMetrics = new StoreMetrics(verifierConfig.storeId + "-tgt", metricRegistry);
@@ -319,9 +324,11 @@ public class CompactionVerifier implements Closeable {
       long lastModTimeMs = indexSegment.getLastModifiedTimeMs();
       assert
           lastModTimeMs >= prevLastModTimeMs :
-          "Last modified time of " + indexSegment.getStartOffset() + " is " + "lesser than predecessor";
+          "Last modified time of " + indexSegment.getStartOffset() + " (" + lastModTimeMs + ") is "
+              + "lesser than predecessor (" + prevLastModTimeMs + ")";
       prevLastModTimeMs = indexSegment.getLastModifiedTimeMs();
     }
+
     LOGGER.info("Verified structure");
   }
 

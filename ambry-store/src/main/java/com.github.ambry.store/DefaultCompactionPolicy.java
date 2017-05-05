@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +40,7 @@ class DefaultCompactionPolicy implements CompactionPolicy {
   DefaultCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
-    this.messageRetentionTimeInMs = storeConfig.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
+    this.messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(storeConfig.storeDeletedMessageRetentionDays);
   }
 
   @Override

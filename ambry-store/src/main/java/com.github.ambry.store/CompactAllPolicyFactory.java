@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -49,7 +50,7 @@ class CompactAllPolicy implements CompactionPolicy {
   CompactAllPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
-    this.messageRetentionTimeInMs = storeConfig.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
+    this.messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(storeConfig.storeDeletedMessageRetentionDays);
   }
 
   @Override

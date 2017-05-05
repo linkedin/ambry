@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -263,7 +264,7 @@ class IndexSegment {
    * @return The time in ms of the last modification of this segment.
    */
   long getLastModifiedTimeMs() {
-    return lastModifiedTimeSec.get() * Time.MsPerSec;
+    return TimeUnit.SECONDS.toMillis(lastModifiedTimeSec.get());
   }
 
   /**
