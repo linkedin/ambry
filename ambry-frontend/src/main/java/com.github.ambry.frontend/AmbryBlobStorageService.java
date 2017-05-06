@@ -209,8 +209,11 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    submitResponse(restRequest, restResponseChannel, null,
-        new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod));
+    handlePrechecks(restRequest, restResponseChannel);
+    Exception exception =
+        isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
+            : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
+    submitResponse(restRequest, restResponseChannel, null, exception);
   }
 
   @Override

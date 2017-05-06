@@ -193,9 +193,23 @@ public class AmbryBlobStorageServiceTest {
 
     doRuntimeExceptionRouterTest(RestMethod.GET);
     doRuntimeExceptionRouterTest(RestMethod.POST);
-    doRuntimeExceptionRouterTest(RestMethod.PUT);
     doRuntimeExceptionRouterTest(RestMethod.DELETE);
     doRuntimeExceptionRouterTest(RestMethod.HEAD);
+  }
+
+  /**
+   * Checks reactions of PUT methods in {@link AmbryBlobStorageService}
+   * @throws Exception
+   */
+  @Test
+  public void putFailureTest() throws Exception {
+    RestRequest restRequest = new BadRestRequest();
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+
+    responseHandler.reset();
+    ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
+    Exception e = restResponseChannel.getException();
+    assertTrue("Unexpected exception", e instanceof RestServiceException);
   }
 
   /**
@@ -230,12 +244,6 @@ public class AmbryBlobStorageServiceTest {
     // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
     Exception e = restResponseChannel.getException();
     assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
-
-    responseHandler.reset();
-    restResponseChannel = new MockRestResponseChannel();
-    ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
-    e = restResponseChannel.getException();
-    assertTrue("Unexpected exception", e instanceof RestServiceException);
 
     responseHandler.reset();
     restResponseChannel = new MockRestResponseChannel();
@@ -674,16 +682,6 @@ public class AmbryBlobStorageServiceTest {
           doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");
           break;
-        case PUT:
-          headers = new JSONObject();
-          setAmbryHeaders(headers, 0, Utils.Infinite_Time, false, "test-serviceID", "text/plain", "test-ownerId");
-          restRequest = createRestRequest(restMethod, "/", headers, null);
-          try {
-            doOperation(restRequest, restResponseChannel);
-          } catch (RestServiceException e) {
-            assertEquals("Unexpected error message", "PUT is not supported", e.getMessage());
-          }
-          break;
         default:
           throw new IllegalArgumentException("Unrecognized RestMethod: " + restMethod);
       }
@@ -1083,13 +1081,6 @@ public class AmbryBlobStorageServiceTest {
           setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
               "routerExceptionPipelineTest");
           checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
-          break;
-        case PUT:
-          testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
-          headers = new JSONObject();
-          setAmbryHeaders(headers, 1, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
-              "routerExceptionPipelineTest");
-          checkRouterExceptionPipeline("PUT is not supported", createRestRequest(restMethod, "/", headers, null));
           break;
         case DELETE:
           testRouter.exceptionOpType = FrontendTestRouter.OpType.DeleteBlob;
