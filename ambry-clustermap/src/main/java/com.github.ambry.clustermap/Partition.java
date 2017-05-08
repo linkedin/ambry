@@ -192,12 +192,6 @@ class Partition extends PartitionId {
     }
 
     Partition partition = (Partition) o;
-
-    if (id == null ^ partition.id == null){
-      // one of them is null (XOR, so not both)
-      return false;
-    }
-    
     return id.equals(partition.id);
   }
 
