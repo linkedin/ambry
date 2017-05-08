@@ -212,7 +212,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     handlePrechecks(restRequest, restResponseChannel);
     Exception exception =
         isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
-            : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
+            : new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
 

@@ -203,7 +203,7 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void putFailureTest() throws Exception {
-    RestRequest restRequest = new BadRestRequest();
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
 
     responseHandler.reset();
