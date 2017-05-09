@@ -124,7 +124,8 @@ public class StorageManagerTest {
     }
     StorageManager storageManager = createAndStartStoreManager(replicas, metricRegistry);
     Map<String, Counter> counters = metricRegistry.getCounters();
-    assertEquals(2, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertEquals(badReplicaIndexes.size(),
+        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
@@ -143,7 +144,8 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
-    assertEquals(2, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
+    assertEquals(badReplicaIndexes.size(),
+        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
