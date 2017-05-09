@@ -334,6 +334,8 @@ public class AdminBlobStorageServiceTest {
     headers.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     headers.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     String blobId = putBlobInRouter(headers, content);
+    // Adding the BLOB_SIZE header after doing the put, in order to verify that the get calls return the expected
+    // value.
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, headers, content);
     getNotModifiedBlobAndVerify(blobId, null);
