@@ -222,6 +222,7 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, contentBuf);
     if (headers != null) {
       httpRequest.headers().set(headers);
+      HttpUtil.setTransferEncodingChunked(httpRequest, true);
     }
     return httpRequest;
   }
@@ -316,8 +317,7 @@ public class FrontendIntegrationTest {
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
     HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeaders(headers, content.capacity(), 7200, false, serviceId, contentType, ownerId);
-    headers.set(HttpHeaderNames.CONTENT_LENGTH, content.capacity());
+    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId);
     String blobId;
     byte[] usermetadata = null;
     if (multipartPost) {
@@ -328,6 +328,7 @@ public class FrontendIntegrationTest {
       headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
       blobId = postBlobAndVerify(headers, content);
     }
+    headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     getBlobAndVerify(blobId, null, headers, content);
     getHeadAndVerify(blobId, null, headers);
     ByteRange range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
@@ -356,7 +357,6 @@ public class FrontendIntegrationTest {
    * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
    * Any other headers have to be set explicitly.
    * @param httpHeaders the {@link HttpHeaders} where the headers should be set.
-   * @param contentLength sets the {@link RestUtils.Headers#BLOB_SIZE} header. Required.
    * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
    *                  expiry.
    * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
@@ -367,10 +367,9 @@ public class FrontendIntegrationTest {
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    */
-  private void setAmbryHeaders(HttpHeaders httpHeaders, long contentLength, long ttlInSecs, boolean isPrivate,
+  private void setAmbryHeadersForPut(HttpHeaders httpHeaders, long ttlInSecs, boolean isPrivate,
       String serviceId, String contentType, String ownerId) {
-    if (httpHeaders != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
-      httpHeaders.add(RestUtils.Headers.BLOB_SIZE, contentLength);
+    if (httpHeaders != null && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       httpHeaders.add(RestUtils.Headers.TTL, ttlInSecs);
       httpHeaders.add(RestUtils.Headers.PRIVATE, isPrivate);
       httpHeaders.add(RestUtils.Headers.SERVICE_ID, serviceId);

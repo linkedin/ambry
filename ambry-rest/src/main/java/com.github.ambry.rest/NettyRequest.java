@@ -291,7 +291,7 @@ class NettyRequest implements RestRequest {
   /**
    * Returns the value of the ambry specific content length header ({@link RestUtils.Headers#BLOB_SIZE}. If there is
    * no such header, returns length in the "Content-Length" header. If there is no such header, tries to infer content
-   * size. If that cannot be done, returns 0.
+   * size. If that cannot be done, returns -1.
    * <p/>
    * This function does not individually count the bytes in the content (it is not possible) so the bytes received may
    * actually be different if the stream is buggy or the client made a mistake. Do *not* treat this as fully accurate.

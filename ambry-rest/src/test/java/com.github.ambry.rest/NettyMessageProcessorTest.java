@@ -129,7 +129,6 @@ public class NettyMessageProcessorTest {
     HttpRequest postRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/", Unpooled.wrappedBuffer(content));
     postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
-    postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, content.remaining());
     postRequest = ReferenceCountUtil.retain(postRequest);
     ByteBuffer receivedContent = doPostTest(postRequest, null);
     compareContent(receivedContent, Collections.singletonList(content));
@@ -145,7 +144,6 @@ public class NettyMessageProcessorTest {
       contents.add(i, buffer);
     }
     postRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
-    postRequest.headers().set(RestUtils.Headers.BLOB_SIZE, blobSize);
     receivedContent = doPostTest(postRequest, contents);
     compareContent(receivedContent, contents);
   }
@@ -160,7 +158,6 @@ public class NettyMessageProcessorTest {
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", null);
     httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
-    httpRequest.headers().set(RestUtils.Headers.BLOB_SIZE, content.remaining());
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content);
     HttpRequest postRequest = encoder.finalizeRequest();
     List<ByteBuffer> contents = new ArrayList<ByteBuffer>();

@@ -19,6 +19,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -88,7 +89,10 @@ public class InMemoryRouter implements Router {
     private final ByteBuffer blob;
 
     public InMemoryBlob(BlobProperties blobProperties, byte[] userMetadata, ByteBuffer blob) {
-      this.blobProperties = blobProperties;
+      this.blobProperties =
+          new BlobProperties(blob.remaining(), blobProperties.getServiceId(), blobProperties.getOwnerId(),
+              blobProperties.getContentType(), blobProperties.isPrivate(), blobProperties.getTimeToLiveInSeconds(),
+              blobProperties.getCreationTimeInMs());
       this.userMetadata = userMetadata;
       this.blob = blob;
     }
@@ -353,17 +357,15 @@ class InMemoryBlobPoster implements Runnable {
    * @throws InterruptedException
    */
   private ByteBuffer readBlob(ReadableStreamChannel postContent) throws InterruptedException {
-    ByteBuffer blobData = ByteBuffer.allocate((int) postContent.getSize());
+    ByteArrayOutputStream blobDataStream = new ByteArrayOutputStream();
     ByteBufferAWC channel = new ByteBufferAWC();
     postContent.readInto(channel, new CloseWriteChannelCallback(channel));
     ByteBuffer chunk = channel.getNextChunk();
     IllegalStateException exception = null;
     while (chunk != null) {
-      if (chunk.remaining() > blobData.remaining()) {
-        exception = new IllegalStateException("Data size advertized does not match actual size of data");
-      } else {
-        blobData.put(chunk);
-      }
+      byte[] chunkData = new byte[chunk.remaining()];
+      chunk.get(chunkData);
+      blobDataStream.write(chunkData, 0, chunkData.length);
       channel.resolveOldestChunk(exception);
       if (exception != null) {
         channel.close();
@@ -372,8 +374,7 @@ class InMemoryBlobPoster implements Runnable {
         chunk = channel.getNextChunk();
       }
     }
-    blobData.flip();
-    return blobData;
+    return ByteBuffer.wrap(blobDataStream.toByteArray());
   }
 }
 

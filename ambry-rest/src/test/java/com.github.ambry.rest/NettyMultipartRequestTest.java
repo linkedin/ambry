@@ -298,7 +298,7 @@ public class NettyMultipartRequestTest {
     request = createRequest(httpHeaders, files);
     try {
       request.prepare();
-      fail("Prepare should have failed because there was more than one " + RestUtils.MultipartPost.BLOB_PART);
+      fail("Prepare should have failed because the size advertised does not match the actual size");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
     } finally {
@@ -323,6 +323,17 @@ public class NettyMultipartRequestTest {
       fail("Prepare should have failed because there was non fileupload");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
+    } finally {
+      closeRequestAndValidate(request);
+    }
+
+    // size of blob is not set. Prepare should succeed.
+    httpHeaders = new DefaultHttpHeaders();
+    files = new InMemoryFile[1];
+    files[0] = new InMemoryFile(RestUtils.MultipartPost.BLOB_PART, ByteBuffer.wrap(TestUtils.getRandomBytes(128)));
+    request = createRequest(httpHeaders, files);
+    try {
+      request.prepare();
     } finally {
       closeRequestAndValidate(request);
     }
