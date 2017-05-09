@@ -293,11 +293,12 @@ public class NettyRequestTest {
   @Test
   public void contentAddAndReadTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
-    for (String digestAlgorithm : digestAlgorithms) {
-      contentAddAndReadTest(digestAlgorithm, true, HttpMethod.POST);
-      contentAddAndReadTest(digestAlgorithm, false, HttpMethod.POST);
-      contentAddAndReadTest(digestAlgorithm, true, HttpMethod.PUT);
-      contentAddAndReadTest(digestAlgorithm, false, HttpMethod.PUT);
+    HttpMethod[] methods = {HttpMethod.POST, HttpMethod.PUT};
+    for (HttpMethod method : methods) {
+      for (String digestAlgorithm : digestAlgorithms) {
+        contentAddAndReadTest(digestAlgorithm, true, method);
+        contentAddAndReadTest(digestAlgorithm, false, method);
+      }
     }
   }
 
@@ -310,11 +311,13 @@ public class NettyRequestTest {
   @Test
   public void backPressureTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
-    for (String digestAlgorithm : digestAlgorithms) {
-      backPressureTest(digestAlgorithm, true, HttpMethod.POST);
-      backPressureTest(digestAlgorithm, false, HttpMethod.POST);
-      backPressureTest(digestAlgorithm, true, HttpMethod.PUT);
-      backPressureTest(digestAlgorithm, false, HttpMethod.PUT);
+
+    HttpMethod[] methods = {HttpMethod.POST, HttpMethod.PUT};
+    for (HttpMethod method : methods) {
+      for (String digestAlgorithm : digestAlgorithms) {
+        backPressureTest(digestAlgorithm, true, method);
+        backPressureTest(digestAlgorithm, false, method);
+      }
     }
   }
 

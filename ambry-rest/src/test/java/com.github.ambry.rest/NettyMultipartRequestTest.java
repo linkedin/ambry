@@ -82,30 +82,24 @@ public class NettyMultipartRequestTest {
    */
   @Test
   public void instantiationTest() throws RestServiceException {
-    // POST will succeed.
-    NettyRequest.bufferWatermark = 1;
-    HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
-    MockChannel channel = new MockChannel();
-    RecvByteBufAllocator expected = channel.config().getRecvByteBufAllocator();
-    NettyMultipartRequest request = new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS);
-    assertTrue("Auto-read should not have been changed", channel.config().isAutoRead());
-    assertEquals("RecvByteBufAllocator should not have changed", expected, channel.config().getRecvByteBufAllocator());
-    closeRequestAndValidate(request);
+    HttpMethod[] successMethods = {HttpMethod.POST, HttpMethod.PUT};
 
-    // PUT will succeed.
-    NettyRequest.bufferWatermark = 1;
-    httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.PUT, "/");
-    channel = new MockChannel();
-    expected = channel.config().getRecvByteBufAllocator();
-    request = new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS);
-    assertTrue("Auto-read should not have been changed", channel.config().isAutoRead());
-    assertEquals("RecvByteBufAllocator should not have changed", expected, channel.config().getRecvByteBufAllocator());
-    closeRequestAndValidate(request);
+    // POST and PUT will succeed.
+    for (HttpMethod method: successMethods) {
+      NettyRequest.bufferWatermark = 1;
+      HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
+      MockChannel channel = new MockChannel();
+      RecvByteBufAllocator expected = channel.config().getRecvByteBufAllocator();
+      NettyMultipartRequest request = new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS);
+      assertTrue("Auto-read should not have been changed", channel.config().isAutoRead());
+      assertEquals("RecvByteBufAllocator should not have changed", expected, channel.config().getRecvByteBufAllocator());
+      closeRequestAndValidate(request);
+    }
 
     // Methods that will fail. Can include other methods, but these should be enough.
     HttpMethod[] methods = {HttpMethod.GET, HttpMethod.DELETE, HttpMethod.HEAD};
     for (HttpMethod method : methods) {
-      httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
+      HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
       try {
         new NettyMultipartRequest(httpRequest, new MockChannel(), NETTY_METRICS);
         fail("Creation of NettyMultipartRequest should have failed for " + method);

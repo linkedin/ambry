@@ -205,11 +205,12 @@ public class AmbryBlobStorageServiceTest {
   public void putFailureTest() throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.PUT, "/", null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-
-    responseHandler.reset();
-    ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
-    Exception e = restResponseChannel.getException();
-    assertTrue("Unexpected exception", e instanceof RestServiceException);
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("PUT should have failed because Ambry does not support it");
+    } catch (RestServiceException e) {
+      assertEquals("PUT is an unsupported method", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
+    }
   }
 
   /**
