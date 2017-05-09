@@ -352,8 +352,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
         request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
-      if (success && ((!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT))
-          || (request.isMultipart() && requestContentFullyReceived))) {
+      if (success && (
+          (!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)) || (
+              request.isMultipart() && requestContentFullyReceived))) {
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {

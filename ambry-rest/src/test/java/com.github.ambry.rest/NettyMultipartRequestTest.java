@@ -85,14 +85,15 @@ public class NettyMultipartRequestTest {
     HttpMethod[] successMethods = {HttpMethod.POST, HttpMethod.PUT};
 
     // POST and PUT will succeed.
-    for (HttpMethod method: successMethods) {
+    for (HttpMethod method : successMethods) {
       NettyRequest.bufferWatermark = 1;
       HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
       MockChannel channel = new MockChannel();
       RecvByteBufAllocator expected = channel.config().getRecvByteBufAllocator();
       NettyMultipartRequest request = new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS);
       assertTrue("Auto-read should not have been changed", channel.config().isAutoRead());
-      assertEquals("RecvByteBufAllocator should not have changed", expected, channel.config().getRecvByteBufAllocator());
+      assertEquals("RecvByteBufAllocator should not have changed", expected,
+          channel.config().getRecvByteBufAllocator());
       closeRequestAndValidate(request);
     }
 

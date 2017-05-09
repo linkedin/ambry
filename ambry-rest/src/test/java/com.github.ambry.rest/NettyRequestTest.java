@@ -630,7 +630,8 @@ public class NettyRequestTest {
     }
     NettyRequest nettyRequest = new NettyRequest(httpRequest, channel, new NettyMetrics(metricRegistry));
     assertEquals("Auto-read is in an invalid state",
-        (!httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT))|| NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
+        (!httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT))
+            || NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
     return nettyRequest;
   }
 
@@ -782,7 +783,8 @@ public class NettyRequestTest {
    * @param method Http method
    * @throws Exception
    */
-  private void contentAddAndReadTest(String digestAlgorithm, boolean useCopyForcingByteBuf, HttpMethod method) throws Exception {
+  private void contentAddAndReadTest(String digestAlgorithm, boolean useCopyForcingByteBuf, HttpMethod method)
+      throws Exception {
     // non composite content
     // start reading before addition of content
     List<HttpContent> httpContents = new ArrayList<>();
@@ -883,7 +885,8 @@ public class NettyRequestTest {
    * @param method Http method
    * @throws Exception
    */
-  private void backPressureTest(String digestAlgorithm, boolean useCopyForcingByteBuf, HttpMethod method) throws Exception {
+  private void backPressureTest(String digestAlgorithm, boolean useCopyForcingByteBuf, HttpMethod method)
+      throws Exception {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     byte[] contentBytes = TestUtils.getRandomBytes(GENERATED_CONTENT_SIZE);
     ByteBuffer content = ByteBuffer.wrap(contentBytes);

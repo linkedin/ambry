@@ -397,9 +397,8 @@ class NettyResponseChannel implements RestResponseChannel {
     }
     response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
     boolean keepAlive =
-        !forceClose && HttpUtil.isKeepAlive(responseMetadata) && request != null
-            && !request.getRestMethod().equals(RestMethod.POST)
-            && !request.getRestMethod().equals(RestMethod.PUT)
+        !forceClose && HttpUtil.isKeepAlive(responseMetadata) && request != null && !request.getRestMethod()
+            .equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)
             && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
     HttpUtil.setKeepAlive(response, keepAlive);
     return response;

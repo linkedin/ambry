@@ -1017,7 +1017,8 @@ public class AdminBlobStorageServiceTest {
   private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg)
       throws JSONException {
     for (RestMethod restMethod : restMethods) {
-      if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.POST) || restMethod.equals(RestMethod.PUT)) {
+      if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.POST) || restMethod.equals(
+          RestMethod.PUT)) {
         continue;
       }
       try {

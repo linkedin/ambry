@@ -383,9 +383,8 @@ class NettyRequest implements RestRequest {
    * @throws RestServiceException if request channel has been closed.
    */
   protected void addContent(HttpContent httpContent) throws RestServiceException {
-    if (!getRestMethod().equals(RestMethod.POST) && !getRestMethod().equals(RestMethod.PUT)
-        && (!(httpContent instanceof LastHttpContent)
-        || httpContent.content().readableBytes() > 0)) {
+    if (!getRestMethod().equals(RestMethod.POST) && !getRestMethod().equals(RestMethod.PUT) && (
+        !(httpContent instanceof LastHttpContent) || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
       validateState(httpContent);
