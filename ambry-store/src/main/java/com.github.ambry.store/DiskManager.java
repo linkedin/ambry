@@ -14,7 +14,6 @@
 
 package com.github.ambry.store;
 
-import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -117,7 +116,7 @@ class DiskManager {
         logger.error("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk");
       }
     } finally {
-     metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
+      metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
     }
   }
 

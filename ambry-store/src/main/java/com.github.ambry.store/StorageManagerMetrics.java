@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class StorageManagerMetrics {
   private final MetricRegistry registry;
-
   public final Histogram storageManagerStartTimeMs;
   public final Histogram storageManagerShutdownTimeMs;
   public final Histogram diskStartTimeMs;
@@ -57,7 +56,6 @@ public class StorageManagerMetrics {
     totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));
     totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
     diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));
-
     compactionCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionCount"));
     compactionManagerTerminateErrorCount =
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionManagerTerminateErrorCount"));

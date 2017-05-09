@@ -71,7 +71,7 @@ public class DumpLogTool {
     blobIdList = verifiableProperties.getString("blobId.list", "");
     logStartOffset = verifiableProperties.getLong("log.start.offset", -1);
     logEndOffset = verifiableProperties.getLong("log.end.offset", -1);
-    bytesPerSec = verifiableProperties.getLong("bytes.per.sec", 10000);
+    bytesPerSec = verifiableProperties.getLongInRange("bytes.per.sec", 10000, 0, 100000000);
     silent = verifiableProperties.getBoolean("silent", true);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
@@ -82,8 +82,6 @@ public class DumpLogTool {
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
     if (bytesPerSec > 0) {
       this.throttler = new Throttler(bytesPerSec, 1000, true, SystemTime.getInstance());
-    } else if (bytesPerSec < 0) {
-      throw new IllegalArgumentException("BlobsPerSec " + bytesPerSec + " cannot be negative ");
     }
     currentTimeInMs = SystemTime.getInstance().milliseconds();
     this.metrics = metrics;
