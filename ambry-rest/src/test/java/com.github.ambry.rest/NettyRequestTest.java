@@ -173,6 +173,22 @@ public class NettyRequestTest {
         closeRequestAndValidate(nettyRequest, channel);
         assertEquals("Allocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
       }
+
+      for (int bufferWatermark : bufferWatermarks) {
+        NettyRequest.bufferWatermark = bufferWatermark;
+        uri = "/PUT" + uriAttachment;
+        nettyRequest = createNettyRequest(HttpMethod.PUT, uri, headers, channel);
+        validateRequest(nettyRequest, RestMethod.PUT, uri, headers, params, cookies, channel);
+        if (bufferWatermark > 0) {
+          assertTrue("RecvAllocator should have changed",
+              channel.config().getRecvByteBufAllocator() instanceof DefaultMaxBytesRecvByteBufAllocator);
+        } else {
+          assertEquals("RecvAllocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
+        }
+        closeRequestAndValidate(nettyRequest, channel);
+        assertEquals("Allocator not as expected", savedAllocator, channel.config().getRecvByteBufAllocator());
+      }
+
       NettyRequest.bufferWatermark = DEFAULT_WATERMARK;
 
       uri = "/DELETE" + uriAttachment;
@@ -278,8 +294,10 @@ public class NettyRequestTest {
   public void contentAddAndReadTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
     for (String digestAlgorithm : digestAlgorithms) {
-      contentAddAndReadTest(digestAlgorithm, true);
-      contentAddAndReadTest(digestAlgorithm, false);
+      contentAddAndReadTest(digestAlgorithm, true, HttpMethod.POST);
+      contentAddAndReadTest(digestAlgorithm, false, HttpMethod.POST);
+      contentAddAndReadTest(digestAlgorithm, true, HttpMethod.PUT);
+      contentAddAndReadTest(digestAlgorithm, false, HttpMethod.PUT);
     }
   }
 
@@ -293,8 +311,10 @@ public class NettyRequestTest {
   public void backPressureTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
     for (String digestAlgorithm : digestAlgorithms) {
-      backPressureTest(digestAlgorithm, true);
-      backPressureTest(digestAlgorithm, false);
+      backPressureTest(digestAlgorithm, true, HttpMethod.POST);
+      backPressureTest(digestAlgorithm, false, HttpMethod.POST);
+      backPressureTest(digestAlgorithm, true, HttpMethod.PUT);
+      backPressureTest(digestAlgorithm, false, HttpMethod.PUT);
     }
   }
 
@@ -607,7 +627,7 @@ public class NettyRequestTest {
     }
     NettyRequest nettyRequest = new NettyRequest(httpRequest, channel, new NettyMetrics(metricRegistry));
     assertEquals("Auto-read is in an invalid state",
-        !httpMethod.equals(HttpMethod.POST) || NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
+        (!httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT))|| NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
     return nettyRequest;
   }
 
@@ -722,7 +742,8 @@ public class NettyRequestTest {
     }
 
     assertEquals("Auto-read is in an invalid state",
-        !restMethod.equals(RestMethod.POST) || NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
+        (!restMethod.equals(RestMethod.POST) && !restMethod.equals(RestMethod.PUT))
+            || NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
   }
 
   /**
@@ -755,29 +776,30 @@ public class NettyRequestTest {
    *                        required.
    * @param useCopyForcingByteBuf if {@code true}, uses {@link CopyForcingByteBuf} instead of the default
    *                              {@link ByteBuf}.
+   * @param method Http method
    * @throws Exception
    */
-  private void contentAddAndReadTest(String digestAlgorithm, boolean useCopyForcingByteBuf) throws Exception {
+  private void contentAddAndReadTest(String digestAlgorithm, boolean useCopyForcingByteBuf, HttpMethod method) throws Exception {
     // non composite content
     // start reading before addition of content
     List<HttpContent> httpContents = new ArrayList<>();
     ByteBuffer content = generateContent(httpContents, useCopyForcingByteBuf);
-    doContentAddAndReadTest(digestAlgorithm, content, httpContents, 0);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, 0, method);
 
     // start reading in the middle of content add
     httpContents.clear();
     content = generateContent(httpContents, useCopyForcingByteBuf);
-    doContentAddAndReadTest(digestAlgorithm, content, httpContents, httpContents.size() / 2);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, httpContents.size() / 2, method);
 
     // start reading after all content added
     httpContents.clear();
     content = generateContent(httpContents, useCopyForcingByteBuf);
-    doContentAddAndReadTest(digestAlgorithm, content, httpContents, httpContents.size());
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, httpContents.size(), method);
 
     // composite content
     httpContents.clear();
     content = generateCompositeContent(httpContents);
-    doContentAddAndReadTest(digestAlgorithm, content, httpContents, 0);
+    doContentAddAndReadTest(digestAlgorithm, content, httpContents, 0, method);
   }
 
   /**
@@ -789,16 +811,17 @@ public class NettyRequestTest {
    * {@code content}.
    * @param numChunksToAddBeforeRead the number of {@link HttpContent} to add before making the
    * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} call.
+   * @param method Http method
    * @throws Exception
    */
   private void doContentAddAndReadTest(String digestAlgorithm, ByteBuffer content, List<HttpContent> httpContents,
-      int numChunksToAddBeforeRead) throws Exception {
+      int numChunksToAddBeforeRead, HttpMethod method) throws Exception {
     if (numChunksToAddBeforeRead < 0 || numChunksToAddBeforeRead > httpContents.size()) {
       throw new IllegalArgumentException("Illegal value of numChunksToAddBeforeRead");
     }
 
     Channel channel = new MockChannel();
-    NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    NettyRequest nettyRequest = createNettyRequest(method, "/", null, channel);
     byte[] wholeDigest = null;
     if (digestAlgorithm != null && !digestAlgorithm.isEmpty()) {
       MessageDigest digest = MessageDigest.getInstance(digestAlgorithm);
@@ -854,9 +877,10 @@ public class NettyRequestTest {
    *                        required.
    * @param useCopyForcingByteBuf if {@code true}, uses {@link CopyForcingByteBuf} instead of the default
    *                              {@link ByteBuf}.
+   * @param method Http method
    * @throws Exception
    */
-  private void backPressureTest(String digestAlgorithm, boolean useCopyForcingByteBuf) throws Exception {
+  private void backPressureTest(String digestAlgorithm, boolean useCopyForcingByteBuf, HttpMethod method) throws Exception {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     byte[] contentBytes = TestUtils.getRandomBytes(GENERATED_CONTENT_SIZE);
     ByteBuffer content = ByteBuffer.wrap(contentBytes);
@@ -870,17 +894,17 @@ public class NettyRequestTest {
       httpContents.clear();
       content.rewind();
       splitContent(contentBytes, GENERATED_CONTENT_PART_COUNT, httpContents, useCopyForcingByteBuf);
-      doBackPressureTest(digestAlgorithm, content, httpContents, 0);
+      doBackPressureTest(digestAlgorithm, content, httpContents, 0, method);
       // start reading in the middle of content add
       httpContents.clear();
       content.rewind();
       splitContent(contentBytes, GENERATED_CONTENT_PART_COUNT, httpContents, useCopyForcingByteBuf);
-      doBackPressureTest(digestAlgorithm, content, httpContents, httpContents.size() / 2);
+      doBackPressureTest(digestAlgorithm, content, httpContents, httpContents.size() / 2, method);
       // start reading after all content added
       httpContents.clear();
       content.rewind();
       splitContent(contentBytes, GENERATED_CONTENT_PART_COUNT, httpContents, useCopyForcingByteBuf);
-      doBackPressureTest(digestAlgorithm, content, httpContents, httpContents.size());
+      doBackPressureTest(digestAlgorithm, content, httpContents, httpContents.size(), method);
     }
   }
 
@@ -895,16 +919,17 @@ public class NettyRequestTest {
    * {@code content}.
    * @param numChunksToAddBeforeRead the number of {@link HttpContent} to add before making the
    * {@link NettyRequest#readInto(AsyncWritableChannel, Callback)} call.
+   * @param method Http Method
    * @throws Exception
    */
   private void doBackPressureTest(String digestAlgorithm, ByteBuffer content, List<HttpContent> httpContents,
-      int numChunksToAddBeforeRead) throws Exception {
+      int numChunksToAddBeforeRead, HttpMethod method) throws Exception {
     if (numChunksToAddBeforeRead < 0 || numChunksToAddBeforeRead > httpContents.size()) {
       throw new IllegalArgumentException("Illegal value of numChunksToAddBeforeRead");
     }
 
     MockChannel channel = new MockChannel();
-    final NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
+    final NettyRequest nettyRequest = createNettyRequest(method, "/", null, channel);
     byte[] wholeDigest = null;
     if (digestAlgorithm != null && !digestAlgorithm.isEmpty()) {
       MessageDigest digest = MessageDigest.getInstance(digestAlgorithm);

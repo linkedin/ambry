@@ -445,7 +445,7 @@ public class NettyResponseChannelTest {
    */
   @Test
   public void keepAliveTest() {
-    HttpMethod[] HTTP_METHODS = {HttpMethod.POST, HttpMethod.GET, HttpMethod.HEAD, HttpMethod.DELETE};
+    HttpMethod[] HTTP_METHODS = {HttpMethod.POST, HttpMethod.PUT, HttpMethod.GET, HttpMethod.HEAD, HttpMethod.DELETE};
     EmbeddedChannel channel = createEmbeddedChannel();
     for (HttpMethod httpMethod : HTTP_METHODS) {
       for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
@@ -693,7 +693,7 @@ public class NettyResponseChannelTest {
         while (channel.readOutbound() != null) {
         }
       }
-      boolean shouldBeAlive = keepAlive && !httpMethod.equals(HttpMethod.POST)
+      boolean shouldBeAlive = keepAlive && !httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT)
           && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedResponseStatus);
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
