@@ -15,8 +15,8 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -26,8 +26,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class StorageManagerMetrics {
   private final MetricRegistry registry;
 
-  public final Timer diskStartTime;
+  public final Histogram storageManagerStartTimeMs;
+  public final Histogram storageManagerShutdownTimeMs;
+  public final Histogram diskStartTimeMs;
+  public final Histogram diskShutdownTimeMs;
   public final Counter totalStoreStartFailures;
+  public final Counter totalStoreShutdownFailures;
   public final Counter diskMountPathFailures;
 
   // CompactionManager related metrics
@@ -44,9 +48,15 @@ public class StorageManagerMetrics {
    */
   public StorageManagerMetrics(MetricRegistry registry) {
     this.registry = registry;
-    diskStartTime = registry.timer(MetricRegistry.name(StorageManager.class, "DiskStartTime"));
-    totalStoreStartFailures = registry.counter(MetricRegistry.name(StorageManager.class, "TotalStoreStartFailures"));
-    diskMountPathFailures = registry.counter(MetricRegistry.name(StorageManager.class, "DiskMountPathFailures"));
+    storageManagerStartTimeMs =
+        registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerStartTimeMs"));
+    storageManagerShutdownTimeMs =
+        registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerShutdownTimeMs"));
+    diskStartTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskStartTimeMs"));
+    diskShutdownTimeMs = registry.histogram(MetricRegistry.name(DiskManager.class, "DiskShutdownTimeMs"));
+    totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));
+    totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
+    diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));
 
     compactionCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionCount"));
     compactionManagerTerminateErrorCount =

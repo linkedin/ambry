@@ -40,6 +40,7 @@ class DiskManager {
   private final Map<PartitionId, BlobStore> stores = new HashMap<>();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
+  private final Time time;
   private final DiskIOScheduler diskIOScheduler;
   private final CompactionManager compactionManager;
 
@@ -62,6 +63,7 @@ class DiskManager {
       MessageStoreHardDelete hardDelete, Time time) {
     this.disk = disk;
     this.metrics = metrics;
+    this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
@@ -76,9 +78,10 @@ class DiskManager {
 
   /**
    * Starts all the stores on this disk.
+   * @throws InterruptedException
    */
   void start() throws InterruptedException {
-    Timer.Context context = metrics.diskStartTime.time();
+    long startTimeMs = time.milliseconds();
     try {
       File mountPath = new File(disk.getMountPath());
       if (mountPath.exists()) {
@@ -114,25 +117,48 @@ class DiskManager {
         logger.error("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk");
       }
     } finally {
-      context.stop();
+     metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
     }
   }
 
   /**
-   * Shuts down all the stores this disk.
+   * Shuts down all the stores on this disk.
+   * @throws InterruptedException
    */
-  void shutdown() {
-    compactionManager.disable();
-    for (Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-      try {
-        partitionAndStore.getValue().shutdown();
-      } catch (Exception e) {
-        logger.error(
-            "Exception while shutting down store for partition " + partitionAndStore.getKey() + " on disk " + disk);
+  void shutdown() throws InterruptedException {
+    long startTimeMs = time.milliseconds();
+    try {
+      compactionManager.disable();
+      final AtomicInteger numFailures = new AtomicInteger(0);
+      List<Thread> shutdownThreads = new ArrayList<>();
+      for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+        Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), new Runnable() {
+          @Override
+          public void run() {
+            try {
+              partitionAndStore.getValue().shutdown();
+            } catch (Exception e) {
+              numFailures.incrementAndGet();
+              metrics.totalStoreShutdownFailures.inc();
+              logger.error("Exception while shutting down store {} on disk {}", partitionAndStore.getKey(), disk, e);
+            }
+          }
+        }, false);
+        thread.start();
+        shutdownThreads.add(thread);
       }
+      for (Thread shutdownThread : shutdownThreads) {
+        shutdownThread.join();
+      }
+      if (numFailures.get() > 0) {
+        logger.error(
+            "Could not shutdown " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
+      }
+      compactionManager.awaitTermination();
+      diskIOScheduler.close();
+    } finally {
+      metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
-    compactionManager.awaitTermination();
-    diskIOScheduler.close();
   }
 
   /**

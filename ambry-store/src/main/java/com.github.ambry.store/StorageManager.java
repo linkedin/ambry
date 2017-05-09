@@ -38,6 +38,7 @@ public class StorageManager {
   private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
   private final List<DiskManager> diskManagers = new ArrayList<>();
   private final StorageManagerMetrics metrics;
+  private final Time time;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -56,6 +57,7 @@ public class StorageManager {
       MessageStoreHardDelete hardDelete, Time time) throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
+    this.time = time;
 
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -96,30 +98,36 @@ public class StorageManager {
 
   /**
    * Start the {@link DiskManager}s for all disks on this node.
+   * @throws InterruptedException
    */
   public void start() throws InterruptedException {
-    logger.info("Starting storage manager");
-    List<Thread> startupThreads = new ArrayList<>();
-    for (final DiskManager diskManager : diskManagers) {
-      Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), new Runnable() {
-        @Override
-        public void run() {
-          try {
-            diskManager.start();
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.error("Disk manager startup thread interrupted for disk " + diskManager.getDisk(), e);
+    long startTimeMs = time.milliseconds();
+    try {
+      logger.info("Starting storage manager");
+      List<Thread> startupThreads = new ArrayList<>();
+      for (final DiskManager diskManager : diskManagers) {
+        Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), new Runnable() {
+          @Override
+          public void run() {
+            try {
+              diskManager.start();
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              logger.error("Disk manager startup thread interrupted for disk " + diskManager.getDisk(), e);
+            }
           }
-        }
-      }, false);
-      thread.start();
-      startupThreads.add(thread);
+        }, false);
+        thread.start();
+        startupThreads.add(thread);
+      }
+      for (Thread startupThread : startupThreads) {
+        startupThread.join();
+      }
+      metrics.initializeCompactionThreadsTracker(this, diskManagers.size());
+      logger.info("Starting storage manager complete");
+    } finally {
+      metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
     }
-    for (Thread startupThread : startupThreads) {
-      startupThread.join();
-    }
-    metrics.initializeCompactionThreadsTracker(this, diskManagers.size());
-    logger.info("Starting storage manager complete");
   }
 
   /**
@@ -145,13 +153,35 @@ public class StorageManager {
   /**
    * Shutdown the {@link DiskManager}s for the disks on this node.
    * @throws StoreException
+   * @throws InterruptedException
    */
-  public void shutdown() throws StoreException {
-    logger.info("Shutting down storage manager");
-    for (DiskManager diskManager : diskManagers) {
-      diskManager.shutdown();
+  public void shutdown() throws InterruptedException {
+    long startTimeMs = time.milliseconds();
+    try {
+      logger.info("Shutting down storage manager");
+      List<Thread> shutdownThreads = new ArrayList<>();
+      for (final DiskManager diskManager : diskManagers) {
+        Thread thread = Utils.newThread("disk-manager-shutdown-" + diskManager.getDisk(), new Runnable() {
+          @Override
+          public void run() {
+            try {
+              diskManager.shutdown();
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              logger.error("Disk manager shutdown thread interrupted for disk " + diskManager.getDisk(), e);
+            }
+          }
+        }, false);
+        thread.start();
+        shutdownThreads.add(thread);
+      }
+      for (Thread shutdownThread : shutdownThreads) {
+        shutdownThread.join();
+      }
+      logger.info("Shutting down storage manager complete");
+    } finally {
+      metrics.storageManagerShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
-    logger.info("Shutting down storage manager complete");
   }
 
   /**
