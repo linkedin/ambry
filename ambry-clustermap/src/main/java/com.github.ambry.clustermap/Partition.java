@@ -192,8 +192,7 @@ class Partition extends PartitionId {
     }
 
     Partition partition = (Partition) o;
-
-    return id == partition.id;
+    return id.equals(partition.id);
   }
 
   @Override
