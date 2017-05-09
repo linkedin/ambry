@@ -61,6 +61,16 @@ public interface BlobStorageService {
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel);
 
   /**
+   * Handles a PUT operation.
+   * <p/>
+   * The {@code restRequest} provided will have both metadata and any content associated with the request. The
+   * {@code restResponseChannel} can be used to send responses to the client.
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   */
+  public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel);
+
+  /**
    * Handles a DELETE operation.
    * <p/>
    * The {@code restRequest} provided will have both metadata and any content associated with the request. The

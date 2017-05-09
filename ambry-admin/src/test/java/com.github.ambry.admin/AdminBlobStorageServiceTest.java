@@ -179,6 +179,7 @@ public class AdminBlobStorageServiceTest {
   public void nullInputsForFunctionsTest() throws Exception {
     doNullInputsForFunctionsTest("handleGet");
     doNullInputsForFunctionsTest("handlePost");
+    doNullInputsForFunctionsTest("handlePut");
     doNullInputsForFunctionsTest("handleDelete");
     doNullInputsForFunctionsTest("handleHead");
   }
@@ -447,6 +448,22 @@ public class AdminBlobStorageServiceTest {
   }
 
   /**
+   * Tests that PUT fails for {@link AdminBlobStorageService}.
+   * @throws Exception
+   */
+  @Test
+  public void putFailureTest() throws Exception {
+    RestRequest restRequest = AdminTestUtils.createRestRequest(RestMethod.PUT, "/", null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("PUT should have failed because Admin does not support it");
+    } catch (RestServiceException e) {
+      assertEquals("PUT is an unsupported method", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
+    }
+  }
+
+  /**
    * Tests for cases where the {@link IdConverter} misbehaves and throws {@link RuntimeException}.
    * @throws InstantiationException
    * @throws JSONException
@@ -586,6 +603,9 @@ public class AdminBlobStorageServiceTest {
     switch (restRequest.getRestMethod()) {
       case POST:
         adminBlobStorageService.handlePost(restRequest, restResponseChannel);
+        break;
+      case PUT:
+        adminBlobStorageService.handlePut(restRequest, restResponseChannel);
         break;
       case GET:
         adminBlobStorageService.handleGet(restRequest, restResponseChannel);
@@ -998,7 +1018,8 @@ public class AdminBlobStorageServiceTest {
   private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg)
       throws JSONException {
     for (RestMethod restMethod : restMethods) {
-      if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.POST)) {
+      if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.POST) || restMethod.equals(
+          RestMethod.PUT)) {
         continue;
       }
       try {

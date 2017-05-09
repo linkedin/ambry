@@ -136,6 +136,12 @@ class NettyRequest implements RestRequest {
         setAutoRead(false);
         continueReadIfPossible(0);
       }
+    } else if (HttpMethod.PUT.equals(httpMethod)) {
+      restMethod = RestMethod.PUT;
+      if (bufferWatermark > 0) {
+        setAutoRead(false);
+        continueReadIfPossible(0);
+      }
     } else if (HttpMethod.DELETE.equals(httpMethod)) {
       restMethod = RestMethod.DELETE;
     } else if (HttpMethod.HEAD.equals(httpMethod)) {
@@ -377,8 +383,8 @@ class NettyRequest implements RestRequest {
    * @throws RestServiceException if request channel has been closed.
    */
   protected void addContent(HttpContent httpContent) throws RestServiceException {
-    if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
-        || httpContent.content().readableBytes() > 0)) {
+    if (!getRestMethod().equals(RestMethod.POST) && !getRestMethod().equals(RestMethod.PUT) && (
+        !(httpContent instanceof LastHttpContent) || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else {
       validateState(httpContent);

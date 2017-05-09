@@ -76,6 +76,9 @@ public class MockRestRequestResponseHandler implements RestRequestHandler, RestR
         case POST:
           blobStorageService.handlePost(restRequest, restResponseChannel);
           break;
+        case PUT:
+          blobStorageService.handlePut(restRequest, restResponseChannel);
+          break;
         case DELETE:
           blobStorageService.handleDelete(restRequest, restResponseChannel);
           break;

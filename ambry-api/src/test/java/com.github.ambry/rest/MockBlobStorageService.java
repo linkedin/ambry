@@ -108,6 +108,19 @@ public class MockBlobStorageService implements BlobStorageService {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * PUT is not supported by {@link MockBlobStorageService}.
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   */
+  @Override
+  public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    Exception exception = new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod);
+    handleResponse(restRequest, restResponseChannel, null, exception);
+  }
+
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {

@@ -198,6 +198,22 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
+   * Checks reactions of PUT methods in {@link AmbryBlobStorageService}
+   * @throws Exception
+   */
+  @Test
+  public void putFailureTest() throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, "/", null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("PUT should have failed because Ambry does not support it");
+    } catch (RestServiceException e) {
+      assertEquals("PUT is an unsupported method", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
+    }
+  }
+
+  /**
    * Checks reactions of all methods in {@link AmbryBlobStorageService} to bad {@link RestResponseHandler} and
    * {@link RestRequest} implementations.
    * @throws Exception
@@ -574,6 +590,9 @@ public class AmbryBlobStorageServiceTest {
     switch (restRequest.getRestMethod()) {
       case POST:
         ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
+        break;
+      case PUT:
+        ambryBlobStorageService.handlePut(restRequest, restResponseChannel);
         break;
       case GET:
         ambryBlobStorageService.handleGet(restRequest, restResponseChannel);
@@ -1012,7 +1031,7 @@ public class AmbryBlobStorageServiceTest {
   private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg)
       throws JSONException {
     for (RestMethod restMethod : restMethods) {
-      if (restMethod.equals(RestMethod.UNKNOWN)) {
+      if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.PUT)) {
         continue;
       }
       JSONObject headers = new JSONObject();

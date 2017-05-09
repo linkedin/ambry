@@ -68,7 +68,7 @@ class NettyMultipartRequest extends NettyRequest {
     // reset auto read state.
     channel.config().setRecvByteBufAllocator(savedAllocator);
     setAutoRead(true);
-    if (!getRestMethod().equals(RestMethod.POST)) {
+    if (!getRestMethod().equals(RestMethod.POST) && !getRestMethod().equals(RestMethod.PUT)) {
       throw new IllegalArgumentException("NettyMultipartRequest cannot be created for " + getRestMethod());
     }
   }

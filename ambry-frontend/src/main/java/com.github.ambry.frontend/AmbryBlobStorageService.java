@@ -208,6 +208,15 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   @Override
+  public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    handlePrechecks(restRequest, restResponseChannel);
+    Exception exception =
+        isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
+            : new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
+    submitResponse(restRequest, restResponseChannel, null, exception);
+  }
+
+  @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
