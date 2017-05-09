@@ -55,8 +55,8 @@ public class DumpLogTool {
   private final long logStartOffset;
   // The offset in the log until which to dump data
   private final long logEndOffset;
-  // The throttling value in blobs per sec
-  private final long blobsPerSec;
+  // The throttling value in bytes per sec
+  private final long bytesPerSec;
   // set to true if only error logging is required
   private final boolean silent;
   private final long currentTimeInMs;
@@ -71,7 +71,7 @@ public class DumpLogTool {
     blobIdList = verifiableProperties.getString("blobId.list", "");
     logStartOffset = verifiableProperties.getLong("log.start.offset", -1);
     logEndOffset = verifiableProperties.getLong("log.end.offset", -1);
-    blobsPerSec = verifiableProperties.getLong("bytes.per.sec", 100);
+    bytesPerSec = verifiableProperties.getLong("bytes.per.sec", 10000);
     silent = verifiableProperties.getBoolean("silent", true);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
@@ -80,10 +80,10 @@ public class DumpLogTool {
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
-    if (blobsPerSec > 0) {
-      this.throttler = new Throttler(blobsPerSec, 1000, true, SystemTime.getInstance());
-    } else if (blobsPerSec < 0) {
-      throw new IllegalArgumentException("BlobsPerSec " + blobsPerSec + " cannot be negative ");
+    if (bytesPerSec > 0) {
+      this.throttler = new Throttler(bytesPerSec, 1000, true, SystemTime.getInstance());
+    } else if (bytesPerSec < 0) {
+      throw new IllegalArgumentException("BlobsPerSec " + bytesPerSec + " cannot be negative ");
     }
     currentTimeInMs = SystemTime.getInstance().milliseconds();
     this.metrics = metrics;
