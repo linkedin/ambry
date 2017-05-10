@@ -51,6 +51,7 @@ public class HardDeleter implements Runnable {
   static final long HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS = 10 * Time.MsPerSec;
 
   final AtomicBoolean enabled = new AtomicBoolean(true);
+  private volatile boolean awaitingAfterCaughtUp = false;
 
   private final StoreMetrics metrics;
   private final String dataDir;
@@ -124,7 +125,9 @@ public class HardDeleter implements Runnable {
             if (!hardDelete()) {
               isCaughtUp = true;
               logger.trace("Waiting for {} ms after caught up for {}", HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS, dataDir);
+              awaitingAfterCaughtUp = true;
               time.await(pauseCondition, HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS);
+              awaitingAfterCaughtUp = false;
             } else if (isCaughtUp) {
               isCaughtUp = false;
               logger.info("Resumed hard deletes for {} after having caught up", dataDir);
@@ -382,16 +385,21 @@ public class HardDeleter implements Runnable {
     long startTimeInMs = time.milliseconds();
     try {
       if (enabled.get()) {
-        logger.info("Hard delete shutdown initiated");
+        logger.info("Hard delete shutdown initiated for store {} ", dataDir);
         enabled.set(false);
         hardDeleteLock.lock();
+        if (awaitingAfterCaughtUp) {
+          logger.info("HardDelete is awaiting after caught up for store {} ", dataDir);
+        } else {
+          logger.info("HardDelete in progress for store {} ", dataDir);
+        }
         try {
           pauseCondition.signal();
         } finally {
           hardDeleteLock.unlock();
         }
         shutdownLatch.await();
-        logger.info("Hard delete shutdown complete");
+        logger.info("Hard delete shutdown complete for store {} ", dataDir);
         throttler.close();
         pruneHardDeleteRecoveryRange();
         persistCleanupToken();

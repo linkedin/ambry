@@ -67,8 +67,8 @@ public class DumpDataTool {
   // Path referring to replica root directory
   private final String replicaRootDirectory;
 
-  // The throttling value in index files per sec
-  private final double indexFilesPerSec;
+  // The throttling value in index entries per sec
+  private final double indexEntriesPerSec;
 
   private final StoreToolsMetrics metrics;
   private final Throttler throttler;
@@ -83,8 +83,8 @@ public class DumpDataTool {
     partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
     typeOfOperation = verifiableProperties.getString("type.of.operation");
     replicaRootDirectory = verifiableProperties.getString("replica.root.directory", "");
-    indexFilesPerSec = verifiableProperties.getDouble("index.files.per.sec", 1);
-    throttler = new Throttler(indexFilesPerSec, 1000, true, SystemTime.getInstance());
+    indexEntriesPerSec = verifiableProperties.getDouble("index.entries.per.sec", 1000);
+    throttler = new Throttler(indexEntriesPerSec, 1000, true, SystemTime.getInstance());
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
@@ -162,7 +162,6 @@ public class DumpDataTool {
           checkEndOffset = !currLogSegmentRef.equals(nextLogSegmentRef);
         }
         compareIndexEntriesToLogContent(indexFiles[i], checkEndOffset);
-        throttler.maybeThrottle(1);
       }
     } finally {
       context.stop();
@@ -282,6 +281,7 @@ public class DumpDataTool {
               value.getOffset().getOffset(), logFileSize, (value.getOffset().getOffset() - logFileSize));
         }
       }
+      throttler.maybeThrottle(entries.size());
       long indexEndOffset = segment.getEndOffset().getOffset();
       if (checkLogEndOffsetMatch && indexEndOffset != randomAccessFile.length()) {
         metrics.indexLogEndOffsetMisMatchError.inc();

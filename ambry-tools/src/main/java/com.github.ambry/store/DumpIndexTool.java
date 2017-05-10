@@ -68,8 +68,8 @@ public class DumpIndexTool {
   private final boolean activeBlobsOnly;
   // set to true if only error logging is required
   private final boolean silent;
-  // The throttling value in index files per sec
-  private final long indexFilesPerSec;
+  // The throttling value in index entries per sec
+  private final long indexEntriesPerSec;
   // StoreToolMetrics
   private final StoreToolsMetrics metrics;
   private final Time time;
@@ -87,7 +87,7 @@ public class DumpIndexTool {
     activeBlobsCount = verifiableProperties.getInt("active.blobs.count", -1);
     activeBlobsOnly = verifiableProperties.getBoolean("active.blobs.only", false);
     silent = verifiableProperties.getBoolean("silent", true);
-    indexFilesPerSec = verifiableProperties.getLong("index.files.per.sec", 1);
+    indexEntriesPerSec = verifiableProperties.getLong("index.entries.per.sec", 1000);
     if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
       throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
     }
@@ -148,7 +148,7 @@ public class DumpIndexTool {
         if (activeBlobsOnly) {
           dumpActiveBlobsForReplica(replicaRootDirecotry, blobs);
         } else {
-          dumpIndexesForReplica(replicaRootDirecotry, blobs, indexFilesPerSec);
+          dumpIndexesForReplica(replicaRootDirecotry, blobs, indexEntriesPerSec);
         }
         break;
       case "DumpNRandomActiveBlobsForReplica":
@@ -255,19 +255,20 @@ public class DumpIndexTool {
    * Dumps all index files for a given Replica
    * @param replicaRootDirectory the root directory for a replica
    * @param blobList list of blobIds to be filtered for. Can be {@code null}
+   * @param indexEntriesPerSec throttling value in index entries per sec
    * @return a {@link Map} of BlobId to {@link BlobStatus} containing the information about every blob in
    * this replica
    * @throws Exception
    */
   public Map<String, BlobStatus> dumpIndexesForReplica(String replicaRootDirectory, List<String> blobList,
-      long indexFilesPerSec) throws Exception {
+      long indexEntriesPerSec) throws Exception {
     final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
       long totalKeysProcessed = 0;
       File replicaDirectory = new File(replicaRootDirectory);
       logger.info("Root directory for replica : " + replicaRootDirectory);
       IndexStats indexStats = new IndexStats();
-      Throttler throttler = new Throttler(indexFilesPerSec, 1000, true, SystemTime.getInstance());
+      Throttler throttler = new Throttler(indexEntriesPerSec, 1000, true, SystemTime.getInstance());
       Map<String, BlobStatus> blobIdToStatusMap = new HashMap<>();
       File[] replicas = replicaDirectory.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
       Arrays.sort(replicas, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
@@ -275,10 +276,11 @@ public class DumpIndexTool {
       int currentIndexCount = 0;
       for (File indexFile : replicas) {
         logger.info("Dumping index " + indexFile + " for replica " + replicaDirectory.getName());
-        totalKeysProcessed +=
+        long keysProcessedPerIndexSegment =
             dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, blobIdToStatusMap, indexStats,
                 currentIndexCount++ >= (totalIndexCount - 2), time, currentTimeInMs);
-        throttler.maybeThrottle(1);
+        throttler.maybeThrottle(keysProcessedPerIndexSegment);
+        totalKeysProcessed += keysProcessedPerIndexSegment;
       }
       long totalActiveRecords = 0;
       for (String key : blobIdToStatusMap.keySet()) {

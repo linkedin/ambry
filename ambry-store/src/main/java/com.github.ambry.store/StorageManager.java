@@ -58,7 +58,6 @@ public class StorageManager {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
     this.time = time;
-
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
       DiskId disk = replica.getDiskId();
