@@ -385,7 +385,7 @@ public class HelixClusterManagerTest {
    */
   private void testAllPartitions() {
     Set<String> partitionsInClusterManager = new HashSet<>();
-    for (PartitionId partition : clusterManager.getAllPartitions()) {
+    for (PartitionId partition : clusterManager.getAllPartitionIds()) {
       String partitionStr =
           useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
       partitionsInClusterManager.add(partitionStr);

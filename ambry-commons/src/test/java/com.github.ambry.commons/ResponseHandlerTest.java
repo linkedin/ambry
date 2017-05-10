@@ -62,7 +62,7 @@ public class ResponseHandlerTest {
     }
 
     @Override
-    public List<PartitionId> getAllPartitions() {
+    public List<PartitionId> getAllPartitionIds() {
       return null;
     }
 

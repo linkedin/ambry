@@ -200,7 +200,7 @@ class MockHelixAdmin implements HelixAdmin {
    * @return all writable partitions registered via this Helix admin.
    */
   Set<String> getWritablePartitions() {
-    Set<String> healthWritablePartitions = new HashSet<>();
+    Set<String> healthyWritablePartitions = new HashSet<>();
     for (Map.Entry<String, Set<String>> entry : partitionToInstances.entrySet()) {
       if (partitionStates.get(entry.getKey()).equals(PartitionState.READ_WRITE)) {
         boolean up = true;
@@ -211,11 +211,11 @@ class MockHelixAdmin implements HelixAdmin {
           }
         }
         if (up) {
-          healthWritablePartitions.add(entry.getKey());
+          healthyWritablePartitions.add(entry.getKey());
         }
       }
     }
-    return healthWritablePartitions;
+    return healthyWritablePartitions;
   }
 
   /**

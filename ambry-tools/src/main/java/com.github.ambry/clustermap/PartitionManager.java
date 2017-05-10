@@ -141,13 +141,13 @@ public class PartitionManager {
         String partitionIdsToAddReplicas = options.valueOf(partitionIdsToAddReplicasToOpt);
         String datacenterToAddReplicasTo = options.valueOf(datacenterToAddReplicasToOpt);
         if (partitionIdsToAddReplicas.compareToIgnoreCase(".") == 0) {
-          for (PartitionId partitionId : manager.getAllPartitions()) {
+          for (PartitionId partitionId : manager.getAllPartitionIds()) {
             manager.addReplicas(partitionId, datacenterToAddReplicasTo, attemptNonRackAwareOnFailure);
           }
         } else {
           String[] partitionIds = partitionIdsToAddReplicas.split(",");
           for (String partitionId : partitionIds) {
-            for (PartitionId partitionInCluster : manager.getAllPartitions()) {
+            for (PartitionId partitionInCluster : manager.getAllPartitionIds()) {
               if (partitionInCluster.isEqual(partitionId)) {
                 manager.addReplicas(partitionInCluster, datacenterToAddReplicasTo, attemptNonRackAwareOnFailure);
               }

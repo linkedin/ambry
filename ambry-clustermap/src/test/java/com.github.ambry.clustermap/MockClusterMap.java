@@ -172,7 +172,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public List<PartitionId> getAllPartitions() {
+  public List<PartitionId> getAllPartitionIds() {
     return new ArrayList<>(partitions.values());
   }
 

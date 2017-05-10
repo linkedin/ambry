@@ -75,7 +75,7 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
-  public List<PartitionId> getAllPartitions() {
+  public List<PartitionId> getAllPartitionIds() {
     return partitionLayout.getPartitions();
   }
 

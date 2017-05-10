@@ -90,7 +90,7 @@ public class StaticClusterManagerTest {
     }
 
     List<? extends PartitionId> writablePartitionIds = clusterMapManager.getWritablePartitionIds();
-    List<? extends PartitionId> partitionIds = clusterMapManager.getAllPartitions();
+    List<? extends PartitionId> partitionIds = clusterMapManager.getAllPartitionIds();
     assertEquals(writablePartitionIds.size(), testPartitionLayout.getPartitionCount() - 3);
     assertEquals(partitionIds.size(), testPartitionLayout.getPartitionCount());
     for (PartitionId partitionId : partitionIds) {
