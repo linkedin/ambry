@@ -75,6 +75,15 @@ subprojects {
     // but run integration tests too when running the test target
     check.dependsOn -= test
     check.dependsOn += unitTest
+    
+    task testJar(type: Jar) {
+        from sourceSets.test.output
+        classifier = 'test'
+    }
+    
+    artifacts {
+        archives testJar
+    }
 }
 
 project(':ambry-utils') {
