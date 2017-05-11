@@ -76,14 +76,14 @@ subprojects {
     check.dependsOn -= test
     check.dependsOn += unitTest
     
-     task testJar(type: Jar) {
+    task testJar(type: Jar) {
         from sourceSets.test.output
         classifier = 'test'
     }
     
     artifacts {
-         archives testJar
-     }
+        archives testJar
+    }
 }
 
 project(':ambry-utils') {
