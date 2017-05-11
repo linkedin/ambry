@@ -163,10 +163,12 @@ public class AmbryServer {
         partitionIds.add(replicaId.getPartitionId());
       }
       statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
-      statsManager.start();
+      if (serverConfig.serverStatsPublishEnabled) {
+        statsManager.start();
+      }
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
-      if (serverConfig.serverStatsPublishEnabled) {
+      if (serverConfig.serverStatsHealthReportEnabled) {
         ambryHealthReports.add(new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
       }
 
