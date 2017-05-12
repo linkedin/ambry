@@ -267,6 +267,7 @@ class CuratedLogIndexState {
     } else {
       newValue =
           new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+      newValue.clearOriginalMessageOffset();
       indexSegmentStartOffsets.put(idToDelete, new Pair<Offset, Offset>(null, null));
       allKeys.put(idToDelete, new Pair<IndexValue, IndexValue>(null, null));
       forcePut = true;
