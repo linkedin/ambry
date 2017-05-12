@@ -32,11 +32,11 @@ import java.util.Map;
  */
 public class MockClusterMap implements ClusterMap {
 
-  private final Map<Long, PartitionId> partitions;
-  private final List<MockDataNodeId> dataNodes;
-  private final int numMountPointsPerNode;
-  private final HashSet<String> dataCentersInClusterMap = new HashSet<>();
-  private boolean partitionsUnavailable = false;
+  protected final Map<Long, PartitionId> partitions;
+  protected final List<MockDataNodeId> dataNodes;
+  protected final int numMountPointsPerNode;
+  protected final HashSet<String> dataCentersInClusterMap = new HashSet<>();
+  protected boolean partitionsUnavailable = false;
   private boolean createNewRegistry = true;
   private MetricRegistry metricRegistry;
 

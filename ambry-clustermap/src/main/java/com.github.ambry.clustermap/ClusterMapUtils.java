@@ -66,7 +66,7 @@ public class ClusterMapUtils {
    * @return a map of dcName -> zkConnectStr.
    * @throws JSONException if there is an error parsing the JSON.
    */
-  static Map<String, String> parseZkJsonAndPopulateZkInfo(String zkLayoutJsonString) throws JSONException {
+  public static Map<String, String> parseZkJsonAndPopulateZkInfo(String zkLayoutJsonString) throws JSONException {
     Map<String, String> dataCenterToZkAddress = new HashMap<>();
     JSONObject root = new JSONObject(zkLayoutJsonString);
     JSONArray all = root.getJSONArray(ZKINFO_STR);
