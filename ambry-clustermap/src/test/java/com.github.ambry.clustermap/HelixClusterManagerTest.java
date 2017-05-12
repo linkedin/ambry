@@ -301,7 +301,8 @@ public class HelixClusterManagerTest {
     assertEquals(helixCluster.getDiskDownCount(), getGaugeValue("diskDownCount"));
     assertEquals(helixCluster.getAllPartitions().size(), getGaugeValue("partitionCount"));
     assertEquals(helixCluster.getAllWritablePartitions().size(), getGaugeValue("partitionReadWriteCount"));
-    assertEquals(3L, getGaugeValue("partitionSealedCount"));
+    assertEquals(helixCluster.getAllPartitions().size() - helixCluster.getAllWritablePartitions().size(),
+        getGaugeValue("partitionSealedCount"));
     assertEquals(helixCluster.getDiskCapacity(), getGaugeValue("rawTotalCapacityBytes"));
     assertEquals(0L, getGaugeValue("isMajorityReplicasDownForAnyPartition"));
     assertEquals(0L,
