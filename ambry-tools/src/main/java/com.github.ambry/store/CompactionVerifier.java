@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.StaticClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
@@ -75,6 +76,7 @@ public class CompactionVerifier implements Closeable {
   private static final Logger LOGGER = LoggerFactory.getLogger(CompactionVerifier.class);
 
   // general and compaction log related
+  private final CompactionVerifierConfig config;
   private final CompactionLog cLog;
   private final long compactionStartTimeMs;
   private final long compactionEndTimeMs;
@@ -140,6 +142,27 @@ public class CompactionVerifier implements Closeable {
     final String partitionLayoutFilePath;
 
     /**
+     * Whether to check data when outside the compaction range. Indexes are always checked (i.e. all source store
+     * index entries should be present in the target unless compacted).
+     * </p>
+     * Please note that this can fail if the source store has not yet undergone hard delete but the target store
+     * has. Use with care to avoid spurious failures.
+     */
+    @Config("check.all.data")
+    @Default("false")
+    final boolean checkAllData;
+
+    /**
+     * Whether to make sure that there are no left over index entries in the target.
+     * </p>
+     * Please note that this can fail if target has received traffic after being copied from source. Use with care to
+     * avoid spurious failures.
+     */
+    @Config("check.all.entries.in.tgt")
+    @Default("false")
+    final boolean checkAllEntriesInTgt;
+
+    /**
      * Loads the config.
      * @param verifiableProperties the {@link VerifiableProperties} to load the config from.
      */
@@ -151,6 +174,8 @@ public class CompactionVerifier implements Closeable {
       storeCapacity = verifiableProperties.getLong("store.capacity");
       hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+      checkAllData = verifiableProperties.getBoolean("check.all.data", false);
+      checkAllEntriesInTgt = verifiableProperties.getBoolean("check.all.entries.in.tgt", false);
     }
   }
 
@@ -184,6 +209,7 @@ public class CompactionVerifier implements Closeable {
    */
   private CompactionVerifier(CompactionVerifierConfig verifierConfig, StoreConfig storeConfig,
       StoreKeyFactory storeKeyFactory) throws IOException, StoreException {
+    config = verifierConfig;
     srcDir = new File(verifierConfig.srcStoreDirPath);
     tgtDir = new File(verifierConfig.tgtStoreDirPath);
 
@@ -350,7 +376,8 @@ public class CompactionVerifier implements Closeable {
       String errMsgId = getErrorMessageId(srcEntry, srcIndex);
 
       boolean shouldVerifyRecord;
-      if (wasProcessedForCompaction(srcValue.getOffset())) {
+      boolean wasProcessedForCompaction = wasProcessedForCompaction(srcValue.getOffset());
+      if (wasProcessedForCompaction) {
         if (!srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
           // put entry
           IndexValue valueFromSrcIndex = srcIndex.findKey(key);
@@ -373,15 +400,19 @@ public class CompactionVerifier implements Closeable {
           }
           if (shouldVerifyRecord && valueFromSrcIndex.isFlagSet(IndexValue.Flags.Delete_Index)) {
             // blob has been deleted. Find the time of the delete
-            long deleteTimesMs = valueFromSrcIndex.getOperationTimeInMs();
-            if (deleteTimesMs == Utils.Infinite_Time) {
-              deleteTimesMs = srcIndex.getIndexSegments()
-                  .floorEntry(valueFromSrcIndex.getOffset())
-                  .getValue()
-                  .getLastModifiedTimeMs();
+            IndexSegment indexSegment =
+                srcIndex.getIndexSegments().floorEntry(valueFromSrcIndex.getOffset()).getValue();
+            long deleteTimeMs = valueFromSrcIndex.getOperationTimeInMs();
+            if (deleteTimeMs == Utils.Infinite_Time) {
+              deleteTimeMs = indexSegment.getLastModifiedTimeMs();
             }
-            if (deleteRefTimeMs <= deleteTimesMs) {
+            if (deleteRefTimeMs <= deleteTimeMs) {
               shouldVerifyRecord = true;
+            } else if (indexSegment.getStartOffset().equals(srcIndex.getIndexSegments().lastKey())) {
+              // if the delete lies in the last index segment of the srcIndex, then it is possible that the
+              // last modified time of the index segment has changed in the tgtIndex (due to traffic). If this is the
+              // case, it is possible that the PUT record has not been cleaned up depending on when compaction ran
+              shouldVerifyRecord = isPutRecordPresentInTgt(key, valueFromTgtIndex);
             } else {
               // PUT record should no longer be present
               assert !isPutRecordPresentInTgt(key, valueFromTgtIndex) :
@@ -399,10 +430,12 @@ public class CompactionVerifier implements Closeable {
         shouldVerifyRecord = true;
       }
       if (shouldVerifyRecord) {
-        verifyRecord(errMsgId, srcEntry, tgtEntriesIterator);
+        verifyRecord(errMsgId, srcEntry, tgtEntriesIterator, wasProcessedForCompaction || config.checkAllData);
       }
     }
-    assert !tgtEntriesIterator.hasNext() : "There should be no more entries in the target index";
+
+    assert !config.checkAllEntriesInTgt
+        || !tgtEntriesIterator.hasNext() : "There should be no more entries in the target index";
   }
 
   /**
@@ -492,10 +525,11 @@ public class CompactionVerifier implements Closeable {
    * @param errMsgId an unique identifier that will be printed with error messages to help debugging.
    * @param srcEntry the {@link IndexEntry} in the source store.
    * @param tgtEntriesIterator the {@link Iterator} for index entries in the target index.
+   * @param verifyLogData {@code true} if the data in the log needs to be verified. {@code false} otherwise.
    * @throws IOException if there is any I/O error reading from the log/index.
    */
-  private void verifyRecord(String errMsgId, IndexEntry srcEntry, IndexEntriesIterator tgtEntriesIterator)
-      throws IOException {
+  private void verifyRecord(String errMsgId, IndexEntry srcEntry, IndexEntriesIterator tgtEntriesIterator,
+      boolean verifyLogData) throws IOException {
     assert tgtEntriesIterator.hasNext() : "There are no more entries in the target index";
     IndexEntry tgtEntry = tgtEntriesIterator.next();
 
@@ -520,12 +554,14 @@ public class CompactionVerifier implements Closeable {
         srcValue.getContainerId() == tgtValue.getContainerId() :
         errMsgId + ": Container ID mismatch: old - " + srcValue.getContainerId() + ", new - "
             + tgtValue.getContainerId();
-    LogSegment srcLogSegment = srcLog.getSegment(srcValue.getOffset().getName());
-    LogSegment tgtLogSegment = tgtLog.getSegment(tgtValue.getOffset().getName());
-    byte[] srcBlob = getDataFromLogSegment(srcLogSegment, srcValue.getOffset().getOffset(), srcValue.getSize());
-    byte[] tgtBlob = getDataFromLogSegment(tgtLogSegment, tgtValue.getOffset().getOffset(), tgtValue.getSize());
-    for (int i = 0; i < srcBlob.length; i++) {
-      assert srcBlob[i] == tgtBlob[i] : errMsgId + " Data does not match";
+    if (verifyLogData) {
+      LogSegment srcLogSegment = srcLog.getSegment(srcValue.getOffset().getName());
+      LogSegment tgtLogSegment = tgtLog.getSegment(tgtValue.getOffset().getName());
+      byte[] srcBlob = getDataFromLogSegment(srcLogSegment, srcValue.getOffset().getOffset(), srcValue.getSize());
+      byte[] tgtBlob = getDataFromLogSegment(tgtLogSegment, tgtValue.getOffset().getOffset(), tgtValue.getSize());
+      for (int i = 0; i < srcBlob.length; i++) {
+        assert srcBlob[i] == tgtBlob[i] : errMsgId + " Data does not match at index: " + i;
+      }
     }
   }
 
