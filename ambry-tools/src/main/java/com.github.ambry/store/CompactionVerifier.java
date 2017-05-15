@@ -163,6 +163,14 @@ public class CompactionVerifier implements Closeable {
     final boolean checkAllEntriesInTgt;
 
     /**
+     * If stray files are found on disk, warns instead of failing. This is useful when a second compaction has started
+     * before the first one could be checked.
+     */
+    @Config("warn.on.stray.files")
+    @Default("false")
+    final boolean warnOnStrayFiles;
+
+    /**
      * Loads the config.
      * @param verifiableProperties the {@link VerifiableProperties} to load the config from.
      */
@@ -176,6 +184,7 @@ public class CompactionVerifier implements Closeable {
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
       checkAllData = verifiableProperties.getBoolean("check.all.data", false);
       checkAllEntriesInTgt = verifiableProperties.getBoolean("check.all.entries.in.tgt", false);
+      warnOnStrayFiles = verifiableProperties.getBoolean("warn.on.stray.files", false);
     }
   }
 
@@ -326,15 +335,30 @@ public class CompactionVerifier implements Closeable {
       positionsSeen.add(position);
     }
 
-    // 5. "_temp" files and the temp clean shutdown file should not exist
-    assert tgtDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length
-        == 0 : "Some log segments haven't been cleaned";
-    assert !new File(tgtDir, BlobStoreCompactor.TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME).exists() :
-        "The temp clean shutdown file has not been" + " deleted";
-
-    // 6. The number of index files on disk must equal the number loaded into the PersistentIndex
+    int numTempFilesOnDisk = tgtDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length;
     int filesOnDiskCount = tgtDir.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER).length;
-    assert filesOnDiskCount == tgtIndex.getIndexSegments().size() : "There are stray index segment files on disk";
+    int inMemIndexSegmentCount = tgtIndex.getIndexSegments().size();
+    boolean tempCleanupFileExists = new File(tgtDir, BlobStoreCompactor.TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME).exists();
+
+    // 5. "_temp" files and the temp clean shutdown file should not exist
+    // 6. The number of index files on disk must equal the number loaded into the PersistentIndex
+
+    if (config.warnOnStrayFiles) {
+      if (numTempFilesOnDisk != 0) {
+        LOGGER.warn("There are {} temp log segment files on disk", numTempFilesOnDisk);
+      }
+      if (tempCleanupFileExists) {
+        LOGGER.warn("A temp clean shutdown file exists");
+      }
+      if (filesOnDiskCount != inMemIndexSegmentCount) {
+        LOGGER.warn("There are {} index segment files on disk but {} in the in-mem index", filesOnDiskCount,
+            inMemIndexSegmentCount);
+      }
+    } else {
+      assert numTempFilesOnDisk == 0 : "Some log segments haven't been cleaned";
+      assert !tempCleanupFileExists : "The temp clean shutdown file has not been" + " deleted";
+      assert filesOnDiskCount == inMemIndexSegmentCount : "There are stray index segment files on disk";
+    }
 
     // 7. All index segments except the latest must have a bloom file and last modified times must be in non decreasing
     // order.

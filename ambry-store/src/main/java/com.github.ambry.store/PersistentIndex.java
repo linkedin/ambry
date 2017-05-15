@@ -195,7 +195,9 @@ class PersistentIndex {
       if (cleanShutdown) {
         cleanShutdownFile.delete();
       }
-      recover(recovery);
+      if (recovery != null) {
+        recover(recovery);
+      }
       setEndOffsets();
       log.setActiveSegment(getCurrentEndOffset().getName());
       logEndOffsetOnStartup = log.getEndOffset();

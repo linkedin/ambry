@@ -72,7 +72,6 @@ class BlobStoreCompactor {
   private final StoreMetrics tgtMetrics;
   private final Log srcLog;
   private final DiskIOScheduler diskIOScheduler;
-  private final MessageStoreRecovery recovery;
   private final Time time;
   private final UUID sessionId;
   private final UUID incarnationId;
@@ -98,7 +97,6 @@ class BlobStoreCompactor {
    * @param metrics the {@link StoreMetrics} to use to record metrics.
    * @param diskIOScheduler the {@link DiskIOScheduler} to schedule I/O.
    * @param srcLog the {@link Log} to copy data from.
-   * @param recovery the {@link MessageStoreRecovery} to use to recover the index and log.
    * @param time the {@link Time} instance to use.
    * @param sessionId the sessionID of the store.
    * @param incarnationId the incarnation ID of the store.
@@ -106,8 +104,8 @@ class BlobStoreCompactor {
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
-      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, MessageStoreRecovery recovery, Time time,
-      UUID sessionId, UUID incarnationId) throws IOException, StoreException {
+      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, Time time, UUID sessionId, UUID incarnationId)
+      throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -116,7 +114,6 @@ class BlobStoreCompactor {
     tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
-    this.recovery = recovery;
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
@@ -442,8 +439,9 @@ class BlobStoreCompactor {
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
-    tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, recovery, null,
-        tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
+    tgtIndex =
+        new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, null, null, tgtMetrics,
+            journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
       logger.debug("Pausing hard delete for {}", storeId);
       srcIndex.hardDeleter.pause();
