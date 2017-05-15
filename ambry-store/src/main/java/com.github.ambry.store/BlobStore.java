@@ -136,11 +136,13 @@ class BlobStore implements Store {
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
         long logSegmentForecastOffsetMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
+        long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
+        long queueProcessingPeriodInMs =
+            TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes);
         blobStoreStats =
-            new BlobStoreStats(storeId, index, config.storeStatsBucketCount, config.storeStatsBucketSpanInMinutes,
-                logSegmentForecastOffsetMs, config.storeStatsWaitTimeoutInSecs,
-                TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes), time,
-                longLivedTaskScheduler, taskScheduler, diskIOScheduler, metrics);
+            new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
+                queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
+                taskScheduler, diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();

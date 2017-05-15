@@ -106,7 +106,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   BlobStoreStats(String storeId, PersistentIndex index, int bucketCount, long bucketSpanTimeInMs,
-      long logSegmentForecastOffsetMs, long queueProcessorPeriodInMs, long waitTimeoutInSecs, Time time,
+      long logSegmentForecastOffsetMs, long queueProcessingPeriodInMs, long waitTimeoutInSecs, Time time,
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
     this.storeId = storeId;
@@ -125,7 +125,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       longLiveTaskScheduler.scheduleAtFixedRate(indexScanner, 0,
           TimeUnit.MILLISECONDS.toSeconds(bucketCount * bucketSpanTimeInMs), TimeUnit.SECONDS);
       queueProcessor = new QueueProcessor();
-      shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessorPeriodInMs, TimeUnit.MILLISECONDS);
+      shortLiveTaskScheduler.scheduleAtFixedRate(queueProcessor, 0, queueProcessingPeriodInMs, TimeUnit.MILLISECONDS);
     }
   }
 
