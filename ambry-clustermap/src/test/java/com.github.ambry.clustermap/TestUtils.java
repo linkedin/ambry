@@ -760,7 +760,7 @@ public class TestUtils {
   /**
    * A class to initialize and hold information about each Zk Server.
    */
-  static class ZkInfo {
+  public static class ZkInfo {
     String dcName;
     int port;
     String dataDir;
@@ -773,7 +773,7 @@ public class TestUtils {
      * @param dcName the name of the datacenter.
      * @param port the port at which this Zk server should run on localhost.
      */
-    ZkInfo(String tempDirPath, String dcName, int port, boolean start) throws IOException {
+    public ZkInfo(String tempDirPath, String dcName, int port, boolean start) throws IOException {
       this.dcName = dcName;
       this.port = port;
       this.dataDir = tempDirPath + "/dataDir";
@@ -794,7 +794,7 @@ public class TestUtils {
       zkServer.start();
     }
 
-    void shutdown() {
+    public void shutdown() {
       if (zkServer != null) {
         zkServer.shutdown();
       }
@@ -805,7 +805,7 @@ public class TestUtils {
    * Construct a ZK layout JSON using predetermined information.
    * @return the constructed JSON.
    */
-  static JSONObject constructZkLayoutJSON(Collection<ZkInfo> zkInfos) throws JSONException {
+  public static JSONObject constructZkLayoutJSON(Collection<ZkInfo> zkInfos) throws JSONException {
     JSONArray zkInfosJson = new JSONArray();
     for (ZkInfo zkInfo : zkInfos) {
       JSONObject zkInfoJson = new JSONObject();

@@ -34,7 +34,7 @@ import org.apache.helix.model.StateModelDefinition;
 /**
  * Mock implementation of {@link HelixAdmin} which stores all information internally.
  */
-class MockHelixAdmin implements HelixAdmin {
+public class MockHelixAdmin implements HelixAdmin {
   private String clusterName;
   private final Map<String, InstanceConfig> instanceNameToinstanceConfigs = new HashMap<>();
   private final Map<String, IdealState> resourcesToIdealStates = new HashMap<>();
@@ -479,23 +479,3 @@ class MockHelixAdmin implements HelixAdmin {
     // no-op.
   }
 }
-
-class MockHelixAdminFactory extends HelixAdminFactory {
-  Map<String, MockHelixAdmin> helixAdminMap = new HashMap<>();
-
-  @Override
-  public MockHelixAdmin getHelixAdmin(String zkAddr) {
-    if (helixAdminMap.containsKey(zkAddr)) {
-      return helixAdminMap.get(zkAddr);
-    } else {
-      MockHelixAdmin helixAdmin = new MockHelixAdmin();
-      helixAdminMap.put(zkAddr, helixAdmin);
-      return helixAdmin;
-    }
-  }
-
-  Map<String, MockHelixAdmin> getAllHelixAdmins() {
-    return helixAdminMap;
-  }
-}
-
