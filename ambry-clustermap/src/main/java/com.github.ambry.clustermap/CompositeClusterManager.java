@@ -70,8 +70,8 @@ class CompositeClusterManager implements ClusterMap {
   public List<PartitionId> getWritablePartitionIds() {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds();
     if (helixClusterManager != null) {
-      if (!checkPartitionListEquivalency(staticWritablePartitionIds, helixClusterManager.getWritablePartitionIds())) {
-        helixClusterManagerMetrics.getAllPartitionsMismatchCount.inc();
+      if (!areEqual(staticWritablePartitionIds, helixClusterManager.getWritablePartitionIds())) {
+        helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
       }
     }
     return staticWritablePartitionIds;
@@ -86,8 +86,8 @@ class CompositeClusterManager implements ClusterMap {
   public List<PartitionId> getAllPartitionIds() {
     List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitionIds();
     if (helixClusterManager != null) {
-      if (!checkPartitionListEquivalency(staticPartitionIds, helixClusterManager.getAllPartitionIds())) {
-        helixClusterManagerMetrics.getAllPartitionsMismatchCount.inc();
+      if (!areEqual(staticPartitionIds, helixClusterManager.getAllPartitionIds())) {
+        helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
       }
     }
     return staticPartitionIds;
@@ -221,13 +221,12 @@ class CompositeClusterManager implements ClusterMap {
   }
 
   /**
-   * Check for partition list equivalency
+   * Check if two lists of partitions are equivalent
    * @param partitionListOne {@link List} of {@link PartitionId}s to compare
    * @param partitionListTwo {@link List} of {@link AmbryPartition}s to compare
    * @return {@code true} if both list are equal, {@code false} otherwise
    */
-  private boolean checkPartitionListEquivalency(List<PartitionId> partitionListOne,
-      List<AmbryPartition> partitionListTwo) {
+  private boolean areEqual(List<PartitionId> partitionListOne, List<AmbryPartition> partitionListTwo) {
     Set<String> partitionStringsOne = new HashSet<>();
     for (PartitionId partitionId : partitionListOne) {
       partitionStringsOne.add(partitionId.toString());
