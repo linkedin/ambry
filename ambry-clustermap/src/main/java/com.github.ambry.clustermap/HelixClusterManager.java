@@ -306,6 +306,14 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * @return list of all partition ids in the cluster
+   */
+  @Override
+  public List<AmbryPartition> getAllPartitionIds() {
+    return new ArrayList<>(partitionNameToAmbryPartition.values());
+  }
+
+  /**
    * Disconnect from the HelixManagers associated with each and every datacenter.
    */
   @Override

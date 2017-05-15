@@ -62,6 +62,11 @@ public class ResponseHandlerTest {
     }
 
     @Override
+    public List<PartitionId> getAllPartitionIds() {
+      return null;
+    }
+
+    @Override
     public boolean hasDatacenter(String datacenterName) {
       return false;
     }

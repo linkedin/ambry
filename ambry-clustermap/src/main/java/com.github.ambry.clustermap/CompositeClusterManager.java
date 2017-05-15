@@ -64,27 +64,33 @@ class CompositeClusterManager implements ClusterMap {
   /**
    * Get writable partition ids from both the underlying {@link StaticClusterManager} and the underlying
    * {@link HelixClusterManager}. Compare the two and if there is a mismatch, update a metric.
-   * @return a list of partition ids from the underlying {@link StaticClusterManager}.
+   * @return a list of writable partition ids from the underlying {@link StaticClusterManager}.
    */
   @Override
   public List<PartitionId> getWritablePartitionIds() {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds();
     if (helixClusterManager != null) {
-      Set<String> staticPartitionIdStrings = new HashSet<>();
-      for (PartitionId partitionId : staticWritablePartitionIds) {
-        staticPartitionIdStrings.add(partitionId.toString());
-      }
-
-      Set<String> helixPartitionIdStrings = new HashSet<>();
-      for (PartitionId partitionId : helixClusterManager.getWritablePartitionIds()) {
-        helixPartitionIdStrings.add(partitionId.toString());
-      }
-
-      if (!staticPartitionIdStrings.equals(helixPartitionIdStrings)) {
-        helixClusterManagerMetrics.getWritablePartitionIdsMismatchCount.inc();
+      if (!areEqual(staticWritablePartitionIds, helixClusterManager.getWritablePartitionIds())) {
+        helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
       }
     }
     return staticWritablePartitionIds;
+  }
+
+  /**
+   * Get all partition ids from both the underlying {@link StaticClusterManager} and the underlying
+   * {@link HelixClusterManager}. Compare the two and if there is a mismatch, update a metric.
+   * @return a list of partition ids from the underlying {@link StaticClusterManager}.
+   */
+  @Override
+  public List<PartitionId> getAllPartitionIds() {
+    List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitionIds();
+    if (helixClusterManager != null) {
+      if (!areEqual(staticPartitionIds, helixClusterManager.getAllPartitionIds())) {
+        helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
+      }
+    }
+    return staticPartitionIds;
   }
 
   /**
@@ -212,6 +218,24 @@ class CompositeClusterManager implements ClusterMap {
     if (helixClusterManager != null) {
       helixClusterManager.close();
     }
+  }
+
+  /**
+   * Check if two lists of partitions are equivalent
+   * @param partitionListOne {@link List} of {@link PartitionId}s to compare
+   * @param partitionListTwo {@link List} of {@link AmbryPartition}s to compare
+   * @return {@code true} if both list are equal, {@code false} otherwise
+   */
+  private boolean areEqual(List<PartitionId> partitionListOne, List<AmbryPartition> partitionListTwo) {
+    Set<String> partitionStringsOne = new HashSet<>();
+    for (PartitionId partitionId : partitionListOne) {
+      partitionStringsOne.add(partitionId.toString());
+    }
+    Set<String> partitionStringsTwo = new HashSet<>();
+    for (PartitionId partitionId : partitionListTwo) {
+      partitionStringsTwo.add(partitionId.toString());
+    }
+    return partitionStringsOne.equals(partitionStringsTwo);
   }
 }
 

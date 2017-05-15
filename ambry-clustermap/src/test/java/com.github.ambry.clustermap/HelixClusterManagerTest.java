@@ -93,11 +93,24 @@ public class HelixClusterManagerTest {
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
     testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3);
+    // add 3 partitions with read_only state.
+    testPartitionLayout.partitionState = PartitionState.READ_ONLY;
+    testPartitionLayout.addNewPartitions(3);
+    testPartitionLayout.partitionState = PartitionState.READ_WRITE;
+
     Utils.writeJsonToFile(zkJson, zkLayoutPath);
     Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+      if (partitionId.getPartitionState().equals(PartitionState.READ_ONLY)) {
+        String partitionName = partitionId.toString();
+        String helixPartitionName = partitionName.substring(partitionName.indexOf('[') + 1, partitionName.indexOf(']'));
+        helixCluster.setPartitionState(helixPartitionName, PartitionState.READ_ONLY);
+      }
+    }
+
     hostname = "localhost";
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
@@ -191,6 +204,7 @@ public class HelixClusterManagerTest {
     for (String zkAddr : helixCluster.getZkAddrs()) {
       helixCluster.bringInstanceDown(helixCluster.getUpInstances(zkAddr).get(0));
     }
+
     assertStateEquivalency();
 
     // Bring all instances down in all dcs.
@@ -285,9 +299,10 @@ public class HelixClusterManagerTest {
     assertEquals(helixCluster.getDownInstances().size(), getGaugeValue("dataNodeDownCount"));
     assertEquals(helixCluster.getDiskCount(), getGaugeValue("diskCount"));
     assertEquals(helixCluster.getDiskDownCount(), getGaugeValue("diskDownCount"));
-    assertEquals(helixCluster.getPartitions().size(), getGaugeValue("partitionCount"));
-    assertEquals(helixCluster.getPartitions().size(), getGaugeValue("partitionReadWriteCount"));
-    assertEquals(0L, getGaugeValue("partitionSealedCount"));
+    assertEquals(helixCluster.getAllPartitions().size(), getGaugeValue("partitionCount"));
+    assertEquals(helixCluster.getAllWritablePartitions().size(), getGaugeValue("partitionReadWriteCount"));
+    assertEquals(helixCluster.getAllPartitions().size() - helixCluster.getAllWritablePartitions().size(),
+        getGaugeValue("partitionSealedCount"));
     assertEquals(helixCluster.getDiskCapacity(), getGaugeValue("rawTotalCapacityBytes"));
     assertEquals(0L, getGaugeValue("isMajorityReplicasDownForAnyPartition"));
     assertEquals(0L,
@@ -358,11 +373,26 @@ public class HelixClusterManagerTest {
           useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
       writableInClusterManager.add(partitionStr);
     }
-    Set<String> writableInCluster = helixCluster.getUpPartitions();
+    Set<String> writableInCluster = helixCluster.getWritablePartitions();
     if (writableInCluster.isEmpty()) {
-      writableInCluster = helixCluster.getPartitions();
+      writableInCluster = helixCluster.getAllWritablePartitions();
     }
     assertEquals(writableInCluster, writableInClusterManager);
+  }
+
+  /**
+   * Tests that all partitions returned by the {@link HelixClusterManager} is equivalent to all
+   * partitions in the cluster.
+   */
+  private void testAllPartitions() {
+    Set<String> partitionsInClusterManager = new HashSet<>();
+    for (PartitionId partition : clusterManager.getAllPartitionIds()) {
+      String partitionStr =
+          useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+      partitionsInClusterManager.add(partitionStr);
+    }
+    Set<String> allPartitions = helixCluster.getAllPartitions();
+    assertEquals(allPartitions, partitionsInClusterManager);
   }
 
   /**
@@ -442,6 +472,7 @@ public class HelixClusterManagerTest {
     assertEquals(downInstancesInCluster, downInstancesInClusterManager);
     assertEquals(upInstancesInCluster, upInstancesInClusterManager);
     testWritablePartitions();
+    testAllPartitions();
   }
 
   /**

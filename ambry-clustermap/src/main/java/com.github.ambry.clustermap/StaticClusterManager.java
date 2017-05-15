@@ -66,16 +66,17 @@ class StaticClusterManager implements ClusterMap {
     writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
 
-  List<PartitionId> getAllPartitions() {
-    return partitionLayout.getPartitions();
-  }
-
   // Implementation of ClusterMap interface
   // --------------------------------------
 
   @Override
   public List<PartitionId> getWritablePartitionIds() {
     return partitionLayout.getWritablePartitions();
+  }
+
+  @Override
+  public List<PartitionId> getAllPartitionIds() {
+    return partitionLayout.getPartitions();
   }
 
   @Override
