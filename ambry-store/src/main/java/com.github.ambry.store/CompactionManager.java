@@ -77,6 +77,12 @@ class CompactionManager {
     if (compactionExecutor != null) {
       logger.info("Compaction thread started for {}", mountPath);
       compactionThread = Utils.newThread(THREAD_NAME_PREFIX + mountPath, compactionExecutor, true);
+      compactionThread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          logger.error("Thread {} threw exception", t, e);
+        }
+      });
       compactionThread.start();
     }
   }

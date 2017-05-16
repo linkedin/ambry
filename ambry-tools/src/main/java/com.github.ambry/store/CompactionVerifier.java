@@ -163,12 +163,12 @@ public class CompactionVerifier implements Closeable {
     final boolean checkAllEntriesInTgt;
 
     /**
-     * If stray files are found on disk, warns instead of failing. This is useful when a second compaction has started
-     * before the first one could be checked.
+     * If stray files are found on disk, fails if this is {@code true} and warns if this is {@code false}. It is
+     * useful to set to {@code false} when a second compaction has started before the first one could be checked.
      */
-    @Config("warn.on.stray.files")
-    @Default("false")
-    final boolean warnOnStrayFiles;
+    @Config("fail.on.stray.files")
+    @Default("true")
+    final boolean failOnStrayFiles;
 
     /**
      * Loads the config.
@@ -184,7 +184,7 @@ public class CompactionVerifier implements Closeable {
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
       checkAllData = verifiableProperties.getBoolean("check.all.data", false);
       checkAllEntriesInTgt = verifiableProperties.getBoolean("check.all.entries.in.tgt", false);
-      warnOnStrayFiles = verifiableProperties.getBoolean("warn.on.stray.files", false);
+      failOnStrayFiles = verifiableProperties.getBoolean("fail.on.stray.files", true);
     }
   }
 
@@ -343,7 +343,11 @@ public class CompactionVerifier implements Closeable {
     // 5. "_temp" files and the temp clean shutdown file should not exist
     // 6. The number of index files on disk must equal the number loaded into the PersistentIndex
 
-    if (config.warnOnStrayFiles) {
+    if (config.failOnStrayFiles) {
+      assert numTempFilesOnDisk == 0 : "Some log segments haven't been cleaned";
+      assert !tempCleanupFileExists : "The temp clean shutdown file has not been" + " deleted";
+      assert filesOnDiskCount == inMemIndexSegmentCount : "There are stray index segment files on disk";
+    } else {
       if (numTempFilesOnDisk != 0) {
         LOGGER.warn("There are {} temp log segment files on disk", numTempFilesOnDisk);
       }
@@ -354,10 +358,6 @@ public class CompactionVerifier implements Closeable {
         LOGGER.warn("There are {} index segment files on disk but {} in the in-mem index", filesOnDiskCount,
             inMemIndexSegmentCount);
       }
-    } else {
-      assert numTempFilesOnDisk == 0 : "Some log segments haven't been cleaned";
-      assert !tempCleanupFileExists : "The temp clean shutdown file has not been" + " deleted";
-      assert filesOnDiskCount == inMemIndexSegmentCount : "There are stray index segment files on disk";
     }
 
     // 7. All index segments except the latest must have a bloom file and last modified times must be in non decreasing
