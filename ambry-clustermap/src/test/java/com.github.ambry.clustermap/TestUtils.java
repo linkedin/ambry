@@ -794,6 +794,10 @@ public class TestUtils {
       zkServer.start();
     }
 
+    public int getPort() {
+      return this.port;
+    }
+
     public void shutdown() {
       if (zkServer != null) {
         zkServer.shutdown();

@@ -32,9 +32,11 @@ import java.util.Map;
  */
 public class MockClusterMap implements ClusterMap {
 
+  protected final boolean enableSSLPorts;
   protected final Map<Long, PartitionId> partitions;
   protected final List<MockDataNodeId> dataNodes;
   protected final int numMountPointsPerNode;
+  protected final int numStoresPerMountPoint;
   protected final HashSet<String> dataCentersInClusterMap = new HashSet<>();
   protected boolean partitionsUnavailable = false;
   private boolean createNewRegistry = true;
@@ -79,7 +81,9 @@ public class MockClusterMap implements ClusterMap {
    */
   public MockClusterMap(boolean enableSSLPorts, int numNodes, int numMountPointsPerNode, int numStoresPerMountPoint)
       throws IOException {
+    this.enableSSLPorts = enableSSLPorts;
     this.numMountPointsPerNode = numMountPointsPerNode;
+    this.numStoresPerMountPoint = numStoresPerMountPoint;
     dataNodes = new ArrayList<MockDataNodeId>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
@@ -110,20 +114,20 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  ArrayList<Port> getListOfPorts(int port) {
+  protected ArrayList<Port> getListOfPorts(int port) {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     return ports;
   }
 
-  ArrayList<Port> getListOfPorts(int port, int sslPort) {
+  protected ArrayList<Port> getListOfPorts(int port, int sslPort) {
     ArrayList<Port> ports = new ArrayList<Port>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     ports.add(new Port(sslPort, PortType.SSL));
     return ports;
   }
 
-  private int getPlainTextPort(ArrayList<Port> ports) {
+  protected int getPlainTextPort(ArrayList<Port> ports) {
     for (Port port : ports) {
       if (port.getPortType() == PortType.PLAINTEXT) {
         return port.getPort();
@@ -132,7 +136,7 @@ public class MockClusterMap implements ClusterMap {
     throw new IllegalArgumentException("No PlainText port found ");
   }
 
-  private MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter) throws IOException {
+  protected MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter) throws IOException {
     File f = null;
     int port = getPlainTextPort(ports);
     try {
@@ -247,7 +251,7 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private static boolean deleteFileOrDirectory(File f) throws IOException {
+  protected static boolean deleteFileOrDirectory(File f) throws IOException {
     if (f.exists()) {
       if (f.isDirectory()) {
         File[] children = f.listFiles();
