@@ -215,6 +215,10 @@ class BlobStoreStats implements StoreStats, Closeable {
         }
       }
       if (retValue == null) {
+        // retValue could be null in three scenarios:
+        // 1. timeRange is outside of current forecast coverage and there is no ongoing scan.
+        // 2. timed out while waiting for an ongoing scan.
+        // 3. rare edge case where currentScanResults updated twice since the start of the wait.
         referenceTimeInMs = timeRange.getEndTimeInMs();
         retValue = new Pair<>(referenceTimeInMs, collectValidDataSizeByLogSegment(referenceTimeInMs));
       }
@@ -275,6 +279,10 @@ class BlobStoreStats implements StoreStats, Closeable {
         }
       }
       if (retValue == null) {
+        // retValue could be null in three scenarios:
+        // 1. referenceTimeInMs is outside of current forecast coverage and there is no ongoing scan.
+        // 2. timed out while waiting for an ongoing scan.
+        // 3. rare edge case where currentScanResults updated twice since the start of the wait.
         retValue = collectValidDataSizeByContainer(referenceTimeInMs);
       }
     }
@@ -816,7 +824,7 @@ class BlobStoreStats implements StoreStats, Closeable {
               // delete record
               IndexValue originalPut;
               if (indexValue.getOriginalMessageOffset() == indexValue.getOffset().getOffset()) {
-                // delete record with no put record
+                // delete record with no put record due to compaction and legacy bugs
                 originalPut = null;
               } else if (indexValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
                   && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()) {
