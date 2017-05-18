@@ -40,8 +40,10 @@ public class ReplicationMetrics {
   public final Meter plainTextIntraColoReplicationBytesRate;
   public final Map<String, Meter> sslInterColoReplicationBytesRate = new HashMap<String, Meter>();
   public final Meter sslIntraColoReplicationBytesRate;
-  public final Map<String, Counter> interColoMetadataExchangeCount = new HashMap<String, Counter>();
+  public final Map<String, Counter> interColoMetadataExchangeCount = new HashMap<>();
+  public final Map<String, Counter> interColoReplicationGetRequestCount = new HashMap<>();
   public final Counter intraColoMetadataExchangeCount;
+  public final Counter intraColoReplicationGetRequestCount;
   public final Map<String, Counter> interColoBlobsReplicatedCount = new HashMap<String, Counter>();
   public final Counter intraColoBlobsReplicatedCount;
   public final Counter unknownRemoteReplicaRequestCount;
@@ -129,6 +131,8 @@ public class ReplicationMetrics {
         registry.meter(MetricRegistry.name(ReplicaThread.class, "SslIntraColoReplicationBytesRate"));
     intraColoMetadataExchangeCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoMetadataExchangeCount"));
+    intraColoReplicationGetRequestCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationGetRequestCount"));
     intraColoBlobsReplicatedCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoBlobsReplicatedCount"));
     unknownRemoteReplicaRequestCount =
@@ -223,6 +227,10 @@ public class ReplicationMetrics {
       Counter interColoMetadataExchangeCountPerDC =
           registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-MetadataExchangeCount"));
       interColoMetadataExchangeCount.put(datacenter, interColoMetadataExchangeCountPerDC);
+      Counter interColoReplicationGetRequestCountPerDC =
+          registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter +
+              "-ReplicationGetRequestCount"));
+      interColoReplicationGetRequestCount.put(datacenter, interColoReplicationGetRequestCountPerDC);
       Counter interColoBlobsReplicatedCountPerDC =
           registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBlobsCount"));
       interColoBlobsReplicatedCount.put(datacenter, interColoBlobsReplicatedCountPerDC);
@@ -523,6 +531,7 @@ public class ReplicationMetrics {
 
   public void updateGetRequestTime(long getRequestTime, boolean remoteColo, boolean sslEnabled, String datacenter) {
     if (remoteColo) {
+      interColoReplicationGetRequestCount.get(datacenter).inc();
       interColoGetRequestTime.get(datacenter).update(getRequestTime);
       if (sslEnabled) {
         sslInterColoGetRequestTime.get(datacenter).update(getRequestTime);
@@ -530,6 +539,7 @@ public class ReplicationMetrics {
         plainTextInterColoGetRequestTime.get(datacenter).update(getRequestTime);
       }
     } else {
+      intraColoReplicationGetRequestCount.inc();
       intraColoGetRequestTime.update(getRequestTime);
       if (sslEnabled) {
         sslIntraColoGetRequestTime.update(getRequestTime);

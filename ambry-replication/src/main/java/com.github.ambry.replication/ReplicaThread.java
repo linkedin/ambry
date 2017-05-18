@@ -177,9 +177,9 @@ class ReplicaThread implements Runnable {
           }
           if (activeReplicasPerNode.size() > 0) {
             try {
-              connectedChannel = connectionPool.checkOutConnection(remoteNode.getHostname(),
-                  activeReplicasPerNode.get(0).getPort(),
-                  replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+              connectedChannel =
+                  connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
+                      replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
               checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
               startTimeInMs = SystemTime.getInstance().milliseconds();
               List<ExchangeMetadataResponse> exchangeMetadataResponseList =
@@ -355,7 +355,8 @@ class ReplicaThread implements Runnable {
       GetResponse getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
               remoteNode);
-      writeMessagesToLocalStore(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode, remoteNode);
+      writeMessagesToLocalStoreAndAdvanceTokens(exchangeMetadataResponseList, getResponse, replicasToReplicatePerNode,
+          remoteNode);
     } finally {
       long fixMissingStoreKeysTime = SystemTime.getInstance().milliseconds() - fixMissingStoreKeysStartTimeInMs;
       replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
@@ -567,12 +568,15 @@ class ReplicaThread implements Runnable {
   }
 
   /**
-   * Gets the messgaes for the keys that are missing from the local store
+   * Gets the messages for the keys that are missing from the local store by issuing a {@link GetRequest} to the remote
+   * node, if there are any missing keys. If there are no missing keys to be fetched, then no request is issued and a
+   * null response is returned.
    * @param connectedChannel The connection channel to the remote node
    * @param exchangeMetadataResponseList The list of metadata response from the remote node
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
-   * @return The response that contains the missing messages
+   * @return The response that contains the missing messages; or null if no request was issued because there were no
+   * keys missing.
    * @throws ReplicationException
    * @throws IOException
    */
@@ -596,38 +600,43 @@ class ReplicaThread implements Runnable {
         }
       }
     }
-    GetRequest getRequest =
-        new GetRequest(correlationIdGenerator.incrementAndGet(), "replication-fetch-" + dataNodeId.getHostname(),
-            MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
-    long startTime = SystemTime.getInstance().milliseconds();
-    try {
-      connectedChannel.send(getRequest);
-      ChannelOutput channelOutput = connectedChannel.receive();
-      GetResponse getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
-      long getRequestTime = SystemTime.getInstance().milliseconds() - startTime;
-      replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
-          datacenterName);
-      if (getResponse.getError() != ServerErrorCode.No_Error) {
-        logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
-            + replicasToReplicatePerNode + " GetResponse from replication: " + getResponse.getError());
-        throw new ReplicationException(
-            " Get Request returned error when trying to get missing keys " + getResponse.getError());
+    GetResponse getResponse = null;
+    if (!partitionRequestInfoList.isEmpty()) {
+      GetRequest getRequest =
+          new GetRequest(correlationIdGenerator.incrementAndGet(), "replication-fetch-" + dataNodeId.getHostname(),
+              MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+      long startTime = SystemTime.getInstance().milliseconds();
+      try {
+        connectedChannel.send(getRequest);
+        ChannelOutput channelOutput = connectedChannel.receive();
+        getResponse = GetResponse.readFrom(new DataInputStream(channelOutput.getInputStream()), clusterMap);
+        long getRequestTime = SystemTime.getInstance().milliseconds() - startTime;
+        replicationMetrics.updateGetRequestTime(getRequestTime, replicatingFromRemoteColo, replicatingOverSsl,
+            datacenterName);
+        if (getResponse.getError() != ServerErrorCode.No_Error) {
+          logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
+              + replicasToReplicatePerNode + " GetResponse from replication: " + getResponse.getError());
+          throw new ReplicationException(
+              " Get Request returned error when trying to get missing keys " + getResponse.getError());
+        }
+      } catch (IOException e) {
+        responseHandler.onEvent(replicasToReplicatePerNode.get(0).getReplicaId(), e);
+        throw e;
       }
-      return getResponse;
-    } catch (IOException e) {
-      responseHandler.onEvent(replicasToReplicatePerNode.get(0).getReplicaId(), e);
-      throw e;
     }
+    return getResponse;
   }
 
   /**
-   * Writes the messages to the local stores from the remote stores for the missing keys
+   * Writes the messages (if any) to the local stores from the remote stores for the missing keys, and advances tokens.
    * @param exchangeMetadataResponseList The list of metadata response from the remote node
-   * @param getResponse The getResponse that contains the messages
+   * @param getResponse The {@link GetResponse} that contains the missing messages. This may be null if there are no
+   *                    missing messages to write as per the exchange metadata response. In that case this method will
+   *                    simply advance the tokens for every store.
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
    */
-  private void writeMessagesToLocalStore(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
+  private void writeMessagesToLocalStoreAndAdvanceTokens(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
       throws IOException {
     int partitionResponseInfoIndex = 0;
