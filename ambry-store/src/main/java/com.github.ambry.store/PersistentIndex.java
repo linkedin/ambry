@@ -188,7 +188,6 @@ class PersistentIndex {
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         validIndexSegments.put(info.getStartOffset(), info);
       }
-      logger.info("Index : " + datadir + " log end offset of index  before recovery " + log.getEndOffset());
       // delete the shutdown file
       cleanShutdownFile = new File(datadir, cleanShutdownFileName);
       cleanShutdown = cleanShutdownFile.exists();
@@ -650,7 +649,7 @@ class PersistentIndex {
         // beyond the start offset of the delete message).
         MessageInfo deletedBlobInfo =
             hardDelete.getMessageInfo(log.getSegment(logSegmentName), value.getOriginalMessageOffset(), factory);
-        if (putValue != null) {
+        if (putValue != null && putValue.getOffset().getName().equals(value.getOffset().getName())) {
           if (putValue.getOffset().getOffset() != value.getOriginalMessageOffset()) {
             logger.error(
                 "Offset in PUT index entry {} is different from original message offset in delete entry {} for key {}",

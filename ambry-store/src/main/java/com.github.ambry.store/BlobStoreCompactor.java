@@ -645,14 +645,16 @@ class BlobStoreCompactor {
           long putRecordOffset = value.getOriginalMessageOffset();
           if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != value.getOffset()
               .getOffset() && indexSegmentStartOffset.getOffset() <= putRecordOffset) {
-            BlobReadOptions options =
-                srcIndex.getBlobReadInfo(indexEntry.getKey(), EnumSet.allOf(StoreGetOptions.class));
-            Offset offset = new Offset(indexSegmentStartOffset.getName(), putRecordOffset);
-            IndexValue putValue =
-                new IndexValue(options.getSize(), offset, options.getExpiresAtMs(), value.getOperationTimeInMs(),
-                    value.getServiceId(), value.getContainerId());
-            validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
-            options.close();
+            try (BlobReadOptions options = srcIndex.getBlobReadInfo(indexEntry.getKey(),
+                EnumSet.allOf(StoreGetOptions.class))) {
+              Offset offset = new Offset(indexSegmentStartOffset.getName(), options.getOffset());
+              IndexValue putValue =
+                  new IndexValue(options.getSize(), offset, options.getExpiresAtMs(), value.getOperationTimeInMs(),
+                      value.getServiceId(), value.getContainerId());
+              validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
+            } catch (StoreException e) {
+              logger.error("Fetching PUT index entry of {} in {} failed", indexEntry.getKey(), indexSegmentStartOffset);
+            }
           }
         }
       } else if (!srcIndex.isExpired(value)) {
@@ -945,14 +947,14 @@ class BlobStoreCompactor {
     if (compactionLog != null) {
       if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         logger.info("Compaction of {} finished", storeId);
+        if (srcIndex != null && srcIndex.hardDeleter != null) {
+          srcIndex.hardDeleter.resume();
+        }
       } else {
         logger.info("Compaction of {} suspended", storeId);
       }
       compactionLog.close();
       compactionLog = null;
-      if (srcIndex != null && srcIndex.hardDeleter != null) {
-        srcIndex.hardDeleter.resume();
-      }
     }
   }
 

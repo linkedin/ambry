@@ -395,7 +395,7 @@ class BlobStore implements Store {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
-        compactor.close(2);
+        compactor.close(30);
         index.close();
         log.close();
         started = false;
