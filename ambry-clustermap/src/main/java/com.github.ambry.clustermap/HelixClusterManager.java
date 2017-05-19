@@ -42,6 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -61,6 +62,8 @@ class HelixClusterManager implements ClusterMap {
   private final Map<AmbryDataNode, Set<AmbryReplica>> ambryDataNodeToAmbryReplicas = new ConcurrentHashMap<>();
   private final Map<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
   private final Map<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
+  private Map<String, Short> dcNameToIdMap;
+  private Map<Short, String> dcIdToNameMap;
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWiseAllocatedUsableCapacityBytes;
@@ -124,9 +127,11 @@ class HelixClusterManager implements ClusterMap {
   /**
    * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
    * cluster.
+   * @throws IllegalStateException if the ids of two datacenters collide.
    * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
    */
   private void initialize() throws Exception {
+    Set<String> dcNameSet = new HashSet<>();
     for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
       logger.info("Initializing cluster information from {}", dcZkInfo.zkConnectStr);
       HelixAdmin admin = dcZkInfo.helixManager.getClusterManagmentTool();
@@ -135,12 +140,15 @@ class HelixClusterManager implements ClusterMap {
         InstanceConfig instanceConfig = admin.getInstanceConfig(clusterName, instanceName);
         AmbryDataNode datanode = new AmbryDataNode(dcZkInfo.dcName, clusterMapConfig, instanceConfig.getHostName(),
             Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
+        dcNameSet.add(datanode.getDatacenterName());
         initializeDisksAndReplicasOnNode(datanode, instanceConfig);
         instanceNameToAmbryDataNode.put(instanceName, datanode);
         dcZkInfo.clusterChangeListener.allInstances.add(instanceName);
       }
       logger.info("Initialized cluster information from {}", dcZkInfo.zkConnectStr);
     }
+    dcNameToIdMap = getDcNameToIdMap(dcNameSet);
+    dcIdToNameMap = reverseMap(dcNameToIdMap);
     for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
       for (AmbryDisk disk : disks) {
         clusterWideRawCapacityBytes += disk.getRawCapacityInBytes();
@@ -229,6 +237,16 @@ class HelixClusterManager implements ClusterMap {
   @Override
   public boolean hasDatacenter(String datacenterName) {
     return dcToDcZkInfo.containsKey(datacenterName);
+  }
+
+  @Override
+  public Short getDatacenterIdByName(String datacenterName) {
+    return dcNameToIdMap.get(datacenterName);
+  }
+
+  @Override
+  public String getDatacenterNameById(short datacenterId) {
+    return dcIdToNameMap.get(datacenterId);
   }
 
   @Override

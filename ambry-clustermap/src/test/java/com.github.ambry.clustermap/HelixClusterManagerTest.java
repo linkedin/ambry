@@ -42,6 +42,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
@@ -182,6 +183,7 @@ public class HelixClusterManagerTest {
       System.out.println(metricName);
     }
     testPartitionReplicaConsistency();
+    testDcNameIdMapping();
     testInvalidPartitionId();
     testDatacenterDatanodeReplicas();
     assertStateEquivalency();
@@ -406,6 +408,22 @@ public class HelixClusterManagerTest {
       PartitionId fetchedPartition = clusterManager.getPartitionIdFromStream(partitionStream);
       assertEquals(partition, fetchedPartition);
     }
+  }
+
+  /**
+   * Tests the ids of datacenters get from the {@code ClusterMap}.
+   */
+  private void testDcNameIdMapping() {
+    for (Map.Entry<String, ZkInfo> entry : dcsToZkInfo.entrySet()) {
+      String dcName = entry.getKey();
+      assertEquals("Wrong datacenter id.", (short) hashDcNameToNonNegativeId(dcName),
+          (short) clusterManager.getDatacenterIdByName(dcName));
+      assertEquals("Wrong datacenter name.", dcName,
+          clusterManager.getDatacenterNameById(clusterManager.getDatacenterIdByName(dcName)));
+    }
+    assertNull("Wrong id for non existent datacenter name", clusterManager.getDatacenterIdByName("NonExistentDcName"));
+    assertNull("Wrong id for null datacenter name", clusterManager.getDatacenterIdByName("null"));
+    assertNull("Wrong name for non existent datacenter id", clusterManager.getDatacenterNameById((short) 10));
   }
 
   /**

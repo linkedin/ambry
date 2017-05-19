@@ -37,6 +37,8 @@ import org.apache.helix.model.builder.AutoModeISBuilder;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * A class to bootstrap static cluster map information into Helix.
@@ -500,7 +502,11 @@ class HelixBootstrapUpgradeUtil {
     String clusterNameInStaticClusterMap = hardwareLayout.getClusterName();
     System.out.println("Verifying equivalency of static cluster: " + clusterNameInStaticClusterMap + " with the "
         + "corresponding cluster in Helix: " + clusterName);
+    Set<Short> dcIdSet = new HashSet<>();
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
+      if (!dcIdSet.add(hashDcNameToNonNegativeId(dc.getName()))) {
+        throw new IllegalStateException("Two datacenters are hashed to the same id. DC name: " + dc.getName());
+      }
       HelixAdmin admin = adminForDc.get(dc.getName());
       ensureOrThrow(admin != null, "No ZkInfo for datacenter " + dc.getName());
       ensureOrThrow(admin.getClusters().contains(clusterName),

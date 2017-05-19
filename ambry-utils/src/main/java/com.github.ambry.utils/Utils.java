@@ -29,6 +29,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -752,6 +754,27 @@ public class Utils {
   public static long getTimeInMsToTheNearestSec(long timeInMs) {
     long timeInSecs = timeInMs / Time.MsPerSec;
     return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
+  }
+
+  /**
+   * Reverse a {@link Map}, such that the key in the original map becomes the value, and the value
+   * in the original map becomes the key. If in the original map there are more than one key are
+   * mapped to the same value, the reversed map would have the value to be mapped to one of the keys.
+   * @param originMap The map to be reversed.
+   * @param <K> The type of key in the original map.
+   * @param <V> The type of value in the original map.
+   * @return A map that has key as the value in the original map, and value as the key in the original
+   * map.
+   */
+  public static <K, V> Map<V, K> reverseMap(Map<K, V> originMap) {
+    if (originMap == null) {
+      throw new IllegalArgumentException("originMap cannot be null");
+    }
+    Map<V, K> reversedMap = new HashMap<>();
+    for (Map.Entry<K, V> entry : originMap.entrySet()) {
+      reversedMap.put(entry.getValue(), entry.getKey());
+    }
+    return reversedMap;
   }
 
   /**

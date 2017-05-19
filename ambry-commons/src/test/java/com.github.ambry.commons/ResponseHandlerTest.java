@@ -47,7 +47,7 @@ public class ResponseHandlerTest {
     Set<ReplicaEventType> lastReplicaEvents;
 
     public DummyMap() {
-      lastReplicaEvents = new HashSet<ReplicaEventType>();
+      lastReplicaEvents = new HashSet<>();
       lastReplicaID = null;
     }
 
@@ -69,6 +69,16 @@ public class ResponseHandlerTest {
     @Override
     public boolean hasDatacenter(String datacenterName) {
       return false;
+    }
+
+    @Override
+    public Short getDatacenterIdByName(String datacenterName) {
+      return null;
+    }
+
+    @Override
+    public String getDatacenterNameById(short datacenterId) {
+      return null;
     }
 
     @Override

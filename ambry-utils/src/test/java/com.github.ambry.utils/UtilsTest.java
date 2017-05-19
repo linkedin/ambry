@@ -18,6 +18,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
@@ -408,6 +410,23 @@ public class UtilsTest {
       assertEquals("epoch epochTimeInMs mismatch ", Utils.Infinite_Time,
           Utils.addSecondsToEpochTime(epochTimeInMs, Utils.Infinite_Time));
     }
+  }
+
+  /**
+   * Tests {@link Utils#reverseMap(Map)}.
+   */
+  @Test
+  public void reverseMapTest() {
+    Map<String, Short> originalMap = new HashMap<>();
+    originalMap.put("first", (short) 1);
+    originalMap.put("second", (short) 2);
+    Map<Short, String> reversedMap = Utils.reverseMap(originalMap);
+    assertEquals("Wrong size of reversedMap", originalMap.size(), reversedMap.size());
+    assertEquals("Wrong value get from the reversed map.", "first", reversedMap.get((short) 1));
+    assertEquals("Wrong value get from the reversed map.", "second", reversedMap.get((short) 2));
+    originalMap.put("third", (short) 2);
+    reversedMap = Utils.reverseMap(originalMap);
+    assertEquals("Wrong size of reversedMap", 2, reversedMap.size());
   }
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";

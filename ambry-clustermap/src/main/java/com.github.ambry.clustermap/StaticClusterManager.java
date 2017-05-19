@@ -28,6 +28,7 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -39,6 +40,8 @@ class StaticClusterManager implements ClusterMap {
   protected final HardwareLayout hardwareLayout;
   protected final PartitionLayout partitionLayout;
   private final MetricRegistry metricRegistry;
+  private final Map<String, Short> dcNameToIdMap;
+  private final Map<Short, String> dcIdToNameMap;
   private final ClusterMapMetrics clusterMapMetrics;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -58,6 +61,14 @@ class StaticClusterManager implements ClusterMap {
     this.partitionLayout = partitionLayout;
     this.metricRegistry = metricRegistry;
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
+    Set<String> dcNameSet = new HashSet<>();
+    for (Datacenter dc : this.hardwareLayout.getDatacenters()) {
+      if (!dcNameSet.add(dc.getName())) {
+        throw new IllegalStateException("The same name is used by more than one datacenters: " + dc.getName());
+      }
+    }
+    dcNameToIdMap = getDcNameToIdMap(dcNameSet);
+    dcIdToNameMap = reverseMap(dcNameToIdMap);
   }
 
   void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
@@ -94,6 +105,16 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
+  public Short getDatacenterIdByName(String datacenterName) {
+    return dcNameToIdMap.get(datacenterName);
+  }
+
+  @Override
+  public String getDatacenterNameById(short datacenterId) {
+    return dcIdToNameMap.get(datacenterId);
+  }
+
+  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     return hardwareLayout.findDataNode(hostname, port);
   }
@@ -101,7 +122,7 @@ class StaticClusterManager implements ClusterMap {
   @Override
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
     List<Replica> replicas = getReplicas(dataNodeId);
-    return new ArrayList<ReplicaId>(replicas);
+    return new ArrayList<>(replicas);
   }
 
   List<Replica> getReplicas(DataNodeId dataNodeId) {
