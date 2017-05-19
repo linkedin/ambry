@@ -42,6 +42,8 @@ class FrontendMetrics {
   public final RestRequestMetrics getBlobSSLMetrics;
   public final RestRequestMetrics getUserMetadataMetrics;
   public final RestRequestMetrics getUserMetadataSSLMetrics;
+  public final RestRequestMetrics getPeersMetrics;
+  public final RestRequestMetrics getPeersSSLMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
   public final RestRequestMetrics postBlobSSLMetrics;
@@ -101,6 +103,9 @@ class FrontendMetrics {
   public final Histogram securityServiceProcessResponseTimeInMs;
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
+  // GetPeersHandler
+  public final Histogram getPeersSecurityProcessingTimeInMs;
+  public final Histogram getPeersProcessingTimeInMs;
 
   // Errors
   // AmbryBlobStorageService
@@ -118,6 +123,8 @@ class FrontendMetrics {
   // PostCallback
   public final Counter postCallbackProcessingError;
   public final Counter outboundIdConversionCallbackProcessingError;
+  // GetPeersHandler
+  public final Counter unknownDatanodeError;
   // Other
   // AmbryBlobStorageService
   public final Histogram blobStorageServiceStartupTimeInMs;
@@ -145,6 +152,8 @@ class FrontendMetrics {
     getUserMetadataMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetUserMetadata", metricRegistry);
     getUserMetadataSSLMetrics =
         new RestRequestMetrics(AmbryBlobStorageService.class, "GetUserMetadata" + SSL_SUFFIX, metricRegistry);
+    getPeersMetrics = new RestRequestMetrics(GetPeersHandler.class, "GetPeers", metricRegistry);
+    getPeersSSLMetrics = new RestRequestMetrics(GetPeersHandler.class, "GetPeers" + SSL_SUFFIX, metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
     postBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
@@ -240,6 +249,11 @@ class FrontendMetrics {
     // AmbryIdConverter
     idConverterProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
+    // GetPeersHandler
+    getPeersSecurityProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityProcessingTimeInMs"));
+    getPeersProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "ProcessingTimeInMs"));
 
     // Errors
     // AmbryBlobStorageService
@@ -266,6 +280,8 @@ class FrontendMetrics {
     outboundIdConversionCallbackProcessingError = metricRegistry.counter(
         MetricRegistry.name(AmbryBlobStorageService.class, "OutboundIdConversionCallbackProcessingError"));
     ttlTooLargeError = metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "TtlTooLargeError"));
+    // GetPeersHandler
+    unknownDatanodeError = metricRegistry.counter(MetricRegistry.name(GetPeersHandler.class, "UnknownDatanodeError"));
 
     // Other
     blobStorageServiceStartupTimeInMs =

@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Histogram;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -55,8 +56,8 @@ import org.slf4j.LoggerFactory;
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
 class AmbryBlobStorageService implements BlobStorageService {
-  protected static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
-  protected final FrontendMetrics frontendMetrics;
+  private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+  static final String OPERATION_GET_PEERS = "peers";
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
   private static final String OPERATION_TYPE_OUTBOUND_ID_CONVERSION = "Outbound Id Conversion";
@@ -72,11 +73,14 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final Router router;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
+  private final ClusterMap clusterMap;
   private final FrontendConfig frontendConfig;
+  private final FrontendMetrics frontendMetrics;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
 
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
+  private GetPeersHandler getPeersHandler;
   private boolean isUp = false;
 
   /**
@@ -89,16 +93,18 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param router the {@link Router} instance to use to perform blob operations.
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter}.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService}.
+   * @param clusterMap the {@link ClusterMap} in use.
    */
-  public AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
+  AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory) {
+      SecurityServiceFactory securityServiceFactory, ClusterMap clusterMap) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
     this.router = router;
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
+    this.clusterMap = clusterMap;
     logger.trace("Instantiated AmbryBlobStorageService");
   }
 
@@ -107,6 +113,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
+    getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -134,7 +141,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void handleGet(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+  public void handleGet(final RestRequest restRequest, final RestResponseChannel restResponseChannel) {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
@@ -142,28 +149,42 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       checkAvailable();
       RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-      RestRequestMetrics requestMetrics =
-          restRequest.getSSLSession() != null ? frontendMetrics.getBlobSSLMetrics : frontendMetrics.getBlobMetrics;
-      if (subresource != null) {
-        logger.trace("Sub-resource requested: {}", subresource);
-        switch (subresource) {
-          case BlobInfo:
-            requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoSSLMetrics
-                : frontendMetrics.getBlobInfoMetrics;
-            break;
-          case UserMetadata:
-            requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getUserMetadataSSLMetrics
-                : frontendMetrics.getUserMetadataMetrics;
-            break;
-        }
+      String operationOrBlobId =
+          RestUtils.getOperationOrBlobIdFromUri(restRequest, subresource, frontendConfig.frontendPathPrefixesToRemove);
+      if (operationOrBlobId.startsWith("/")) {
+        operationOrBlobId = operationOrBlobId.substring(1);
       }
-      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource, GetOption.None);
-      GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
+      if (operationOrBlobId.equalsIgnoreCase(OPERATION_GET_PEERS)) {
+        getPeersHandler.handle(restRequest, restResponseChannel, new Callback<ReadableStreamChannel>() {
+          @Override
+          public void onCompletion(ReadableStreamChannel result, Exception exception) {
+            submitResponse(restRequest, restResponseChannel, result, exception);
+          }
+        });
+      } else {
+        RestRequestMetrics requestMetrics =
+            restRequest.getSSLSession() != null ? frontendMetrics.getBlobSSLMetrics : frontendMetrics.getBlobMetrics;
+        if (subresource != null) {
+          logger.trace("Sub-resource requested: {}", subresource);
+          switch (subresource) {
+            case BlobInfo:
+              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoSSLMetrics
+                  : frontendMetrics.getBlobInfoMetrics;
+              break;
+            case UserMetadata:
+              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getUserMetadataSSLMetrics
+                  : frontendMetrics.getUserMetadataMetrics;
+              break;
+          }
+        }
+        restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+        GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource, GetOption.None);
+        GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
+        SecurityProcessRequestCallback securityCallback =
+            new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
+        securityService.processRequest(restRequest, securityCallback);
+      }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
-      SecurityProcessRequestCallback securityCallback =
-          new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
-      securityService.processRequest(restRequest, securityCallback);
     } catch (Exception e) {
       submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
@@ -270,7 +291,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param responseBody the body of the response in the form of a {@link ReadableStreamChannel}.
    * @param exception any {@link Exception} that occurred during the handling of {@code restRequest}.
    */
-  protected void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
+  void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
       ReadableStreamChannel responseBody, Exception exception) {
     try {
       if (exception != null && exception instanceof RouterException) {

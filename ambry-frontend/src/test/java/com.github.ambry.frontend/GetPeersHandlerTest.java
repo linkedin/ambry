@@ -1,0 +1,379 @@
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+package com.github.ambry.frontend;
+
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaEventType;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.SecurityService;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.CopyingAsyncWritableChannel;
+import com.github.ambry.router.FutureResult;
+import com.github.ambry.router.ReadableStreamChannel;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import org.json.JSONObject;
+import org.junit.Test;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
+
+import static org.junit.Assert.*;
+
+
+/**
+ * Tests for {@link GetPeersHandler}.
+ */
+public class GetPeersHandlerTest {
+  private final TailoredPeersClusterMap clusterMap;
+  private final DummySecurityService securityService;
+  private final GetPeersHandler getPeersHandler;
+
+  public GetPeersHandlerTest() {
+    FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
+    clusterMap = new TailoredPeersClusterMap();
+    securityService = new DummySecurityService();
+    getPeersHandler = new GetPeersHandler(clusterMap, securityService, metrics);
+  }
+
+  /**
+   * Tests for the good cases where the datanodes are correct. The peers obtained from the response is compared
+   * against the ground truth.
+   * @throws Exception
+   */
+  @Test
+  public void handleGoodCaseTest() throws Exception {
+    for (String datanode : TailoredPeersClusterMap.datanodeNames) {
+      RestRequest restRequest = getRestRequest(datanode);
+      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
+      assertNotNull("There should be a response", channel);
+      CopyingAsyncWritableChannel writableChannel = new CopyingAsyncWritableChannel();
+      channel.readInto(writableChannel, null).get(1, TimeUnit.SECONDS);
+      byte[] peerStrBytes = writableChannel.getData();
+      String peersStr = new String(peerStrBytes);
+      List<String> peers = peersStr.length() > 0 ? Arrays.asList(peersStr.split(",")) : new ArrayList<String>();
+      Set<String> expectedPeers = clusterMap.getPeers(datanode);
+      assertTrue("Peer list returned does not match expected for " + datanode, expectedPeers.containsAll(peers));
+      assertEquals("Content-type is not as expected", "text/plain",
+          restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+      assertEquals("Content-length is not as expected", peerStrBytes.length,
+          Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    }
+  }
+
+  /**
+   * Tests the case where the {@link SecurityService} denies the request.
+   * @throws Exception
+   */
+  @Test
+  public void securityServiceDenialTest() throws Exception {
+    String msg = "@@expected";
+    securityService.exceptionToReturn = new IllegalStateException(msg);
+    verifyFailureWithMsg(msg);
+  }
+
+  /**
+   * Tests the case where the {@link ClusterMap} throws exceptions.
+   * @throws Exception
+   */
+  @Test
+  public void badClusterMapTest() throws Exception {
+    String msg = "@@expected";
+    clusterMap.exceptionToThrow = new IllegalStateException(msg);
+    verifyFailureWithMsg(msg);
+  }
+
+  /**
+   * Tests cases where the arguments are either missing, incorrect or do no refer to known datanodes.
+   * @throws Exception
+   */
+  @Test
+  public void badArgsTest() throws Exception {
+    doBadArgsTest(null, "100", RestServiceErrorCode.MissingArgs);
+    doBadArgsTest("host", null, RestServiceErrorCode.MissingArgs);
+    doBadArgsTest("host", "abc", RestServiceErrorCode.InvalidArgs);
+    doBadArgsTest("non-existent-host", "100", RestServiceErrorCode.NotFound);
+    String host = TailoredPeersClusterMap.datanodeNames[0].split(":")[0];
+    doBadArgsTest(host, "-1", RestServiceErrorCode.NotFound);
+  }
+
+  // helpers
+  // general
+
+  /**
+   * Get a {@link RestRequest} that requests for the peers of the given {@code datanode}
+   * @param datanode the name of the datanode (host:port) whose peers are required.
+   * @return a {@link RestRequest} that requests for the peers of the given {@code datanode}
+   * @throws Exception
+   */
+  private RestRequest getRestRequest(String datanode) throws Exception {
+    String[] parts = datanode.split(":");
+    JSONObject data = new JSONObject();
+    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET);
+    data.put(MockRestRequest.URI_KEY,
+        AmbryBlobStorageService.OPERATION_GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
+            + GetPeersHandler.PORT_QUERY_PARAM + "=" + parts[1]);
+    return new MockRestRequest(data, null);
+  }
+
+  /**
+   * Sends the given {@link RestRequest} to the {@link GetPeersHandler} and waits for the response and returns it.
+   * @param restRequest the {@link RestRequest} to send.
+   * @param restResponseChannel the {@link RestResponseChannel} where headers will be set.
+   * @return the response body as a {@link ReadableStreamChannel}.
+   * @throws Exception
+   */
+  private ReadableStreamChannel sendRequestGetResponse(RestRequest restRequest, RestResponseChannel restResponseChannel)
+      throws Exception {
+    final CountDownLatch latch = new CountDownLatch(1);
+    final AtomicReference<Exception> exceptionRef = new AtomicReference<>();
+    final AtomicReference<ReadableStreamChannel> channelRef = new AtomicReference<>();
+    getPeersHandler.handle(restRequest, restResponseChannel, new Callback<ReadableStreamChannel>() {
+      @Override
+      public void onCompletion(ReadableStreamChannel result, Exception exception) {
+        channelRef.set(result);
+        exceptionRef.set(exception);
+        latch.countDown();
+      }
+    });
+    assertTrue("Latch did not count down in time", latch.await(1, TimeUnit.SECONDS));
+    if (exceptionRef.get() != null) {
+      throw exceptionRef.get();
+    }
+    return channelRef.get();
+  }
+
+  /**
+   * Verifies that attempting to get peers of any datanode fails with the provided {@code msg}.
+   * @param msg the message in the {@link Exception} that will be thrown.
+   * @throws Exception
+   */
+  private void verifyFailureWithMsg(String msg) throws Exception {
+    RestRequest restRequest = getRestRequest(TailoredPeersClusterMap.datanodeNames[0]);
+    try {
+      sendRequestGetResponse(restRequest, new MockRestResponseChannel());
+      fail("Request should have failed");
+    } catch (Exception e) {
+      assertEquals("Unexpected Exception", msg, e.getMessage());
+    }
+  }
+
+  // badArgsTest() helpers.
+
+  /**
+   * Does the test where bad args are provided in the request to {@link GetPeersHandler}.
+   * @param name the name of the host whose peers are required. Can be {@code null} if this param should be omitted.
+   * @param port the port of the host whose peers are required. Can be {@code null} if this param should be omitted.
+   * @param expectedErrorCode the {@link RestServiceErrorCode} expected in response.
+   * @throws Exception
+   */
+  private void doBadArgsTest(String name, String port, RestServiceErrorCode expectedErrorCode) throws Exception {
+    StringBuilder uri = new StringBuilder(AmbryBlobStorageService.OPERATION_GET_PEERS + "?");
+    if (name != null) {
+      uri.append(GetPeersHandler.NAME_QUERY_PARAM).append("=").append(name);
+    }
+    if (port != null) {
+      if (name != null) {
+        uri.append("&");
+      }
+      uri.append(GetPeersHandler.PORT_QUERY_PARAM).append("=").append(port);
+    }
+    JSONObject data = new JSONObject();
+    data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET);
+    data.put(MockRestRequest.URI_KEY, uri);
+    RestRequest restRequest = new MockRestRequest(data, null);
+    try {
+      sendRequestGetResponse(restRequest, new MockRestResponseChannel());
+      fail("Request should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", expectedErrorCode, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Implementation of {@link SecurityService} that can throw exceptions on demand.
+   */
+  private static class DummySecurityService implements SecurityService {
+    Exception exceptionToReturn = null;
+
+    @Override
+    public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
+      FutureResult<Void> futureResult = new FutureResult<>();
+      futureResult.done(null, exceptionToReturn);
+      callback.onCompletion(null, exceptionToReturn);
+      return futureResult;
+    }
+
+    @Override
+    public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+        Callback<Void> callback) {
+      throw new NotImplementedException();
+    }
+
+    @Override
+    public void close() throws IOException {
+
+    }
+  }
+}
+
+/**
+ * Implementation of {@link ClusterMap} that has well known structure and can provide peer lists via the
+ * {@link #getPeers(String)} method for verification.
+ * <p/>
+ * Can also throw exceptions on demand.
+ */
+class TailoredPeersClusterMap implements ClusterMap {
+  static final String[] datanodeNames = {"host1:100", "host1:200", "host2:100", "host3:100"};
+
+  private static final String DC_NAME = "Datacenter";
+  private static final String[] mountPathsArr = {"/tmp1", "/tmp2", "/tmp3", "/tmp4"};
+
+  private final Map<String, MockDataNodeId> datanodes = new HashMap<>();
+  private final Map<String, Set<String>> peerMap = new HashMap<>();
+  private final List<MockPartitionId> partitions = new ArrayList<>();
+
+  RuntimeException exceptionToThrow = null;
+
+  TailoredPeersClusterMap() {
+    for (String datanodeName : datanodeNames) {
+      String[] parts = datanodeName.split(":");
+      Port port = new Port(Integer.parseInt(parts[1]), PortType.PLAINTEXT);
+      List<String> mountPaths = Collections.singletonList("/" + datanodeName);
+      MockDataNodeId dataNodeId = new MockDataNodeId(parts[0], Collections.singletonList(port), mountPaths, DC_NAME);
+      datanodes.put(datanodeName, dataNodeId);
+    }
+
+    List<MockDataNodeId> partNodes = new ArrayList<>();
+    partNodes.add(datanodes.get(datanodeNames[0]));
+    partNodes.add(datanodes.get(datanodeNames[1]));
+    partitions.add(new MockPartitionId(0, partNodes, 0));
+    partNodes.clear();
+    partNodes.add(datanodes.get(datanodeNames[0]));
+    partNodes.add(datanodes.get(datanodeNames[1]));
+    partitions.add(new MockPartitionId(1, partNodes, 0));
+    partNodes.clear();
+    partNodes.add(datanodes.get(datanodeNames[0]));
+    partNodes.add(datanodes.get(datanodeNames[2]));
+    partitions.add(new MockPartitionId(2, partNodes, 0));
+    partNodes.clear();
+    partNodes.add(datanodes.get(datanodeNames[0]));
+    partitions.add(new MockPartitionId(3, partNodes, 0));
+    partNodes.clear();
+    partNodes.add(datanodes.get(datanodeNames[3]));
+    partitions.add(new MockPartitionId(4, partNodes, 0));
+
+    peerMap.put(datanodeNames[0], new HashSet(Arrays.asList(datanodeNames[1], datanodeNames[2])));
+    peerMap.put(datanodeNames[1], new HashSet(Arrays.asList(datanodeNames[0])));
+    peerMap.put(datanodeNames[2], Collections.singleton(datanodeNames[0]));
+    peerMap.put(datanodeNames[3], Collections.EMPTY_SET);
+  }
+
+  @Override
+  public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public List<? extends PartitionId> getWritablePartitionIds() {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public List<? extends PartitionId> getAllPartitionIds() {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public boolean hasDatacenter(String datacenterName) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public DataNodeId getDataNodeId(String hostname, int port) {
+    if (exceptionToThrow != null) {
+      throw exceptionToThrow;
+    }
+    return datanodes.get(hostname + ":" + port);
+  }
+
+  @Override
+  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
+    if (exceptionToThrow != null) {
+      throw exceptionToThrow;
+    }
+    List<ReplicaId> replicaIdsToReturn = new ArrayList<ReplicaId>();
+    for (PartitionId partitionId : partitions) {
+      List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
+      for (ReplicaId replicaId : replicaIds) {
+        if (replicaId.getDataNodeId().getHostname().equals(dataNodeId.getHostname())
+            && replicaId.getDataNodeId().getPort() == dataNodeId.getPort()) {
+          replicaIdsToReturn.add(replicaId);
+        }
+      }
+    }
+    return replicaIdsToReturn;
+  }
+
+  @Override
+  public List<? extends DataNodeId> getDataNodeIds() {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public MetricRegistry getMetricRegistry() {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public void close() {
+
+  }
+
+  Set<String> getPeers(String datanode) {
+    return peerMap.get(datanode);
+  }
+}

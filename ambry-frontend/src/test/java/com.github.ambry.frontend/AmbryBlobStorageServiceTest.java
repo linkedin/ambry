@@ -14,6 +14,8 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -68,6 +70,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
@@ -94,14 +97,16 @@ public class AmbryBlobStorageServiceTest {
   private final SecurityServiceFactory securityServiceFactory;
   private final FrontendTestResponseHandler responseHandler;
   private final InMemoryRouter router;
+  private final ClusterMap clusterMap;
 
   private AmbryBlobStorageService ambryBlobStorageService;
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
    * @throws InstantiationException
+   * @throws IOException
    */
-  public AmbryBlobStorageServiceTest() throws InstantiationException {
+  public AmbryBlobStorageServiceTest() throws InstantiationException, IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
@@ -109,6 +114,7 @@ public class AmbryBlobStorageServiceTest {
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry);
     router = new InMemoryRouter(verifiableProperties);
     responseHandler = new FrontendTestResponseHandler();
+    clusterMap = new MockClusterMap();
     ambryBlobStorageService = getAmbryBlobStorageService();
     responseHandler.start();
     ambryBlobStorageService.start();
@@ -512,7 +518,7 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, idConverterFactory,
-            securityServiceFactory);
+            securityServiceFactory, clusterMap);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -521,6 +527,51 @@ public class AmbryBlobStorageServiceTest {
     assertEquals(serviceId, testRouter.deleteServiceId);
     doOperation(createRestRequest(RestMethod.DELETE, "/", null, null), new MockRestResponseChannel());
     assertNull("Service ID should not have been set for this delete", testRouter.deleteServiceId);
+  }
+
+  /**
+   * Tests the handling of {@link AmbryBlobStorageService#OPERATION_GET_PEERS} requests.
+   * @throws Exception
+   */
+  @Test
+  public void getPeersTest() throws Exception {
+    ambryBlobStorageService.shutdown();
+    TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
+    ambryBlobStorageService =
+        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
+            securityServiceFactory, clusterMap);
+    ambryBlobStorageService.start();
+    // test good requests
+    for (String datanode : TailoredPeersClusterMap.datanodeNames) {
+      String[] parts = datanode.split(":");
+      String baseUri =
+          AmbryBlobStorageService.OPERATION_GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
+              + GetPeersHandler.PORT_QUERY_PARAM + "=" + parts[1];
+      String[] uris = {baseUri, "/" + baseUri};
+      for (String uri : uris) {
+        MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+        doOperation(createRestRequest(RestMethod.GET, uri, null, null), restResponseChannel);
+        byte[] peerStrBytes = restResponseChannel.getResponseBody();
+        String peersStr = new String(peerStrBytes);
+        List<String> peers = peersStr.length() > 0 ? Arrays.asList(peersStr.split(",")) : new ArrayList<String>();
+        Set<String> expectedPeers = clusterMap.getPeers(datanode);
+        assertTrue("Peer list returned does not match expected for " + datanode, expectedPeers.containsAll(peers));
+        assertEquals("Content-type is not as expected", "text/plain",
+            restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+        assertEquals("Content-length is not as expected", peerStrBytes.length,
+            Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      }
+    }
+    // test one bad request
+    RestRequest restRequest =
+        createRestRequest(RestMethod.GET, AmbryBlobStorageService.OPERATION_GET_PEERS, null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Request should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MissingArgs, e.getErrorCode());
+    }
   }
 
   // helpers
@@ -623,7 +674,7 @@ public class AmbryBlobStorageServiceTest {
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
-        securityServiceFactory);
+        securityServiceFactory, clusterMap);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -989,7 +1040,7 @@ public class AmbryBlobStorageServiceTest {
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, converterFactory,
-            securityServiceFactory);
+            securityServiceFactory, clusterMap);
     ambryBlobStorageService.start();
     doExternalServicesBadInputTest(RestMethod.values(), expectedExceptionMsg);
   }
@@ -1016,7 +1067,7 @@ public class AmbryBlobStorageServiceTest {
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              idConverterFactory, securityFactory);
+              idConverterFactory, securityFactory, clusterMap);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg);
     }
@@ -1063,7 +1114,7 @@ public class AmbryBlobStorageServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, idConverterFactory,
-            securityServiceFactory);
+            securityServiceFactory, clusterMap);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
