@@ -46,6 +46,8 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   private final Counter pastDueCounter;
   private final OpTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaIterator;
+  // The value contains a pair - the boolean indicates whether the request to the corresponding replicaId has been
+  // determined as expired (but not yet removed). The long is the time at which the request was sent.
   private final LinkedHashMap<ReplicaId, Pair<Boolean, Long>> unexpiredRequestSendTimes = new LinkedHashMap<>();
   private final Map<ReplicaId, Long> expiredRequestSendTimes = new HashMap<>();
 
@@ -146,7 +148,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
 
     /**
      * @return {@code true} if the oldest request that was sent has been outstanding for more than the cutoff latency.
-     * @throws IllegalStateException if no requests have been sent yet.
      */
     private boolean isOldestRequestPastDue() {
       boolean isPastDue = true;
@@ -158,6 +159,7 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
               time.milliseconds() - oldestEntry.getValue().getSecond() >= latencyTracker.getSnapshot()
                   .getValue(quantile));
           if (isPastDue) {
+            // indicate that the request has been processed and declared expired.
             oldestEntry.setValue(new Pair<>(true, oldestEntry.getValue().getSecond()));
           }
         }
