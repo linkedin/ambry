@@ -35,10 +35,13 @@ import org.slf4j.LoggerFactory;
  * Represents a record of the compaction process and helps in recovery in case of crashes.
  */
 class CompactionLog implements Closeable {
+  static final short VERSION_0 = 0;
+  static final short VERSION_1 = 1;
+  static final short CURRENT_VERSION = VERSION_1;
+  static final String COMPACTION_LOG_SUFFIX = "_compactionLog";
+
   private static final byte[] ZERO_LENGTH_ARRAY = new byte[0];
   private static final long UNINITIALIZED_TIMESTAMP = -1;
-  private static final String COMPACTION_LOG_SUFFIX = "_compactionLog";
-  private static final short VERSION_0 = 0;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -55,6 +58,7 @@ class CompactionLog implements Closeable {
   private final Time time;
 
   private int currentIdx = 0;
+  private Offset startOffsetOfLastIndexSegmentForDeleteCheck = null;
 
   /**
    * Used to determine whether compaction is in progress.
@@ -117,6 +121,22 @@ class CompactionLog implements Closeable {
             throw new IllegalStateException("CRC of data read does not match CRC in file");
           }
           break;
+        case VERSION_1:
+          startTime = stream.readLong();
+          if (stream.readByte() == (byte) 1) {
+            startOffsetOfLastIndexSegmentForDeleteCheck = Offset.fromBytes(stream);
+          }
+          currentIdx = stream.readInt();
+          cycleLogsSize = stream.readInt();
+          cycleLogs = new ArrayList<>(cycleLogsSize);
+          while (cycleLogs.size() < cycleLogsSize) {
+            cycleLogs.add(CycleLog.fromBytes(stream, storeKeyFactory));
+          }
+          crc = crcInputStream.getValue();
+          if (crc != stream.readLong()) {
+            throw new IllegalStateException("CRC of data read does not match CRC in file");
+          }
+          break;
         default:
           throw new IllegalArgumentException("Unrecognized version");
       }
@@ -166,6 +186,26 @@ class CompactionLog implements Closeable {
     flush();
     logger.trace("{}: Set safe token to {} during compaction of {}", file, cycleLog.safeToken,
         cycleLog.compactionDetails);
+  }
+
+  /**
+   * @return the start {@link Offset} of the last index segment for checking deletes. This is initially {@code null} and
+   * has to be set.
+   */
+  Offset getStartOffsetOfLastIndexSegmentForDeleteCheck() {
+    return startOffsetOfLastIndexSegmentForDeleteCheck;
+  }
+
+  /**
+   * Sets the start {@link Offset} of the last index segment for checking deletes.
+   * @param startOffsetOfLastIndexSegmentForDeleteCheck he start {@link Offset} of the last index segment for checking
+   *                                                    deletes.
+   */
+  void setStartOffsetOfLastIndexSegmentForDeleteCheck(Offset startOffsetOfLastIndexSegmentForDeleteCheck) {
+    this.startOffsetOfLastIndexSegmentForDeleteCheck = startOffsetOfLastIndexSegmentForDeleteCheck;
+    flush();
+    logger.trace("{}: Set startOffsetOfLastIndexSegmentForDeleteCheck to {}", file,
+        this.startOffsetOfLastIndexSegmentForDeleteCheck);
   }
 
   /**
@@ -280,22 +320,39 @@ class CompactionLog implements Closeable {
   private void flush() {
     /*
         Description of serialized format
-
-        version
-        startTime
-        index of current cycle's log
-        size of cycle log list
-        cycleLog1 (see CycleLog#toBytes())
-        cycleLog2
-        ...
-        crc
+        Version 0:
+          version
+          startTime
+          index of current cycle's log
+          size of cycle log list
+          cycleLog1 (see CycleLog#toBytes())
+          cycleLog2
+          ...
+          crc
+         Version 1:
+          version
+          startTime
+          byte to indicate whether startOffsetOfLastIndexSegmentForDeleteCheck is present (1) or not (0)
+          startOffsetOfLastIndexSegmentForDeleteCheck if not null
+          index of current cycle's log
+          size of cycle log list
+          cycleLog1 (see CycleLog#toBytes())
+          cycleLog2
+          ...
+          crc
        */
     File tempFile = new File(file.getAbsolutePath() + ".tmp");
     try (FileOutputStream fileOutputStream = new FileOutputStream(tempFile)) {
       CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
       DataOutputStream stream = new DataOutputStream(crcOutputStream);
-      stream.writeShort(VERSION_0);
+      stream.writeShort(CURRENT_VERSION);
       stream.writeLong(startTime);
+      if (startOffsetOfLastIndexSegmentForDeleteCheck == null) {
+        stream.writeByte(0);
+      } else {
+        stream.writeByte(1);
+        stream.write(startOffsetOfLastIndexSegmentForDeleteCheck.toBytes());
+      }
       stream.writeInt(currentIdx);
       stream.writeInt(cycleLogs.size());
       for (CycleLog cycleLog : cycleLogs) {
