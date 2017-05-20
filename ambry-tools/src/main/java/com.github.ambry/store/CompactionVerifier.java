@@ -149,7 +149,7 @@ public class CompactionVerifier implements Closeable {
      * has. Use with care to avoid spurious failures.
      */
     @Config("check.all.data")
-    @Default("false")
+    @Default("true")
     final boolean checkAllData;
 
     /**
@@ -159,7 +159,7 @@ public class CompactionVerifier implements Closeable {
      * avoid spurious failures.
      */
     @Config("check.all.entries.in.tgt")
-    @Default("false")
+    @Default("true")
     final boolean checkAllEntriesInTgt;
 
     /**
@@ -182,8 +182,8 @@ public class CompactionVerifier implements Closeable {
       storeCapacity = verifiableProperties.getLong("store.capacity");
       hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
-      checkAllData = verifiableProperties.getBoolean("check.all.data", false);
-      checkAllEntriesInTgt = verifiableProperties.getBoolean("check.all.entries.in.tgt", false);
+      checkAllData = verifiableProperties.getBoolean("check.all.data", true);
+      checkAllEntriesInTgt = verifiableProperties.getBoolean("check.all.entries.in.tgt", true);
       failOnStrayFiles = verifiableProperties.getBoolean("fail.on.stray.files", true);
     }
   }
@@ -345,7 +345,7 @@ public class CompactionVerifier implements Closeable {
 
     if (config.failOnStrayFiles) {
       assert numTempFilesOnDisk == 0 : "Some log segments haven't been cleaned";
-      assert !tempCleanupFileExists : "The temp clean shutdown file has not been" + " deleted";
+      assert !tempCleanupFileExists : "The temp clean shutdown file has not been deleted";
       assert filesOnDiskCount == inMemIndexSegmentCount : "There are stray index segment files on disk";
     } else {
       if (numTempFilesOnDisk != 0) {
@@ -443,6 +443,21 @@ public class CompactionVerifier implements Closeable {
                   errMsgId + ": Found a deleted PUT record that should have been cleaned up in target index."
                       + " IndexVale: " + srcValue;
               shouldVerifyRecord = false;
+            }
+          }
+          if (!config.checkAllEntriesInTgt && shouldVerifyRecord && valueFromTgtIndex.isFlagSet(
+              IndexValue.Flags.Delete_Index)) {
+            // deleted in the target index. Because the start offset of the index segment until which deletes are valid
+            // is calculated before compaction, it is possible that the LMT of the index segment changed after this
+            // calculation was done. This can happen only if there has been no write to the index segment for the past
+            // 7 days and only if the tgt is expected to have more entries than the src.
+            Offset startOffsetDelIdxSegInTgt = tgtIndex.getIndexSegments().floorKey(valueFromTgtIndex.getOffset());
+            if (startOffsetDelIdxSegInTgt.equals(srcIndex.getIndexSegments().lastKey())) {
+              // if the delete lies in the last index segment that tgtIndex has in common with srcIndex, then it is
+              // possible that the last modified time of the index segment has changed in the tgtIndex (due to traffic).
+              // If this is the case, it is possible that the PUT record has been cleaned up depending on when the start
+              // offset for delete was calculated.
+              shouldVerifyRecord = isPutRecordPresentInTgt(key, valueFromTgtIndex);
             }
           }
         } else {
