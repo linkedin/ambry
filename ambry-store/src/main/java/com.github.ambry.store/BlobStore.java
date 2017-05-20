@@ -126,8 +126,8 @@ class BlobStore implements Store {
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
         compactor =
-            new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, log, recovery, time,
-                sessionId, storeDescriptor.getIncarnationId());
+            new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, log, time, sessionId,
+                storeDescriptor.getIncarnationId());
         index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
             sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
@@ -395,7 +395,7 @@ class BlobStore implements Store {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
-        compactor.close(2);
+        compactor.close(30);
         index.close();
         log.close();
         started = false;

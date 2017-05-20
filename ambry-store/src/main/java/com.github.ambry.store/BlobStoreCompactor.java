@@ -72,7 +72,6 @@ class BlobStoreCompactor {
   private final StoreMetrics tgtMetrics;
   private final Log srcLog;
   private final DiskIOScheduler diskIOScheduler;
-  private final MessageStoreRecovery recovery;
   private final Time time;
   private final UUID sessionId;
   private final UUID incarnationId;
@@ -98,7 +97,6 @@ class BlobStoreCompactor {
    * @param metrics the {@link StoreMetrics} to use to record metrics.
    * @param diskIOScheduler the {@link DiskIOScheduler} to schedule I/O.
    * @param srcLog the {@link Log} to copy data from.
-   * @param recovery the {@link MessageStoreRecovery} to use to recover the index and log.
    * @param time the {@link Time} instance to use.
    * @param sessionId the sessionID of the store.
    * @param incarnationId the incarnation ID of the store.
@@ -106,8 +104,8 @@ class BlobStoreCompactor {
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
-      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, MessageStoreRecovery recovery, Time time,
-      UUID sessionId, UUID incarnationId) throws IOException, StoreException {
+      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, Log srcLog, Time time, UUID sessionId, UUID incarnationId)
+      throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -116,7 +114,6 @@ class BlobStoreCompactor {
     tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
-    this.recovery = recovery;
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
@@ -442,8 +439,9 @@ class BlobStoreCompactor {
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
-    tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, recovery, null,
-        tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
+    tgtIndex =
+        new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, null, null, tgtMetrics,
+            journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
       logger.debug("Pausing hard delete for {}", storeId);
       srcIndex.hardDeleter.pause();
@@ -606,7 +604,9 @@ class BlobStoreCompactor {
     }
     // order by offset in log.
     Collections.sort(indexEntriesToCopy, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
-    logger.debug(
+    logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
+        copyCandidates.size(), indexEntriesToCopy.size());
+    logger.trace(
         "For index segment with start offset {} in {} - Total index entries: {}. Valid index entries: {}. Entries to "
             + "copy: {}", indexSegmentStartOffset, storeId, allIndexEntries, copyCandidates, indexEntriesToCopy);
     return indexEntriesToCopy;
@@ -645,12 +645,16 @@ class BlobStoreCompactor {
           long putRecordOffset = value.getOriginalMessageOffset();
           if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != value.getOffset()
               .getOffset() && indexSegmentStartOffset.getOffset() <= putRecordOffset) {
-            BlobReadOptions options =
-                srcIndex.getBlobReadInfo(indexEntry.getKey(), EnumSet.allOf(StoreGetOptions.class));
-            Offset offset = new Offset(indexSegmentStartOffset.getName(), putRecordOffset);
-            IndexValue putValue = new IndexValue(options.getSize(), offset, options.getExpiresAtMs());
-            validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
-            options.close();
+            try (BlobReadOptions options = srcIndex.getBlobReadInfo(indexEntry.getKey(),
+                EnumSet.allOf(StoreGetOptions.class))) {
+              Offset offset = new Offset(indexSegmentStartOffset.getName(), options.getOffset());
+              IndexValue putValue =
+                  new IndexValue(options.getSize(), offset, options.getExpiresAtMs(), value.getOperationTimeInMs(),
+                      value.getServiceId(), value.getContainerId());
+              validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
+            } catch (StoreException e) {
+              logger.error("Fetching PUT index entry of {} in {} failed", indexEntry.getKey(), indexSegmentStartOffset);
+            }
           }
         }
       } else if (!srcIndex.isExpired(value)) {
@@ -705,54 +709,59 @@ class BlobStoreCompactor {
       throws IOException, StoreException {
     boolean copiedAll = true;
     long totalCapacity = tgtLog.getCapacityInBytes();
-    FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false);
     long writtenLastTime = 0;
-    for (IndexEntry srcIndexEntry : srcIndexEntries) {
-      IndexValue srcValue = srcIndexEntry.getValue();
-      long usedCapacity = tgtIndex.getLogUsedCapacity();
-      if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
-        fileChannel.position(srcValue.getOffset().getOffset());
-        Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
-        // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
-        diskIOScheduler.getSlice(LOG_SEGMENT_COPY_JOB_NAME, LOG_SEGMENT_COPY_JOB_NAME, writtenLastTime);
-        tgtLog.appendFrom(fileChannel, srcValue.getSize());
-        FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
-        if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-          IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
-          if (putValue != null) {
-            tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan);
+    try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
+      for (IndexEntry srcIndexEntry : srcIndexEntries) {
+        IndexValue srcValue = srcIndexEntry.getValue();
+        long usedCapacity = tgtIndex.getLogUsedCapacity();
+        if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
+          fileChannel.position(srcValue.getOffset().getOffset());
+          Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
+          // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
+          diskIOScheduler.getSlice(LOG_SEGMENT_COPY_JOB_NAME, LOG_SEGMENT_COPY_JOB_NAME, writtenLastTime);
+          tgtLog.appendFrom(fileChannel, srcValue.getSize());
+          FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
+          if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+            IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
+            if (putValue != null) {
+              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan);
+            } else {
+              IndexValue tgtValue =
+                  new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+                      srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+              tgtValue.setFlag(IndexValue.Flags.Delete_Index);
+              tgtValue.clearOriginalMessageOffset();
+              tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+            }
           } else {
             IndexValue tgtValue =
                 new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
                     srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
-            tgtValue.setFlag(IndexValue.Flags.Delete_Index);
-            tgtValue.clearOriginalMessageOffset();
             tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
           }
+          long lastModifiedTimeSecsToSet =
+              srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
+                  : lastModifiedTimeSecs;
+          tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
+          writtenLastTime = srcValue.getSize();
+          srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
+        } else if (!isActive) {
+          logger.info("Stopping copying in {} because shutdown is in progress", storeId);
+          copiedAll = false;
+          break;
         } else {
-          IndexValue tgtValue = new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-              srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
-          tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+          // this is the extra segment, so it is ok to run out of space.
+          logger.info(
+              "There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
+                  + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity,
+              logSegmentToCopy.getName());
+          copiedAll = false;
+          break;
         }
-        long lastModifiedTimeSecsToSet =
-            srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
-                : lastModifiedTimeSecs;
-        tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
-        writtenLastTime = srcValue.getSize();
-        srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
-      } else if (!isActive) {
-        logger.info("Stopping copying in {} because shutdown is in progress", storeId);
-        copiedAll = false;
-        break;
-      } else {
-        // this is the extra segment, so it is ok to run out of space.
-        logger.info("There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
-            + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity, logSegmentToCopy.getName());
-        copiedAll = false;
-        break;
       }
+    } finally {
+      logSegmentToCopy.closeView();
     }
-    logSegmentToCopy.closeView();
     return copiedAll;
   }
 
@@ -938,14 +947,14 @@ class BlobStoreCompactor {
     if (compactionLog != null) {
       if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
         logger.info("Compaction of {} finished", storeId);
+        if (srcIndex != null && srcIndex.hardDeleter != null) {
+          srcIndex.hardDeleter.resume();
+        }
       } else {
         logger.info("Compaction of {} suspended", storeId);
       }
       compactionLog.close();
       compactionLog = null;
-      if (srcIndex != null && srcIndex.hardDeleter != null) {
-        srcIndex.hardDeleter.resume();
-      }
     }
   }
 

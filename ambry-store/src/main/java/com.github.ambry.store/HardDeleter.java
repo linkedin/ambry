@@ -106,7 +106,7 @@ public class HardDeleter implements Runnable {
     this.factory = factory;
     this.time = time;
     throttler = new Throttler(config.storeCleanupOperationsBytesPerSec, 10, true, time);
-    scanSizeInBytes = config.storeCleanupOperationsBytesPerSec * 10;
+    scanSizeInBytes = Math.min(config.storeCleanupOperationsBytesPerSec * 10, 1024 * 1024);
     messageRetentionSeconds = config.storeDeletedMessageRetentionDays * Time.SecsPerDay;
   }
 
@@ -566,7 +566,7 @@ public class HardDeleter implements Runnable {
           BlobReadOptions readInfo = index.getBlobReadInfo(info.getStoreKey(), getOptions);
           readOptionsList.add(readInfo);
         } catch (StoreException e) {
-          logger.error("Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
+          logger.debug("Failed to read blob info for blobid {} during hard deletes, ignoring. Caught exception {}",
               info.getStoreKey(), e);
           metrics.hardDeleteExceptionsCount.inc();
         }

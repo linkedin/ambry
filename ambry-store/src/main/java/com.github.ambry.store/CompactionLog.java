@@ -49,10 +49,10 @@ class CompactionLog implements Closeable {
     PREPARE, COPY, COMMIT, CLEANUP, DONE
   }
 
+  final Long startTime;
+  final List<CycleLog> cycleLogs;
   private final File file;
   private final Time time;
-  private final Long startTime;
-  private final List<CycleLog> cycleLogs;
 
   private int currentIdx = 0;
 
@@ -314,7 +314,7 @@ class CompactionLog implements Closeable {
   /**
    * Details and log for a single compaction cycle.
    */
-  private static class CycleLog {
+  static class CycleLog {
     private static final int TIMESTAMP_SIZE = 8;
     private static final int STORE_TOKEN_PRESENT_FLAG_SIZE = 1;
 

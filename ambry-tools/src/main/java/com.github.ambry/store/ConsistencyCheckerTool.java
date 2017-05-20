@@ -87,7 +87,8 @@ public class ConsistencyCheckerTool {
       reporter = JmxReporter.forRegistry(registry).build();
       reporter.start();
       ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties, metrics);
-      consistencyCheckerTool.checkConsistency();
+      boolean success = consistencyCheckerTool.checkConsistency();
+      System.exit(success ? 0 : 1);
     } finally {
       if (reporter != null) {
         reporter.stop();
@@ -97,9 +98,10 @@ public class ConsistencyCheckerTool {
 
   /**
    * Executes the operation with the help of properties passed during initialization of {@link DumpDataTool}
+   * @return {@code true} if no real inconsistent blobs. {@code false}
    * @throws Exception
    */
-  private void checkConsistency() throws Exception {
+  private boolean checkConsistency() throws Exception {
     File rootDir = new File(partitionRootDirectory);
     logger.info("Root directory for Partition" + rootDir);
     ArrayList<String> replicaList = populateReplicaList(rootDir);
@@ -116,6 +118,7 @@ public class ConsistencyCheckerTool {
       logger.info("\nDumping Inconsistent blobs ");
       dumpInconsistentBlobs(rootDir.listFiles(), realInconsistentBlobs);
     }
+    return realInconsistentBlobs.size() == 0;
   }
 
   private ArrayList<String> populateReplicaList(File rootDir) {
