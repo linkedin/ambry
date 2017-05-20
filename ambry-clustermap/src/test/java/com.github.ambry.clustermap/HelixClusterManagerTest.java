@@ -291,7 +291,6 @@ public class HelixClusterManagerTest {
     // trigger for live instance change event should have come in twice per dc - the initial one, and the one due to a
     // node brought up in each DC.
     assertEquals(instanceTriggerCount, getCounterValue("liveInstanceChangeTriggerCount"));
-    assertEquals(dcs.length, getCounterValue("externalViewChangeTriggerCount"));
     assertEquals(dcs.length, getCounterValue("instanceConfigChangeTriggerCount"));
     assertEquals(helixCluster.getDataCenterCount(), getGaugeValue("datacenterCount"));
     assertEquals(helixCluster.getDownInstances().size() + helixCluster.getUpInstances().size(),

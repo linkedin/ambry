@@ -90,19 +90,23 @@ class MockHelixManager implements HelixManager {
   @Override
   public void addLiveInstanceChangeListener(LiveInstanceChangeListener listener) throws Exception {
     liveInstanceChangeListener = listener;
-    triggerLiveInstanceNotification();
+    triggerLiveInstanceNotification(true);
   }
 
   @Override
   public void addInstanceConfigChangeListener(InstanceConfigChangeListener listener) throws Exception {
     instanceConfigChangeListener = listener;
-    instanceConfigChangeListener.onInstanceConfigChange(Collections.EMPTY_LIST, new NotificationContext(this));
+    NotificationContext notificationContext = new NotificationContext(this);
+    notificationContext.setType(NotificationContext.Type.INIT);
+    instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);
   }
 
   @Override
   public void addExternalViewChangeListener(ExternalViewChangeListener listener) throws Exception {
     externalViewChangeListener = listener;
-    externalViewChangeListener.onExternalViewChange(Collections.EMPTY_LIST, new NotificationContext(this));
+    NotificationContext notificationContext = new NotificationContext(this);
+    notificationContext.setType(NotificationContext.Type.INIT);
+    externalViewChangeListener.onExternalViewChange(Collections.EMPTY_LIST, notificationContext);
   }
 
   @Override
@@ -128,12 +132,16 @@ class MockHelixManager implements HelixManager {
   /**
    * Trigger a live instance change notification.
    */
-  void triggerLiveInstanceNotification() {
+  void triggerLiveInstanceNotification(boolean initial) {
     List<LiveInstance> liveInstances = new ArrayList<>();
     for (String instance : mockAdmin.getUpInstances()) {
       liveInstances.add(new LiveInstance(instance));
     }
-    liveInstanceChangeListener.onLiveInstanceChange(liveInstances, new NotificationContext(this));
+    NotificationContext notificationContext = new NotificationContext(this);
+    if (initial) {
+      notificationContext.setType(NotificationContext.Type.INIT);
+    }
+    liveInstanceChangeListener.onLiveInstanceChange(liveInstances, notificationContext);
   }
 
   //****************************
