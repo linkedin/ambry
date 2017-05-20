@@ -156,6 +156,79 @@ public class AdaptiveOperationTrackerTest {
     doTrackerUpdateTest(false);
   }
 
+  /**
+   * Tests the case where there are no unexpired requests because the only unexpired request returned a failure. In
+   * that case, the tracker must allow sending more requests.
+   * @throws InterruptedException
+   */
+  @Test
+  public void noUnexpiredRequestsTest() throws InterruptedException {
+    primeTracker(localColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
+    double localColoCutoff = localColoTracker.getSnapshot().getValue(QUANTILE);
+
+    OperationTracker ot = getOperationTracker(false, 1, 1);
+    // 3-0-0-0
+    sendRequests(ot, 1);
+    // 2-1-0-0
+    // sleep for a time greater than cutoff
+    time.sleep((long) localColoCutoff + 2);
+    sendRequests(ot, 1);
+    // 1-2-0-0
+    // provide a response to the second request that is not a success
+    ot.onResponse(inflightReplicas.pollLast(), false);
+    // 1-1-0-1
+    assertFalse("Operation should not be done", ot.isDone());
+    // should now be able to send one more request
+    sendRequests(ot, 1);
+    // 0-2-0-1
+    ot.onResponse(inflightReplicas.pollLast(), true);
+    // 0-1-1-1
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    // past due counter should be 1
+    assertEquals("Past due counter is inconsistent", 1, pastDueCounter.getCount());
+  }
+
+  /**
+   * Tests the case where the tracker is updated b/w the {@link Iterator#hasNext()} and {@link Iterator#next()} calls.
+   * @throws InterruptedException
+   */
+  @Test
+  public void trackerUpdateBetweenHasNextAndNextTest() throws InterruptedException {
+    primeTracker(localColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, LOCAL_COLO_LATENCY_RANGE);
+    primeTracker(crossColoTracker, AdaptiveOperationTracker.MIN_DATA_POINTS_REQUIRED, CROSS_COLO_LATENCY_RANGE);
+    double localColoCutoff = localColoTracker.getSnapshot().getValue(1);
+
+    OperationTracker ot =
+        new AdaptiveOperationTracker(localDcName, mockPartition, false, 1, 1, time, localColoTracker, null,
+            pastDueCounter, 1);
+    // 3-0-0-0
+    sendRequests(ot, 1);
+    // 2-1-0-0
+    // sleep for a time greater than cutoff
+    time.sleep((long) localColoCutoff + 2);
+
+    // now get an iterator and call hasNext() on it
+    Iterator<ReplicaId> replicaIterator = ot.getReplicaIterator();
+    assertTrue("There should be a replica to send to", replicaIterator.hasNext());
+    // now insert a value in the tracker such that it is the max value. However, the return value of hasNext() must
+    // not change even though the tracker has changed its return value for getSnapshot().getValue(1).
+    long valueToInsert = 2 * (long) localColoCutoff;
+    localColoTracker.update(valueToInsert);
+    assertEquals("Tracker's snapshot should return the max value", valueToInsert,
+        (long) localColoTracker.getSnapshot().getValue(1));
+    // hasNext() should not change it's return value
+    assertTrue("There should be a replica to send to", replicaIterator.hasNext());
+
+    sendRequests(ot, 1);
+    // 1-2-0-0
+    ot.onResponse(inflightReplicas.pollLast(), true);
+    // 1-1-1-0
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    // past due counter should be 1
+    assertEquals("Past due counter is inconsistent", 1, pastDueCounter.getCount());
+  }
+
   // helpers
 
   // general
