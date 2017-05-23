@@ -27,8 +27,8 @@ public class Throttler {
   private double desiredRatePerSec;
   private long checkIntervalMs;
   private boolean throttleDown;
-  private Object lock = new Object();
-  private Object waitGuard = new Object();
+  private final Object lock = new Object();
+  private final Object waitGuard = new Object();
   private long periodStartNs;
   private double observedSoFar;
   private Logger logger = LoggerFactory.getLogger(getClass());
@@ -90,7 +90,7 @@ public class Throttler {
   /**
    * Disable the throttler for good.
    */
-  public void close() {
+  public void disable() {
     synchronized (waitGuard) {
       enabled = false;
       waitGuard.notify();

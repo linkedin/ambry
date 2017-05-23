@@ -1894,7 +1894,7 @@ public class BlobStoreCompactorTest {
     long getSlice(String jobType, String jobId, long usedSinceLastCall) {
       if (jobType.equals(BlobStoreCompactor.INDEX_SEGMENT_READ_JOB_NAME)) {
         indexSegmentsCopied += usedSinceLastCall;
-      } else if (jobType.equals(BlobStoreCompactor.LOG_SEGMENT_COPY_JOB_NAME)) {
+      } else if (jobType.equals(DiskManager.CLEANUP_OPS_JOB_NAME)) {
         numBytesCopied += usedSinceLastCall;
       }
       if (indexSegmentsCopied == indexSegmentCountToCutoffAt || numBytesCopied >= numBytesToCutoffAt) {
@@ -1912,7 +1912,8 @@ public class BlobStoreCompactorTest {
     InterruptionInducingIndex() throws StoreException {
       super(tempDirStr, state.scheduler, state.log, new StoreConfig(new VerifiableProperties(state.properties)),
           CuratedLogIndexState.STORE_KEY_FACTORY, state.recovery, state.hardDelete,
-          new StoreMetrics(STORE_ID, new MetricRegistry()), state.time, state.sessionId, state.incarnationId);
+          CuratedLogIndexState.DISK_IO_SCHEDULER, new StoreMetrics(STORE_ID, new MetricRegistry()), state.time,
+          state.sessionId, state.incarnationId);
     }
 
     @Override

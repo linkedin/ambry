@@ -60,13 +60,20 @@ class DiskIOScheduler implements Closeable {
   }
 
   /**
+   * Disables the DiskIOScheduler i.e. there will be no more blocking calls
+   */
+  void disable() {
+    for (Throttler throttler : throttlers.values()) {
+      throttler.disable();
+    }
+  }
+
+  /**
    * Release resources and close throttlers
    */
   @Override
   public void close() {
-    for (Throttler throttler : throttlers.values()) {
-      throttler.close();
-    }
+    // nothing to do.
   }
 }
 

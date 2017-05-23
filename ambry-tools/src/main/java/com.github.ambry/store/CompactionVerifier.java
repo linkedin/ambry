@@ -258,17 +258,18 @@ public class CompactionVerifier implements Closeable {
     };
     MessageStoreHardDelete hardDelete = new BlobStoreHardDelete();
 
+    DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
     // load "src compaction" log and index
     srcLog = new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, srcMetrics);
     srcIndex =
-        new PersistentIndex(srcDir.getAbsolutePath(), null, srcLog, storeConfig, storeKeyFactory, recovery, hardDelete,
-            srcMetrics, SystemTime.getInstance(), sessionId, incarnationId);
+        new PersistentIndex(srcDir.getAbsolutePath(), null, srcLog, storeConfig, storeKeyFactory, null, hardDelete,
+            diskIOScheduler, srcMetrics, SystemTime.getInstance(), sessionId, incarnationId);
 
     // load "tgt" compaction log and index
     tgtLog = new Log(tgtDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, tgtMetrics);
     tgtIndex =
-        new PersistentIndex(tgtDir.getAbsolutePath(), null, tgtLog, storeConfig, storeKeyFactory, recovery, hardDelete,
-            tgtMetrics, SystemTime.getInstance(), sessionId, incarnationId);
+        new PersistentIndex(tgtDir.getAbsolutePath(), null, tgtLog, storeConfig, storeKeyFactory, null, hardDelete,
+            diskIOScheduler, tgtMetrics, SystemTime.getInstance(), sessionId, incarnationId);
   }
 
   @Override

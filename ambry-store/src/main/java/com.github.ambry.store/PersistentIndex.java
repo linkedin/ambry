@@ -94,6 +94,7 @@ class PersistentIndex {
   private final String dataDir;
   private final MessageStoreHardDelete hardDelete;
   private final StoreKeyFactory factory;
+  private final DiskIOScheduler diskIOScheduler;
   private final StoreConfig config;
   private final boolean cleanShutdown;
   private final Offset logEndOffsetOnStartup;
@@ -120,6 +121,7 @@ class PersistentIndex {
    * @param factory The factory used to create store keys
    * @param recovery The recovery handle to perform recovery on startup
    * @param hardDelete  The hard delete handle used to perform hard deletes
+   * @param diskIOScheduler the {@link DiskIOScheduler} to use.
    * @param metrics the metrics object
    * @param time the time instance to use
    * @param sessionId the ID of the current session.
@@ -127,15 +129,16 @@ class PersistentIndex {
    * @throws StoreException
    */
   PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
-      Time time, UUID sessionId, UUID incarnationId) throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Time time, UUID sessionId, UUID incarnationId)
+      throws StoreException {
     /*
     If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
     whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
     elements held by the latest segment, the journal needs to be able to hold twice the max number of elements a
     segment can hold.
     */
-    this(datadir, scheduler, log, config, factory, recovery, hardDelete, metrics,
+    this(datadir, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
         new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
             config.storeMaxNumberOfEntriesToReturnFromJournal), time, sessionId, incarnationId,
         CLEAN_SHUTDOWN_FILENAME);
@@ -151,6 +154,7 @@ class PersistentIndex {
    * @param recovery The recovery handle to perform recovery on startup
    * @param hardDelete  The hard delete handle used to perform hard deletes. {@code null} if hard delete functionality
    *                    is not required.
+   * @param diskIOScheduler the {@link DiskIOScheduler} to use.
    * @param metrics the metrics object
    * @param journal the journal to use
    * @param time the time instance to use
@@ -160,9 +164,9 @@ class PersistentIndex {
    * @throws StoreException
    */
   PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
-      Journal journal, Time time, UUID sessionId, UUID incarnationId, String cleanShutdownFileName)
-      throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Journal journal, Time time, UUID sessionId,
+      UUID incarnationId, String cleanShutdownFileName) throws StoreException {
     this.dataDir = datadir;
     this.log = log;
     this.time = time;
@@ -170,6 +174,7 @@ class PersistentIndex {
     this.factory = factory;
     this.config = config;
     this.hardDelete = hardDelete;
+    this.diskIOScheduler = diskIOScheduler;
     this.journal = journal;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
@@ -207,7 +212,7 @@ class PersistentIndex {
         // never work on the part of the log that is not yet flushed (by ensuring that the message retention
         // period is longer than the log flush time).
         logger.info("Index : " + datadir + " Starting hard delete recovery");
-        hardDeleter = new HardDeleter(config, metrics, datadir, log, this, hardDelete, factory, time);
+        hardDeleter = new HardDeleter(config, metrics, datadir, log, this, hardDelete, factory, diskIOScheduler, time);
         hardDeleter.performRecovery();
         logger.info("Index : " + datadir + " Finished performing hard delete recovery");
         metrics.initializeHardDeleteMetric(hardDeleter, this);

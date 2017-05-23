@@ -49,7 +49,6 @@ import org.slf4j.LoggerFactory;
  */
 class BlobStoreCompactor {
   static final String INDEX_SEGMENT_READ_JOB_NAME = "blob_store_compactor_index_segment_read";
-  static final String LOG_SEGMENT_COPY_JOB_NAME = "blob_store_compactor_log_segment_copy";
   static final String TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME = "compactor_clean_shutdown";
   static final FilenameFilter TEMP_LOG_SEGMENTS_FILTER = new FilenameFilter() {
     private final String SUFFIX = LogSegmentNameHelper.SUFFIX + TEMP_LOG_SEGMENT_NAME_SUFFIX;
@@ -439,9 +438,8 @@ class BlobStoreCompactor {
         existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
-    tgtIndex =
-        new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, null, null, tgtMetrics,
-            journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
+    tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, null, null,
+        diskIOScheduler, tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
       logger.debug("Pausing hard delete for {}", storeId);
       srcIndex.hardDeleter.pause();
@@ -718,7 +716,7 @@ class BlobStoreCompactor {
           fileChannel.position(srcValue.getOffset().getOffset());
           Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
           // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
-          diskIOScheduler.getSlice(LOG_SEGMENT_COPY_JOB_NAME, LOG_SEGMENT_COPY_JOB_NAME, writtenLastTime);
+          diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME, writtenLastTime);
           tgtLog.appendFrom(fileChannel, srcValue.getSize());
           FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
           if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {

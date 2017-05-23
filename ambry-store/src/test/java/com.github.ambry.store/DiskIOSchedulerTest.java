@@ -61,11 +61,12 @@ public class DiskIOSchedulerTest {
       assertFalse("maybeThrottle should not have been called for this jobType", ((MockThrottler) throttler).called);
     }
 
-    // closing scheduler
-    scheduler.close();
+    // disabling scheduler
+    scheduler.disable();
     for (Throttler throttler : throttlers.values()) {
       assertTrue("Throttler should be closed.", ((MockThrottler) throttler).closed);
     }
+    scheduler.close();
   }
 
   /**
@@ -102,7 +103,7 @@ public class DiskIOSchedulerTest {
     }
 
     @Override
-    public void close() {
+    public void disable() {
       closed = true;
     }
 
