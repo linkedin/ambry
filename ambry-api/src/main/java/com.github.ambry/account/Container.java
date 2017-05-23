@@ -38,22 +38,23 @@ import org.json.JSONObject;
  *    "version": 1,
  *    "status": "active"
  *  }
+ *
+ *  A container object is immutable. To update a container of an account, construct a new container object with updated
+ *  fields, and make update through {@link Account#updateContainer(Container)}.
  */
 public class Container {
   // static variables
-  public static final String CONTAINER_METADATA_VERSION_KEY = "version";
-  public static final String CONTAINER_NAME_KEY = "containerName";
-  public static final String CONTAINER_ID_KEY = "containerId";
-  public static final String CONTAINER_STATUS_KEY = "status";
-  public static final String CONTAINER_DESCRIPTION_KEY = "description";
-  public static final String CONTAINER_IS_PRIVATE_KEY = "isPrivate";
-  public static final String CONTAINER_STATUS_ACTIVE = "active";
-  public static final String CONTAINER_STATUS_INACTIVE = "inactive";
-  public static final short CONTAINER_METADATA_VERSION_1 = 1;
+  static final String CONTAINER_METADATA_VERSION_KEY = "version";
+  static final String CONTAINER_NAME_KEY = "containerName";
+  static final String CONTAINER_ID_KEY = "containerId";
+  static final String CONTAINER_STATUS_KEY = "status";
+  static final String CONTAINER_DESCRIPTION_KEY = "description";
+  static final String CONTAINER_IS_PRIVATE_KEY = "isPrivate";
+  static final short CONTAINER_METADATA_VERSION_1 = 1;
   // container field variables
   private final short id;
   private final String name;
-  private final String status;
+  private final ContainerStatus status;
   private final String description;
   private final boolean isPrivate;
   private final Account parentAccount;
@@ -76,7 +77,7 @@ public class Container {
       case CONTAINER_METADATA_VERSION_1:
         this.id = (short) metadata.getInt(CONTAINER_ID_KEY);
         this.name = metadata.getString(CONTAINER_NAME_KEY);
-        this.status = metadata.getString(CONTAINER_STATUS_KEY);
+        this.status = ContainerStatus.valueOf(metadata.getString(CONTAINER_STATUS_KEY));
         this.description = metadata.optString(CONTAINER_DESCRIPTION_KEY);
         this.isPrivate = metadata.getBoolean(CONTAINER_IS_PRIVATE_KEY);
         this.metadata = metadata;
@@ -99,8 +100,8 @@ public class Container {
    * @param parentAccount The parent {@link Account} of this Container.
    * @throws JSONException
    */
-  public Container(short id, String name, String status, String description, boolean isPrivate, Account parentAccount)
-      throws JSONException {
+  public Container(short id, String name, ContainerStatus status, String description, boolean isPrivate,
+      Account parentAccount) throws JSONException {
     if (name == null) {
       throw new IllegalArgumentException("name cannot be null.");
     }
@@ -142,7 +143,7 @@ public class Container {
    * Gets the status of the container.
    * @return The status of the container.
    */
-  public String getStatus() {
+  public ContainerStatus getStatus() {
     return status;
   }
 
@@ -222,5 +223,13 @@ public class Container {
     int result = (int) id;
     result = 31 * result + parentAccount.hashCode();
     return result;
+  }
+
+  /**
+   * Status of the container. {@code ACTIVE} means this container is in operational state, and {@code INACTIVE} means
+   * the container is inactive, so accessing any blob in this container will be denied.
+   */
+  public enum ContainerStatus {
+    ACTIVE, INACTIVE
   }
 }

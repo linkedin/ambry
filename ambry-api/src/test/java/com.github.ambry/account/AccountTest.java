@@ -19,7 +19,7 @@ import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
@@ -32,22 +32,22 @@ import static org.junit.Assert.*;
  */
 public class AccountTest {
   // Reference Account fields
-  private static final short refAccountId = 1234;
-  private static final String refAccountName = "testAccount1";
-  private static final String refAccountStatus = ACCOUNT_STATUS_ACTIVE;
-  private static final JSONObject refAccountJson = new JSONObject();
+  private final short refAccountId = 1234;
+  private final String refAccountName = "testAccount1";
+  private final AccountStatus refAccountStatus = AccountStatus.ACTIVE;
+  private final JSONObject refAccountJson = new JSONObject();
   // Reference Container fields
-  private static final List<Short> refContainerIds = Arrays.asList(new Short[]{0, 1});
-  private static final List<String> refContainerNames = Arrays.asList(new String[]{"Container_0_0", "Container_0_1"});
-  private static final List<String> refContainerDescriptions =
+  private final List<Short> refContainerIds = Arrays.asList(new Short[]{0, 1});
+  private final List<String> refContainerNames = Arrays.asList(new String[]{"Container_0_0", "Container_0_1"});
+  private final List<String> refContainerDescriptions =
       Arrays.asList(new String[]{"Public container", "Private container"});
-  private static final List<String> refContainerStatuses =
-      Arrays.asList(new String[]{CONTAINER_STATUS_ACTIVE, CONTAINER_STATUS_INACTIVE});
-  private static final List<Boolean> refContainerPrivacies = Arrays.asList(new Boolean[]{false, true});
-  private static final List<JSONObject> refContainerJsons = new ArrayList<>();
+  private final List<ContainerStatus> refContainerStatuses =
+      Arrays.asList(new Container.ContainerStatus[]{ContainerStatus.ACTIVE, ContainerStatus.INACTIVE});
+  private final List<Boolean> refContainerPrivacies = Arrays.asList(new Boolean[]{false, true});
+  private final List<JSONObject> refContainerJsons = new ArrayList<>();
 
-  @BeforeClass
-  public static void init() throws JSONException {
+  @Before
+  public void init() throws JSONException {
     refAccountJson.put(ACCOUNT_METADATA_VERSION_KEY, ACCOUNT_METADATA_VERSION_1);
     refAccountJson.put(ACCOUNT_ID_KEY, refAccountId);
     refAccountJson.put(ACCOUNT_NAME_KEY, refAccountName);
@@ -82,7 +82,7 @@ public class AccountTest {
     Account accountFromArguments = new Account(refAccountId, refAccountName, refAccountStatus);
     assertAccountWithoutMetadata(accountFromArguments);
     for (int i = 0; i < 2; i++) {
-      accountFromArguments.addContainerAndMetadata(
+      accountFromArguments.updateContainer(
           new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
               refContainerDescriptions.get(i), refContainerPrivacies.get(i), accountFromArguments));
     }
@@ -120,7 +120,20 @@ public class AccountTest {
   }
 
   /**
-   * Tests {@link Account#addContainerAndMetadata(Container)}, for adding or updating a {@link Container} in an
+   * Tests updating an {@link Account}.
+   * @throws JSONException
+   */
+  @Test
+  public void testUpdateAccount() throws JSONException {
+    Account account = new Account(refAccountId, refAccountName, refAccountStatus);
+    account.setStatus(AccountStatus.INACTIVE);
+    assertEquals("Account status is wrong.", AccountStatus.INACTIVE, account.getStatus());
+    assertEquals("Account status in json is wrong.", AccountStatus.INACTIVE,
+        AccountStatus.valueOf(account.getMetadata().getString(ACCOUNT_STATUS_KEY)));
+  }
+
+  /**
+   * Tests {@link Account#updateContainer(Container)}, for adding or updating a {@link Container} in an
    * {@link Account}.
    * @throws Exception Any unexpected exceptions.
    */
@@ -130,20 +143,20 @@ public class AccountTest {
     Account account = new Account(refAccountId, refAccountName, refAccountStatus);
     Container container = new Container(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
         refContainerDescriptions.get(0), refContainerPrivacies.get(0), account);
-    account.addContainerAndMetadata(container);
+    account.updateContainer(container);
     assertEquals(1, account.getAllContainers().size());
     assertEquals(container.getMetadata(), account.getMetadata().getJSONArray(CONTAINERS_KEY).getJSONObject(0));
 
     // updating an existing account
     account = new Account(refAccountJson);
     String newNameForContainer0 = "newNameForContainer0";
-    String newStatusForContainer0 = "newStatusForContainer0";
+    ContainerStatus newStatusForContainer0 = refContainerStatuses.get(1);
     String newDescriptionForContainer0 = "newDescriptionForContainer0";
     boolean newIsPrivateForContainer0 = !refContainerPrivacies.get(0);
     Container updatedContainer_0 =
         new Container(refContainerIds.get(0), newNameForContainer0, newStatusForContainer0, newDescriptionForContainer0,
             newIsPrivateForContainer0, account);
-    account.addContainerAndMetadata(updatedContainer_0);
+    account.updateContainer(updatedContainer_0);
     container = account.getContainerByContainerId((short) 0);
     assertEquals(updatedContainer_0, container);
     JSONObject accountJson = account.getMetadata();
@@ -168,7 +181,7 @@ public class AccountTest {
     // add null container
     try {
       Account account = new Account(refAccountId, refAccountName, refAccountStatus);
-      account.addContainerAndMetadata(null);
+      account.updateContainer(null);
       fail("Should have thrown.");
     } catch (IllegalArgumentException e) {
       // expected
@@ -277,6 +290,27 @@ public class AccountTest {
     } catch (IllegalArgumentException e) {
       // expected
       System.err.println("Expected " + e.getClass() + " with message: " + e.getMessage());
+    }
+  }
+
+  /**
+   * Tests when invalid account or container status are in the corresponding json metadata.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testInvalidStatus() throws Exception {
+    JSONObject badAccountJson = refAccountJson.put(ACCOUNT_STATUS_KEY, "invalidAccountStatus");
+    try {
+      new Account(badAccountJson);
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+    JSONObject badContainerJson = refContainerJsons.get(0);
+    badContainerJson.put(CONTAINER_STATUS_KEY, "invalidContainerStatus");
+    try {
+      new Container(badContainerJson, new Account(refAccountId, refAccountName, refAccountStatus));
+    } catch (IllegalArgumentException e) {
+      // expected
     }
   }
 
