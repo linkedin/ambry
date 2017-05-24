@@ -118,7 +118,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster);
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
     if (useComposite) {
       StaticClusterAgentsFactory staticClusterAgentsFactory =
           new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath);
@@ -163,12 +163,23 @@ public class HelixClusterManagerTest {
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster),
+      new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null),
           metricRegistry);
       fail("Instantiation should have failed with invalid zk addresses");
     } catch (IOException e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
+    }
+
+    metricRegistry = new MetricRegistry();
+    try {
+      new HelixClusterManager(clusterMapConfig, hostname,
+          new MockHelixManagerFactory(helixCluster, new Exception("beBad")), metricRegistry);
+      fail("Instantiation should fail with a HelixManager factory that throws exception on listener registrations");
+    } catch (Exception e) {
+      assertEquals(1L,
+          metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
+      assertEquals("beBad", e.getCause().getMessage());
     }
   }
 
@@ -400,7 +411,7 @@ public class HelixClusterManagerTest {
    */
   private void testPartitionReplicaConsistency() throws Exception {
     for (PartitionId partition : clusterManager.getWritablePartitionIds()) {
-      assertEquals(partition.getReplicaIds().size(), testPartitionLayout.getTotalReplicaCount());
+      assertEquals(testPartitionLayout.getTotalReplicaCount(), partition.getReplicaIds().size());
       InputStream partitionStream = new ByteBufferInputStream(ByteBuffer.wrap(partition.getBytes()));
       PartitionId fetchedPartition = clusterManager.getPartitionIdFromStream(partitionStream);
       assertEquals(partition, fetchedPartition);
@@ -479,13 +490,16 @@ public class HelixClusterManagerTest {
    */
   private static class MockHelixManagerFactory extends HelixFactory {
     private final MockHelixCluster helixCluster;
+    private final Exception beBadException;
 
     /**
      * Construct this factory
      * @param helixCluster the {@link MockHelixCluster} that this factory's manager will be associated with.
+     * @param beBadException the {@link Exception} that the Helix Manager constructed by this factory will throw.
      */
-    MockHelixManagerFactory(MockHelixCluster helixCluster) {
+    MockHelixManagerFactory(MockHelixCluster helixCluster, Exception beBadException) {
       this.helixCluster = helixCluster;
+      this.beBadException = beBadException;
     }
 
     /**
@@ -498,7 +512,7 @@ public class HelixClusterManagerTest {
      */
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {
-        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster);
+        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, beBadException);
       } else {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

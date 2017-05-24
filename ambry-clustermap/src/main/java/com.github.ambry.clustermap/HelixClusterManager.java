@@ -15,12 +15,14 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,12 +54,14 @@ class HelixClusterManager implements ClusterMap {
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final Map<String, DcZkInfo> dcToDcZkInfo = new HashMap<>();
-  private final Map<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
-  private final Map<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
-  private final Map<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas = new ConcurrentHashMap<>();
-  private final Map<AmbryDataNode, Set<AmbryReplica>> ambryDataNodeToAmbryReplicas = new ConcurrentHashMap<>();
-  private final Map<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
-  private final Map<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<AmbryDataNode, Set<AmbryReplica>> ambryDataNodeToAmbryReplicas =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWiseAllocatedUsableCapacityBytes;
@@ -96,14 +100,28 @@ class HelixClusterManager implements ClusterMap {
 
       // Now register listeners to get notified on instance config change in every datacenter. The initial
       // instance config change notification will populate the static cluster information, so wait until that is done
-      // before registering for live instance change.
+      // before registering for live instance change. Since the initial notifications come in the context of the
+      // same thread that does the registration, register for each datacenter in separate threads to parallelize.
+      final CountDownLatch initializationDone = new CountDownLatch(dcToDcZkInfo.size());
       for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
-        dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeHandler);
-        logger.info("Registered instance config change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
-        // Now register listeners to get notified on live instance change in every datacenter.
-        dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeHandler);
-        logger.info("Registered live instance change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
+        Utils.newThread(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeHandler);
+              logger.info("Registered instance config change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
+              // Now register listeners to get notified on live instance change in every datacenter.
+              dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeHandler);
+              logger.info("Registered live instance change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
+            } catch (Exception e) {
+              dcZkInfo.clusterChangeHandler.initializationException = e;
+            } finally {
+              initializationDone.countDown();
+            }
+          }
+        }, false).start();
       }
+      initializationDone.await();
       assertSuccessfulInitialization();
     } catch (Exception e) {
       helixClusterManagerMetrics.initializeInstantiationMetric(false);
@@ -125,7 +143,6 @@ class HelixClusterManager implements ClusterMap {
    */
   private void assertSuccessfulInitialization() throws Exception {
     for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
-      dcZkInfo.clusterChangeHandler.liveInstanceChangeInitialized.await();
       Exception initializationException = dcZkInfo.clusterChangeHandler.initializationException;
       if (initializationException != null) {
         throw initializationException;
@@ -285,8 +302,6 @@ class HelixClusterManager implements ClusterMap {
     private final String dcName;
     final Set<String> allInstances = new HashSet<>();
     private final Object notificationLock = new Object();
-    private CountDownLatch configChangeInitialized = new CountDownLatch(1);
-    private CountDownLatch liveInstanceChangeInitialized = new CountDownLatch(1);
     private Exception initializationException;
 
     /**
@@ -307,8 +322,6 @@ class HelixClusterManager implements ClusterMap {
             initializeInstances(configs);
           } catch (Exception e) {
             initializationException = e;
-          } finally {
-            configChangeInitialized.countDown();
           }
         }
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
@@ -345,13 +358,6 @@ class HelixClusterManager implements ClusterMap {
       logger.trace("Live instance change triggered with: {}", liveInstances);
       if (changeContext.getType() == NotificationContext.Type.INIT) {
         logger.info("Received initial notification for live instance change");
-        try {
-          configChangeInitialized.await();
-        } catch (Exception e) {
-          initializationException = e;
-        } finally {
-          liveInstanceChangeInitialized.countDown();
-        }
       }
       updateInstanceLiveness(liveInstances);
       helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
@@ -409,22 +415,28 @@ class HelixClusterManager implements ClusterMap {
             // partition name and replica name are the same.
             String partitionName = info[0];
             long replicaCapacity = Long.valueOf(info[1]);
-            AmbryPartition partition = partitionNameToAmbryPartition.get(partitionName);
-            if (partition == null) {
-              // Create partition
-              partition = new AmbryPartition(Long.valueOf(partitionName), helixClusterManagerCallback);
-              partitionNameToAmbryPartition.put(partitionName, partition);
-              ambryPartitionToAmbryReplicas.put(partition, new HashSet<AmbryReplica>());
-              partitionMap.put(ByteBuffer.wrap(partition.getBytes()), partition);
-            } else {
-              ensurePartitionAbsenceOnNodeAndValidateCapacity(partition, datanode, replicaCapacity);
+            AmbryPartition mappedPartition =
+                new AmbryPartition(Long.valueOf(partitionName), helixClusterManagerCallback);
+            // Ensure only one AmbryPartition entry goes in to the mapping based on the name.
+            AmbryPartition existing = partitionNameToAmbryPartition.putIfAbsent(partitionName, mappedPartition);
+            if (existing != null) {
+              mappedPartition = existing;
             }
+            // mappedPartition is now the final mapped AmbryPartition object for this partition.
+            synchronized (mappedPartition) {
+              if (!ambryPartitionToAmbryReplicas.containsKey(mappedPartition)) {
+                ambryPartitionToAmbryReplicas.put(mappedPartition,
+                    Collections.newSetFromMap(new ConcurrentHashMap<>()));
+                partitionMap.put(ByteBuffer.wrap(mappedPartition.getBytes()), mappedPartition);
+              }
+            }
+            ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             if (sealedReplicas.contains(partitionName)) {
-              partition.setState(PartitionState.READ_ONLY);
+              mappedPartition.setState(PartitionState.READ_ONLY);
             }
-            // Create replica
-            AmbryReplica replica = new AmbryReplica(partition, disk, replicaCapacity);
-            ambryPartitionToAmbryReplicas.get(partition).add(replica);
+            // Create replica associated with this node.
+            AmbryReplica replica = new AmbryReplica(mappedPartition, disk, replicaCapacity);
+            ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }
         }

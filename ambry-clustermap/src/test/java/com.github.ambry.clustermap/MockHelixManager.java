@@ -55,7 +55,8 @@ class MockHelixManager implements HelixManager {
   private LiveInstanceChangeListener liveInstanceChangeListener;
   private ExternalViewChangeListener externalViewChangeListener;
   private InstanceConfigChangeListener instanceConfigChangeListener;
-  private MockHelixAdmin mockAdmin;
+  private final MockHelixAdmin mockAdmin;
+  private final Exception beBadException;
 
   /**
    * Instantiate a MockHelixManager.
@@ -63,13 +64,16 @@ class MockHelixManager implements HelixManager {
    * @param instanceType the {@link InstanceType} of the requester.
    * @param zkAddr the address identifying the zk service to which this request is to be made.
    * @param helixCluster the {@link MockHelixCluster} associated with this manager.
+   * @param beBadException the {@link Exception} that this manager will throw on listener registrations.
    */
-  MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, MockHelixCluster helixCluster) {
+  MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, MockHelixCluster helixCluster,
+      Exception beBadException) {
     this.instanceName = instanceName;
     this.instanceType = instanceType;
     mockAdmin = helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr);
     mockAdmin.addHelixManager(this);
     clusterName = helixCluster.getClusterName();
+    this.beBadException = beBadException;
   }
 
   @Override
@@ -89,12 +93,18 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addLiveInstanceChangeListener(LiveInstanceChangeListener listener) throws Exception {
+    if (beBadException != null) {
+      throw beBadException;
+    }
     liveInstanceChangeListener = listener;
     triggerLiveInstanceNotification(true);
   }
 
   @Override
   public void addInstanceConfigChangeListener(InstanceConfigChangeListener listener) throws Exception {
+    if (beBadException != null) {
+      throw beBadException;
+    }
     instanceConfigChangeListener = listener;
     NotificationContext notificationContext = new NotificationContext(this);
     notificationContext.setType(NotificationContext.Type.INIT);
@@ -103,6 +113,9 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addExternalViewChangeListener(ExternalViewChangeListener listener) throws Exception {
+    if (beBadException != null) {
+      throw beBadException;
+    }
     externalViewChangeListener = listener;
     NotificationContext notificationContext = new NotificationContext(this);
     notificationContext.setType(NotificationContext.Type.INIT);
