@@ -157,7 +157,6 @@ class DiskManager {
             "Could not shutdown " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
       compactionManager.awaitTermination();
-      diskIOScheduler.close();
     } finally {
       metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
