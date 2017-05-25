@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 
@@ -70,7 +71,7 @@ class CompositeClusterManager implements ClusterMap {
   public List<PartitionId> getWritablePartitionIds() {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds();
     if (helixClusterManager != null) {
-      if (!areEqual(staticWritablePartitionIds, helixClusterManager.getWritablePartitionIds())) {
+      if (!equalStrRepresentationInList(staticWritablePartitionIds, helixClusterManager.getWritablePartitionIds())) {
         helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
       }
     }
@@ -86,7 +87,7 @@ class CompositeClusterManager implements ClusterMap {
   public List<PartitionId> getAllPartitionIds() {
     List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitionIds();
     if (helixClusterManager != null) {
-      if (!areEqual(staticPartitionIds, helixClusterManager.getAllPartitionIds())) {
+      if (!equalStrRepresentationInList(staticPartitionIds, helixClusterManager.getAllPartitionIds())) {
         helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
       }
     }
@@ -109,6 +110,30 @@ class CompositeClusterManager implements ClusterMap {
       }
     }
     return staticHas;
+  }
+
+  @Override
+  public Short getDatacenterIdByName(String datacenterName) {
+    Short staticDcId = staticClusterManager.getDatacenterIdByName(datacenterName);
+    if (helixClusterManager != null) {
+      Short helixDcId = helixClusterManager.getDatacenterIdByName(datacenterName);
+      if (!Objects.equals(staticDcId, helixDcId)) {
+        helixClusterManagerMetrics.datacenterIdMismatchCount.inc();
+      }
+    }
+    return staticDcId;
+  }
+
+  @Override
+  public String getDatacenterNameById(short datacenterId) {
+    String staticDcName = staticClusterManager.getDatacenterNameById(datacenterId);
+    if (helixClusterManager != null) {
+      String helixDcName = helixClusterManager.getDatacenterNameById(datacenterId);
+      if (!Objects.equals(staticDcName, helixDcName)) {
+        helixClusterManagerMetrics.datacenterNameMismatchCount.inc();
+      }
+    }
+    return staticDcName;
   }
 
   /**
@@ -221,21 +246,28 @@ class CompositeClusterManager implements ClusterMap {
   }
 
   /**
-   * Check if two lists of partitions are equivalent
-   * @param partitionListOne {@link List} of {@link PartitionId}s to compare
-   * @param partitionListTwo {@link List} of {@link AmbryPartition}s to compare
-   * @return {@code true} if both list are equal, {@code false} otherwise
+   * Check if the string representations of elements in two lists are the same, regardless of the order.
+   * @param listOne The first list to check
+   * @param listTwo The second list to check
+   * @return {@code true} if the element string representations are the same, {@code false} otherwise
    */
-  private boolean areEqual(List<PartitionId> partitionListOne, List<AmbryPartition> partitionListTwo) {
-    Set<String> partitionStringsOne = new HashSet<>();
-    for (PartitionId partitionId : partitionListOne) {
-      partitionStringsOne.add(partitionId.toString());
+  private <T1, T2> boolean equalStrRepresentationInList(List<T1> listOne, List<T2> listTwo) {
+    if (listOne == null && listTwo == null) {
+      return true;
     }
-    Set<String> partitionStringsTwo = new HashSet<>();
-    for (PartitionId partitionId : partitionListTwo) {
-      partitionStringsTwo.add(partitionId.toString());
+    if ((listOne == null && listTwo != null) || listOne != null && listTwo == null
+        || listOne.size() != listTwo.size()) {
+      return false;
     }
-    return partitionStringsOne.equals(partitionStringsTwo);
+    Set<String> stringSetOne = new HashSet<>();
+    for (T1 element : listOne) {
+      stringSetOne.add(element.toString());
+    }
+    Set<String> stringSetTwo = new HashSet<>();
+    for (T2 element : listTwo) {
+      stringSetTwo.add(element.toString());
+    }
+    return stringSetOne.equals(stringSetTwo);
   }
 }
 

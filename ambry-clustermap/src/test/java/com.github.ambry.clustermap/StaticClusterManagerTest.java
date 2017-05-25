@@ -30,6 +30,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -114,8 +115,13 @@ public class StaticClusterManagerTest {
         assertEquals(true, false);
       }
     }
-
     for (Datacenter datacenter : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      String dcName = datacenter.getName();
+      assertEquals("Wrong datacenter id.", (short) hashDcNameToNonNegativeId(dcName),
+          (short) clusterMapManager.getDatacenterIdByName(dcName));
+      short id = clusterMapManager.getDatacenterIdByName(dcName);
+      String newName = clusterMapManager.getDatacenterNameById(id);
+      assertEquals("Wrong datacenter name.", dcName, newName);
       for (DataNode dataNode : datacenter.getDataNodes()) {
         DataNodeId dataNodeId = clusterMapManager.getDataNodeId(dataNode.getHostname(), dataNode.getPort());
         assertEquals(dataNodeId, dataNode);
@@ -124,6 +130,10 @@ public class StaticClusterManagerTest {
         }
       }
     }
+    assertNull("Wrong id for non existent datacenter name",
+        clusterMapManager.getDatacenterIdByName("NonExistentDcName"));
+    assertNull("Wrong id for null datacenter name", clusterMapManager.getDatacenterIdByName("null"));
+    assertNull("Wrong name for non existent datacenter id", clusterMapManager.getDatacenterNameById((short) 10));
   }
 
   @Test

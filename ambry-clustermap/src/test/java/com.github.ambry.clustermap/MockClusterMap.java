@@ -25,6 +25,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -38,6 +42,8 @@ public class MockClusterMap implements ClusterMap {
   protected final int numMountPointsPerNode;
   protected final int numStoresPerMountPoint;
   protected final HashSet<String> dataCentersInClusterMap = new HashSet<>();
+  private final Map<String, Short> dcNameToIdMap;
+  private final Map<Short, String> dcIdToNameMap;
   protected boolean partitionsUnavailable = false;
   private boolean createNewRegistry = true;
   private MetricRegistry metricRegistry;
@@ -84,16 +90,18 @@ public class MockClusterMap implements ClusterMap {
     this.enableSSLPorts = enableSSLPorts;
     this.numMountPointsPerNode = numMountPointsPerNode;
     this.numStoresPerMountPoint = numStoresPerMountPoint;
-    dataNodes = new ArrayList<MockDataNodeId>(numNodes);
+    this.dataNodes = new ArrayList<>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
     int currentPlainTextPort = 62000;
     int currentSSLPort = 63000;
+    Set<String> dcNameSet = new HashSet<>();
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
       }
       String dcName = "DC" + dcIndex;
+      dcNameSet.add(dcName);
       dataCentersInClusterMap.add(dcName);
       if (enableSSLPorts) {
         dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName));
@@ -101,7 +109,9 @@ public class MockClusterMap implements ClusterMap {
         dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++), dcName));
       }
     }
-    partitions = new HashMap<Long, PartitionId>();
+    dcNameToIdMap = getDcNameToIdMap(dcNameSet);
+    dcIdToNameMap = reverseMap(dcNameToIdMap);
+    partitions = new HashMap<>();
 
     // create partitions
     long partitionId = 0;
@@ -115,7 +125,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   protected ArrayList<Port> getListOfPorts(int port) {
-    ArrayList<Port> ports = new ArrayList<Port>();
+    ArrayList<Port> ports = new ArrayList<>();
     ports.add(new Port(port, PortType.PLAINTEXT));
     return ports;
   }
@@ -140,7 +150,7 @@ public class MockClusterMap implements ClusterMap {
     File f = null;
     int port = getPlainTextPort(ports);
     try {
-      List<String> mountPaths = new ArrayList<String>(numMountPointsPerNode);
+      List<String> mountPaths = new ArrayList<>(numMountPointsPerNode);
       f = File.createTempFile("ambry", ".tmp");
       for (int i = 0; i < numMountPointsPerNode; i++) {
         File mountFile = new File(f.getParent(), "mountpathfile" + port + i);
@@ -183,6 +193,16 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public boolean hasDatacenter(String datacenterName) {
     return dataCentersInClusterMap.contains(datacenterName);
+  }
+
+  @Override
+  public Short getDatacenterIdByName(String datacenterName) {
+    return dcNameToIdMap.get(datacenterName);
+  }
+
+  @Override
+  public String getDatacenterNameById(short datacenterId) {
+    return dcIdToNameMap.get(datacenterId);
   }
 
   @Override

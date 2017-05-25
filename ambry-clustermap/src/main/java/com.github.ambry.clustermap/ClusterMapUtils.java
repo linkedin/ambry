@@ -17,8 +17,10 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -165,6 +167,44 @@ public class ClusterMapUtils {
       throw new IllegalStateException(
           "Invalid disk capacity: " + diskCapacityInBytes + " is more than " + MAX_DISK_CAPACITY_IN_BYTES);
     }
+  }
+
+  /**
+   * Gets a map from datacenter name to datacenter id. The id generated for each datacenter name is unique and
+   * non-negative.
+   * @param dcNameSet A set of datacenter names.
+   * @return A map from datacenter name to datacenter id in short.
+   * @throws IllegalStateException if the generated id of some datacenter collide.
+   */
+  static Map<String, Short> getDcNameToIdMap(Set<String> dcNameSet) {
+    if (dcNameSet == null) {
+      throw new IllegalArgumentException("dcNames cannot be null.");
+    }
+    Map<String, Short> datacenterToIdMap = new HashMap<>();
+    Set<Short> dcIdSet = new HashSet<>();
+    for (String dcName : dcNameSet) {
+      short dcId = hashDcNameToNonNegativeId(dcName);
+      datacenterToIdMap.put(dcName, dcId);
+      if (!dcIdSet.add(dcId)) {
+        String dcToIdMapString = datacenterToIdMap.toString();
+        throw new IllegalStateException(
+            "Two datacenters are hashed to the same id. Current datacenter name to id mapping: " + dcToIdMapString);
+      }
+    }
+    return datacenterToIdMap;
+  }
+
+  /**
+   * A method to hash a datacenter name to a non-negative short number. The id will be unique across the cluster.
+   * @param dcName The datacenter name to hash.
+   * @return The non-negative short number as the hashed value.
+   */
+  static Short hashDcNameToNonNegativeId(String dcName) {
+    short id = (short) dcName.hashCode();
+    if (id == Short.MIN_VALUE) {
+      return 0;
+    }
+    return id >= 0 ? id : (short) -id;
   }
 }
 

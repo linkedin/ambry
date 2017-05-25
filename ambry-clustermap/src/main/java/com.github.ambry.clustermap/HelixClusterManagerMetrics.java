@@ -33,6 +33,8 @@ class HelixClusterManagerMetrics {
   public final Counter getWritablePartitionIdsMismatchCount;
   public final Counter getAllPartitionIdsMismatchCount;
   public final Counter hasDatacenterMismatchCount;
+  public final Counter datacenterIdMismatchCount;
+  public final Counter datacenterNameMismatchCount;
   public final Counter getDataNodeIdMismatchCount;
   public final Counter getReplicaIdsMismatchCount;
   public final Counter getDataNodeIdsMismatchCount;
@@ -63,6 +65,10 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getAllPartitionIdsMismatchCount"));
     hasDatacenterMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "hasDatacenterMismatchCount"));
+    datacenterIdMismatchCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "datacenterIdMismatchCount"));
+    datacenterNameMismatchCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "datacenterNameMismatchCount"));
     getDataNodeIdMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "getDataNodeIdMismatchCount"));
     getReplicaIdsMismatchCount =
