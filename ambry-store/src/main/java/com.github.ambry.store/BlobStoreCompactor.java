@@ -491,14 +491,15 @@ class BlobStoreCompactor {
    */
   private boolean copyDataByLogSegment(LogSegment logSegmentToCopy, FileSpan duplicateSearchSpan)
       throws IOException, StoreException {
-    logger.debug("Copying data from {}", logSegmentToCopy);
+    logger.info("Copying data from {}", logSegmentToCopy);
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
-      logger.debug("Processing index segment {}", indexSegmentToCopy.getFile());
+      logger.info("Processing index segment {}", indexSegmentToCopy.getFile());
       if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,
           indexSegmentToCopy, duplicateSearchSpan)) {
         // there is a shutdown in progress or there was no space to copy all entries.
-        logger.debug("Did not copy all entries in {}", indexSegmentToCopy.getFile());
+        logger.info("Did not copy all entries in {} (either because there is no space or there is a shutdown)",
+            indexSegmentToCopy.getFile());
         return false;
       }
     }
