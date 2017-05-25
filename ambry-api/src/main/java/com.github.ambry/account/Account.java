@@ -18,7 +18,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -41,23 +40,28 @@ import org.json.JSONObject;
  *      {
  *        "containerName": "MyPrivateContainer",
  *        "description": "This is my private container",
- *        "isPublic": "true",
+ *        "isPrivate": "true",
  *        "containerId": 0,
  *        "version": 1,
- *        "status": "ACTIVE"
+ *        "status": "ACTIVE",
+ *        "parentAccountId": "101"
  *      },
  *      {
  *        "containerName": "MyPublicContainer",
  *        "description": "This is my public container",
- *        "acl": "false",
+ *        "isPrivate": "false",
  *        "containerId": 1,
  *        "version": 1,
- *        "status": "ACTIVE"
+ *        "status": "ACTIVE",
+ *        "parentAccountId": "101"
  *      }
  *    ],
  *    "version": 1,
  *    "status": "ACTIVE"
  *  }
+ *
+ *  An account object is immutable. To update an account, refer to {@link AccountBuilder} to build a new account
+ *  object with updated field(s).
  */
 public class Account {
   // static variables
@@ -72,61 +76,35 @@ public class Account {
   private final short id;
   private final String name;
   private AccountStatus status;
-  private JSONObject metadata;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
-  private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
   /**
    * Constructor from account metadata.
    * @param metadata The metadata of the account in JSON.
+   * @throws JSONException If fails to parse metadata.
    */
-  public Account(JSONObject metadata) throws JSONException {
+  Account(JSONObject metadata) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
-    this.version = (short) metadata.getInt(ACCOUNT_METADATA_VERSION_KEY);
+    version = (short) metadata.getInt(ACCOUNT_METADATA_VERSION_KEY);
     switch (version) {
       case ACCOUNT_METADATA_VERSION_1:
-        this.id = (short) metadata.getInt(ACCOUNT_ID_KEY);
-        this.name = metadata.getString(ACCOUNT_NAME_KEY);
-        this.status = AccountStatus.valueOf(metadata.getString(ACCOUNT_STATUS_KEY));
-        this.metadata = metadata;
+        id = (short) metadata.getInt(ACCOUNT_ID_KEY);
+        name = metadata.getString(ACCOUNT_NAME_KEY);
+        status = AccountStatus.valueOf(metadata.getString(ACCOUNT_STATUS_KEY));
         JSONArray containerArray = metadata.getJSONArray(CONTAINERS_KEY);
         for (int index = 0; index < containerArray.length(); index++) {
           JSONObject containerMetadata = containerArray.getJSONObject(index);
-          updateContainerMap(new Container(containerMetadata, this));
+          updateContainerMap(new Container(containerMetadata));
         }
         break;
 
       default:
-        throw new IllegalArgumentException("Unsupported account metadata version=" + version);
+        throw new IllegalStateException("Unsupported account metadata version=" + version);
     }
-  }
-
-  /**
-   * Constructor of Account without any {@link Container}.
-   * @param id The id of the account.
-   * @param name The name of the account.
-   * @param status The status of the account.
-   * @throws JSONException
-   */
-  public Account(short id, String name, AccountStatus status) throws JSONException {
-    if (name == null) {
-      throw new IllegalArgumentException("name cannot be null.");
-    }
-    this.version = ACCOUNT_METADATA_VERSION_1;
-    this.id = id;
-    this.name = name;
-    this.status = status;
-    JSONObject tempMetadata = new JSONObject();
-    tempMetadata.put(ACCOUNT_METADATA_VERSION_KEY, version);
-    tempMetadata.put(ACCOUNT_ID_KEY, id);
-    tempMetadata.put(ACCOUNT_NAME_KEY, name);
-    tempMetadata.put(ACCOUNT_STATUS_KEY, status);
-    tempMetadata.put(CONTAINERS_KEY, new JSONArray());
-    metadata = tempMetadata;
   }
 
   /**
@@ -146,16 +124,30 @@ public class Account {
   }
 
   /**
-   * Gets the metadata of the account in JSON format.
-   * @return The metadata of the account.
+   * Gets the metadata of the account in {@link JSONObject}.
+   * @return The metadata of the account in {@link JSONObject}.
+   * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
    */
-  public JSONObject getMetadata() {
-    readWriteLock.readLock().lock();
-    try {
-      return metadata;
-    } finally {
-      readWriteLock.readLock().unlock();
+  public JSONObject toJson() throws JSONException {
+    JSONObject metadata;
+    switch (version) {
+      case ACCOUNT_METADATA_VERSION_1:
+        metadata = new JSONObject();
+        metadata.put(ACCOUNT_METADATA_VERSION_KEY, version);
+        metadata.put(ACCOUNT_ID_KEY, id);
+        metadata.put(ACCOUNT_NAME_KEY, name);
+        metadata.put(ACCOUNT_STATUS_KEY, status);
+        JSONArray containerArray = new JSONArray();
+        for (Container container : containerIdToContainerMap.values()) {
+          containerArray.put(container.toJson());
+        }
+        metadata.put(CONTAINERS_KEY, containerArray);
+        break;
+
+      default:
+        throw new IllegalArgumentException("Unsupported account metadata version=" + version);
     }
+    return metadata;
   }
 
   /**
@@ -163,26 +155,7 @@ public class Account {
    * @return The status of the account.
    */
   public AccountStatus getStatus() {
-    readWriteLock.readLock().lock();
-    try {
-      return status;
-    } finally {
-      readWriteLock.readLock().unlock();
-    }
-  }
-
-  /**
-   * Sets the status of the account.
-   * @param status The new status of the account.
-   */
-  public void setStatus(AccountStatus status) throws JSONException {
-    readWriteLock.writeLock().lock();
-    try {
-      metadata.put(ACCOUNT_STATUS_KEY, status);
-      this.status = status;
-    } finally {
-      readWriteLock.writeLock().unlock();
-    }
+    return status;
   }
 
   /**
@@ -191,13 +164,8 @@ public class Account {
    * @return The {@link Container} of this account with the specified id, or {@code null} if such a
    *                    container does not exist.
    */
-  public Container getContainerByContainerId(short containerId) {
-    readWriteLock.readLock().lock();
-    try {
-      return containerIdToContainerMap.get(containerId);
-    } finally {
-      readWriteLock.readLock().unlock();
-    }
+  public Container getContainerById(short containerId) {
+    return containerIdToContainerMap.get(containerId);
   }
 
   /**
@@ -206,13 +174,8 @@ public class Account {
    * @return The {@link Container} of this account with the specified name, or {@code null} if such a
    *                    container does not exist.
    */
-  public Container getContainerByContainerName(String containerName) {
-    readWriteLock.readLock().lock();
-    try {
-      return containerNameToContainerMap.get(containerName);
-    } finally {
-      readWriteLock.readLock().unlock();
-    }
+  public Container getContainerByName(String containerName) {
+    return containerNameToContainerMap.get(containerName);
   }
 
   /**
@@ -220,17 +183,12 @@ public class Account {
    * @return All the containers of this account.
    */
   public List<Container> getAllContainers() {
-    readWriteLock.readLock().lock();
-    try {
-      return Collections.unmodifiableList(new ArrayList<>(containerIdToContainerMap.values()));
-    } finally {
-      readWriteLock.readLock().unlock();
-    }
+    return Collections.unmodifiableList(new ArrayList<>(containerIdToContainerMap.values()));
   }
 
   /**
-   * Adds a container to this account without modifying the metadata of the account.
-   * @param container The container to this account.
+   * Adds a {@link Container} to this account and updates internal maps accordingly.
+   * @param container The container to update this account.
    */
   private void updateContainerMap(Container container) {
     containerIdToContainerMap.put(container.getId(), container);
@@ -238,49 +196,13 @@ public class Account {
   }
 
   /**
-   * Updates a {@link Container} and the corresponding container field in the account metadata. If the container does
-   * not exist, the container will be added to the account and its account metadata.
-   * @param container The container to update.
-   * @throws JSONException
-   */
-  public void updateContainer(Container container) throws JSONException {
-    if (container == null) {
-      throw new IllegalArgumentException("Container cannot be null.");
-    }
-    JSONObject newMetadata = new JSONObject(metadata, JSONObject.getNames(metadata));
-    switch (version) {
-      case ACCOUNT_METADATA_VERSION_1:
-        JSONArray newContainerArray = newMetadata.getJSONArray(CONTAINERS_KEY);
-        for (int index = 0; index < newContainerArray.length(); index++) {
-          JSONObject newContainerMetadata = newContainerArray.getJSONObject(index);
-          if (newContainerMetadata.getInt(Container.CONTAINER_ID_KEY) == container.getId()) {
-            newContainerArray.put(index, container.getMetadata());
-            break;
-          }
-        }
-        newContainerArray.put(container.getMetadata());
-        readWriteLock.writeLock().lock();
-        try {
-          metadata = newMetadata;
-          updateContainerMap(container);
-        } finally {
-          readWriteLock.writeLock().unlock();
-        }
-        break;
-
-      default:
-        throw new IllegalArgumentException("Unsupported account metadata version=" + version);
-    }
-  }
-
-  /**
    * Generates a {@link String} representation that uniquely identifies this account. The string
-   * is in the format of {@code Account[id:name]}.
+   * is in the format of {@code Account[id]}.
    * @return The {@link String} representation of this account.
    */
   @Override
   public String toString() {
-    return "Account[" + getId() + ":" + getName() + "]";
+    return "Account[" + getId() + "]";
   }
 
   @Override
@@ -300,7 +222,7 @@ public class Account {
     if (!name.equals(account.name)) {
       return false;
     }
-    return this.getStatus().equals(account.getStatus());
+    return status == account.status;
   }
 
   @Override
@@ -310,7 +232,7 @@ public class Account {
 
   /**
    * Status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
-   * the account is inactive, so accessing any container of this account will be denied.
+   * the account has been deactivated.
    */
   public enum AccountStatus {
     ACTIVE, INACTIVE
