@@ -66,7 +66,6 @@ public class DiskIOSchedulerTest {
     for (Throttler throttler : throttlers.values()) {
       assertTrue("Throttler should be closed.", ((MockThrottler) throttler).closed);
     }
-    scheduler.close();
   }
 
   /**
@@ -77,7 +76,6 @@ public class DiskIOSchedulerTest {
   public void nullThrottlersTest() throws Exception {
     DiskIOScheduler scheduler = new DiskIOScheduler(null);
     assertEquals("Unexpected i/o slice availability returned", Long.MAX_VALUE, scheduler.getSlice("jobType", "job", 0));
-    scheduler.close();
   }
 
   /**
