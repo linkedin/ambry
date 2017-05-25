@@ -96,6 +96,15 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Get the datacenter name associated with the given instance.
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the datacenter name associated with the given instance.
+   */
+  static String getDcName(InstanceConfig instanceConfig) {
+    return instanceConfig.getRecord().getSimpleField(DATACENTER_STR);
+  }
+
+  /**
    * Get the ssl port associated with the given instance (if any).
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the ssl port associated with the given instance.

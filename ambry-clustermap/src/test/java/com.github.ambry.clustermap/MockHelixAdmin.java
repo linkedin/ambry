@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -108,6 +109,10 @@ public class MockHelixAdmin implements HelixAdmin {
     return instances;
   }
 
+  List<InstanceConfig> getInstanceConfigs(String clusterName) {
+    return new ArrayList<>(instanceNameToinstanceConfigs.values());
+  }
+
   @Override
   public InstanceConfig getInstanceConfig(String clusterName, String instanceName) {
     return instanceNameToinstanceConfigs.get(instanceName);
@@ -185,7 +190,7 @@ public class MockHelixAdmin implements HelixAdmin {
    */
   private void triggerLiveInstanceChangeNotification() {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
-      helixManager.triggerLiveInstanceNotification();
+      helixManager.triggerLiveInstanceNotification(false);
     }
   }
 
