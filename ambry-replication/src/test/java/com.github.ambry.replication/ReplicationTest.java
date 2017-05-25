@@ -541,10 +541,11 @@ public class ReplicationTest {
       ArrayList<MessageInfo> remoteInfoList = new ArrayList<>();
       ArrayList<ByteBuffer> remoteBufferList = new ArrayList<>();
 
-      Arrays.asList(localInfoList, remoteInfoList);
-
+      // add 10 messages to replicas of this partition in both hosts.
       addMessagesToReplicasOfPartition(partitionIds.get(i), Arrays.asList(localInfoList, remoteInfoList),
           Arrays.asList(localBufferList, remoteBufferList), 10);
+      // add 5 or 6 messages (depending on whether partition is even-numbered or odd-numbered) to replicas of this
+      // partition in the remote host only.
       addMessagesToReplicasOfPartition(partitionIds.get(i), Collections.singletonList(remoteInfoList),
           Collections.singletonList(remoteBufferList), (i % 2 == 0 ? 5 : 6));
 
@@ -814,6 +815,7 @@ public class ReplicationTest {
       messageInfoNode1.put(partitionIds.get(i), localInfoList);
       bufferListNode1.put(partitionIds.get(i), localBufferList);
 
+      // add additional messages only to the remote replica.
       addMessagesToReplicasOfPartition(partitionIds.get(i), Collections.singletonList(remoteInfoList),
           Collections.singletonList(remoteBufferList), 5);
 
@@ -1005,6 +1007,7 @@ public class ReplicationTest {
       ArrayList<MessageInfo> remoteInfoList = new ArrayList<>();
       ArrayList<ByteBuffer> remoteBufferList = new ArrayList<>();
 
+      // add ten messages to replicas in both hosts.
       addMessagesToReplicasOfPartition(partitionIds.get(i), Arrays.asList(localInfoList, remoteInfoList),
           Arrays.asList(localBufferList, remoteBufferList), 10);
 
@@ -1016,12 +1019,12 @@ public class ReplicationTest {
       for (int j = 0; j < data.length; j++) {
         data[j] ^= 0xFF;
       }
-      //random.nextBytes(data);
       long corruptStreamSize = corruptByteBuffer.limit();
       remoteInfoList.add(new MessageInfo(corruptMessageId, corruptStreamSize));
       remoteBufferList.add(corruptByteBuffer);
       partitionIdToCorruptIdMap.put(partitionIds.get(i), corruptMessageId);
 
+      // add 5 messages to just the remote replica.
       addMessagesToReplicasOfPartition(partitionIds.get(i), Collections.singletonList(remoteInfoList),
           Collections.singletonList(remoteBufferList), 5);
 
