@@ -191,13 +191,15 @@ class CompactionManager {
               boolean compactionStarted = false;
               try {
                 if (store.isStarted() && !storesToSkip.contains(store)) {
-                  logger.trace("{} is started and eligible for compaction check", store);
+                  logger.info("{} is started and is being checked for compaction eligibility", store);
                   CompactionDetails details = getCompactionDetails(store);
                   if (details != null) {
                     logger.trace("Generated {} as details for {}", details, store);
                     metrics.markCompactionStart(true);
                     compactionStarted = true;
                     store.compact(details);
+                  } else {
+                    logger.info("{} is not eligible for compaction", store);
                   }
                 }
               } catch (Exception e) {

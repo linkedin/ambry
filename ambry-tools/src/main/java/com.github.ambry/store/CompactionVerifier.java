@@ -583,8 +583,8 @@ public class CompactionVerifier implements Closeable {
     assert
         srcValue.getSize() == tgtValue.getSize() :
         errMsgId + ": Size mismatch: old - " + srcValue.getSize() + ", new - " + tgtValue.getSize();
-    assert
-        Utils.getTimeInMsToTheNearestSec(srcValue.getExpiresAtMs()) == tgtValue.getExpiresAtMs() :
+    assert Utils.getTimeInMsToTheNearestSec(srcValue.getExpiresAtMs()) == Utils.getTimeInMsToTheNearestSec(
+        tgtValue.getExpiresAtMs()) :
         errMsgId + ": ExpiresAt mismatch: old - " + srcValue.getExpiresAtMs() + ", new - " + tgtValue.getExpiresAtMs();
     assert
         srcValue.getServiceId() == tgtValue.getServiceId() :

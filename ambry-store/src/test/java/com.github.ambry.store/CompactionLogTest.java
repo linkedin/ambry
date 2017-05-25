@@ -13,12 +13,15 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -94,6 +97,11 @@ public class CompactionLogTest {
       assertEquals("Should be in the PREPARE phase", CompactionLog.Phase.PREPARE, cLog.getCompactionPhase());
       cLog.markCopyStart();
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, cLog.getCompactionPhase());
+      Offset offset = new Offset(LogSegmentNameHelper.generateFirstSegmentName(true),
+          Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE));
+      cLog.setStartOffsetOfLastIndexSegmentForDeleteCheck(offset);
+      assertEquals("Offset that was set was not the one returned", offset,
+          cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(true), 0),
               new UUID(1, 1), new UUID(1, 1));
@@ -149,6 +157,14 @@ public class CompactionLogTest {
       cLog.close();
       cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
       assertEquals("Should be in the COPY phase", CompactionLog.Phase.COPY, cLog.getCompactionPhase());
+      Offset offset = new Offset(LogSegmentNameHelper.generateFirstSegmentName(true),
+          Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE));
+      cLog.setStartOffsetOfLastIndexSegmentForDeleteCheck(offset);
+
+      cLog.close();
+      cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+      assertEquals("Offset that was set was not the one returned", offset,
+          cLog.getStartOffsetOfLastIndexSegmentForDeleteCheck());
       StoreFindToken safeToken =
           new StoreFindToken(new MockId("dummy"), new Offset(LogSegmentNameHelper.generateFirstSegmentName(true), 0),
               new UUID(1, 1), new UUID(1, 1));
@@ -251,6 +267,41 @@ public class CompactionLogTest {
       fail("Construction should have failed because compaction log file does not exist");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
+    }
+  }
+
+  /**
+   * Tests the reading of versions older than the current versions.
+   * @throws IOException
+   */
+  @Test
+  public void oldVersionsReadTest() throws IOException {
+    String storeName = "store";
+    long startTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    long referenceTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    CompactionDetails details = getCompactionDetails(referenceTimeMs);
+    for (int i = 0; i < CompactionLog.CURRENT_VERSION; i++) {
+      File file = new File(tempDir, storeName + CompactionLog.COMPACTION_LOG_SUFFIX);
+      switch (i) {
+        case CompactionLog.VERSION_0:
+          try (FileOutputStream fileOutputStream = new FileOutputStream(file)) {
+            CrcOutputStream crcOutputStream = new CrcOutputStream(fileOutputStream);
+            DataOutputStream stream = new DataOutputStream(crcOutputStream);
+            stream.writeShort(i);
+            stream.writeLong(startTimeMs);
+            stream.writeInt(0);
+            stream.writeInt(1);
+            stream.write(new CompactionLog.CycleLog(details).toBytes());
+            stream.writeLong(crcOutputStream.getValue());
+            fileOutputStream.getChannel().force(true);
+          }
+          CompactionLog cLog = new CompactionLog(tempDirStr, storeName, STORE_KEY_FACTORY, time);
+          verifyEquality(details, cLog.getCompactionDetails());
+          assertEquals("Current Idx not as expected", 0, cLog.getCurrentIdx());
+          break;
+        default:
+          throw new IllegalStateException("No serialization implementation for version: " + i);
+      }
     }
   }
 

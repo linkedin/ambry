@@ -1715,7 +1715,6 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceOneByOneTest() throws StoreException {
-    Offset logAbsoluteZero = new Offset(state.log.getFirstSegment().getName(), 0);
     Offset journalStartOffset = state.index.journal.getFirstOffset();
     StoreFindToken startToken = new StoreFindToken();
     Offset stoppedAt = null;
