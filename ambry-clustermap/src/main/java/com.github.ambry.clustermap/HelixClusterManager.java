@@ -108,6 +108,9 @@ class HelixClusterManager implements ClusterMap {
           @Override
           public void run() {
             try {
+              // Helix provides the initial notification for a change from within the same thread that adds the
+              // listener, in the context of the add call. Therefore, when the call to add a listener returns, the
+              // initial notification will have been received and handled.
               dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeHandler);
               logger.info("Registered instance config change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
               // Now register listeners to get notified on live instance change in every datacenter.
