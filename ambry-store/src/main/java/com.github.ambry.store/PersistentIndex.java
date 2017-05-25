@@ -436,33 +436,42 @@ class PersistentIndex {
    * @return True, if segment needs to roll over. False, otherwise
    */
   private boolean needToRollOverIndex(IndexEntry entry) {
+    Offset offset = entry.getValue().getOffset();
     if (validIndexSegments.size() == 0) {
-      logger.info("Creating first segment");
+      logger.info("Creating first segment with start offset {}", offset);
       return true;
     }
 
     IndexSegment lastSegment = validIndexSegments.lastEntry().getValue();
     if (lastSegment.getSizeWritten() >= maxInMemoryIndexSizeInBytes) {
-      logger.info("Index: {} Rolling over because the size written {} >= maxInMemoryIndexSizeInBytes {}", dataDir,
-          lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
+      logger.info("Index: {} Rolling over from {} to {} because the size written {} >= maxInMemoryIndexSizeInBytes {}",
+          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
       return true;
     }
     if (lastSegment.getNumberOfItems() >= maxInMemoryNumElements) {
-      logger.info("Index: {} Rolling over because the number of items in the last segment: {} >= "
-          + "maxInMemoryNumElements {}", dataDir, lastSegment.getNumberOfItems(), maxInMemoryNumElements);
+      logger.info("Index: {} Rolling over from {} to {} because the number of items in the last segment: {} >= "
+              + "maxInMemoryNumElements {}", dataDir, lastSegment.getStartOffset(), offset, lastSegment.getNumberOfItems(),
+          maxInMemoryNumElements);
       return true;
     }
     if (lastSegment.getKeySize() != entry.getKey().sizeInBytes()) {
-      logger.info("Index: {} Rolling over because the segment keySize: {} != entry's keysize {}", dataDir,
-          lastSegment.getKeySize(), entry.getKey().sizeInBytes());
+      logger.info("Index: {} Rolling over from {} to {} because the segment keySize: {} != entry's keysize {}", dataDir,
+          lastSegment.getStartOffset(), offset, lastSegment.getKeySize(), entry.getKey().sizeInBytes());
       return true;
     }
     if (lastSegment.getValueSize() != entry.getValue().getBytes().capacity()) {
-      logger.info("Index: {} Rolling over because the segment value size: {} != current entry value size: {}", dataDir,
-          lastSegment.getValueSize(), entry.getValue().getBytes().capacity());
+      logger.info(
+          "Index: {} Rolling over from {} to {} because the segment value size: {} != current entry value size: {}",
+          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getValueSize(),
+          entry.getValue().getBytes().capacity());
       return true;
     }
-    return !entry.getValue().getOffset().getName().equals(lastSegment.getLogSegmentName());
+    if (!offset.getName().equals(lastSegment.getLogSegmentName())) {
+      logger.info("Index: {} Rolling over from {} to {} because the log has rolled over from {} to {}", dataDir,
+          lastSegment.getStartOffset(), offset, lastSegment.getLogSegmentName(), offset.getName());
+      return true;
+    }
+    return false;
   }
 
   /**
