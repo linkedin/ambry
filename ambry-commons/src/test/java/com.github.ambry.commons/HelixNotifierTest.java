@@ -19,7 +19,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.ZNRecord;
 import org.junit.AfterClass;
@@ -27,6 +27,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.github.ambry.commons.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -37,9 +38,7 @@ public class HelixNotifierTest {
   private static int zkClientConnectTimeoutMs = 20000;
   private static int zkClientSessionTimeoutMs = 20000;
   private static String zkClientConnectString = "localhost:2182";
-  private static String storeRootPath = "/ambryTest";
-  private static String completeAccountMetadataPath = "/accountMetadata/completeAccountMetadata";
-  private static String topicPath = "/topics";
+  private static String storeRootPath = "/ambry/testCluster/helixPropertyStore";
 
   private static final HelixPropertyStoreFactory<ZNRecord> storeFactory = new MockHelixPropertyStoreFactory<>();
   private static final List<String> refTopics = Arrays.asList(new String[]{"Topic1", "Topic2"});
@@ -58,7 +57,7 @@ public class HelixNotifierTest {
   @BeforeClass
   public static void initialize() throws Exception {
     storeConfig = HelixPropertyStoreUtils.getHelixStoreConfig(zkClientConnectString, zkClientSessionTimeoutMs,
-        zkClientConnectTimeoutMs, storeRootPath, completeAccountMetadataPath, topicPath);
+        zkClientConnectTimeoutMs, storeRootPath);
   }
 
   @Before
@@ -84,10 +83,9 @@ public class HelixNotifierTest {
   public void testHelixNotifier() throws Exception {
     // Subscribe a topic and send a message for the topic
     notifier.subscribe(refTopics.get(0), listeners.get(0));
-    assertEquals("Wrong number of Listeners for the topic", 1, notifier.getListenersByTopic(refTopics.get(0)).size());
     latch0.set(new CountDownLatch(1));
     notifier.sendMessage(refTopics.get(0), refMessages.get(0));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
 
@@ -95,17 +93,16 @@ public class HelixNotifierTest {
     resetTopicListeners();
     latch0.set(new CountDownLatch(1));
     notifier.sendMessage(refTopics.get(0), refMessages.get(1));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(1), receivedMessagesByListener0.get(0));
 
     // Subscribe to a different topic and send message for that topic
     resetTopicListeners();
     notifier.subscribe(refTopics.get(1), listeners.get(0));
-    assertEquals("Wrong number of Listeners for the topic", 1, notifier.getListenersByTopic(refTopics.get(1)).size());
     latch0.set(new CountDownLatch(1));
     notifier.sendMessage(refTopics.get(1), refMessages.get(0));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
     assertEquals("Received topic is different from expected", refTopics.get(1), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
   }
@@ -120,7 +117,7 @@ public class HelixNotifierTest {
     latch0.set(new CountDownLatch(1));
     notifier.subscribe(refTopics.get(0), listeners.get(0));
     notifier.sendMessage(refTopics.get(0), nonAlphabetNumericMessage);
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
     assertEquals("Wrong number of Listeners for the topic", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", nonAlphabetNumericMessage,
         receivedMessagesByListener0.get(0));
@@ -134,12 +131,11 @@ public class HelixNotifierTest {
   public void testTwoListenersForTheSameTopic() throws Exception {
     notifier.subscribe(refTopics.get(1), listeners.get(0));
     notifier.subscribe(refTopics.get(1), listeners.get(1));
-    assertEquals("Wrong number of Listeners for the topic", 2, notifier.getListenersByTopic(refTopics.get(1)).size());
     latch0.set(new CountDownLatch(1));
     latch1.set(new CountDownLatch(1));
     notifier.sendMessage(refTopics.get(1), refMessages.get(1));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
-    latch1.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
+    awaitLatchOrTimeout(latch1.get(), latchTimeoutMs);
     assertEquals("Received topic is different from expected", refTopics.get(1), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(1), receivedMessagesByListener0.get(0));
     assertEquals("Received topic is different from expected", refTopics.get(1), receivedTopicsByListener1.get(0));
@@ -158,8 +154,8 @@ public class HelixNotifierTest {
     latch1.set(new CountDownLatch(1));
     notifier.sendMessage(refTopics.get(0), refMessages.get(0));
     notifier.sendMessage(refTopics.get(1), refMessages.get(1));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
-    latch1.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
+    awaitLatchOrTimeout(latch1.get(), latchTimeoutMs);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
     assertEquals("Received topic is different from expected", refTopics.get(1), receivedTopicsByListener1.get(0));
@@ -174,12 +170,10 @@ public class HelixNotifierTest {
   public void testOneListenerForTwoDifferentTopics() throws Exception {
     notifier.subscribe(refTopics.get(0), listeners.get(0));
     notifier.subscribe(refTopics.get(1), listeners.get(0));
-    assertEquals("Wrong number of Listeners for the topic", 1, notifier.getListenersByTopic(refTopics.get(0)).size());
-    assertEquals("Wrong number of Listeners for the topic", 1, notifier.getListenersByTopic(refTopics.get(1)).size());
     latch0.set(new CountDownLatch(2));
     notifier.sendMessage(refTopics.get(0), refMessages.get(0));
     notifier.sendMessage(refTopics.get(1), refMessages.get(1));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
     assertEquals("Received topics are different from expected", new HashSet<>(refTopics),
         new HashSet<>(receivedTopicsByListener0));
     assertEquals("Received messages are different from expected", new HashSet<>(refMessages),
@@ -187,15 +181,34 @@ public class HelixNotifierTest {
   }
 
   /**
-   * Tests unsubscribing a topic.
+   * Tests unsubscribing a topic. This test is meaningful when using {@link MockHelixPropertyStoreFactory}, where
+   * a single thread guarantees to know if {@link TopicListener#onMessageReceive(String, Object)} has been
+   * called or not.
+   * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUnsubscribeTopic() {
-    assertEquals("Wrong number of Listeners for the topic", 0, notifier.getListenersByTopic(refTopics.get(0)).size());
+  public void testUnsubscribeTopic() throws Exception {
+    // Subscribe a topic and send a message for the topic
     notifier.subscribe(refTopics.get(0), listeners.get(0));
-    assertEquals("Wrong number of Listeners for the topic", 1, notifier.getListenersByTopic(refTopics.get(0)).size());
+    latch0.set(new CountDownLatch(1));
+    notifier.sendMessage(refTopics.get(0), refMessages.get(0));
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
+    assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
+    assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
+
+    // unsubscribe the listener
     notifier.unsubscribe(refTopics.get(0), listeners.get(0));
-    assertEquals("Wrong number of Listeners for the topic", 0, notifier.getListenersByTopic(refTopics.get(0)).size());
+    latch0.set(new CountDownLatch(1));
+    notifier.sendMessage(refTopics.get(0), refMessages.get(0));
+    try {
+      awaitLatchOrTimeout(latch0.get(), 1);
+      fail("should have thrown");
+    } catch (TimeoutException e) {
+      // expected, since the TopicListener would not be called, and the latch would not be counted down.
+    }
+
+    // unsubscribe the listener again should be silent
+    notifier.unsubscribe(refTopics.get(0), listeners.get(0));
   }
 
   /**
@@ -203,9 +216,26 @@ public class HelixNotifierTest {
    */
   @Test
   public void testUnsubscribeNonExistentListeners() {
-    assertEquals("Wrong number of Listeners for the topic", 0, notifier.getListenersByTopic(refTopics.get(0)).size());
+    // unsubscribe a non-existent listener should be silent
     notifier.unsubscribe(refTopics.get(0), listeners.get(0));
-    assertEquals("Wrong number of Listeners for the topic", 0, notifier.getListenersByTopic(refTopics.get(0)).size());
+  }
+
+  /**
+   * Tests sending a message to a topic without any {@link TopicListener}. This test is meaningful
+   * when using {@link MockHelixPropertyStoreFactory}, where a single thread guarantees to know if
+   * {@link TopicListener#onMessageReceive(String, Object)} has been called or not.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void sendMessageToTopicWithNoListeners() throws Exception {
+    latch0.set(new CountDownLatch(1));
+    notifier.sendMessage(refTopics.get(0), refMessages.get(0));
+    try {
+      awaitLatchOrTimeout(latch0.get(), 1);
+      fail("should have thrown");
+    } catch (TimeoutException e) {
+      // expected, since the TopicListener would not be called, and the latch would not be counted down.
+    }
   }
 
   /**
@@ -219,7 +249,7 @@ public class HelixNotifierTest {
     notifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
     notifier_2.sendMessage(refTopics.get(0), refMessages.get(0));
-    latch0.get().await(latchTimeoutMs, TimeUnit.MILLISECONDS);
+    awaitLatchOrTimeout(latch0.get(), latchTimeoutMs);
     assertEquals(1, receivedTopicsByListener0.size());
     assertEquals(refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals(1, receivedMessagesByListener0.size());
@@ -227,20 +257,23 @@ public class HelixNotifierTest {
   }
 
   /**
-   * Tests when sending a message to a {@link TopicListener}, the processMessage method throws exception will not
-   * crash the {@link HelixAccountService}.
+   * Tests when sending a message to a {@link TopicListener}, if the {@link TopicListener#onMessageReceive(String, Object)}
+   * method throws exception, it will not crash the {@link HelixNotifier}.
    */
   @Test
-  public void testSendMessageToBadListener() {
+  public void testSendMessageToBadListener() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
     TopicListener listener = new TopicListener() {
       @Override
-      public void processMessage(String topic, Object message) {
+      public void onMessageReceive(String topic, Object message) {
+        latch.countDown();
         throw new RuntimeException("Exception thrown from TopicListener");
       }
     };
     String topic = "topic";
     notifier.subscribe(topic, listener);
     notifier.sendMessage(topic, "message");
+    awaitLatchOrTimeout(latch, latchTimeoutMs);
   }
 
   /**
@@ -309,8 +342,8 @@ public class HelixNotifierTest {
     }
 
     @Override
-    public void processMessage(String topic, String message) {
-      System.err.println("Topic is: " + topic + ", referenceMessage1 is: " + message);
+    public void onMessageReceive(String topic, String message) {
+      System.out.println("Topic is: " + topic + ", referenceMessage1 is: " + message);
       receivedTopics.add(topic);
       receivedMessages.add(message);
       latch.get().countDown();

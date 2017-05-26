@@ -18,18 +18,23 @@ import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
+
+import static com.github.ambry.commons.TestUtils.*;
 
 
 /**
  * Utilities for operating on the corresponding part of a {@code ZooKeeper} for a {@link HelixPropertyStore}.
  */
 class HelixPropertyStoreUtils {
+  private static final long operationTimeoutMs = 20000;
+
   /**
-   * An agent to perform operations on the {@code ZooKeeper} for a {@link HelixPropertyStore}.
+   * An agent to perform operations on a {@link HelixPropertyStore} on ZooKeeper.
    */
   static class HelixStoreOperator {
     private final HelixPropertyStore<ZNRecord> store;
@@ -43,9 +48,7 @@ class HelixPropertyStoreUtils {
     HelixStoreOperator(HelixPropertyStoreConfig storeConfig, HelixPropertyStoreFactory storeFactory) {
       ArrayList<String> paths = new ArrayList<>();
       paths.add(storeConfig.rootPath);
-      store =
-          storeFactory.getHelixPropertyStore(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
-              storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath, paths);
+      store = storeFactory.getHelixPropertyStore(storeConfig, paths);
     }
 
     /**
@@ -54,13 +57,18 @@ class HelixPropertyStoreUtils {
      * @param zNRecord The {@link ZNRecord} to write.
      * @throws Exception
      */
-    void write(String path, ZNRecord zNRecord) throws InterruptedException {
+    void write(String path, ZNRecord zNRecord) throws Exception {
+      AtomicReference<Exception> exceptionRef = new AtomicReference<>();
       CountDownLatch latch = new CountDownLatch(1);
-      StoreOperationListener operationListener = new StoreOperationListener(latch, StoreOperationType.WRITE);
+      StoreOperationListener operationListener =
+          new StoreOperationListener(latch, StoreOperationType.WRITE, exceptionRef);
       store.subscribe(path, operationListener);
       store.set(path, zNRecord, AccessOption.PERSISTENT);
-      latch.await();
+      awaitLatchOrTimeout(latch, operationTimeoutMs);
       store.unsubscribe(path, operationListener);
+      if (exceptionRef.get() != null) {
+        throw exceptionRef.get();
+      }
     }
 
     /**
@@ -68,13 +76,18 @@ class HelixPropertyStoreUtils {
      * @param path The store path to delete. This is a relative path under the store root path.
      * @throws InterruptedException
      */
-    void delete(String path) throws InterruptedException {
+    void delete(String path) throws Exception {
+      AtomicReference<Exception> exceptionRef = new AtomicReference<>();
       CountDownLatch latch = new CountDownLatch(1);
-      StoreOperationListener operationListener = new StoreOperationListener(latch, StoreOperationType.DELETE);
+      StoreOperationListener operationListener =
+          new StoreOperationListener(latch, StoreOperationType.DELETE, exceptionRef);
       store.subscribe(path, operationListener);
       store.remove(path, AccessOption.PERSISTENT);
-      latch.await();
+      awaitLatchOrTimeout(latch, operationTimeoutMs);
       store.unsubscribe(path, operationListener);
+      if (exceptionRef.get() != null) {
+        throw exceptionRef.get();
+      }
     }
 
     /**
@@ -93,42 +106,42 @@ class HelixPropertyStoreUtils {
   private static class StoreOperationListener implements HelixPropertyListener {
     private final CountDownLatch latch;
     private final StoreOperationType operationType;
+    private final AtomicReference<Exception> exceptionRef;
 
     /**
      * Constructor.
      * @param latch The {@link CountDownLatch} to count down once the operation of specified type is done.
      * @param operationType The type of the operation to listen.
      */
-    StoreOperationListener(CountDownLatch latch, StoreOperationType operationType) {
+    StoreOperationListener(CountDownLatch latch, StoreOperationType operationType,
+        AtomicReference<Exception> exceptionRef) {
       this.latch = latch;
       this.operationType = operationType;
+      this.exceptionRef = exceptionRef;
     }
 
     @Override
     public void onDataChange(String path) {
-      if (operationType.equals(StoreOperationType.WRITE)) {
-        latch.countDown();
-      } else {
-        System.err.println("Data is changed but wrong operation type is specified. " + operationType);
+      if (!operationType.equals(StoreOperationType.WRITE)) {
+        exceptionRef.set(new Exception("Data is changed but wrong operation type is specified. " + operationType));
       }
+      latch.countDown();
     }
 
     @Override
     public void onDataCreate(String path) {
-      if (operationType.equals(StoreOperationType.CREATE) || operationType.equals(StoreOperationType.WRITE)) {
-        latch.countDown();
-      } else {
-        System.err.println("Data is created but wrong operation type is specified. " + operationType);
+      if (!operationType.equals(StoreOperationType.CREATE) && !operationType.equals(StoreOperationType.WRITE)) {
+        exceptionRef.set(new Exception("Data is created but wrong operation type is specified. " + operationType));
       }
+      latch.countDown();
     }
 
     @Override
     public void onDataDelete(String path) {
-      if (operationType.equals(StoreOperationType.DELETE)) {
-        latch.countDown();
-      } else {
-        System.err.println("Data is deleted but wrong operation type is specified. " + operationType);
+      if (!operationType.equals(StoreOperationType.DELETE)) {
+        exceptionRef.set(new Exception("Data is deleted but wrong operation type is specified. " + operationType));
       }
+      latch.countDown();
     }
   }
 
@@ -140,29 +153,18 @@ class HelixPropertyStoreUtils {
   }
 
   /**
-   * Delete corresponding {@code ZooKeeper} nodes of a {@link HelixPropertyStore} if exist, specified by
-   * {@link HelixPropertyStoreConfig}.
+   * Delete corresponding {@code ZooKeeper} nodes of a {@link HelixPropertyStore} if exist. The {@link HelixPropertyStore}
+   * is specified by {@link HelixPropertyStoreConfig}.
    * @param storeConfig The config that specifies the {@link HelixPropertyStore}.
    * @param storeFactory The factory to get a {@link HelixPropertyStore}.
    * @throws InterruptedException
    */
   static void deleteStoreIfExists(HelixPropertyStoreConfig storeConfig, HelixPropertyStoreFactory storeFactory)
-      throws InterruptedException {
+      throws Exception {
     HelixStoreOperator storeOperator = new HelixStoreOperator(storeConfig, storeFactory);
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
     }
-  }
-
-  /**
-   * Get a {@link HelixStoreOperator}.
-   * @param storeConfig The config that specifies the {@link HelixPropertyStore}.
-   * @param storeFactory The factory to get a {@link HelixPropertyStore}.
-   * @return A {@link HelixStoreOperator}.
-   */
-  static HelixStoreOperator getStoreOperator(HelixPropertyStoreConfig storeConfig,
-      HelixPropertyStoreFactory storeFactory) {
-    return new HelixStoreOperator(storeConfig, storeFactory);
   }
 
   /**
@@ -171,14 +173,10 @@ class HelixPropertyStoreUtils {
    * @param zkClientSessionTimeoutMs Timeout for a zk session.
    * @param zkClientConnectionTimeoutMs Timeout for a zk connection.
    * @param storeRootPath The root path of a store in {@code ZooKeeper}.
-   * @param completeAccountMetadataPath The path of a store in {@code ZooKeeper}, which points to the complete
-   *                                    account metadata path.
-   * @param topicPath The path of a store in {@code ZooKeeper}, which points to the topic path used by the
-   *                  {@link HelixNotifier}.
    * @return {@link HelixPropertyStoreConfig} defined by the arguments.
    */
   static HelixPropertyStoreConfig getHelixStoreConfig(String zkClientConnectString, int zkClientSessionTimeoutMs,
-      int zkClientConnectionTimeoutMs, String storeRootPath, String completeAccountMetadataPath, String topicPath) {
+      int zkClientConnectionTimeoutMs, String storeRootPath) {
     Properties helixConfigProps = new Properties();
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
@@ -188,10 +186,6 @@ class HelixPropertyStoreUtils {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
         zkClientConnectString);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storeRootPath);
-    helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "complete.account.metadata.path",
-        completeAccountMetadataPath);
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "notification.path", topicPath);
     VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     return new HelixPropertyStoreConfig(vHelixConfigProps);
   }

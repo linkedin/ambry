@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,16 +25,19 @@ import org.apache.helix.store.HelixPropertyStore;
  * @param <T>
  */
 class MockHelixPropertyStoreFactory<T> extends HelixPropertyStoreFactory<T> {
+  // an internal map from store root path to a store.
   Map<String, MockHelixPropertyStore<T>> storeKeyToMockStoreMap = new HashMap<>();
 
   @Override
-  HelixPropertyStore<T> getHelixPropertyStore(String zkClientConnectString, int zkClientSessionTimeoutMs,
-      int zkClientConnectionTimeoutMs, String rootPath, List<String> subscribedPaths) {
-    String storeKey = zkClientConnectString + rootPath;
-    MockHelixPropertyStore<T> store = storeKeyToMockStoreMap.get(storeKey);
+  HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig, List<String> subscribedPaths) {
+    if (storeConfig == null) {
+      throw new IllegalArgumentException("storeConfig cannot be null");
+    }
+    String storeRootPath = storeConfig.zkClientConnectString + storeConfig.rootPath;
+    MockHelixPropertyStore<T> store = storeKeyToMockStoreMap.get(storeRootPath);
     if (store == null) {
       store = new MockHelixPropertyStore<>();
-      storeKeyToMockStoreMap.put(storeKey, store);
+      storeKeyToMockStoreMap.put(storeRootPath, store);
     }
     return store;
   }

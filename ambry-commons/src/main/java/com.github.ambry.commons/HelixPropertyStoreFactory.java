@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
@@ -33,26 +34,28 @@ public class HelixPropertyStoreFactory<T> {
 
   /**
    * Get a {@link HelixPropertyStore}.
-   * @param zkClientConnectString The connect string for ZooKeeper server.
-   * @param zkClientSessionTimeoutMs Session timeout in ms.
-   * @param zkClientConnectionTimeoutMs Connection timeout in ms.
+   * @param storeConfig A {@link HelixPropertyStoreConfig} instance that provides required configurations to start
+   *                    a {@link HelixPropertyStore}.
    * @param subscribedPaths A list of paths that could potentially be listened.
    * @return A {@link HelixPropertyStore} instance.
    */
-  HelixPropertyStore<T> getHelixPropertyStore(String zkClientConnectString, int zkClientSessionTimeoutMs,
-      int zkClientConnectionTimeoutMs, String rootPath, List<String> subscribedPaths) {
-    if (zkClientConnectString == null) {
+  HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig, List<String> subscribedPaths) {
+    if (storeConfig == null) {
       throw new IllegalArgumentException("zkClientConnectString cannot be null");
     }
-    long startTime = System.currentTimeMillis();
-    ZkClient zkClient = new ZkClient(zkClientConnectString, zkClientSessionTimeoutMs, zkClientConnectionTimeoutMs,
-        new ZNRecordSerializer());
+    long startTimeMs = System.currentTimeMillis();
+    ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
+        storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
     if (subscribedPaths == null) {
       subscribedPaths = new ArrayList<>();
     }
     HelixPropertyStore<T> helixPropertyStore =
-        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), rootPath, subscribedPaths);
-    logger.info("HelixPropertyStore started, took {} ms", System.currentTimeMillis() - startTime);
+        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
+    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
+            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}, took {}ms",
+        storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
+        storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath, subscribedPaths,
+        System.currentTimeMillis() - startTimeMs);
     return helixPropertyStore;
   }
 }

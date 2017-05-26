@@ -20,7 +20,7 @@ public class HelixPropertyStoreConfig {
   public static final String HELIX_PROPERTY_STORE_PREFIX = "helix.property.store.";
 
   /**
-   * Timeo in ms to time out a connection to ZooKeeper server.
+   * Time in ms to time out a connection to a ZooKeeper server.
    */
   @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms")
   @Default("20000")
@@ -35,26 +35,18 @@ public class HelixPropertyStoreConfig {
   public final int zkClientSessionTimeoutMs;
 
   /**
-   * The ZooKeeper server address.
+   * The ZooKeeper server address. This config is required.
    */
   @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string")
-  @Default("")
   public final String zkClientConnectString;
 
   /**
    * The root path of helix property store in the ZooKeeper. Must start with {@code /}, and must not end with {@code /}.
+   * It is recommended to make root path in the form of {@code /ambry/<clustername>/helixPropertyStore}
    */
   @Config(HELIX_PROPERTY_STORE_PREFIX + "root.path")
-  @Default("/ambry/helixPropertyStore")
+  @Default("/ambry/defaultCluster/helixPropertyStore")
   public final String rootPath;
-
-  /**
-   * The path in the {@code HelixPropertyStore} for topics, under which will be the individual topic.
-   * Must start with {@code /}, and must not end with {@code /}.
-   */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "topic.path")
-  @Default("/topics")
-  public final String topicPath;
 
   public HelixPropertyStoreConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectionTimeoutMs =
@@ -63,9 +55,8 @@ public class HelixPropertyStoreConfig {
     zkClientSessionTimeoutMs =
         verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms", 20000, 1,
             Integer.MAX_VALUE);
-    zkClientConnectString =
-        verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string", "");
-    rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path", "/ambry/helixPropertyStore");
-    topicPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "topic.path", "/topics");
+    zkClientConnectString = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string");
+    rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path",
+        "/ambry/defaultCluster/helixPropertyStore");
   }
 }

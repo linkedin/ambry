@@ -69,7 +69,7 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
 
   @Override
   public boolean set(String path, T record, int options) {
-    System.err.println("Setting to store path: " + path + ", record: " + record.toString());
+    System.out.println("Setting to store path: " + path + ", record: " + record.toString());
     return setAndNotify(path, record);
   }
 
@@ -81,7 +81,7 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
   @Override
   public boolean update(String path, DataUpdater<T> updater, int options) {
     T newRecord = updater.update(pathToRecords.get(path));
-    System.err.println("Updating to store path: " + path + ", record: " + newRecord.toString());
+    System.out.println("Updating to store path: " + path + ", record: " + newRecord.toString());
     return setAndNotify(path, newRecord);
   }
 
