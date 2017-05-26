@@ -23,13 +23,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceConfigChangeListener;
 import org.apache.helix.InstanceType;
@@ -53,7 +53,7 @@ class HelixClusterManager implements ClusterMap {
   private final String clusterName;
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
-  private final Map<String, DcZkInfo> dcToDcZkInfo = new HashMap<>();
+  private final ConcurrentHashMap<String, DcZkInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas =
@@ -66,6 +66,7 @@ class HelixClusterManager implements ClusterMap {
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWiseAllocatedUsableCapacityBytes;
   private final HelixClusterManagerCallback helixClusterManagerCallback;
+  private final AtomicReference<Exception> initializationException = new AtomicReference<>();
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -83,73 +84,62 @@ class HelixClusterManager implements ClusterMap {
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
-      Map<String, String> dataCenterToZkAddress =
+      final Map<String, String> dataCenterToZkAddress =
           parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
+      final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
       for (Map.Entry<String, String> entry : dataCenterToZkAddress.entrySet()) {
         String dcName = entry.getKey();
         String zkConnectStr = entry.getValue();
-        HelixManager manager =
-            helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
-        logger.info("Connecting to Helix manager at {}", zkConnectStr);
-        manager.connect();
-        logger.info("Established connection");
         ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
-        DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeHandler);
-        dcToDcZkInfo.put(dcName, dcZkInfo);
-      }
-
-      // Now register listeners to get notified on instance config change in every datacenter. The initial
-      // instance config change notification will populate the static cluster information, so wait until that is done
-      // before registering for live instance change. Since the initial notifications come in the context of the
-      // same thread that does the registration, register for each datacenter in separate threads to parallelize.
-      final CountDownLatch initializationDone = new CountDownLatch(dcToDcZkInfo.size());
-      for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
+        // Initialize from every datacenter in a separate thread to speed things up.
         Utils.newThread(new Runnable() {
           @Override
           public void run() {
             try {
-              // Helix provides the initial notification for a change from within the same thread that adds the
-              // listener, in the context of the add call. Therefore, when the call to add a listener returns, the
-              // initial notification will have been received and handled.
-              dcZkInfo.helixManager.addInstanceConfigChangeListener(dcZkInfo.clusterChangeHandler);
-              logger.info("Registered instance config change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
+              HelixManager manager =
+                  helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+              logger.info("Connecting to Helix manager at {}", zkConnectStr);
+              manager.connect();
+              logger.info("Established connection to Helix manager at {}", zkConnectStr);
+              DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeHandler);
+              dcToDcZkInfo.put(dcName, dcZkInfo);
+
+              // The initial instance config change notification is required to populate the static cluster
+              // information, and only after that is complete do we want the live instance change notification to
+              // come in. We do not need to do anything extra to ensure this, however, since Helix provides the initial
+              // notification for a change from within the same thread that adds the listener, in the context of the add
+              // call. Therefore, when the call to add a listener returns, the initial notification will have been
+              // received and handled.
+              manager.addInstanceConfigChangeListener(clusterChangeHandler);
+              logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
               // Now register listeners to get notified on live instance change in every datacenter.
-              dcZkInfo.helixManager.addLiveInstanceChangeListener(dcZkInfo.clusterChangeHandler);
-              logger.info("Registered live instance change listeners for Helix manager at {}", dcZkInfo.zkConnectStr);
+              manager.addLiveInstanceChangeListener(clusterChangeHandler);
+              logger.info("Registered live instance change listeners for Helix manager at {}", zkConnectStr);
             } catch (Exception e) {
-              dcZkInfo.clusterChangeHandler.initializationException = e;
+              initializationException.compareAndSet(null, e);
             } finally {
-              initializationDone.countDown();
+              initializationAttemptComplete.countDown();
             }
           }
         }, false).start();
       }
-      initializationDone.await();
-      assertSuccessfulInitialization();
+      initializationAttemptComplete.await();
     } catch (Exception e) {
+      initializationException.compareAndSet(null, e);
+    }
+    if (initializationException.get() == null) {
+      initializeCapacityStats();
+      helixClusterManagerMetrics.initializeInstantiationMetric(true);
+      helixClusterManagerMetrics.initializeDatacenterMetrics();
+      helixClusterManagerMetrics.initializeDataNodeMetrics();
+      helixClusterManagerMetrics.initializeDiskMetrics();
+      helixClusterManagerMetrics.initializePartitionMetrics();
+      helixClusterManagerMetrics.initializeCapacityMetrics();
+    } else {
       helixClusterManagerMetrics.initializeInstantiationMetric(false);
       close();
-      throw new IOException("Encountered exception while parsing json, connecting to Helix or initializing", e);
-    }
-    initializeCapacityStats();
-    helixClusterManagerMetrics.initializeInstantiationMetric(true);
-    helixClusterManagerMetrics.initializeDatacenterMetrics();
-    helixClusterManagerMetrics.initializeDataNodeMetrics();
-    helixClusterManagerMetrics.initializeDiskMetrics();
-    helixClusterManagerMetrics.initializePartitionMetrics();
-    helixClusterManagerMetrics.initializeCapacityMetrics();
-  }
-
-  /**
-   * Assert that cluster manager initialization was successful.
-   * @throws Exception if the initialization was not successful.
-   */
-  private void assertSuccessfulInitialization() throws Exception {
-    for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
-      Exception initializationException = dcZkInfo.clusterChangeHandler.initializationException;
-      if (initializationException != null) {
-        throw initializationException;
-      }
+      throw new IOException("Encountered exception while parsing json, connecting to Helix or initializing",
+          initializationException.get());
     }
   }
 
@@ -305,7 +295,6 @@ class HelixClusterManager implements ClusterMap {
     private final String dcName;
     final Set<String> allInstances = new HashSet<>();
     private final Object notificationLock = new Object();
-    private Exception initializationException;
 
     /**
      * Initialize a ClusterChangeHandler in the given datacenter.
@@ -317,14 +306,14 @@ class HelixClusterManager implements ClusterMap {
 
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
-      logger.trace("Config change triggered with: {}", configs);
+      logger.trace("Config change triggered in {} with: {}", dcName, configs);
       synchronized (notificationLock) {
         if (changeContext.getType() == NotificationContext.Type.INIT) {
           try {
-            logger.info("Received initial notification for instance config change");
+            logger.info("Received initial notification for instance config change from {}", dcName);
             initializeInstances(configs);
           } catch (Exception e) {
-            initializationException = e;
+            initializationException.compareAndSet(null, e);
           }
         }
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
@@ -358,9 +347,9 @@ class HelixClusterManager implements ClusterMap {
      */
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
-      logger.trace("Live instance change triggered with: {}", liveInstances);
+      logger.trace("Live instance change triggered from {} with: {}", dcName, liveInstances);
       if (changeContext.getType() == NotificationContext.Type.INIT) {
-        logger.info("Received initial notification for live instance change");
+        logger.info("Received initial notification for live instance change from {}", dcName);
       }
       updateInstanceLiveness(liveInstances);
       helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
