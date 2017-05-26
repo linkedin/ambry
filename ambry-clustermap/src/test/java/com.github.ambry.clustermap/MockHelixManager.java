@@ -106,9 +106,7 @@ class MockHelixManager implements HelixManager {
       throw beBadException;
     }
     instanceConfigChangeListener = listener;
-    NotificationContext notificationContext = new NotificationContext(this);
-    notificationContext.setType(NotificationContext.Type.INIT);
-    instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);
+    triggerConfigChangeNotification(true);
   }
 
   @Override
@@ -155,6 +153,14 @@ class MockHelixManager implements HelixManager {
       notificationContext.setType(NotificationContext.Type.INIT);
     }
     liveInstanceChangeListener.onLiveInstanceChange(liveInstances, notificationContext);
+  }
+
+  void triggerConfigChangeNotification(boolean initial) {
+    NotificationContext notificationContext = new NotificationContext(this);
+    if (initial) {
+      notificationContext.setType(NotificationContext.Type.INIT);
+    }
+    instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);
   }
 
   //****************************

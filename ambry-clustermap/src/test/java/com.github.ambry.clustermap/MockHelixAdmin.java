@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,6 +45,10 @@ public class MockHelixAdmin implements HelixAdmin {
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
   private long totalDiskCapacity;
+
+  Set<String> getInstancesForPartition(String partition) {
+    return partitionToInstances.containsKey(partition) ? partitionToInstances.get(partition) : Collections.EMPTY_SET;
+  }
 
   @Override
   public List<String> getClusters() {
@@ -124,6 +127,18 @@ public class MockHelixAdmin implements HelixAdmin {
     return true;
   }
 
+  void  setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+    InstanceConfig instanceConfig = getInstanceConfig(clusterName, instance);
+    List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    if (isSealed) {
+      sealedReplicas.add(partition.toPathString());
+    } else {
+      sealedReplicas.remove(partition.toPathString());
+    }
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    triggerInstanceConfigChangeNotification();
+  }
+
   /**
    * Associate the given Helix manager with this admin.
    * @param helixManager the {@link MockHelixManager} to associate this admin with.
@@ -191,6 +206,12 @@ public class MockHelixAdmin implements HelixAdmin {
   private void triggerLiveInstanceChangeNotification() {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
       helixManager.triggerLiveInstanceNotification(false);
+    }
+  }
+
+  private void triggerInstanceConfigChangeNotification() {
+    for (MockHelixManager helixManager : helixManagersForThisAdmin) {
+      helixManager.triggerConfigChangeNotification(false);
     }
   }
 

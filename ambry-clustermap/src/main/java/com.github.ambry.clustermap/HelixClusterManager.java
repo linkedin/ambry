@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceConfigChangeListener;
@@ -67,6 +68,7 @@ class HelixClusterManager implements ClusterMap {
   private long clusterWiseAllocatedUsableCapacityBytes;
   private final HelixClusterManagerCallback helixClusterManagerCallback;
   private final AtomicReference<Exception> initializationException = new AtomicReference<>();
+  private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -128,6 +130,7 @@ class HelixClusterManager implements ClusterMap {
       initializationException.compareAndSet(null, e);
     }
     if (initializationException.get() == null) {
+      sealedStateChangeCounter.incrementAndGet();
       initializeCapacityStats();
       helixClusterManagerMetrics.initializeInstantiationMetric(true);
       helixClusterManagerMetrics.initializeDatacenterMetrics();
@@ -315,6 +318,8 @@ class HelixClusterManager implements ClusterMap {
           } catch (Exception e) {
             initializationException.compareAndSet(null, e);
           }
+        } else {
+          updateInstanceSealedStates(configs);
         }
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
       }
@@ -338,6 +343,17 @@ class HelixClusterManager implements ClusterMap {
         allInstances.add(instanceName);
       }
       logger.info("Initialized cluster information from {}", dcName);
+    }
+
+    private void updateInstanceSealedStates(List<InstanceConfig> instanceConfigs) {
+      for (InstanceConfig instanceConfig : instanceConfigs) {
+        AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName());
+        List<String> sealedReplicas = getSealedReplicas(instanceConfig);
+        for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
+          replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+        }
+      }
+      sealedStateChangeCounter.incrementAndGet();
     }
 
     /**
@@ -423,11 +439,9 @@ class HelixClusterManager implements ClusterMap {
               }
             }
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
-            if (sealedReplicas.contains(partitionName)) {
-              mappedPartition.setState(PartitionState.READ_ONLY);
-            }
             // Create replica associated with this node.
-            AmbryReplica replica = new AmbryReplica(mappedPartition, disk, replicaCapacity);
+            AmbryReplica replica =
+                new AmbryReplica(mappedPartition, disk, replicaCapacity, sealedReplicas.contains(partitionName));
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }
@@ -491,6 +505,15 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
       return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
+    }
+
+    /**
+     * Get the value counter representing the sealed state change for partitions.
+     * @return the value of the counter representing the sealed state change for partitions.
+     */
+    @Override
+    public long getSealedStateChangeCounter() {
+      return sealedStateChangeCounter.get();
     }
 
     /**

@@ -13,10 +13,12 @@
  */
 package com.github.ambry.clustermap;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.helix.model.InstanceConfig;
 
 
 /**
@@ -63,6 +65,14 @@ public class MockHelixCluster {
    */
   Set<String> getZkAddrs() {
     return helixAdmins.keySet();
+  }
+
+  void  setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+    for (MockHelixAdmin helixAdmin: helixAdmins.values()) {
+      if (helixAdmin.getInstancesInCluster(clusterName).contains(instance)) {
+        helixAdmin.setReplicaSealedState(partition, instance, isSealed);
+      }
+    }
   }
 
   /**
@@ -147,6 +157,25 @@ public class MockHelixCluster {
         helixAdmin.bringInstanceDown(instance);
       }
     }
+  }
+
+  InstanceConfig getInstanceConfig(String instanceName) {
+    InstanceConfig instanceConfig = null;
+    for (MockHelixAdmin helixAdmin: helixAdmins.values()) {
+      if (helixAdmin.getUpInstances().contains(instanceName)) {
+        instanceConfig = helixAdmin.getInstanceConfig(null, instanceName);
+        break;
+      }
+    }
+    return instanceConfig;
+  }
+
+  List<String> getInstancesForPartition(String partition) {
+    List<String> instances = new ArrayList<>();
+    for (MockHelixAdmin helixAdmin: helixAdmins.values()) {
+      instances.addAll(helixAdmin.getInstancesForPartition(partition));
+    }
+    return instances;
   }
 
   /**

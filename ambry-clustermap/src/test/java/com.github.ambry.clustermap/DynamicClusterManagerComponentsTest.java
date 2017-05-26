@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
@@ -39,6 +40,7 @@ public class DynamicClusterManagerComponentsTest {
   private static final String HOST_NAME = TestUtils.getLocalHost();
   private final ClusterMapConfig clusterMapConfig1;
   private final ClusterMapConfig clusterMapConfig2;
+  private AtomicLong sealedStateChangeCounter;
 
   /**
    * Instantiate and initialize clustermap configs.
@@ -144,6 +146,7 @@ public class DynamicClusterManagerComponentsTest {
 
     // AmbryPartition tests
     // All partitions are READ_WRITE initially.
+    sealedStateChangeCounter = new AtomicLong(0);
     MockClusterManagerCallback mockClusterManagerCallback = new MockClusterManagerCallback();
     AmbryPartition partition1 = new AmbryPartition(1, mockClusterManagerCallback);
     AmbryPartition partition2 = new AmbryPartition(2, mockClusterManagerCallback);
@@ -151,39 +154,38 @@ public class DynamicClusterManagerComponentsTest {
     assertTrue(partition1.compareTo(partition1) == 0);
     assertFalse(partition1.isEqual(partition2.toPathString()));
     assertTrue(partition1.compareTo(partition2) != 0);
-    partition1.setState(PartitionState.READ_ONLY);
-    assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
-    assertEquals(partition2.getPartitionState(), PartitionState.READ_WRITE);
 
     // AmbryReplica tests
     try {
-      new AmbryReplica(null, disk1, MAX_REPLICA_CAPACITY_IN_BYTES);
+      new AmbryReplica(null, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     try {
-      new AmbryReplica(partition1, null, MAX_REPLICA_CAPACITY_IN_BYTES);
+      new AmbryReplica(partition1, null, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     try {
-      new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES + 1);
+      new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     // Create a few replicas and make the mockClusterManagerCallback aware of the association.
-    AmbryReplica replica1 = new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES);
+    AmbryReplica replica1 = new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica1);
-    AmbryReplica replica2 = new AmbryReplica(partition2, disk2, MIN_REPLICA_CAPACITY_IN_BYTES);
+    AmbryReplica replica2 = new AmbryReplica(partition2, disk1, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica2);
-    AmbryReplica replica3 = new AmbryReplica(partition1, disk2, MIN_REPLICA_CAPACITY_IN_BYTES);
+    AmbryReplica replica3 = new AmbryReplica(partition1, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica3);
+    AmbryReplica replica4 = new AmbryReplica(partition2, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, true);
+    mockClusterManagerCallback.addReplicaToPartition(partition2, replica4);
 
     assertEquals(replica1.getDiskId().getMountPath(), replica1.getMountPath());
     List<AmbryReplica> peerReplicas = replica1.getPeerReplicaIds();
@@ -196,8 +198,26 @@ public class DynamicClusterManagerComponentsTest {
     assertEquals("Found: " + replicaList1.toString(), 2, replicaList1.size());
     assertTrue(replicaList1.contains(replica1));
     assertTrue(replicaList1.contains(replica3));
-    assertEquals(1, replicaList2.size());
+    assertEquals(2, replicaList2.size());
     assertTrue(replicaList2.contains(replica2));
+    assertTrue(replicaList2.contains(replica4));
+
+    assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
+    assertEquals(partition2.getPartitionState(), PartitionState.READ_ONLY);
+    replica1.setSealedState(true);
+    sealedStateChangeCounter.incrementAndGet();
+    assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
+    replica3.setSealedState(true);
+    sealedStateChangeCounter.incrementAndGet();
+    assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
+    replica1.setSealedState(false);
+    sealedStateChangeCounter.incrementAndGet();
+    assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
+    replica3.setSealedState(false);
+    sealedStateChangeCounter.incrementAndGet();
+    assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
+    replica4.setSealedState(false);
+    assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
   }
 
   /**
@@ -210,6 +230,11 @@ public class DynamicClusterManagerComponentsTest {
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
       return new ArrayList<AmbryReplica>(partitionToReplicas.get(partition));
+    }
+
+    @Override
+    public long getSealedStateChangeCounter() {
+      return sealedStateChangeCounter.get();
     }
 
     /**

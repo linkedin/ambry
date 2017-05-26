@@ -281,6 +281,40 @@ public class HelixClusterManagerTest {
     assertStateEquivalency();
   }
 
+  @Test
+  public void sealedReplicaChangeTest() throws Exception {
+    if (useComposite) {
+      return;
+    }
+
+    // all instances are up initially.
+    assertStateEquivalency();
+
+    AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds().get(0);
+    List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
+    helixCluster.setReplicaSealedState(partition, instances.get(0), true);
+    assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+        clusterManager.getWritablePartitionIds().contains(partition));
+    assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+        partition.getPartitionState());
+    helixCluster.setReplicaSealedState(partition, instances.get(1), true);
+    assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+        clusterManager.getWritablePartitionIds().contains(partition));
+    assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+        partition.getPartitionState());
+    helixCluster.setReplicaSealedState(partition, instances.get(1), false);
+    assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
+        clusterManager.getWritablePartitionIds().contains(partition));
+    assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
+        partition.getPartitionState());
+    helixCluster.setReplicaSealedState(partition, instances.get(0), false);
+    // At this point all replicas have been marked READ_WRITE. Now, the entire partition should be READ_WRITE.
+    assertTrue("If no replica is SEALED, the whole partition should be Writable",
+        clusterManager.getWritablePartitionIds().contains(partition));
+    assertEquals("If no replica is SEALED, the whole partition should be Writable", PartitionState.READ_WRITE,
+        partition.getPartitionState());
+  }
+
   /**
    * Test that the metrics in {@link HelixClusterManagerMetrics} are updated as expected. This also tests and ensures
    * coverage of the methods in {@link HelixClusterManager} that are used only by {@link HelixClusterManagerMetrics}.

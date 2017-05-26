@@ -28,4 +28,10 @@ interface ClusterManagerCallback {
    * @return the list of {@link AmbryReplica}s associated with the given partition.
    */
   List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition);
+
+  /**
+   * Get the counter for the sealed state change for partitions.
+   * @return the counter for the sealed state change for partitions.
+   */
+  long getSealedStateChangeCounter();
 }
