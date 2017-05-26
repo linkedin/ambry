@@ -15,7 +15,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Throttler;
-import java.io.Closeable;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,7 +28,7 @@ import java.util.Map;
  * The initial implementation simply returns MAX_VALUE for the application and uses the throttler for the other 2.
  * In the future this will have functions to submit feedback so that more intelligent decisions can be made.
  */
-class DiskIOScheduler implements Closeable {
+class DiskIOScheduler {
   private final Map<String, Throttler> throttlers;
 
   /**
@@ -60,12 +59,11 @@ class DiskIOScheduler implements Closeable {
   }
 
   /**
-   * Release resources and close throttlers
+   * Disables the DiskIOScheduler i.e. there will be no more blocking calls
    */
-  @Override
-  public void close() {
+  void disable() {
     for (Throttler throttler : throttlers.values()) {
-      throttler.close();
+      throttler.disable();
     }
   }
 }

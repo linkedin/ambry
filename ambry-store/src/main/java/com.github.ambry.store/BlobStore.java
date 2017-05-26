@@ -128,8 +128,8 @@ class BlobStore implements Store {
         compactor =
             new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, log, time, sessionId,
                 storeDescriptor.getIncarnationId());
-        index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, metrics, time,
-            sessionId, storeDescriptor.getIncarnationId());
+        index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, diskIOScheduler,
+            metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
         blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);

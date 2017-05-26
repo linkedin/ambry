@@ -17,7 +17,6 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
-import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -60,6 +59,7 @@ public class HardDeleter implements Runnable {
   private final MessageStoreHardDelete hardDelete;
   private final StoreKeyFactory factory;
   private final Time time;
+  private final DiskIOScheduler diskIOScheduler;
   private final int scanSizeInBytes;
   private final int messageRetentionSeconds;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
@@ -90,22 +90,21 @@ public class HardDeleter implements Runnable {
   private FindToken endToken;
   private StoreFindToken recoveryEndToken;
   private HardDeletePersistInfo hardDeleteRecoveryRange = new HardDeletePersistInfo();
-  private Throttler throttler;
   private boolean isCaughtUp = false;
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ReentrantLock hardDeleteLock = new ReentrantLock();
   private final Condition pauseCondition = hardDeleteLock.newCondition();
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
-      MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
+      MessageStoreHardDelete hardDelete, StoreKeyFactory factory, DiskIOScheduler diskIOScheduler, Time time) {
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;
     this.index = index;
     this.hardDelete = hardDelete;
     this.factory = factory;
+    this.diskIOScheduler = diskIOScheduler;
     this.time = time;
-    throttler = new Throttler(config.storeCleanupOperationsBytesPerSec, 10, true, time);
     scanSizeInBytes = Math.min(config.storeCleanupOperationsBytesPerSec * 10, 1024 * 1024);
     messageRetentionSeconds = config.storeDeletedMessageRetentionDays * Time.SecsPerDay;
   }
@@ -400,7 +399,6 @@ public class HardDeleter implements Runnable {
         }
         shutdownLatch.await();
         logger.info("Hard delete shutdown complete for store {} ", dataDir);
-        throttler.close();
         pruneHardDeleteRecoveryRange();
         persistCleanupToken();
       }
@@ -613,14 +611,7 @@ public class HardDeleter implements Runnable {
         }
         logWriteInfo.logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
         metrics.hardDeleteDoneCount.inc(1);
-        throttler.maybeThrottle(logWriteInfo.size);
-      }
-    } catch (InterruptedException e) {
-      if (enabled.get()) {
-        // We throw here because we do not want the tokens to be updated.
-        throw new StoreException("Got interrupted during hard deletes", StoreErrorCodes.Unknown_Error);
-      } else {
-        throw new StoreException("Got interrupted as store is shutting down", StoreErrorCodes.Store_Shutting_Down);
+        diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME, logWriteInfo.size);
       }
     } catch (IOException e) {
       throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);

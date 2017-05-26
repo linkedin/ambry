@@ -61,8 +61,8 @@ public class DiskIOSchedulerTest {
       assertFalse("maybeThrottle should not have been called for this jobType", ((MockThrottler) throttler).called);
     }
 
-    // closing scheduler
-    scheduler.close();
+    // disabling scheduler
+    scheduler.disable();
     for (Throttler throttler : throttlers.values()) {
       assertTrue("Throttler should be closed.", ((MockThrottler) throttler).closed);
     }
@@ -76,7 +76,6 @@ public class DiskIOSchedulerTest {
   public void nullThrottlersTest() throws Exception {
     DiskIOScheduler scheduler = new DiskIOScheduler(null);
     assertEquals("Unexpected i/o slice availability returned", Long.MAX_VALUE, scheduler.getSlice("jobType", "job", 0));
-    scheduler.close();
   }
 
   /**
@@ -102,7 +101,7 @@ public class DiskIOSchedulerTest {
     }
 
     @Override
-    public void close() {
+    public void disable() {
       closed = true;
     }
 
