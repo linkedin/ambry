@@ -200,6 +200,7 @@ public class BlobStoreStatsTest {
         totalLogSegmentValidSizeBeforePuts + expectedIncrement);
     assertEquals("Put entries are not properly counted for container valid size", totalContainerValidSizeAfterPuts,
         totalContainerValidSizeBeforePuts + expectedIncrement);
+    blobStoreStats.close();
   }
 
   /**
@@ -257,6 +258,7 @@ public class BlobStoreStatsTest {
         totalLogSegmentValidSizeAfterExpiration, totalLogSegmentValidSizeBeforePuts + expectedDeltaAfterExpiration);
     assertEquals("Expired put entries are not properly counted for container valid size",
         totalContainerValidSizeAfterExpiration, totalContainerValidSizeBeforePuts + expectedDeltaAfterExpiration);
+    blobStoreStats.close();
   }
 
   /**
@@ -315,6 +317,7 @@ public class BlobStoreStatsTest {
         totalLogSegmentValidSizeAfterDeletes, totalLogSegmentValidSizeBeforeDeletes - expectedLogSegmentDecrement);
     assertEquals("Delete entries are not properly counted for container valid size",
         totalContainerValidSizeAfterDeletes, totalContainerValidSizeBeforeDeletes - expectedContainerDecrement);
+    blobStoreStats.close();
   }
 
   /**
@@ -604,6 +607,7 @@ public class BlobStoreStatsTest {
     blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
+    blobStoreStats.close();
   }
 
   @Test
@@ -650,6 +654,7 @@ public class BlobStoreStatsTest {
     verifyAndGetLogSegmentValidSize(blobStoreStats, new TimeRange(state.time.milliseconds(), 0));
     assertEquals("Throttle count mismatch from expected value", expectedThrottleCount,
         mockThrottler.throttleCount.get());
+    blobStoreStats.close();
   }
 
   /**
@@ -909,8 +914,8 @@ public class BlobStoreStatsTest {
 
     while (logSegment != null) {
       String logSegmentName = logSegment.getName();
-      /*assertTrue("Log segment: " + logSegmentName + " not found",
-          actualLogSegmentValidSizeMap.getSecond().containsKey(logSegmentName));*/
+      assertTrue("Log segment: " + logSegmentName + " not found",
+          actualLogSegmentValidSizeMap.getSecond().containsKey(logSegmentName));
 
       long expectedLogSegmentValidSize =
           state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), timeRange.getEndTimeInMs());
