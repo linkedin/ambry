@@ -319,7 +319,7 @@ class HelixClusterManager implements ClusterMap {
             initializationException.compareAndSet(null, e);
           }
         } else {
-          updateInstanceSealedStates(configs);
+          updateSealedStateOfReplicas(configs);
         }
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
       }
@@ -345,7 +345,7 @@ class HelixClusterManager implements ClusterMap {
       logger.info("Initialized cluster information from {}", dcName);
     }
 
-    private void updateInstanceSealedStates(List<InstanceConfig> instanceConfigs) {
+    private void updateSealedStateOfReplicas(List<InstanceConfig> instanceConfigs) {
       for (InstanceConfig instanceConfig : instanceConfigs) {
         AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName());
         List<String> sealedReplicas = getSealedReplicas(instanceConfig);
