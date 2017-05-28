@@ -18,18 +18,22 @@ import org.json.JSONObject;
 
 
 /**
- * A representation of a container. A container virtually groups a number of blobs under the same {@link Account},
- * so that an operation on the container will be applied to all the blobs of the container. There can be multiple
- * containers under the the same {@link Account}, but containers cannot be nested. Eventually, one and only one
- * container needs to be specified when posting a blob. Container id is part of the blob’s properties, and cannot
- * be modified once the blob is created.
- *
- * Container name is provided by a user as an external reference to that container under an {@link Account}. Container
- * id is one-to-one mapped to container name, and serves as an internal identifier of a container. Container name/id
- * has to be distinct within the same {@link Account}, but can be the same across different {@link Account}s. Container
- * metadata is made in JSON, which is generic to contain additional information of the metadata.
- *
- * Version 1 of Container metadata in JSON is in the format below.
+ * <p>
+ *   A representation of a container. A container virtually groups a number of blobs under the same {@link Account},
+ * so that an operation on a container can be applied to all the blobs of the container. When posting a blob, a
+ * container needs to be specified. There can be multiple containers under the the same {@link Account}, but containers
+ * cannot be nested.
+ * </p>
+ * <p>
+ *   Container name is provided by a user as an external reference to that container. Container id is an internal
+ *   identifier of the container, and is one-to-one mapped to a container name. Container name/id has to be distinct
+ *   within the same {@link Account}, but can be the same across different {@link Account}s.
+ * </p>
+ * <p>
+ *   Container is serialized into {@link JSONObject} in the highest metadata version, which is version 1 for now.
+ *   Below lists all the metadata versions and their formats:
+ * </p>
+ *  <pre><code>
  *  {
  *    "containerName": "MyPrivateContainer",
  *    "description": "This is my private container",
@@ -39,9 +43,11 @@ import org.json.JSONObject;
  *    "status": "active"
  *    "parentAccountId": "101"
  *  }
- *
- *  A container object is immutable. To update a container of an account, refer to {@link ContainerBuilder} and
+ *  </code></pre>
+ *  <p>
+ *    A container object is immutable. To update a container, refer to {@link ContainerBuilder} and
  *  {@link AccountBuilder}.
+ *  </p>
  */
 public class Container {
   // static variables
@@ -53,26 +59,26 @@ public class Container {
   static final String CONTAINER_IS_PRIVATE_KEY = "isPrivate";
   static final String CONTAINER_PARENT_ACCOUNT_ID_KEY = "parentAccountId";
   static final short CONTAINER_METADATA_VERSION_1 = 1;
+  static final short HIGHEST_CONTAINER_METADATA_VERSION = CONTAINER_METADATA_VERSION_1;
   // container field variables
-  private final short id;
+  private final Short id;
   private final String name;
   private final ContainerStatus status;
   private final String description;
-  private final boolean isPrivate;
-  private final short parentAccountId;
-  private short version;
+  private final Boolean isPrivate;
+  private final Short parentAccountId;
 
   /**
-   * Constructor from container metadata.
+   * Constructing an {@link Container} object from container metadata.
    * @param metadata The metadata of the container in JSON.
    * @throws JSONException If fails to parse metadata.
    */
-  public Container(JSONObject metadata) throws JSONException {
+  Container(JSONObject metadata) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
-    this.version = (short) metadata.getInt(CONTAINER_METADATA_VERSION_KEY);
-    switch (version) {
+    short metadataVersion = (short) metadata.getInt(CONTAINER_METADATA_VERSION_KEY);
+    switch (metadataVersion) {
       case CONTAINER_METADATA_VERSION_1:
         this.id = (short) metadata.getInt(CONTAINER_ID_KEY);
         this.name = metadata.getString(CONTAINER_NAME_KEY);
@@ -80,11 +86,32 @@ public class Container {
         this.description = metadata.optString(CONTAINER_DESCRIPTION_KEY);
         this.isPrivate = metadata.getBoolean(CONTAINER_IS_PRIVATE_KEY);
         this.parentAccountId = (short) metadata.getInt(CONTAINER_PARENT_ACCOUNT_ID_KEY);
+        checkRequiredFields();
         break;
 
       default:
-        throw new IllegalStateException("Unsupported container metadata version=" + version);
+        throw new IllegalStateException("Unsupported container metadata version=" + metadataVersion);
     }
+  }
+
+  /**
+   * Constructor that takes individual arguments. Cannot be null.
+   * @param id The id of the container. Cannot be null.
+   * @param name The name of the container. Cannot be null.
+   * @param status The status of the container. Cannot be null.
+   * @param description The description of the container. Can be null.
+   * @param isPrivate The privacy setting of the container. Cannot be null.
+   * @param parentAccountId The id of the parent {@link Account} of this container. Cannot be null.
+   */
+  Container(Short id, String name, ContainerStatus status, String description, Boolean isPrivate,
+      Short parentAccountId) {
+    this.id = id;
+    this.name = name;
+    this.status = status;
+    this.description = description;
+    this.isPrivate = isPrivate;
+    this.parentAccountId = parentAccountId;
+    checkRequiredFields();
   }
 
   /**
@@ -141,29 +168,21 @@ public class Container {
    * @throws JSONException If fails to compose metadata.
    */
   public JSONObject toJson() throws JSONException {
-    JSONObject metadata;
-    switch (version) {
-      case CONTAINER_METADATA_VERSION_1:
-        metadata = new JSONObject();
-        metadata.put(CONTAINER_METADATA_VERSION_KEY, version);
-        metadata.put(CONTAINER_ID_KEY, id);
-        metadata.put(CONTAINER_NAME_KEY, name);
-        metadata.put(CONTAINER_STATUS_KEY, status);
-        metadata.put(CONTAINER_DESCRIPTION_KEY, description);
-        metadata.put(CONTAINER_IS_PRIVATE_KEY, isPrivate);
-        metadata.put(CONTAINER_PARENT_ACCOUNT_ID_KEY, parentAccountId);
-        break;
-
-      default:
-        throw new IllegalStateException("Unsupported container metadata version=" + version);
-    }
+    JSONObject metadata = new JSONObject();
+    metadata.put(CONTAINER_METADATA_VERSION_KEY, HIGHEST_CONTAINER_METADATA_VERSION);
+    metadata.put(CONTAINER_ID_KEY, id);
+    metadata.put(CONTAINER_NAME_KEY, name);
+    metadata.put(CONTAINER_STATUS_KEY, status);
+    metadata.put(CONTAINER_DESCRIPTION_KEY, description);
+    metadata.put(CONTAINER_IS_PRIVATE_KEY, isPrivate);
+    metadata.put(CONTAINER_PARENT_ACCOUNT_ID_KEY, parentAccountId);
     return metadata;
   }
 
   /**
-   * Generates a {@link String} representation that uniquely identifies this container. The string
+   * Generates a String representation that uniquely identifies this container. The string
    * is in the format of {@code Container[accountId:containerId]}.
-   * @return The {@link String} representation of this container.
+   * @return The String representation of this container.
    */
   @Override
   public String toString() {
@@ -181,19 +200,19 @@ public class Container {
 
     Container container = (Container) o;
 
-    if (id != container.id) {
-      return false;
-    }
-    if (isPrivate != container.isPrivate) {
-      return false;
-    }
-    if (parentAccountId != container.parentAccountId) {
+    if (!id.equals(container.id)) {
       return false;
     }
     if (!name.equals(container.name)) {
       return false;
     }
-    return status == container.status;
+    if (status != container.status) {
+      return false;
+    }
+    if (!isPrivate.equals(container.isPrivate)) {
+      return false;
+    }
+    return parentAccountId.equals(container.parentAccountId);
   }
 
   @Override
@@ -209,5 +228,16 @@ public class Container {
    */
   public enum ContainerStatus {
     ACTIVE, INACTIVE
+  }
+
+  /**
+   * Checks if any required fields is missiong for a {@link Container}.
+   */
+  private void checkRequiredFields() {
+    if (id == null || name == null || status == null || isPrivate == null || parentAccountId == null) {
+      throw new IllegalStateException(
+          "Either of required fields id=" + id + " or name=" + name + " or status=" + status + " or isPrivate="
+              + isPrivate + " or parentAccountId=" + parentAccountId + " is null");
+    }
   }
 }

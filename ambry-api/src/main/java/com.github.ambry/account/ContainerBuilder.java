@@ -13,9 +13,6 @@
  */
 package com.github.ambry.account;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import static com.github.ambry.account.Container.*;
 
 
@@ -23,6 +20,7 @@ import static com.github.ambry.account.Container.*;
  * A builder class for {@link Container}. Since {@link Container} is immutable, modifying a {@link Container} needs to
  * build a new {@link Container} object with updated fields through this builder. A {@link Container} can be built
  * in two ways: 1) from an existing {@link Container} object; and 2) by supplying required fields of a {@link Container}.
+ * This class is not thread safe.
  */
 public class ContainerBuilder {
   private Short id;
@@ -31,7 +29,6 @@ public class ContainerBuilder {
   private String description;
   private Boolean isPrivate;
   private Short parentAccountId;
-  private short version;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -42,40 +39,31 @@ public class ContainerBuilder {
     if (origin == null) {
       throw new IllegalArgumentException("origin cannot be null.");
     }
-    this.id = origin.getId();
-    this.name = origin.getName();
-    this.status = origin.getStatus();
-    this.description = origin.getDescription();
-    this.isPrivate = origin.getIsPrivate();
-    this.parentAccountId = origin.getParentAccountId();
-    this.version = CONTAINER_METADATA_VERSION_1;
+    id = origin.getId();
+    name = origin.getName();
+    status = origin.getStatus();
+    description = origin.getDescription();
+    isPrivate = origin.getIsPrivate();
+    parentAccountId = origin.getParentAccountId();
   }
 
   /**
-   * Constructor. The builder will not include any {@link Container} information.
-   * @param id The id of the {@link Account} to build.
-   * @param name The name of the {@link Account}. Cannot be {@code null}.
-   * @param status The status of the {@link Account}. Cannot be {@code null}.
-   */
-
-  /**
-   * Constructor.
+   * Constructor for a {@link ContainerBuilder} taking individual arguments.
    * @param id The id of the {@link Container} to build.
-   * @param name The name of the {@link Container}. Cannot be {@code null}.
-   * @param status The status of the {@link Container}. Cannot be {@code null}.
-   * @param description The description of the {@link Container}. {@code null} is ok.
+   * @param name The name of the {@link Container}.
+   * @param status The status of the {@link Container}.
+   * @param description The description of the {@link Container}.
    * @param isPrivate {@code true} if the {@link Container} is public, {@code false} otherwise.
    * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
    */
-  public ContainerBuilder(short id, String name, ContainerStatus status, String description, boolean isPrivate,
-      short parentAccountId) {
+  public ContainerBuilder(Short id, String name, ContainerStatus status, String description, Boolean isPrivate,
+      Short parentAccountId) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.description = description;
     this.isPrivate = isPrivate;
     this.parentAccountId = parentAccountId;
-    this.version = CONTAINER_METADATA_VERSION_1;
   }
 
   /**
@@ -83,7 +71,7 @@ public class ContainerBuilder {
    * @param id The id to set.
    * @return This builder.
    */
-  public ContainerBuilder setId(short id) {
+  public ContainerBuilder setId(Short id) {
     this.id = id;
     return this;
   }
@@ -123,7 +111,7 @@ public class ContainerBuilder {
    * @param isPrivate The privacy setting to set.
    * @return This builder.
    */
-  public ContainerBuilder setIsPrivate(boolean isPrivate) {
+  public ContainerBuilder setIsPrivate(Boolean isPrivate) {
     this.isPrivate = isPrivate;
     return this;
   }
@@ -133,7 +121,7 @@ public class ContainerBuilder {
    * @param parentAccountId The parent {@link Account} id to set.
    * @return This builder.
    */
-  public ContainerBuilder setParentAccountId(short parentAccountId) {
+  public ContainerBuilder setParentAccountId(Short parentAccountId) {
     this.parentAccountId = parentAccountId;
     return this;
   }
@@ -144,51 +132,7 @@ public class ContainerBuilder {
    * @return A {@link Container} object.
    * @throws IllegalStateException If any required fields is not set.
    */
-  public Container build() throws JSONException {
-    checkRequiredFields(version);
-    switch (version) {
-      case CONTAINER_METADATA_VERSION_1:
-        JSONObject metadata = new JSONObject();
-        metadata.put(CONTAINER_METADATA_VERSION_KEY, CONTAINER_METADATA_VERSION_1);
-        metadata.put(CONTAINER_ID_KEY, id);
-        metadata.put(CONTAINER_NAME_KEY, name);
-        metadata.put(CONTAINER_STATUS_KEY, status);
-        metadata.put(CONTAINER_DESCRIPTION_KEY, description);
-        metadata.put(CONTAINER_IS_PRIVATE_KEY, isPrivate);
-        metadata.put(CONTAINER_PARENT_ACCOUNT_ID_KEY, parentAccountId);
-        return new Container(metadata);
-
-      default:
-        throw new IllegalStateException("Unsupported container metadata version=" + version);
-    }
-  }
-
-  /**
-   * Checks required fields to build a {@link Container}.
-   * @param version The version to build.
-   */
-  private void checkRequiredFields(short version) {
-    switch (version) {
-      case CONTAINER_METADATA_VERSION_1:
-        if (id == null) {
-          throw new IllegalStateException("Cannot build account, id is not set");
-        }
-        if (name == null) {
-          throw new IllegalStateException("Cannot build account, name is not set");
-        }
-        if (status == null) {
-          throw new IllegalStateException("Cannot build account, status is not set");
-        }
-        if (isPrivate == null) {
-          throw new IllegalStateException("Cannot build account, isPrivate is not set");
-        }
-        if (parentAccountId == null) {
-          throw new IllegalStateException("Cannot build account, parentAccountId is not set");
-        }
-        break;
-
-      default:
-        throw new IllegalStateException("Unsupported container metadata version=" + version);
-    }
+  public Container build() {
+    return new Container(id, name, status, description, isPrivate, parentAccountId);
   }
 }

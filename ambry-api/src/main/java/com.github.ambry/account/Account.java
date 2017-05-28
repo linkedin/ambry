@@ -14,54 +14,64 @@
 package com.github.ambry.account;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 
 /**
- * A representation of an Ambry user. A user is an entity (an application or an individual user) who uses ambry
- * as service. This class contains general information of a user, which can be used for user-based operations
- * such as authentication, get a {@link Container} under this account, and access control. The account name is
- * provided by an Ambry user as an external reference. Account id is an internal identifier of the user, and is
- * one-to-one mapped to the account name. Account name and id are generated through user registration process.
- * Account id is part of a blob’s properties, and cannot be modified once the blob is created. Account metadata
- * is made in JSON, which is generic to contain additional information of the metadata.
- *
- * Version 1 of account metadata in JSON is in the format below.
- *  {
- *    "accountId": 101,
- *    "accountName": "MyAccount",
- *    "containers": [
- *      {
- *        "containerName": "MyPrivateContainer",
- *        "description": "This is my private container",
- *        "isPrivate": "true",
- *        "containerId": 0,
- *        "version": 1,
- *        "status": "ACTIVE",
- *        "parentAccountId": "101"
- *      },
- *      {
- *        "containerName": "MyPublicContainer",
- *        "description": "This is my public container",
- *        "isPrivate": "false",
- *        "containerId": 1,
- *        "version": 1,
- *        "status": "ACTIVE",
- *        "parentAccountId": "101"
- *      }
- *    ],
- *    "version": 1,
- *    "status": "ACTIVE"
- *  }
- *
- *  An account object is immutable. To update an account, refer to {@link AccountBuilder} to build a new account
- *  object with updated field(s).
+ * <p>
+ *   A representation of an Ambry user. A user is an entity (an application or an individual user) who uses ambry
+ * as a service. This {@code Account} class contains general information of a user, which can be used for user-based
+ * operations such as authentication, get a {@link Container} under this account, and access control.
+ * </p>
+ * <p>
+ *   Account name is provided by an Ambry user as an external reference. Account id is an internal identifier
+ *   of the user, and is one-to-one mapped to an account name. Account name and id are generated through user
+ *   registration process.
+ * </p>
+ * <p>
+ *   Account is serialized into {@link JSONObject} in the highest metadata version, which is version 1 for now.
+ *   Below lists all the metadata versions and their formats:
+ * </p>
+ * <pre><code>
+ * Version 1:
+ * {
+ *   "accountId": 101,
+ *   "accountName": "MyAccount",
+ *   "containers": [
+ *     {
+ *       "containerName": "MyPrivateContainer",
+ *       "description": "This is my private container",
+ *       "isPrivate": "true",
+ *       "containerId": 0,
+ *       "version": 1,
+ *       "status": "ACTIVE",
+ *       "parentAccountId": "101"
+ *     },
+ *     {
+ *       "containerName": "MyPublicContainer",
+ *       "description": "This is my public container",
+ *       "isPrivate": "false",
+ *       "containerId": 1,
+ *       "version": 1,
+ *       "status": "ACTIVE",
+ *       "parentAccountId": "101"
+ *     }
+ *   ],
+ *   "version": 1,
+ *   "status": "ACTIVE"
+ * }
+ * </code></pre>
+ * <p>
+ *   An account object is immutable. To update an account, refer to {@link AccountBuilder} for how to build a new
+ *   account object with updated field(s).
+ * </p>
  */
 public class Account {
   // static variables
@@ -71,9 +81,9 @@ public class Account {
   static final String ACCOUNT_STATUS_KEY = "status";
   static final String CONTAINERS_KEY = "containers";
   static final short ACCOUNT_METADATA_VERSION_1 = 1;
+  static final short HIGHEST_ACCOUNT_METADATA_VERSION = ACCOUNT_METADATA_VERSION_1;
   // account member variables
-  private final short version;
-  private final short id;
+  private final Short id;
   private final String name;
   private AccountStatus status;
   // internal data structure
@@ -81,7 +91,7 @@ public class Account {
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
 
   /**
-   * Constructor from account metadata.
+   * Constructing an {@link Account} object from account metadata.
    * @param metadata The metadata of the account in JSON.
    * @throws JSONException If fails to parse metadata.
    */
@@ -89,21 +99,50 @@ public class Account {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
-    version = (short) metadata.getInt(ACCOUNT_METADATA_VERSION_KEY);
-    switch (version) {
+    short metadataVersion = (short) metadata.getInt(ACCOUNT_METADATA_VERSION_KEY);
+    switch (metadataVersion) {
       case ACCOUNT_METADATA_VERSION_1:
         id = (short) metadata.getInt(ACCOUNT_ID_KEY);
         name = metadata.getString(ACCOUNT_NAME_KEY);
         status = AccountStatus.valueOf(metadata.getString(ACCOUNT_STATUS_KEY));
+        checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.getJSONArray(CONTAINERS_KEY);
-        for (int index = 0; index < containerArray.length(); index++) {
-          JSONObject containerMetadata = containerArray.getJSONObject(index);
-          updateContainerMap(new Container(containerMetadata));
+        Collection<Container> containers = new ArrayList<>();
+        if (containerArray != null) {
+          for (int index = 0; index < containerArray.length(); index++) {
+            JSONObject containerMetadata = containerArray.getJSONObject(index);
+            Container container = new Container(containerMetadata);
+            containers.add(container);
+            updateContainerMap(container);
+          }
+          checkAccountIdInContainers();
+          checkDuplicateContainerNameOrId(containers);
         }
         break;
 
       default:
-        throw new IllegalStateException("Unsupported account metadata version=" + version);
+        throw new IllegalStateException("Unsupported account metadata version=" + metadataVersion);
+    }
+  }
+
+  /**
+   * Constructor that takes individual arguments.
+   * @param id The id of the account. Cannot be null.
+   * @param name The name of the account. Cannot be null.
+   * @param status The status of the account. Cannot be null.
+   * @param containers A collection of {@link Container}s to be part of this account.
+   */
+  Account(Short id, String name, AccountStatus status, Collection<Container> containers) {
+    this.id = id;
+    this.name = name;
+    this.status = status;
+    checkRequiredFieldsForBuild();
+    if (containers != null) {
+      for (Container container : containers) {
+        updateContainerMap(container);
+      }
+      checkAccountIdInContainers();
+      checkDuplicateContainerNameOrId(containers);
     }
   }
 
@@ -129,24 +168,16 @@ public class Account {
    * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
    */
   public JSONObject toJson() throws JSONException {
-    JSONObject metadata;
-    switch (version) {
-      case ACCOUNT_METADATA_VERSION_1:
-        metadata = new JSONObject();
-        metadata.put(ACCOUNT_METADATA_VERSION_KEY, version);
-        metadata.put(ACCOUNT_ID_KEY, id);
-        metadata.put(ACCOUNT_NAME_KEY, name);
-        metadata.put(ACCOUNT_STATUS_KEY, status);
-        JSONArray containerArray = new JSONArray();
-        for (Container container : containerIdToContainerMap.values()) {
-          containerArray.put(container.toJson());
-        }
-        metadata.put(CONTAINERS_KEY, containerArray);
-        break;
-
-      default:
-        throw new IllegalArgumentException("Unsupported account metadata version=" + version);
+    JSONObject metadata = new JSONObject();
+    metadata.put(ACCOUNT_METADATA_VERSION_KEY, HIGHEST_ACCOUNT_METADATA_VERSION);
+    metadata.put(ACCOUNT_ID_KEY, id);
+    metadata.put(ACCOUNT_NAME_KEY, name);
+    metadata.put(ACCOUNT_STATUS_KEY, status);
+    JSONArray containerArray = new JSONArray();
+    for (Container container : containerIdToContainerMap.values()) {
+      containerArray.put(container.toJson());
     }
+    metadata.put(CONTAINERS_KEY, containerArray);
     return metadata;
   }
 
@@ -179,11 +210,11 @@ public class Account {
   }
 
   /**
-   * Gets all the containers of this account in a list.
+   * Gets all the containers of this account in a Collection.
    * @return All the containers of this account.
    */
-  public List<Container> getAllContainers() {
-    return Collections.unmodifiableList(new ArrayList<>(containerIdToContainerMap.values()));
+  public Collection<Container> getAllContainers() {
+    return Collections.unmodifiableCollection(containerIdToContainerMap.values());
   }
 
   /**
@@ -196,9 +227,9 @@ public class Account {
   }
 
   /**
-   * Generates a {@link String} representation that uniquely identifies this account. The string
-   * is in the format of {@code Account[id]}.
-   * @return The {@link String} representation of this account.
+   * Generates a String representation that uniquely identifies this account. The string is in the format of
+   * {@code Account[id]}.
+   * @return The String representation of this account.
    */
   @Override
   public String toString() {
@@ -216,7 +247,7 @@ public class Account {
 
     Account account = (Account) o;
 
-    if (id != account.id) {
+    if (!id.equals(account.id)) {
       return false;
     }
     if (!name.equals(account.name)) {
@@ -231,10 +262,51 @@ public class Account {
   }
 
   /**
-   * Status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
+   * The status of the account. {@code ACTIVE} means this account is in operational state, and {@code INACTIVE} means
    * the account has been deactivated.
    */
   public enum AccountStatus {
     ACTIVE, INACTIVE
+  }
+
+  /**
+   * Checks if required fields are missing to build.
+   */
+  private void checkAccountIdInContainers() {
+    for (Container container : containerIdToContainerMap.values()) {
+      if (container.getParentAccountId() != id) {
+        throw new IllegalStateException(
+            "Container does not belong to this account because parentAccountId=" + container.getParentAccountId()
+                + " is not the same as accountId=" + id);
+      }
+    }
+  }
+
+  /**
+   * Checks if any required field is missing for a {@link Account}.
+   */
+  private void checkRequiredFieldsForBuild() {
+    if (id == null || name == null || status == null) {
+      throw new IllegalStateException(
+          "Either of required fields id=" + id + " or name=" + name + " or status=" + status + " is null");
+    }
+  }
+
+  /**
+   * Checks if there are containers that have different ids but the same names, or vise versa.
+   * @param containers A collection of containers to check duplicate name or id.
+   * @throws IllegalStateException if there are containers that have different ids but the same names, or vise versa.
+   */
+  private void checkDuplicateContainerNameOrId(Collection<Container> containers) {
+    int expectedKvPairs = containers == null ? 0 : containers.size();
+    Set<Short> containerIdSet = containerIdToContainerMap.keySet();
+    Set<String> containerNameSet = containerNameToContainerMap.keySet();
+    if (containerIdSet.size() != expectedKvPairs || containerNameSet.size() != expectedKvPairs) {
+      StringBuilder sb = new StringBuilder("Duplicate container id or name exists. Container list=");
+      for (Container container : containers) {
+        sb.append("[id=" + container.getId() + ", name=" + container.getName() + "] ");
+      }
+      throw new IllegalStateException(sb.toString());
+    }
   }
 }
