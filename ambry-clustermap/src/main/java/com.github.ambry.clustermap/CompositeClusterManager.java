@@ -23,6 +23,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static com.github.ambry.clustermap.Datacenter.*;
+
 
 /**
  * A cluster manager that is a wrapper over a {@link StaticClusterManager} instance and a {@link HelixClusterManager}
@@ -109,6 +111,11 @@ class CompositeClusterManager implements ClusterMap {
       }
     }
     return staticHas;
+  }
+
+  @Override
+  public short getLocalDatacenterId() {
+    return LEGACY_DATACENTER_ID;
   }
 
   /**

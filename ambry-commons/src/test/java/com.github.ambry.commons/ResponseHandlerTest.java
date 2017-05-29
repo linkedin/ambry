@@ -16,6 +16,7 @@ package com.github.ambry.commons;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.Datacenter;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
@@ -69,6 +70,11 @@ public class ResponseHandlerTest {
     @Override
     public boolean hasDatacenter(String datacenterName) {
       return false;
+    }
+
+    @Override
+    public short getLocalDatacenterId() {
+      return Datacenter.LEGACY_DATACENTER_ID;
     }
 
     @Override

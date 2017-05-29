@@ -72,6 +72,8 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
+  // accountId = LEGACY_ACCOUNT_ID indicate accountId is not available at the time when this blobId is formed.
+  public static final short LEGACY_ACCOUNT_ID = -1;
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
