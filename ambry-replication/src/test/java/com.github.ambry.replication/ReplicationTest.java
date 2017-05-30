@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
@@ -504,7 +505,7 @@ public class ReplicationTest {
       List<ArrayList<MessageInfo>> messageInfoListofLists, List<ArrayList<ByteBuffer>> messageBufferListofLists,
       int count) throws Exception {
     for (int i = 0; i < count; i++) {
-      BlobId id = new BlobId(partitionId);
+      BlobId id = new BlobIdBuilder(partitionId).build();
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
       long streamSize = byteBuffer.limit();
       for (ArrayList<MessageInfo> messageInfoList : messageInfoListofLists) {
@@ -550,7 +551,7 @@ public class ReplicationTest {
           Collections.singletonList(remoteBufferList), (i % 2 == 0 ? 5 : 6));
 
       // add an expired message to replica 2
-      BlobId idExpired = new BlobId(partitionIds.get(i));
+      BlobId idExpired = new BlobIdBuilder(partitionIds.get(i)).build();
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
@@ -807,7 +808,7 @@ public class ReplicationTest {
           Arrays.asList(localBufferList, remoteBufferList), 10);
 
       // add an expired message to replica 2
-      BlobId idExpired = new BlobId(partitionIds.get(i));
+      BlobId idExpired = new BlobIdBuilder(partitionIds.get(i)).build();
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
@@ -1012,7 +1013,7 @@ public class ReplicationTest {
           Arrays.asList(localBufferList, remoteBufferList), 10);
 
       // add a corrupt message to replica 2
-      BlobId corruptMessageId = new BlobId(partitionIds.get(i));
+      BlobId corruptMessageId = new BlobIdBuilder(partitionIds.get(i)).build();
       ByteBuffer corruptByteBuffer = constructTestBlobInMessageFormat(corruptMessageId, 1000, random);
       byte[] data = corruptByteBuffer.array();
       // flip every bit in the array
@@ -1029,7 +1030,7 @@ public class ReplicationTest {
           Collections.singletonList(remoteBufferList), 5);
 
       // add an expired message to replica 2
-      BlobId idExpired = new BlobId(partitionIds.get(i));
+      BlobId idExpired = new BlobIdBuilder(partitionIds.get(i)).build();
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));

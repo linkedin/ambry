@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -36,7 +37,7 @@ public class RouterUtilsTest {
       fail("Should not get any exception.");
     }
     partition = clusterMap.getWritablePartitionIds().get(0);
-    originalBlobId = new BlobId(partition);
+    originalBlobId = new BlobIdBuilder(partition).build();
     blobIdStr = originalBlobId.getID();
   }
 

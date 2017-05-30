@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestResponseChannel;
@@ -62,7 +63,7 @@ public class GetReplicasHandlerTest {
     List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
-      BlobId blobId = new BlobId(partitionId);
+      BlobId blobId = new BlobIdBuilder(partitionId).build();
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel);
       assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());

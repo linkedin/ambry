@@ -16,6 +16,7 @@ package com.github.ambry.commons;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.Datacenter;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -71,9 +72,9 @@ public class BlobId extends StoreKey {
   private static final short DATACENTER_ID_SIZE_IN_BYTES = 2;
   // the version to indicate the serialized format.
   private Short version;
-  private short accountId;
-  private short containerId;
-  private short datacenterId;
+  private Short accountId;
+  private Short containerId;
+  private Short datacenterId;
   private PartitionId partitionId;
   private String uuid;
 
@@ -85,33 +86,13 @@ public class BlobId extends StoreKey {
    * @param datacenterId The id of the datacenter to be embedded into the blob.
    * @param partitionId The partition where this blob is to be stored.
    */
-  public BlobId(short accountId, short containerId, short datacenterId, PartitionId partitionId) {
-    if (partitionId == null) {
-      throw new IllegalArgumentException("Partition ID cannot be null");
-    }
-    this.version = BLOB_ID_V2;
+  BlobId(Short accountId, Short containerId, Short datacenterId, PartitionId partitionId) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.datacenterId = datacenterId;
     this.partitionId = partitionId;
-    this.uuid = UUID.randomUUID().toString();
-  }
-
-  /**
-   * Constructs a new unique BlobId for the specified partition. This will construct a blob in version 1, so the
-   * serialization does not embed account id, container id, or datacenter id.
-   * @param partitionId The partition where this blob is to be stored.
-   */
-  public BlobId(PartitionId partitionId) {
-    if (partitionId == null) {
-      throw new IllegalArgumentException("Partition ID cannot be null");
-    }
-    this.version = BLOB_ID_V1;
-    this.accountId = LEGACY_ACCOUNT_ID;
-    this.containerId = LEGACY_CONTAINER_ID;
-    this.datacenterId = LEGACY_DATACENTER_ID;
-    this.partitionId = partitionId;
-    this.uuid = UUID.randomUUID().toString();
+    uuid = UUID.randomUUID().toString();
+    populateMissingFieldsAndDetermineVersion();
   }
 
   /**
@@ -217,7 +198,7 @@ public class BlobId extends StoreKey {
   /**
    * Gets the id of the datacenter where this blob was originally posted. If this information was not available
    * when the blob id was formed, it will return -1.
-   * @return
+   * @return The id of the datacenter where this blob was originally posted.
    */
   public short getDatacenterId() {
     return datacenterId;
@@ -300,16 +281,16 @@ public class BlobId extends StoreKey {
 
     BlobId blobId = (BlobId) o;
 
-    if (accountId != blobId.accountId) {
-      return false;
-    }
-    if (containerId != blobId.containerId) {
-      return false;
-    }
-    if (datacenterId != blobId.datacenterId) {
-      return false;
-    }
     if (!version.equals(blobId.version)) {
+      return false;
+    }
+    if (!accountId.equals(blobId.accountId)) {
+      return false;
+    }
+    if (!containerId.equals(blobId.containerId)) {
+      return false;
+    }
+    if (!datacenterId.equals(blobId.datacenterId)) {
       return false;
     }
     if (!partitionId.equals(blobId.partitionId)) {
@@ -321,5 +302,26 @@ public class BlobId extends StoreKey {
   @Override
   public int hashCode() {
     return Utils.hashcode(new Object[]{version, partitionId, uuid});
+  }
+
+  /**
+   * Populate the missing fields with legacy values, and determine the version of format to serialize. Only
+   * when all the three fields of {@code accountId}, {@code containerId} and {@code datacenterId} are available,
+   * the serialization format version will be set to {@link #BLOB_ID_V2}, otherwise {@link #BLOB_ID_V1}.
+   */
+  private void populateMissingFieldsAndDetermineVersion() {
+    version = accountId == null && containerId == null && datacenterId == null ? BlobId.BLOB_ID_V1 : BlobId.BLOB_ID_V2;
+    if (partitionId == null) {
+      throw new IllegalStateException("partitionId is null");
+    }
+    if (accountId == null) {
+      accountId = Account.LEGACY_ACCOUNT_ID;
+    }
+    if (containerId == null) {
+      containerId = Container.LEGACY_CONTAINER_ID;
+    }
+    if (datacenterId == null) {
+      datacenterId = Datacenter.LEGACY_DATACENTER_ID;
+    }
   }
 }

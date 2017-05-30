@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -341,7 +342,7 @@ public class ServerWritePerformance {
             List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
-            BlobId blobId = new BlobId(partitionId);
+            BlobId blobId = new BlobIdBuilder(partitionId).build();
             PutRequest putRequest =
                 new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
                     props.getBlobSize(), BlobType.DataBlob);

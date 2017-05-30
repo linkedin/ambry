@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -214,7 +215,7 @@ public class IndexWritePerformance {
           int indexToUse = new Random().nextInt(indexesWithMetrics.size());
           // Does not matter what partition we use
           PartitionId partition = map.getWritablePartitionIds().get(0);
-          indexesWithMetrics.get(indexToUse).addToIndexRandomData(new BlobId(partition));
+          indexesWithMetrics.get(indexToUse).addToIndexRandomData(new BlobIdBuilder(partition).build());
           throttler.maybeThrottle(1);
         }
       } catch (Exception e) {

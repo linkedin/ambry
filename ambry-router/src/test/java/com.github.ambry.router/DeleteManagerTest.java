@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
@@ -100,7 +101,7 @@ public class DeleteManagerTest {
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, mockTime);
     List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds();
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
-    blobId = new BlobId(partition);
+    blobId = new BlobIdBuilder(partition).build();
     blobIdString = blobId.getID();
   }
 

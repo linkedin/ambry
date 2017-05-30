@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
@@ -102,10 +103,10 @@ public final class ServerTestUtil {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
-      BlobId blobId1 = new BlobId(partitionIds.get(0));
-      BlobId blobId2 = new BlobId(partitionIds.get(0));
-      BlobId blobId3 = new BlobId(partitionIds.get(0));
-      BlobId blobId4 = new BlobId(partitionIds.get(0));
+      BlobId blobId1 = new BlobIdBuilder(partitionIds.get(0)).build();
+      BlobId blobId2 = new BlobIdBuilder(partitionIds.get(0)).build();
+      BlobId blobId3 = new BlobIdBuilder(partitionIds.get(0)).build();
+      BlobId blobId4 = new BlobIdBuilder(partitionIds.get(0)).build();
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
@@ -266,7 +267,7 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(partition));
+      ids.add(new BlobIdBuilder(partition).build());
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -854,17 +855,17 @@ public final class ServerTestUtil {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       PartitionId partition = clusterMap.getWritablePartitionIds().get(0);
-      BlobId blobId1 = new BlobId(partition);
-      BlobId blobId2 = new BlobId(partition);
-      BlobId blobId3 = new BlobId(partition);
-      BlobId blobId4 = new BlobId(partition);
-      BlobId blobId5 = new BlobId(partition);
-      BlobId blobId6 = new BlobId(partition);
-      BlobId blobId7 = new BlobId(partition);
-      BlobId blobId8 = new BlobId(partition);
-      BlobId blobId9 = new BlobId(partition);
-      BlobId blobId10 = new BlobId(partition);
-      BlobId blobId11 = new BlobId(partition);
+      BlobId blobId1 = new BlobIdBuilder(partition).build();
+      BlobId blobId2 = new BlobIdBuilder(partition).build();
+      BlobId blobId3 = new BlobIdBuilder(partition).build();
+      BlobId blobId4 = new BlobIdBuilder(partition).build();
+      BlobId blobId5 = new BlobIdBuilder(partition).build();
+      BlobId blobId6 = new BlobIdBuilder(partition).build();
+      BlobId blobId7 = new BlobIdBuilder(partition).build();
+      BlobId blobId8 = new BlobIdBuilder(partition).build();
+      BlobId blobId9 = new BlobIdBuilder(partition).build();
+      BlobId blobId10 = new BlobIdBuilder(partition).build();
+      BlobId blobId11 = new BlobIdBuilder(partition).build();
 
       // put blob 1
       PutRequest putRequest =
@@ -1014,7 +1015,7 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(mockPartitionId));
+      ids.add(new BlobIdBuilder(mockPartitionId).build());
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);

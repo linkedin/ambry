@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -389,7 +390,7 @@ public class AdminBlobStorageServiceTest {
     List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
-      BlobId blobId = new BlobId(partitionId);
+      BlobId blobId = new BlobIdBuilder(partitionId).build();
       RestRequest restRequest =
           AdminTestUtils.createRestRequest(RestMethod.GET, blobId.getID() + "/" + RestUtils.SubResource.Replicas, null,
               null);

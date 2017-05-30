@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -787,7 +788,7 @@ class PutOperation {
           attemptedPartitionIds.add(partitionId);
         }
         partitionId = getPartitionForPut(attemptedPartitionIds);
-        chunkBlobId = new BlobId(partitionId);
+        chunkBlobId = new BlobIdBuilder(partitionId).build();
         chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),

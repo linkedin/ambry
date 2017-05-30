@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -151,7 +152,7 @@ public class DirectoryUploader {
         FileInputStream stream = null;
         try {
           int replicaCount = 0;
-          BlobId blobId = new BlobId(partitionId);
+          BlobId blobId = new BlobIdBuilder(partitionId).build();
           List<ReplicaId> successList = new ArrayList<ReplicaId>();
           List<ReplicaId> failureList = new ArrayList<ReplicaId>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {

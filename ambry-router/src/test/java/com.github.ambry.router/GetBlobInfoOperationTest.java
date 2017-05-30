@@ -14,7 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
@@ -149,7 +149,7 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testInstantiation() throws Exception {
-    String blobIdStr = (new BlobId(mockClusterMap.getWritablePartitionIds().get(0))).getID();
+    String blobIdStr = (new BlobIdBuilder(mockClusterMap.getWritablePartitionIds().get(0))).build().getID();
     Callback<GetBlobResultInternal> getOperationCallback = new Callback<GetBlobResultInternal>() {
       @Override
       public void onCompletion(GetBlobResultInternal result, Exception exception) {

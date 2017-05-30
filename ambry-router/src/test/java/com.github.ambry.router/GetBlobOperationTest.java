@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -219,7 +220,7 @@ public class GetBlobOperationTest {
           e.getErrorCode());
     }
 
-    blobIdStr = new BlobId(mockClusterMap.getWritablePartitionIds().get(0)).getID();
+    blobIdStr = new BlobIdBuilder(mockClusterMap.getWritablePartitionIds().get(0)).build().getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,

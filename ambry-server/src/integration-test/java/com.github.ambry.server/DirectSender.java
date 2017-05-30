@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -52,7 +53,7 @@ class DirectSender implements Runnable {
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
     for (int i = 0; i < totalBlobsToPut; i++) {
       int partitionIndex = new Random().nextInt(partitionIds.size());
-      BlobId blobId = new BlobId(partitionIds.get(partitionIndex));
+      BlobId blobId = new BlobIdBuilder(partitionIds.get(partitionIndex)).build();
       blobIds.add(blobId);
     }
     this.data = data;

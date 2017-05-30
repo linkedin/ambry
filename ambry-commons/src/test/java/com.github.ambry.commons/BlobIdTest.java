@@ -37,7 +37,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link BlobId}.
+ * Unit tests for {@link BlobId} and {@link BlobIdBuilder}.
  */
 public class BlobIdTest {
   private short referenceAccountId = 7777;
@@ -58,47 +58,75 @@ public class BlobIdTest {
   }
 
   /**
-   * Tests constructor for BlobId in version 1.
+   * Tests building BlobId in version 1.
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testBlobIdV1Constructor() throws Exception {
-    BlobId blobId = new BlobId(referencePartitionId);
-    assertEquals("Wrong account id in blob ID: " + blobId, blobId.getAccountId(), Account.LEGACY_ACCOUNT_ID);
-    assertEquals("Wrong container id in blob ID: " + blobId, blobId.getContainerId(), Container.LEGACY_CONTAINER_ID);
-    assertEquals("Wrong datacenter id in blob ID: " + blobId, blobId.getDatacenterId(),
-        Datacenter.LEGACY_DATACENTER_ID);
-    assertEquals("Wrong partition id in blob ID: " + blobId, blobId.getPartition(), referencePartitionId);
-    System.out.println(
-        "BlobId=" + blobId + ", accountId=" + blobId.getAccountId() + ", containerId=" + blobId.getContainerId()
-            + ", datacenterId=" + blobId.getDatacenterId() + ", idSizeInBytes=" + blobId.toString().length());
+  public void testBuildBlobIdV1() throws Exception {
+    // use BlobIdBuilder(partitionId)
+    BlobId blobId = new BlobIdBuilder(referencePartitionId).build();
+    assertEquals("Wrong serialized version", BLOB_ID_V1, getVersionFromBlobString(blobId.toString()));
+    assertBlob(blobId, Account.LEGACY_ACCOUNT_ID, Container.LEGACY_CONTAINER_ID, Datacenter.LEGACY_DATACENTER_ID,
+        referencePartitionId);
+
+    // use BlobIdBuilder(accountId, containerId, datacenterId, partitionId), where the first three are null;
+    buildBlobIdAndAssert(null, null, null, referencePartitionId, BLOB_ID_V1);
   }
 
   /**
-   * Tests constructor for BlobId in version 2.
+   * Tests building BlobId in version 2. This will validate that even a single non-null field of either of
+   * {@code accountId}, {@code containerId}, or {@code datacenterId} will create blobId version 2.
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testBlobIdV2Constructor() throws Exception {
-    BlobId blobId = new BlobId(referenceAccountId, referenceContainerId, referenceDatacenterId, referencePartitionId);
-    assertEquals("Wrong account id in blob ID: " + blobId, blobId.getAccountId(), referenceAccountId);
-    assertEquals("Wrong container id in blob ID: " + blobId, blobId.getContainerId(), referenceContainerId);
-    assertEquals("Wrong datacenter id in blob ID: " + blobId, blobId.getDatacenterId(), referenceDatacenterId);
-    assertEquals("Wrong partition id in blob ID: " + blobId, blobId.getPartition(), referencePartitionId);
-    System.out.println(
-        "BlobId=" + blobId + ", accountId=" + blobId.getAccountId() + ", containerId=" + blobId.getContainerId()
-            + ", datacenterId=" + blobId.getDatacenterId() + ", idSizeInBytes=" + blobId.toString().length());
+  public void testBuildBlobIdV2() throws Exception {
+    buildBlobIdAndAssert(referenceAccountId, referenceContainerId, referenceDatacenterId, referencePartitionId,
+        BLOB_ID_V2);
+    buildBlobIdAndAssert(null, referenceContainerId, referenceDatacenterId, referencePartitionId, BLOB_ID_V2);
+    buildBlobIdAndAssert(referenceAccountId, null, referenceDatacenterId, referencePartitionId, BLOB_ID_V2);
+    buildBlobIdAndAssert(referenceAccountId, referenceContainerId, null, referencePartitionId, BLOB_ID_V2);
   }
 
   /**
-   * Tests deserialization from a composed blob id string (not from deserialization of a blobId) in both
-   * version 1 and 2.
+   * Tests setter in {@link BlobIdBuilder}.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testSetAndBuild() throws Exception {
+    Short accountId = (short) (referenceAccountId + 1);
+    Short containerId = (short) (referenceContainerId + 1);
+    Short datacenterId = (short) (referenceDatacenterId + 1);
+    PartitionId partitionId = referenceClusterMap.getWritablePartitionIds().get(1);
+    BlobIdBuilder blobIdBuilder =
+        new BlobIdBuilder(referenceAccountId, referenceContainerId, referenceDatacenterId, referencePartitionId);
+    BlobId blobId = blobIdBuilder.setAccountId(accountId)
+        .setContainerId(containerId)
+        .setDatacenterId(datacenterId)
+        .setPartitionId(partitionId)
+        .build();
+    assertBlob(blobId, accountId, containerId, datacenterId, partitionId);
+  }
+
+  /**
+   * Tests when not only {@code partitionId} is available, it will create version 2 of blobId.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testWhenOnlyPartitionIdAvailable() throws Exception {
+    BlobId idV2 = new BlobIdBuilder(referencePartitionId).setAccountId(referenceAccountId).build();
+    assertEquals("Wrong serialized version", BLOB_ID_V2, getVersionFromBlobString(idV2.toString()));
+    assertBlob(idV2, referenceAccountId, null, null, referencePartitionId);
+  }
+
+  /**
+   * Tests deserialization from a composed blob id string (not from deserialization of a blobId in both version
+   * 1 and 2.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testDeserialization() throws Exception {
     for (Short version : versions) {
-      deserializeBlobIdFromComposedBlobId(version);
+      composedBlobIdAndDeserialize(version);
     }
   }
 
@@ -126,12 +154,21 @@ public class BlobIdTest {
   }
 
   /**
-   * Makes a blobid-like string in the same way as used in blobId serialization, and then deserialize from the
+   * Tests blobId long form in both v1 and v2.
+   */
+  @Test
+  public void testBlobIdLongForm() {
+    assertBlobIdLongForm(BLOB_ID_V1);
+    assertBlobIdLongForm(BLOB_ID_V2);
+  }
+
+  /**
+   * Makes a blobId-like string in the same way as used in blobId serialization, and then deserialize from the
    * string to construct blobId object.
    * @param version The version of BlobId.
    * @throws Exception Any unexpected exception.
    */
-  private void deserializeBlobIdFromComposedBlobId(short version) throws Exception {
+  private void composedBlobIdAndDeserialize(short version) throws Exception {
     String srcUUID = UUID.randomUUID().toString();
     String srcBlobIdStr;
     switch (version) {
@@ -143,7 +180,7 @@ public class BlobIdTest {
             referencePartitionId, srcUUID.length(), srcUUID);
         break;
       default:
-        throw new IllegalArgumentException("invalid version number blob" + version);
+        throw new IllegalArgumentException("Invalid version number blob" + version);
     }
     deserializeBlobIdAndAssert(version, srcBlobIdStr, referencePartitionId);
   }
@@ -157,11 +194,11 @@ public class BlobIdTest {
     String srcBlobIdStr;
     switch (version) {
       case BLOB_ID_V1:
-        srcBlobIdStr = new BlobId(referencePartitionId).getID();
+        srcBlobIdStr = new BlobIdBuilder(referencePartitionId).build().getID();
         break;
       case BLOB_ID_V2:
-        srcBlobIdStr =
-            new BlobId(referenceAccountId, referenceContainerId, referenceDatacenterId, referencePartitionId).getID();
+        srcBlobIdStr = new BlobIdBuilder(referenceAccountId, referenceContainerId, referenceDatacenterId,
+            referencePartitionId).build().getID();
         break;
       default:
         throw new IllegalArgumentException("invalid version number blob" + version);
@@ -303,5 +340,103 @@ public class BlobIdTest {
    */
   private DataInputStream getStreamFromBase64(String base64String) {
     return new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(base64String))));
+  }
+
+  /**
+   * Asserts a {@link BlobId} against the expected values.
+   * @param blobId The {@link BlobId} to assert.
+   * @param accountId The expected {@code accountId}. If {@code null}, the assertion will be run against
+   * {@link Account#LEGACY_ACCOUNT_ID}.
+   * @param containerId The expected {@code containerId}. If {@code null}, the assertion will be run against
+   * {@link Container#LEGACY_CONTAINER_ID}.
+   * @param datacenterId The expected {@code datacenterId}. If {@code null}, the assertion will be run against
+   * {@link Datacenter#LEGACY_DATACENTER_ID}.
+   * @param partitionId The expected partitionId.
+   * @throws Exception Any unexpected exception.
+   */
+  private void assertBlob(BlobId blobId, Short accountId, Short containerId, Short datacenterId,
+      PartitionId partitionId) throws Exception {
+    assertEquals("Wrong account id in blob ID: " + blobId, blobId.getAccountId(),
+        accountId == null ? Account.LEGACY_ACCOUNT_ID : accountId);
+    assertEquals("Wrong container id in blob ID: " + blobId, blobId.getContainerId(),
+        containerId == null ? Container.LEGACY_CONTAINER_ID : containerId);
+    assertEquals("Wrong datacenter id in blob ID: " + blobId, blobId.getDatacenterId(),
+        datacenterId == null ? Datacenter.LEGACY_DATACENTER_ID : datacenterId);
+    assertEquals("Wrong partition id in blob ID: " + blobId, blobId.getPartition(), partitionId);
+    assertEquals("Wrong blob after serDes.", blobId, new BlobId(blobId.getID(), referenceClusterMap));
+    System.out.println(
+        "BlobId=" + blobId + ", accountId=" + blobId.getAccountId() + ", containerId=" + blobId.getContainerId()
+            + ", datacenterId=" + blobId.getDatacenterId() + ", idSizeInBytes=" + blobId.toString().length());
+  }
+
+  /**
+   * Builds a {@link BlobId} and assert it against the expected values.
+   * @param accountId The expected {@code accountId}. If {@code null}, the assertion will be run against
+   * {@link Account#LEGACY_ACCOUNT_ID}.
+   * @param containerId The expected {@code containerId}. If {@code null}, the assertion will be run against
+   * {@link Container#LEGACY_CONTAINER_ID}.
+   * @param datacenterId The expected {@code datacenterId}. If {@code null}, the assertion will be run against
+   * {@link Datacenter#LEGACY_DATACENTER_ID}.
+   * @param partitionId The expected partitionId.
+   * @param expectedBlobVersion The expected version number.
+   * @throws Exception Any unexpected exception.
+   */
+  private void buildBlobIdAndAssert(Short accountId, Short containerId, Short datacenterId, PartitionId partitionId,
+      short expectedBlobVersion) throws Exception {
+    BlobId blobId = new BlobIdBuilder(accountId, containerId, datacenterId, partitionId).build();
+    assertEquals("Wrong blob id version", expectedBlobVersion, getVersionFromBlobString(blobId.getID()));
+    assertBlob(blobId, accountId, containerId, datacenterId, partitionId);
+  }
+
+  /**
+   * Gets the version number from a blobId string.
+   * @param blobId The blobId string to get version number.
+   * @return Version number
+   * @throws Exception Any unexpected exception.
+   */
+  private short getVersionFromBlobString(String blobId) throws Exception {
+    DataInputStream dis = new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(blobId))));
+    try {
+      return dis.readShort();
+    } finally {
+      dis.close();
+    }
+  }
+
+  /**
+   * Asserts blobId long form.
+   * @param version The version number of blobId.
+   */
+  private void assertBlobIdLongForm(short version) {
+    BlobId blobId;
+    switch (version) {
+      case BLOB_ID_V1:
+        blobId = new BlobIdBuilder(referencePartitionId).build();
+        break;
+      case BLOB_ID_V2:
+        blobId = new BlobIdBuilder(referenceAccountId, referenceContainerId, referenceDatacenterId,
+            referencePartitionId).build();
+        break;
+
+      default:
+        fail("Unrecognized blob version number");
+        return;
+    }
+    String blobIdStr = blobId.getID();
+    String blobIdLongForm = blobId.getLongForm();
+    String blobLongFormWithoutUuid = blobIdLongForm.substring(0, blobIdLongForm.lastIndexOf(':'));
+    StringBuilder expectedBlobIdLongFormWithoutUuidSb =
+        new StringBuilder().append("[").append(blobIdStr).append(":").append(version).append(":");
+    if (version == BLOB_ID_V2) {
+      expectedBlobIdLongFormWithoutUuidSb.append(referenceAccountId)
+          .append(":")
+          .append(referenceContainerId)
+          .append(":")
+          .append(referenceDatacenterId)
+          .append(":");
+    }
+    String expectedBlobIdLongFormWithoutUuidStr =
+        expectedBlobIdLongFormWithoutUuidSb.append(referencePartitionId).toString();
+    assertEquals("Wrong blob id long form.", expectedBlobIdLongFormWithoutUuidStr, blobLongFormWithoutUuid);
   }
 }
