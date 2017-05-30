@@ -21,6 +21,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
@@ -53,8 +54,7 @@ public class CompactionManagerTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     blobStore = new MockBlobStore(config, metrics, time, null);
-    compactionManager =
-        new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
   }
 
   /**
@@ -77,9 +77,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    blobStore = new MockBlobStore(config, metrics, time, null);
-    compactionManager =
-        new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -103,11 +101,26 @@ public class CompactionManagerTest {
     properties.setProperty("store.enable.compaction", Boolean.toString(true));
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
-    blobStore = new MockBlobStore(config, metrics, time, null);
-    compactionManager =
-        new CompactionManager(MOUNT_PATH, config, Collections.singleton((BlobStore) blobStore), metrics, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.disable();
     compactionManager.awaitTermination();
+  }
+
+  /**
+   * Tests construction failure on bad input.
+   */
+  @Test
+  public void testConstructorBadArgs() {
+    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    properties.setProperty("store.compaction.triggers", "@@BAD_TRIGGER@@");
+    config = new StoreConfig(new VerifiableProperties(properties));
+    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    try {
+      new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
+      fail("Construction should have failed because one of the trigger values is invalid");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
   }
 
   /**
@@ -127,11 +140,13 @@ public class CompactionManagerTest {
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    MockBlobStore lastStore = null;
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = new MockBlobStore(config, metrics, time, compactCallsCountdown, null);
       // one store should not have any segments to compact
       store.details = i == 0 ? null : generateRandomCompactionDetails(i);
       stores.add(store);
+      lastStore = store;
     }
     compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
     compactionManager.enable();
@@ -152,6 +167,13 @@ public class CompactionManagerTest {
         assertFalse("Compact should not have been called", store.compactCalled);
       }
     }
+    // test scheduleNextForCompaction()
+    lastStore.compactCallsCountdown = new CountDownLatch(1);
+    lastStore.compactCalled = false;
+    assertTrue("Should schedule compaction", compactionManager.scheduleNextForCompaction(lastStore));
+    assertTrue("Compaction call did not come within the expected time",
+        lastStore.compactCallsCountdown.await(1, TimeUnit.HOURS));
+    assertTrue("compact() should have been called", lastStore.compactCalled);
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
@@ -228,16 +250,70 @@ public class CompactionManagerTest {
         assertTrue("Should schedule compaction", compactionManager.scheduleNextForCompaction(store));
         assertTrue("Compaction call did not come within the expected time",
             store.compactCallsCountdown.await(1, TimeUnit.HOURS));
+        if (store.callOrderException != null) {
+          throw store.callOrderException;
+        }
         assertTrue("compact() should have been called", store.compactCalled);
       }
     }
-
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
   }
 
+  /**
+   * Tests for cases where only certain triggers are enabled.
+   * @throws Exception
+   */
+  @Test
+  public void testDifferentTriggers() throws Exception {
+    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    blobStore.details = generateRandomCompactionDetails(2);
+
+    // all enabled is already tested in testCompactionExecutorHappyPath()
+    // only time based enabled
+    properties.setProperty("store.compaction.triggers", "Time");
+    Runnable timeTriggerCode = () -> {
+      try {
+        assertTrue("Compaction calls did not come within the expected time",
+            blobStore.compactCallsCountdown.await(1, TimeUnit.SECONDS));
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
+      }
+      if (blobStore.callOrderException != null) {
+        throw new IllegalStateException(blobStore.callOrderException);
+      }
+      assertTrue("compact() should have been called", blobStore.compactCalled);
+    };
+    Runnable adminTriggerCode =
+        () -> assertFalse("Compaction should not be scheduled", compactionManager.scheduleNextForCompaction(blobStore));
+    doTestTrigger(Arrays.asList(timeTriggerCode, adminTriggerCode));
+
+    // only admin based enabled
+    properties.setProperty("store.compaction.triggers", "Admin");
+    long startTimeMs = time.milliseconds();
+    adminTriggerCode = () -> {
+      assertTrue("Compaction should be scheduled", compactionManager.scheduleNextForCompaction(blobStore));
+      try {
+        assertTrue("Compaction calls did not come within the expected time",
+            blobStore.compactCallsCountdown.await(1, TimeUnit.SECONDS));
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
+      }
+      if (blobStore.callOrderException != null) {
+        throw new IllegalStateException(blobStore.callOrderException);
+      }
+      assertTrue("compact() should have been called", blobStore.compactCalled);
+    };
+    // the fact that the time based trigger has not been enabled can only be tested indirectly by making sure
+    // time has not moved forward
+    timeTriggerCode = () -> assertEquals("Time should not have moved forward", startTimeMs, time.milliseconds());
+    doTestTrigger(Arrays.asList(adminTriggerCode, timeTriggerCode));
+  }
+
   // helper methods
+
+  // general
 
   /**
    * Generates random {@link CompactionDetails} with random log segment names
@@ -249,6 +325,30 @@ public class CompactionManagerTest {
     return new CompactionDetails(time.milliseconds(), logSegmentsNames);
   }
 
+  // testDifferentTriggers() helpers
+
+  /**
+   * Does the compaction triggers test by running each trigger in {@code triggerRunners} after resetting state.
+   * @param triggerRunners the code that triggers compaction.
+   * @throws Exception
+   */
+  private void doTestTrigger(List<Runnable> triggerRunners) throws Exception {
+    blobStore.resumeCompactionCalled = false;
+    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    config = new StoreConfig(new VerifiableProperties(properties));
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
+    compactionManager.enable();
+    assertNotNull("Compaction thread should be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    for (Runnable triggerRunner : triggerRunners) {
+      blobStore.compactCallsCountdown = new CountDownLatch(1);
+      blobStore.compactCalled = false;
+      triggerRunner.run();
+    }
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+  }
+
   /**
    * MockBlobStore to assist in testing {@link CompactionManager}
    */
@@ -256,7 +356,7 @@ public class CompactionManagerTest {
     CountDownLatch compactCallsCountdown;
     CompactionDetails details;
 
-    private boolean resumeCompactionCalled = false;
+    boolean resumeCompactionCalled = false;
     boolean compactCalled = false;
     Exception callOrderException = null;
 

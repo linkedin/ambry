@@ -133,6 +133,14 @@ public class StoreConfig {
   @Default("1")
   public final int storeMinLogSegmentCountToReclaimToTriggerCompaction;
 
+  /**
+   * Comma separated list of the compaction triggers that should be enabled. The valid triggers are:
+   * Time, Admin
+   */
+  @Config("store.compaction.triggers")
+  @Default("Time,Admin")
+  public final String[] storeCompactionTriggers;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -160,6 +168,7 @@ public class StoreConfig {
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
+    storeCompactionTriggers = verifiableProperties.getString("store.compaction.triggers", "Time,Admin").split(",");
   }
 }
 

@@ -33,6 +33,9 @@ import org.slf4j.LoggerFactory;
 class CompactionManager {
   static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
 
+  private static final String TIME_BASED_TRIGGER_NAME = "time";
+  private static final String ADMIN_BASED_TRIGGER_NAME = "admin";
+
   private final String mountPath;
   private final StoreConfig storeConfig;
   private final Time time;
@@ -59,14 +62,33 @@ class CompactionManager {
     this.stores = stores;
     this.time = time;
     this.metrics = metrics;
-    compactionExecutor = storeConfig.storeEnableCompaction ? new CompactionExecutor() : null;
-    try {
-      CompactionPolicyFactory compactionPolicyFactory =
-          Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
-      compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
-    } catch (Exception e) {
-      throw new IllegalStateException(
-          "Error creating compaction policy using compactionPolicyFactory " + storeConfig.storeCompactionPolicyFactory);
+    if (storeConfig.storeEnableCompaction) {
+      boolean enableTimeBasedTrigger = false;
+      boolean enableAdminBasedTrigger = false;
+      for (String trigger : storeConfig.storeCompactionTriggers) {
+        switch (trigger.toLowerCase()) {
+          case TIME_BASED_TRIGGER_NAME:
+            enableTimeBasedTrigger = true;
+            break;
+          case ADMIN_BASED_TRIGGER_NAME:
+            enableAdminBasedTrigger = true;
+            break;
+          default:
+            throw new IllegalArgumentException("Unrecognized trigger name: " + trigger);
+        }
+      }
+      compactionExecutor = new CompactionExecutor(enableTimeBasedTrigger, enableAdminBasedTrigger);
+      try {
+        CompactionPolicyFactory compactionPolicyFactory =
+            Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
+        compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
+      } catch (Exception e) {
+        throw new IllegalStateException("Error creating compaction policy using compactionPolicyFactory "
+            + storeConfig.storeCompactionPolicyFactory);
+      }
+    } else {
+      compactionExecutor = null;
+      compactionPolicy = null;
     }
   }
 
@@ -143,6 +165,8 @@ class CompactionManager {
    * A {@link Runnable} that cycles through the stores and executes compaction if required.
    */
   private class CompactionExecutor implements Runnable {
+    private final boolean timeBasedTriggerEnabled;
+    private final boolean adminBasedTriggerEnabled;
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
@@ -153,6 +177,15 @@ class CompactionManager {
     private volatile boolean enabled = true;
 
     volatile boolean isRunning = false;
+
+    /**
+     * @param enableTimeBasedTrigger if {@code true}, checks for compaction eligibility of every store in a time period.
+     * @param enableAdminBasedTrigger if {@code true}, allows compaction to be triggered via an admin command.
+     */
+    CompactionExecutor(boolean enableTimeBasedTrigger, boolean enableAdminBasedTrigger) {
+      timeBasedTriggerEnabled = enableTimeBasedTrigger;
+      adminBasedTriggerEnabled = enableAdminBasedTrigger;
+    }
 
     /**
      * Starts by resuming any compactions that were left halfway. In steady state, it cycles through the stores at a
@@ -182,7 +215,9 @@ class CompactionManager {
         }
         // continue to do compactions as required.
         long expectedNextCheckTime = time.milliseconds() + waitTimeMs;
-        storesToCheck.addAll(stores);
+        if (timeBasedTriggerEnabled) {
+          storesToCheck.addAll(stores);
+        }
         while (enabled) {
           try {
             while (enabled && storesToCheck.peek() != null) {
@@ -216,11 +251,16 @@ class CompactionManager {
             try {
               if (enabled) {
                 if (storesToCheck.peek() == null) {
-                  long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
-                  logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
-                  time.await(waitCondition, actualWaitTimeMs);
+                  if (timeBasedTriggerEnabled) {
+                    long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
+                    logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
+                    time.await(waitCondition, actualWaitTimeMs);
+                  } else {
+                    logger.trace("Going to wait until compaction thread at {} is woken up", mountPath);
+                    waitCondition.await();
+                  }
                 }
-                if (time.milliseconds() >= expectedNextCheckTime) {
+                if (timeBasedTriggerEnabled && time.milliseconds() >= expectedNextCheckTime) {
                   expectedNextCheckTime = time.milliseconds() + waitTimeMs;
                   storesToCheck.addAll(stores);
                 }
@@ -259,7 +299,7 @@ class CompactionManager {
      * @return {@code true} if the scheduling was successful. {@code false} if not.
      */
     boolean scheduleNextForCompaction(BlobStore store) {
-      if (!enabled || !store.isStarted() || storesToSkip.contains(store)) {
+      if (!enabled || !adminBasedTriggerEnabled || !store.isStarted() || storesToSkip.contains(store)) {
         return false;
       }
       lock.lock();
