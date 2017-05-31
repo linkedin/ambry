@@ -299,28 +299,46 @@ public class RequestResponseTest {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
-    DeleteRequest deleteRequest = new DeleteRequest(1234, "client", id1);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    do {
-      deleteRequest.writeTo(writableByteChannel);
-    } while (!deleteRequest.isSendComplete());
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read length
-    requestStream.readShort(); // read short
-    DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
-    Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
-    Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
-    DeleteResponse response = new DeleteResponse(1234, "client", ServerErrorCode.No_Error);
-    outputStream.reset();
-    do {
-      response.writeTo(writableByteChannel);
-    } while (!response.isSendComplete());
-    requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read size
-    DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
-    Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+    short[] versions = new short[]{DeleteRequest.Delete_Request_Version_V1, DeleteRequest.Delete_Request_Version_V2};
+    for (short version : versions) {
+      short accountId = Utils.getRandomShort(random);
+      short containerId = Utils.getRandomShort(random);
+      int deletionTimeSecs = random.nextInt();
+      int correlationId = random.nextInt();
+      DeleteRequest deleteRequest;
+      if (version == DeleteRequest.Delete_Request_Version_V1) {
+        deleteRequest = new DeleteRequest(correlationId, "client", id1);
+      } else {
+        deleteRequest = new DeleteRequest(correlationId, "client", id1, accountId, containerId, deletionTimeSecs);
+      }
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
+      do {
+        deleteRequest.writeTo(writableByteChannel);
+      } while (!deleteRequest.isSendComplete());
+      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      requestStream.readLong(); // read length
+      requestStream.readShort(); // read short
+      DeleteRequest.ReceivedDeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
+      Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
+      Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
+      if (version == DeleteRequest.Delete_Request_Version_V2) {
+        Assert.assertEquals("AccountId mismatch ", accountId, deserializedDeleteRequest.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", containerId, deserializedDeleteRequest.getContainerId());
+        Assert.assertEquals("DeletionTime mismatch ", deletionTimeSecs,
+            deserializedDeleteRequest.getDeletionTimeInSecs());
+      }
+      DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
+      outputStream.reset();
+      do {
+        response.writeTo(writableByteChannel);
+      } while (!response.isSendComplete());
+      requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      requestStream.readLong(); // read size
+      DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
+      Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), correlationId);
+      Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+    }
   }
 
   @Test

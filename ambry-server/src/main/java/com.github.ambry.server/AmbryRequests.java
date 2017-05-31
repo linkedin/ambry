@@ -344,7 +344,8 @@ public class AmbryRequests implements RequestAPI {
   }
 
   public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
-    DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    DeleteRequest.ReceivedDeleteRequest deleteRequest =
+        DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     metrics.deleteBlobRequestQueueTimeInMs.update(requestQueueTime);

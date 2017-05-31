@@ -42,6 +42,7 @@ public class MessageFormatRecord {
   public static final short Message_Header_Version_V1 = 1;
   public static final short BlobProperties_Version_V1 = 1;
   public static final short Delete_Version_V1 = 1;
+  public static final short Delete_Version_V2 = 2;
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
   public static final short Blob_Version_V2 = 2;
@@ -78,13 +79,15 @@ public class MessageFormatRecord {
     }
   }
 
-  public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
+  public static DeleteRecord deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
       case Delete_Version_V1:
         return Delete_Format_V1.deserializeDeleteRecord(crcStream);
+      case Delete_Version_V2:
+        return Delete_Format_V2.deserializeDeleteRecord(crcStream);
       default:
         throw new MessageFormatException("delete record version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
@@ -440,7 +443,8 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static boolean deserializeDeleteRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
+    public static DeleteRecord deserializeDeleteRecord(CrcInputStream crcStream)
+        throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       boolean isDeleted = dataStream.readByte() == 1 ? true : false;
       long actualCRC = crcStream.getValue();
@@ -450,7 +454,67 @@ public class MessageFormatRecord {
             "corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
-      return isDeleted;
+      return new DeleteRecord(isDeleted);
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   * |         |               |               |               |             |
+   * | version |   AccountId   |  ContainerId  |  DeletionTime |     Crc     |
+   * |(2 bytes)|    (2 byte2)  |   (2 bytes)   |   (4 bytes)   |  (8 bytes)  |
+   * |         |               |               |               |             |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   *  version         - The version of the delete record
+   *
+   *  AccountId     - AccountId that the blob belongs to
+   *
+   *  ContainerId   - ContainerId that the blob belongs to
+   *
+   *  Deletion Time - Time of deletion in secs
+   *
+   *  Crc             - The crc of the delete record
+   *
+   */
+  public static class Delete_Format_V2 {
+
+    public static final int AccountId_Field_Size_In_Bytes = 2;
+    public static final int ContainerId_Field_Size_In_Bytes = 2;
+    public static final int Deletion_Time_Field_Size_In_Bytes = 4;
+
+    private static Logger logger = LoggerFactory.getLogger(Delete_Format_V2.class);
+
+    public static int getDeleteRecordSize() {
+      return Version_Field_Size_In_Bytes + AccountId_Field_Size_In_Bytes + ContainerId_Field_Size_In_Bytes
+          + Deletion_Time_Field_Size_In_Bytes + Crc_Size;
+    }
+
+    public static void serializeDeleteRecord(ByteBuffer outputBuffer, short accountId, short containerId,
+        int deletionTimeInSecs) {
+      int startOffset = outputBuffer.position();
+      outputBuffer.putShort(Delete_Version_V2);
+      outputBuffer.putShort(accountId);
+      outputBuffer.putShort(containerId);
+      outputBuffer.putInt(deletionTimeInSecs);
+      Crc32 crc = new Crc32();
+      crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
+      outputBuffer.putLong(crc.getValue());
+    }
+
+    public static DeleteRecord deserializeDeleteRecord(CrcInputStream crcStream)
+        throws IOException, MessageFormatException {
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      short accountId = dataStream.readShort();
+      short containerId = dataStream.readShort();
+      int deletionTimeInSecs = dataStream.readInt();
+      long actualCRC = crcStream.getValue();
+      long expectedCRC = dataStream.readLong();
+      if (actualCRC != expectedCRC) {
+        logger.error(
+            "corrupt data while parsing delete record V2 Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+      }
+      return new DeleteRecord(accountId, containerId, deletionTimeInSecs);
     }
   }
 

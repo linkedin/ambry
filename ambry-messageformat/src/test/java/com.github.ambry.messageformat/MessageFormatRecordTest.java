@@ -41,18 +41,24 @@ public class MessageFormatRecordTest {
   @Test
   public void deserializeTest() {
     try {
-      // Test delete V1 record
-      ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
-      MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, true);
-      deleteRecord.flip();
-      boolean deleted = MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-      Assert.assertEquals(deleted, true);
+      // Test Blob property V1 Record
+      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
+      ByteBuffer stream =
+          ByteBuffer.allocate(MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties));
+      MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
+      stream.flip();
+      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+      Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
+      Assert.assertEquals(properties.getContentType(), result.getContentType());
+      Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
+      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
+      Assert.assertEquals(properties.getServiceId(), result.getServiceId());
 
-      // corrupt delete V1 record
-      deleteRecord.flip();
-      deleteRecord.put(10, (byte) 4);
+      // corrupt blob property V1 record
+      stream.flip();
+      stream.put(10, (byte) 10);
       try {
-        boolean corruptDeleted = MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+        BlobProperties resultCorrupt = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         Assert.assertEquals(true, false);
       } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
@@ -228,6 +234,57 @@ public class MessageFormatRecordTest {
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
     outputBuffer.putShort(properties.getCreatorAccountId());
+  }
+
+  @Test
+  public void testDeleteRecordV1() throws IOException, MessageFormatException {
+    // Test delete V1 record
+    ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
+    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, true);
+    deleteRecord.flip();
+    DeleteRecord deserializeDeleteRecord =
+        MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+    Assert.assertEquals("Delete record version mismatch ", deserializeDeleteRecord.getVersion(),
+        MessageFormatRecord.Delete_Version_V1);
+    Assert.assertEquals(deserializeDeleteRecord.isDeleted(), true);
+
+    // corrupt delete V1 record
+    deleteRecord.flip();
+    deleteRecord.put(10, (byte) 4);
+    try {
+      MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+      Assert.assertEquals(true, false);
+    } catch (MessageFormatException e) {
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+    }
+  }
+
+  @Test
+  public void testDeleteRecordV2() throws IOException, MessageFormatException {
+    // Test delete V2 record
+    ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize());
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    int deletionTimeSecs = TestUtils.RANDOM.nextInt();
+    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord, accountId, containerId, deletionTimeSecs);
+    deleteRecord.flip();
+    DeleteRecord deserializeDeleteRecord =
+        MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+    Assert.assertEquals("Delete record version mismatch ", deserializeDeleteRecord.getVersion(),
+        MessageFormatRecord.Delete_Version_V2);
+    Assert.assertEquals("AccountId mismatch ", accountId, deserializeDeleteRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", containerId, deserializeDeleteRecord.getContainerId());
+    Assert.assertEquals("DeletionTime mismatch ", deletionTimeSecs, deserializeDeleteRecord.getDeletionTimeInSecs());
+
+    // corrupt delete V2 record
+    deleteRecord.flip();
+    deleteRecord.put(10, (byte) 4);
+    try {
+      MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+      Assert.assertEquals(true, false);
+    } catch (MessageFormatException e) {
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+    }
   }
 
   @Test

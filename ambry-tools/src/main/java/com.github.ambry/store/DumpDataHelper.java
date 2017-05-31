@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.DeleteRecord;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -91,9 +92,14 @@ class DumpDataHelper {
           BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
           blobDataOutput = "Blob - size " + blobData.getSize();
         } else {
-          boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(streamlog);
+          DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(streamlog);
           isDeleted = true;
-          deleteMsg = "delete change " + deleteFlag;
+          if (deleteRecord.getVersion() == MessageFormatRecord.Delete_Version_V1) {
+            deleteMsg = "delete change " + deleteRecord.isDeleted();
+          } else {
+            deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
+                + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInSecs();
+          }
         }
       } else {
         throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
