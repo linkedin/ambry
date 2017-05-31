@@ -23,6 +23,8 @@ import com.github.ambry.utils.Utils;
  */
 public class BlobProperties {
 
+  public static final short ACCOUNTID_CONTAINERID_DEFAULT_VALUE = -1;
+
   protected long blobSize;
   protected String serviceId;
   protected String ownerId;
@@ -30,13 +32,29 @@ public class BlobProperties {
   protected boolean isPrivate;
   protected long timeToLiveInSeconds;
   protected long creationTimeInMs;
+  private short accountId;
+  private short containerId;
+  private short issuerAccountId;
 
   /**
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
+   * @TODO: Remove this constructor once BlobProperty V2 is enabled
    */
   public BlobProperties(long blobSize, String serviceId) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds());
+  }
+
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   * @param accountId accountId of the user who uploaded the blob
+   * @param containerId containerId of the blob
+   * @param issuerAccountId Issuer AccountId of the put request
+   */
+  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, short issuerAccountId) {
+    this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
+        accountId, containerId, issuerAccountId);
   }
 
   /**
@@ -46,6 +64,7 @@ public class BlobProperties {
    * @param contentType The content type of the blob (eg: mime). Can be Null
    * @param isPrivate Is the blob secure
    * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
+   * @TODO: Remove this constructor once BlobProperty V2 is enabled
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds) {
@@ -60,10 +79,44 @@ public class BlobProperties {
    * @param contentType The content type of the blob (eg: mime). Can be Null
    * @param isPrivate Is the blob secure
    * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
+   * @param accountId accountId of the user who uploaded the blob
+   * @param containerId containerId of the blob
+   * @param issuerAccountId Issuer AccountId of the put request
+   */
+  public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
+      long timeToLiveInSeconds, short accountId, short containerId, short issuerAccountId) {
+    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
+        SystemTime.getInstance().milliseconds(), accountId, containerId, issuerAccountId);
+  }
+
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   * @param ownerId The owner of the blob (For example , memberId or groupId)
+   * @param contentType The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate Is the blob secure
+   * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
    * @param creationTimeInMs The time at which the blob is created.
+   * @TODO: Remove this constructor once BlobProperty V2 is enabled
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs) {
+    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs,
+        ACCOUNTID_CONTAINERID_DEFAULT_VALUE, ACCOUNTID_CONTAINERID_DEFAULT_VALUE, ACCOUNTID_CONTAINERID_DEFAULT_VALUE);
+  }
+
+  /**
+   * @param blobSize The size of the blob in bytes
+   * @param serviceId The service id that is creating this blob
+   * @param ownerId The owner of the blob (For example , memberId or groupId)
+   * @param contentType The content type of the blob (eg: mime). Can be Null
+   * @param isPrivate Is the blob secure
+   * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
+   * @param creationTimeInMs The time at which the blob is created.
+   * @param issuerAccountId Issuer AccountId of the put request
+   */
+  public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
+      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, short issuerAccountId) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -71,6 +124,9 @@ public class BlobProperties {
     this.isPrivate = isPrivate;
     this.creationTimeInMs = creationTimeInMs;
     this.timeToLiveInSeconds = timeToLiveInSeconds;
+    this.accountId = accountId;
+    this.containerId = containerId;
+    this.issuerAccountId = issuerAccountId;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -105,6 +161,18 @@ public class BlobProperties {
     return creationTimeInMs;
   }
 
+  public short getAccountId() {
+    return accountId;
+  }
+
+  public short getContainerId() {
+    return containerId;
+  }
+
+  public short getIssuerAccountId() {
+    return issuerAccountId;
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
@@ -132,6 +200,9 @@ public class BlobProperties {
     } else {
       sb.append(", ").append("TimeToLiveInSeconds=Infinite");
     }
+    sb.append(", ").append("AccountId=").append(getAccountId());
+    sb.append(", ").append("ContainerId=").append(getContainerId());
+    sb.append(", ").append("IssuerAccountId=").append(getIssuerAccountId());
     sb.append("]");
     return sb.toString();
   }

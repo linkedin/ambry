@@ -17,6 +17,8 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -28,35 +30,15 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.messageformat.MessageFormatRecord.BlobProperties_Format_V1.*;
+import static com.github.ambry.messageformat.MessageFormatRecord.*;
+
 
 public class MessageFormatRecordTest {
 
   @Test
   public void deserializeTest() {
     try {
-      // Test Blob property V1 Record
-      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
-      ByteBuffer stream =
-          ByteBuffer.allocate(MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties));
-      MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
-      stream.flip();
-      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
-      Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
-      Assert.assertEquals(properties.getContentType(), result.getContentType());
-      Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
-      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
-      Assert.assertEquals(properties.getServiceId(), result.getServiceId());
-
-      // corrupt blob property V1 record
-      stream.flip();
-      stream.put(10, (byte) 10);
-      try {
-        BlobProperties resultCorrupt = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
-        Assert.assertEquals(true, false);
-      } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
-      }
-
       // Test delete V1 record
       ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
       MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, true);
@@ -145,6 +127,77 @@ public class MessageFormatRecordTest {
     } catch (Exception e) {
       Assert.assertTrue(false);
     }
+  }
+
+  @Test
+  public void testBlobPropertyV1() throws IOException, MessageFormatException {
+    // Test Blob property V1 Record
+    short[] versions = new short[]{BlobPropertiesSerDe.Version1, BlobPropertiesSerDe.Version2};
+    for (short version : versions) {
+      BlobProperties properties;
+      long blobSize = TestUtils.RANDOM.nextLong();
+      long ttl = TestUtils.RANDOM.nextInt();
+      if (version == BlobPropertiesSerDe.Version1) {
+        properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl);
+      } else {
+        short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+        short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+        short issuerAccountId = Utils.getRandomShort(TestUtils.RANDOM);
+        properties =
+            new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, issuerAccountId);
+      }
+      ByteBuffer stream;
+      if (version == BlobPropertiesSerDe.Version1) {
+        stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties));
+        MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
+      } else {
+        stream = ByteBuffer.allocate(getBlobPropertiesV2RecordSize(properties));
+        serializeBlobPropertiesV2Record(stream, properties);
+      }
+      stream.flip();
+      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+      Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
+      Assert.assertEquals(properties.getContentType(), result.getContentType());
+      Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
+      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
+      Assert.assertEquals(properties.getServiceId(), result.getServiceId());
+      // @TODO: fix this once BlobProperty V2 is enabled
+      if (version == BlobPropertiesSerDe.Version1) {
+        Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getAccountId());
+        Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getContainerId());
+        Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getIssuerAccountId());
+      } else {
+        Assert.assertEquals(properties.getAccountId(), result.getAccountId());
+        Assert.assertEquals(properties.getContainerId(), result.getContainerId());
+        Assert.assertEquals(properties.getIssuerAccountId(), result.getIssuerAccountId());
+      }
+
+      // corrupt blob property V1 record
+      stream.flip();
+      stream.put(10, (byte) 10);
+      try {
+        MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+        Assert.assertEquals(true, false);
+      } catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      }
+    }
+  }
+
+  // TODO: remove this once BlobProperties V2 is enabled
+  public static void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
+    int startOffset = outputBuffer.position();
+    outputBuffer.putShort(BlobProperties_Version_V1);
+    BlobPropertiesSerDe.putBlobPropertiesToBufferV2(outputBuffer, properties);
+    Crc32 crc = new Crc32();
+    crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV2RecordSize(properties) - Crc_Size);
+    outputBuffer.putLong(crc.getValue());
+  }
+
+  //  TODO: remove this once BlobProperties V2 is enabled
+  public static int getBlobPropertiesV2RecordSize(BlobProperties properties) {
+    int size = BlobPropertiesSerDe.getBlobPropertiesV2Size(properties);
+    return Version_Field_Size_In_Bytes + size + Crc_Size;
   }
 
   @Test

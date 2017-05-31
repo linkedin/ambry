@@ -27,6 +27,13 @@ class SystemMetadata extends BlobProperties {
     super(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds);
     this.creationTimeInMs = creationTime;
   }
+
+  public SystemMetadata(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
+      long timeToLiveInSeconds, long creationTime, short accountId, short containerId, short issuerAccountId) {
+    super(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, accountId, containerId,
+        issuerAccountId);
+    this.creationTimeInMs = creationTime;
+  }
 }
 
 /**
@@ -34,14 +41,19 @@ class SystemMetadata extends BlobProperties {
  */
 public class BlobPropertiesSerDe {
 
-  private static final short Version1 = 1;
+  static final short Version1 = 1;
+  static final short Version2 = 2;
   private static final int Version_Field_Size_In_Bytes = 2;
   private static final int TTL_Field_Size_In_Bytes = 8;
   private static final int Private_Field_Size_In_Bytes = 1;
   private static final int CreationTime_Field_Size_In_Bytes = 8;
   private static final int Variable_Field_Size_In_Bytes = 4;
   private static final int BlobSize_Field_Size_In_Bytes = 8;
+  private static final int AccountId_Field_Size_In_Bytes = 2;
+  private static final int ContainerId_Field_Size_In_Bytes = 2;
+  private static final int IssuerAccountId_Field_Size_In_Bytes = 2;
 
+  // @TODO: remove this to add accountId and containerId once putBlobPropertiesToBuffer is changed to version2
   public static int getBlobPropertiesSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
@@ -50,9 +62,25 @@ public class BlobPropertiesSerDe {
         + Utils.getNullableStringLength(properties.getServiceId());
   }
 
+  /**
+   * Returns the size of {@link BlobProperties} to serialize in Version 2
+   * @param properties {@link BlobProperties} for which size is requested
+   * @return the size of the {@link BlobProperties} to serialize in Version 2
+   * @TODO: will be used once putBlobPropertiesToBuffer is changed to version2
+   */
+  public static int getBlobPropertiesV2Size(BlobProperties properties) {
+    return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
+        + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
+        + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
+        + Utils.getNullableStringLength(properties.getOwnerId()) + Variable_Field_Size_In_Bytes
+        + Utils.getNullableStringLength(properties.getServiceId()) + AccountId_Field_Size_In_Bytes
+        + ContainerId_Field_Size_In_Bytes + IssuerAccountId_Field_Size_In_Bytes;
+  }
+
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
     long version = stream.readShort();
-    if (version == Version1) {
+    BlobProperties toReturn;
+    if (version == Version1 || version == Version2) {
       long ttl = stream.readLong();
       boolean isPrivate = stream.readByte() == 1 ? true : false;
       long creationTime = stream.readLong();
@@ -60,10 +88,20 @@ public class BlobPropertiesSerDe {
       String contentType = Utils.readIntString(stream);
       String ownerId = Utils.readIntString(stream);
       String serviceId = Utils.readIntString(stream);
-      return new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
+      if (version == Version1) {
+        toReturn = new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
+      } else {
+        short accountId = stream.readShort();
+        short containerId = stream.readShort();
+        short issuerAccountId = stream.readShort();
+        toReturn =
+            new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
+                containerId, issuerAccountId);
+      }
     } else {
       throw new IllegalArgumentException("stream has unknown blob property version " + version);
     }
+    return toReturn;
   }
 
   public static void putBlobPropertiesToBuffer(ByteBuffer outputBuffer, BlobProperties properties) {
@@ -75,5 +113,24 @@ public class BlobPropertiesSerDe {
     Utils.serializeNullableString(outputBuffer, properties.getContentType());
     Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+  }
+
+  /**
+   * Serialied {@link BlobProperties} to buffer in version {@link #Version2}
+   * @param outputBuffer the {@link ByteBuffer} to write the {@link BlobProperties}
+   * @param properties the {@link BlobProperties} to be serialized
+   */
+  public static void putBlobPropertiesToBufferV2(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(Version2);
+    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
+    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(properties.getCreationTimeInMs());
+    outputBuffer.putLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
+    outputBuffer.putShort(properties.getIssuerAccountId());
   }
 }
