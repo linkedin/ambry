@@ -1006,7 +1006,8 @@ class CuratedLogIndexState {
       String segmentName = ((LogSegment) read).getName();
       Pair<MockId, LogEntry> idAndValue = logOrder.get(new Offset(segmentName, offset));
       IndexValue value = idAndValue.getSecond().indexValue;
-      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs());
+      return new MessageInfo.MessageInfoBuilder(idAndValue.getFirst(), value.getSize()).setExpirationTimeMs(
+          value.getExpiresAtMs()).build();
     }
   }
 

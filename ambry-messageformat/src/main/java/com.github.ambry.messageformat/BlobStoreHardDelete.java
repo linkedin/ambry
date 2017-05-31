@@ -79,12 +79,14 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
           if (headerFormat.getBlobPropertiesRecordRelativeOffset()
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
             BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
-            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
+            return new MessageInfo.MessageInfoBuilder(key,
+                header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize()).setExpirationTimeMs(
+                Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()))
+                .build();
           } else {
             boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
-            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                deleteFlag);
+            return new MessageInfo.MessageInfoBuilder(key,
+                header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize()).setDeleted(deleteFlag).build();
           }
         default:
           throw new MessageFormatException("Version not known while reading message - " + version,

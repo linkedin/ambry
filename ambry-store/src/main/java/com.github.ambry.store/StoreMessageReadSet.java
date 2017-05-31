@@ -93,7 +93,10 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   MessageInfo getMessageInfo() {
-    return new MessageInfo(storeKey, size, isDeleted, expiresAtMs, crc);
+    return new MessageInfo.MessageInfoBuilder(storeKey, size).setDeleted(isDeleted)
+        .setExpirationTimeMs(expiresAtMs)
+        .setCRC(crc)
+        .build();
   }
 
   File getFile() {

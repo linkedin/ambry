@@ -775,9 +775,8 @@ class PersistentIndex {
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     IndexEntryType.ANY, indexSegments);
-            messageEntries.add(
-                new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                    value.getExpiresAtMs()));
+            messageEntries.add(new MessageInfo.MessageInfoBuilder(entry.getKey(), value.getSize()).setDeleted(
+                value.isFlagSet(IndexValue.Flags.Delete_Index)).setExpirationTimeMs(value.getExpiresAtMs()).build());
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
@@ -1078,9 +1077,8 @@ class PersistentIndex {
           IndexValue value =
               findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot), IndexEntryType.ANY,
                   indexSegments);
-          messageEntries.add(
-              new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                  value.getExpiresAtMs()));
+          messageEntries.add(new MessageInfo.MessageInfoBuilder(entry.getKey(), value.getSize()).setDeleted(
+              value.isFlagSet(IndexValue.Flags.Delete_Index)).setExpirationTimeMs(value.getExpiresAtMs()).build());
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
@@ -1168,8 +1166,10 @@ class PersistentIndex {
       if (!messageInfo.isDeleted()) {
         // ok to use most recent ref to filter out deleted records.
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
-        messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
+        messageInfo = new MessageInfo.MessageInfoBuilder(messageInfo.getStoreKey(), messageInfo.getSize()).setDeleted(
+            indexValue.isFlagSet(IndexValue.Flags.Delete_Index))
+            .setExpirationTimeMs(messageInfo.getExpirationTimeInMs())
+            .build();
         messageEntriesIterator.set(messageInfo);
       }
     }
@@ -1332,7 +1332,9 @@ class PersistentIndex {
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     IndexEntryType.ANY, indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs()));
+              messageEntries.add(new MessageInfo.MessageInfoBuilder(entry.getKey(), value.getSize()).setDeleted(true)
+                  .setExpirationTimeMs(value.getExpiresAtMs())
+                  .build());
             }
             offsetEnd = entry.getOffset();
             currentTotalSizeOfEntries += value.getSize();

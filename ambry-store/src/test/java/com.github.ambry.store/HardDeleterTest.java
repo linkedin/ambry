@@ -76,7 +76,7 @@ public class HardDeleterTest {
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
-      offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
+      offsetMap.put(nextOffset, new MessageInfo.MessageInfoBuilder(id, sizeOfEntry).build());
       nextOffset += sizeOfEntry;
     }
 

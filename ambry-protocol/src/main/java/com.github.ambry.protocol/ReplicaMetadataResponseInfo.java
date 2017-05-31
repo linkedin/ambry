@@ -147,6 +147,8 @@ public class ReplicaMetadataResponseInfo {
         return MessageInfoListSerde.MessageInfoListVersion_V1;
       case ReplicaMetadataResponse.Replica_Metadata_Response_Version_V2:
         return MessageInfoListSerde.MessageInfoListVersion_V2;
+      case ReplicaMetadataResponse.Replica_Metadata_Response_Version_V3:
+        return MessageInfoListSerde.MessageInfoListVersion_V3;
       default:
         throw new IllegalArgumentException(
             "Unknown ReplicaMetadataResponse version encountered: " + replicaMetadataResponseVersion);

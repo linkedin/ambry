@@ -39,6 +39,7 @@ public class GetResponse extends Response {
   private static int Partition_Response_Info_List_Size = 4;
   static final short Get_Response_Version_V1 = 1;
   static final short Get_Response_Version_V2 = 2;
+  static final short Get_Response_Version_V3 = 3;
 
   private static final short currentVersion = Get_Response_Version_V2;
 

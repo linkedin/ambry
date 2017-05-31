@@ -56,8 +56,8 @@ public class MessageFormatWriteSetTest {
   @Test
   public void writeSetTest() throws IOException {
     byte[] buf = new byte[2000];
-    MessageInfo info1 = new MessageInfo(new MockId("id1"), 1000, 123);
-    MessageInfo info2 = new MessageInfo(new MockId("id2"), 1000, 123);
+    MessageInfo info1 = new MessageInfo.MessageInfoBuilder(new MockId("id1"), 1000).setExpirationTimeMs(123).build();
+    MessageInfo info2 = new MessageInfo.MessageInfoBuilder(new MockId("id2"), 1000).setExpirationTimeMs(123).build();
     List<MessageInfo> infoList = new ArrayList<MessageInfo>();
     infoList.add(info1);
     infoList.add(info2);

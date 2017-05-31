@@ -20,26 +20,66 @@ import com.github.ambry.utils.Utils;
  * A message info class that contains basic info about a message
  */
 public class MessageInfo {
+
+  public static final short ACCOUNTID_CONTAINERID_DEFAULT_VALUE = -1;
+
   private final StoreKey key;
   private final long size;
-  private final long expirationTimeInMs;
-  private final boolean isDeleted;
-  private final Long crc;
+  private long expirationTimeInMs = Utils.Infinite_Time;
+  private boolean isDeleted = false;
+  private Long crc = null;
+  private short accountId;
+  private short containerId;
+  private long operationTimeMs;
 
-  public MessageInfo(StoreKey key, long size, long expirationTimeInMs) {
-    this(key, size, false, expirationTimeInMs);
-  }
+  public static class MessageInfoBuilder {
+    private final StoreKey key;
+    private final long size;
+    private long expirationTimeInMs = Utils.Infinite_Time;
+    private boolean isDeleted = false;
+    private Long crc = null;
+    private short accountId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
+    private short containerId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
+    private long operationTimeMs = Utils.Infinite_Time;
 
-  public MessageInfo(StoreKey key, long size, boolean deleted) {
-    this(key, size, deleted, Utils.Infinite_Time);
-  }
+    public MessageInfoBuilder(StoreKey key, long size) {
+      this.key = key;
+      this.size = size;
+    }
 
-  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs) {
-    this(key, size, deleted, expirationTimeInMs, null);
-  }
+    public MessageInfoBuilder setExpirationTimeMs(long expirationTimeInMs) {
+      this.expirationTimeInMs = expirationTimeInMs;
+      return this;
+    }
 
-  public MessageInfo(StoreKey key, long size) {
-    this(key, size, Utils.Infinite_Time);
+    public MessageInfoBuilder setDeleted(boolean isDeleted) {
+      this.isDeleted = isDeleted;
+      return this;
+    }
+
+    public MessageInfoBuilder setCRC(Long crc) {
+      this.crc = crc;
+      return this;
+    }
+
+    public MessageInfoBuilder setAccountId(short accountId) {
+      this.accountId = accountId;
+      return this;
+    }
+
+    public MessageInfoBuilder setContainerId(short containerId) {
+      this.containerId = containerId;
+      return this;
+    }
+
+    public MessageInfoBuilder setOperationTimeMs(long operationTimeMs) {
+      this.operationTimeMs = operationTimeMs;
+      return this;
+    }
+
+    public MessageInfo build() {
+      return new MessageInfo(key, size, isDeleted, expirationTimeInMs, crc, accountId, containerId, operationTimeMs);
+    }
   }
 
   /**
@@ -49,13 +89,20 @@ public class MessageInfo {
    * @param deleted whethe the message is deleted.
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param crc the crc associated with this message. If unavailable, pass in null.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
    */
-  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
+  private MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc, short accountId,
+      short containerId, long operationTimeMs) {
     this.key = key;
     this.size = size;
     this.isDeleted = deleted;
     this.expirationTimeInMs = expirationTimeInMs;
     this.crc = crc;
+    this.accountId = accountId;
+    this.containerId = containerId;
+    this.operationTimeMs = operationTimeMs;
   }
 
   public StoreKey getStoreKey() {
@@ -85,6 +132,18 @@ public class MessageInfo {
     return crc;
   }
 
+  public short getAccountId() {
+    return accountId;
+  }
+
+  public short getContainerId() {
+    return containerId;
+  }
+
+  public long getOperationTimeMs() {
+    return operationTimeMs;
+  }
+
   @Override
   public String toString() {
     StringBuilder stringBuilder = new StringBuilder();
@@ -103,6 +162,15 @@ public class MessageInfo {
         .append(",")
         .append("Crc-")
         .append(crc)
+        .append(",")
+        .append("AccountId-")
+        .append(accountId)
+        .append(",")
+        .append("ContainerId-")
+        .append(containerId)
+        .append(",")
+        .append("OperationTimeMs-")
+        .append(operationTimeMs)
         .append("]");
     return stringBuilder.toString();
   }
