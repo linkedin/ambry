@@ -17,6 +17,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -33,8 +34,9 @@ import org.slf4j.LoggerFactory;
 class CompactionManager {
   static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
 
-  private static final String PERIODIC_TRIGGER_NAME = "periodic";
-  private static final String ADMIN_TRIGGER_NAME = "admin";
+  private enum Trigger {
+    PERIODIC, ADMIN
+  }
 
   private final String mountPath;
   private final StoreConfig storeConfig;
@@ -63,21 +65,11 @@ class CompactionManager {
     this.time = time;
     this.metrics = metrics;
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
-      boolean enableTimeBasedTrigger = false;
-      boolean enableAdminBasedTrigger = false;
+      EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
       for (String trigger : storeConfig.storeCompactionTriggers) {
-        switch (trigger.toLowerCase()) {
-          case PERIODIC_TRIGGER_NAME:
-            enableTimeBasedTrigger = true;
-            break;
-          case ADMIN_TRIGGER_NAME:
-            enableAdminBasedTrigger = true;
-            break;
-          default:
-            throw new IllegalArgumentException("Unrecognized trigger name: [" + trigger + "]");
-        }
+        triggers.add(Trigger.valueOf(trigger.toUpperCase()));
       }
-      compactionExecutor = new CompactionExecutor(enableTimeBasedTrigger, enableAdminBasedTrigger);
+      compactionExecutor = new CompactionExecutor(triggers);
       try {
         CompactionPolicyFactory compactionPolicyFactory =
             Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
@@ -165,8 +157,7 @@ class CompactionManager {
    * A {@link Runnable} that cycles through the stores and executes compaction if required.
    */
   private class CompactionExecutor implements Runnable {
-    private final boolean timeBasedTriggerEnabled;
-    private final boolean adminBasedTriggerEnabled;
+    private final EnumSet<Trigger> triggers;
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
@@ -179,12 +170,10 @@ class CompactionManager {
     volatile boolean isRunning = false;
 
     /**
-     * @param enableTimeBasedTrigger if {@code true}, checks for compaction eligibility of every store in a time period.
-     * @param enableAdminBasedTrigger if {@code true}, allows compaction to be triggered via an admin command.
+     * @param triggers the {@link EnumSet} of active compaction triggers.
      */
-    CompactionExecutor(boolean enableTimeBasedTrigger, boolean enableAdminBasedTrigger) {
-      timeBasedTriggerEnabled = enableTimeBasedTrigger;
-      adminBasedTriggerEnabled = enableAdminBasedTrigger;
+    CompactionExecutor(EnumSet<Trigger> triggers) {
+      this.triggers = triggers;
     }
 
     /**
@@ -215,7 +204,7 @@ class CompactionManager {
         }
         // continue to do compactions as required.
         long expectedNextCheckTime = time.milliseconds() + waitTimeMs;
-        if (timeBasedTriggerEnabled) {
+        if (triggers.contains(Trigger.PERIODIC)) {
           storesToCheck.addAll(stores);
         }
         while (enabled) {
@@ -251,7 +240,7 @@ class CompactionManager {
             try {
               if (enabled) {
                 if (storesToCheck.peek() == null) {
-                  if (timeBasedTriggerEnabled) {
+                  if (triggers.contains(Trigger.PERIODIC)) {
                     long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
                     logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
                     time.await(waitCondition, actualWaitTimeMs);
@@ -260,7 +249,7 @@ class CompactionManager {
                     waitCondition.await();
                   }
                 }
-                if (timeBasedTriggerEnabled && time.milliseconds() >= expectedNextCheckTime) {
+                if (triggers.contains(Trigger.PERIODIC) && time.milliseconds() >= expectedNextCheckTime) {
                   expectedNextCheckTime = time.milliseconds() + waitTimeMs;
                   storesToCheck.addAll(stores);
                 }
@@ -299,7 +288,7 @@ class CompactionManager {
      * @return {@code true} if the scheduling was successful. {@code false} if not.
      */
     boolean scheduleNextForCompaction(BlobStore store) {
-      if (!enabled || !adminBasedTriggerEnabled || !store.isStarted() || storesToSkip.contains(store)) {
+      if (!enabled || !triggers.contains(Trigger.ADMIN) || !store.isStarted() || storesToSkip.contains(store)) {
         return false;
       }
       lock.lock();
