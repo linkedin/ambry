@@ -97,11 +97,13 @@ public class StoreConfig {
   public final long storeSegmentSizeInBytes;
 
   /**
-   * Whether compaction is to be enabled or not
+   * Comma separated list of the compaction triggers that should be enabled. If this config is an empty string,
+   * compaction will not be enabled.
+   * The valid triggers are: Periodic,Admin
    */
-  @Config("store.enable.compaction")
-  @Default("false")
-  public final boolean storeEnableCompaction;
+  @Config("store.compaction.triggers")
+  @Default("")
+  public final String[] storeCompactionTriggers;
 
   /**
    * The frequency (in hours) at which a store is checked to see whether it is ready for compaction.
@@ -133,14 +135,6 @@ public class StoreConfig {
   @Default("1")
   public final int storeMinLogSegmentCountToReclaimToTriggerCompaction;
 
-  /**
-   * Comma separated list of the compaction triggers that should be enabled. The valid triggers are:
-   * Time, Admin
-   */
-  @Config("store.compaction.triggers")
-  @Default("Time,Admin")
-  public final String[] storeCompactionTriggers;
-
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -161,14 +155,13 @@ public class StoreConfig {
         verifiableProperties.getLongInRange("store.segment.size.in.bytes", Long.MAX_VALUE, 1, Long.MAX_VALUE);
     storeMinUsedCapacityToTriggerCompactionInPercentage =
         verifiableProperties.getInt("store.min.used.capacity.to.trigger.compaction.in.percentage", 50);
-    storeEnableCompaction = verifiableProperties.getBoolean("store.enable.compaction", false);
+    storeCompactionTriggers = verifiableProperties.getString("store.compaction.triggers", "").split(",");
     storeCompactionCheckFrequencyInHours =
         verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1, 365 * 24);
     storeCompactionPolicyFactory = verifiableProperties.getString("store.compaction.policy.factory",
         "com.github.ambry.store.DefaultCompactionPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
-    storeCompactionTriggers = verifiableProperties.getString("store.compaction.triggers", "Time,Admin").split(",");
   }
 }
 

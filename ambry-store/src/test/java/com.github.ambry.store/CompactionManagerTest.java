@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -36,8 +37,8 @@ import static org.junit.Assert.*;
  * Unit tests {@link CompactionManager}.
  */
 public class CompactionManagerTest {
-
   private static final String MOUNT_PATH = "/tmp/";
+  private static final String ALL_COMPACTION_TRIGGERS = "Periodic,Admin";
   // the properties that will used to generate a StoreConfig. Clear before use if required.
   private final Properties properties = new Properties();
   private final Time time = new MockTime();
@@ -74,7 +75,7 @@ public class CompactionManagerTest {
     compactionManager.awaitTermination();
 
     // with compaction enabled.
-    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
@@ -98,7 +99,7 @@ public class CompactionManagerTest {
     compactionManager.awaitTermination();
 
     // with compaction enabled.
-    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
@@ -111,7 +112,6 @@ public class CompactionManagerTest {
    */
   @Test
   public void testConstructorBadArgs() {
-    properties.setProperty("store.enable.compaction", Boolean.toString(true));
     properties.setProperty("store.compaction.triggers", "@@BAD_TRIGGER@@");
     config = new StoreConfig(new VerifiableProperties(properties));
     StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
@@ -136,7 +136,7 @@ public class CompactionManagerTest {
     // one store with nothing to compact isn't going to get compact calls.
     // since we are using mock time, wait for compact calls to arrive twice to ensure the time based scheduling works
     CountDownLatch compactCallsCountdown = new CountDownLatch(2 * (numStores - 1));
-    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
@@ -191,7 +191,7 @@ public class CompactionManagerTest {
     // one store that isn't started isn't going to get compact calls.
     // another store that throws an exception on resumeCompaction() isn't going to get a compact call.
     CountDownLatch compactCallsCountdown = new CountDownLatch(numStores - 2);
-    properties.setProperty("store.enable.compaction", Boolean.toString(true));
+    properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
     properties.setProperty("store.compaction.check.frequency.in.hours", Integer.toString(100));
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
@@ -267,13 +267,24 @@ public class CompactionManagerTest {
    */
   @Test
   public void testDifferentTriggers() throws Exception {
-    properties.setProperty("store.enable.compaction", Boolean.toString(true));
     blobStore.details = generateRandomCompactionDetails(2);
+    Runnable adminDisabledChecker =
+        () -> assertFalse("Compaction should not be scheduled", compactionManager.scheduleNextForCompaction(blobStore));
 
-    // all enabled is already tested in testCompactionExecutorHappyPath()
-    // only time based enabled
-    properties.setProperty("store.compaction.triggers", "Time");
-    Runnable timeTriggerCode = () -> {
+    // 1. all enabled is already tested in testCompactionExecutorHappyPath()
+
+    // 2. none enabled
+    properties.setProperty("store.compaction.triggers", "");
+    AtomicLong startTimeMs = new AtomicLong(time.milliseconds());
+    // the fact that the time based trigger has not been enabled can only be tested indirectly by making sure
+    // time has not moved forward
+    Runnable periodicDisabledChecker =
+        () -> assertEquals("Time should not have moved forward", startTimeMs.get(), time.milliseconds());
+    doTestTrigger(Arrays.asList(adminDisabledChecker, periodicDisabledChecker));
+
+    // 3. only periodic enabled
+    properties.setProperty("store.compaction.triggers", "Periodic");
+    Runnable periodicEnabledChecker = () -> {
       try {
         assertTrue("Compaction calls did not come within the expected time",
             blobStore.compactCallsCountdown.await(1, TimeUnit.SECONDS));
@@ -285,14 +296,12 @@ public class CompactionManagerTest {
       }
       assertTrue("compact() should have been called", blobStore.compactCalled);
     };
-    Runnable adminTriggerCode =
-        () -> assertFalse("Compaction should not be scheduled", compactionManager.scheduleNextForCompaction(blobStore));
-    doTestTrigger(Arrays.asList(timeTriggerCode, adminTriggerCode));
+    doTestTrigger(Arrays.asList(adminDisabledChecker, periodicEnabledChecker));
 
-    // only admin based enabled
+    // 4. only admin enabled
     properties.setProperty("store.compaction.triggers", "Admin");
-    long startTimeMs = time.milliseconds();
-    adminTriggerCode = () -> {
+    startTimeMs.set(time.milliseconds());
+    Runnable adminEnabledChecker = () -> {
       assertTrue("Compaction should be scheduled", compactionManager.scheduleNextForCompaction(blobStore));
       try {
         assertTrue("Compaction calls did not come within the expected time",
@@ -305,10 +314,9 @@ public class CompactionManagerTest {
       }
       assertTrue("compact() should have been called", blobStore.compactCalled);
     };
-    // the fact that the time based trigger has not been enabled can only be tested indirectly by making sure
-    // time has not moved forward
-    timeTriggerCode = () -> assertEquals("Time should not have moved forward", startTimeMs, time.milliseconds());
-    doTestTrigger(Arrays.asList(adminTriggerCode, timeTriggerCode));
+    periodicDisabledChecker =
+        () -> assertEquals("Time should not have moved forward", startTimeMs.get(), time.milliseconds());
+    doTestTrigger(Arrays.asList(adminEnabledChecker, periodicDisabledChecker));
   }
 
   // helper methods
@@ -338,8 +346,13 @@ public class CompactionManagerTest {
     config = new StoreConfig(new VerifiableProperties(properties));
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.enable();
-    assertNotNull("Compaction thread should be created",
-        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    if (config.storeCompactionTriggers[0].isEmpty()) {
+      assertNull("Compaction thread should not be created",
+          TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    } else {
+      assertNotNull("Compaction thread should be created",
+          TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    }
     for (Runnable triggerRunner : triggerRunners) {
       blobStore.compactCallsCountdown = new CountDownLatch(1);
       blobStore.compactCalled = false;

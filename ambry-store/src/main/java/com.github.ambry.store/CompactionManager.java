@@ -33,8 +33,8 @@ import org.slf4j.LoggerFactory;
 class CompactionManager {
   static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
 
-  private static final String TIME_BASED_TRIGGER_NAME = "time";
-  private static final String ADMIN_BASED_TRIGGER_NAME = "admin";
+  private static final String PERIODIC_TRIGGER_NAME = "periodic";
+  private static final String ADMIN_TRIGGER_NAME = "admin";
 
   private final String mountPath;
   private final StoreConfig storeConfig;
@@ -62,19 +62,19 @@ class CompactionManager {
     this.stores = stores;
     this.time = time;
     this.metrics = metrics;
-    if (storeConfig.storeEnableCompaction) {
+    if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
       boolean enableTimeBasedTrigger = false;
       boolean enableAdminBasedTrigger = false;
       for (String trigger : storeConfig.storeCompactionTriggers) {
         switch (trigger.toLowerCase()) {
-          case TIME_BASED_TRIGGER_NAME:
+          case PERIODIC_TRIGGER_NAME:
             enableTimeBasedTrigger = true;
             break;
-          case ADMIN_BASED_TRIGGER_NAME:
+          case ADMIN_TRIGGER_NAME:
             enableAdminBasedTrigger = true;
             break;
           default:
-            throw new IllegalArgumentException("Unrecognized trigger name: " + trigger);
+            throw new IllegalArgumentException("Unrecognized trigger name: [" + trigger + "]");
         }
       }
       compactionExecutor = new CompactionExecutor(enableTimeBasedTrigger, enableAdminBasedTrigger);
