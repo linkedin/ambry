@@ -358,6 +358,11 @@ public class AccountContainerTest {
     accountBuilder.setId(refAccountId);
     updatedAccount = accountBuilder.build();
     assertEquals(origin.getAllContainers().toString(), updatedAccount.getAllContainers().toString());
+
+    // remove a null container
+    accountBuilder.removeContainer(null);
+    updatedAccount = accountBuilder.build();
+    assertEquals(origin.getAllContainers().toString(), updatedAccount.getAllContainers().toString());
   }
 
   /**
