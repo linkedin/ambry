@@ -15,6 +15,7 @@ package com.github.ambry.account;
 
 import java.util.HashMap;
 import java.util.Map;
+import org.json.JSONException;
 
 import static com.github.ambry.account.Account.*;
 
@@ -125,7 +126,7 @@ public class AccountBuilder {
    * @return An {@link Account} object.
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
-  public Account build() {
+  public Account build() throws JSONException {
     return new Account(id, name, status, idToContainerMetadataMap.values());
   }
 }

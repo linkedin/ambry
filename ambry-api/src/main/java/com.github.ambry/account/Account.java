@@ -13,12 +13,10 @@
  */
 package com.github.ambry.account;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -36,8 +34,8 @@ import org.json.JSONObject;
  *   registration process.
  * </p>
  * <p>
- *   Account is serialized into {@link JSONObject} in the highest metadata version, which is version 1 for now.
- *   Below lists all the metadata versions and their formats:
+ *   Account is serialized into {@link JSONObject} in the {@code CURRENT_JSON_VERSION}, which is version 1 for now.
+ *   Below lists all the json versions and their formats:
  * </p>
  * <pre><code>
  * Version 1:
@@ -75,13 +73,13 @@ import org.json.JSONObject;
  */
 public class Account {
   // static variables
-  static final String ACCOUNT_METADATA_VERSION_KEY = "version";
+  static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
   static final String ACCOUNT_NAME_KEY = "accountName";
-  static final String ACCOUNT_STATUS_KEY = "status";
+  static final String STATUS_KEY = "status";
   static final String CONTAINERS_KEY = "containers";
-  static final short ACCOUNT_METADATA_VERSION_1 = 1;
-  static final short HIGHEST_ACCOUNT_METADATA_VERSION = ACCOUNT_METADATA_VERSION_1;
+  static final short JSON_VERSION_1 = 1;
+  static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   // account member variables
   private final Short id;
   private final String name;
@@ -95,33 +93,30 @@ public class Account {
    * @param metadata The metadata of the account in JSON.
    * @throws JSONException If fails to parse metadata.
    */
-  Account(JSONObject metadata) throws JSONException {
+  private Account(JSONObject metadata) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
-    short metadataVersion = (short) metadata.getInt(ACCOUNT_METADATA_VERSION_KEY);
+    short metadataVersion = (short) metadata.getInt(JSON_VERSION_KEY);
     switch (metadataVersion) {
-      case ACCOUNT_METADATA_VERSION_1:
+      case JSON_VERSION_1:
         id = (short) metadata.getInt(ACCOUNT_ID_KEY);
         name = metadata.getString(ACCOUNT_NAME_KEY);
-        status = AccountStatus.valueOf(metadata.getString(ACCOUNT_STATUS_KEY));
+        status = AccountStatus.valueOf(metadata.getString(STATUS_KEY));
         checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.getJSONArray(CONTAINERS_KEY);
-        Collection<Container> containers = new ArrayList<>();
         if (containerArray != null) {
           for (int index = 0; index < containerArray.length(); index++) {
-            JSONObject containerMetadata = containerArray.getJSONObject(index);
-            Container container = new Container(containerMetadata);
-            containers.add(container);
+            Container container = Container.fromJson(containerArray.getJSONObject(index));
+            checkParentAccountIdInContainers(container);
+            checkDuplicateContainerNameOrId(container);
             updateContainerMap(container);
           }
-          checkAccountIdInContainers();
-          checkDuplicateContainerNameOrId(containers);
         }
         break;
 
       default:
-        throw new IllegalStateException("Unsupported account metadata version=" + metadataVersion);
+        throw new IllegalStateException("Unsupported account json version=" + metadataVersion);
     }
   }
 
@@ -132,17 +127,17 @@ public class Account {
    * @param status The status of the account. Cannot be null.
    * @param containers A collection of {@link Container}s to be part of this account.
    */
-  Account(Short id, String name, AccountStatus status, Collection<Container> containers) {
+  Account(Short id, String name, AccountStatus status, Collection<Container> containers) throws JSONException {
     this.id = id;
     this.name = name;
     this.status = status;
     checkRequiredFieldsForBuild();
     if (containers != null) {
       for (Container container : containers) {
+        checkParentAccountIdInContainers(container);
+        checkDuplicateContainerNameOrId(container);
         updateContainerMap(container);
       }
-      checkAccountIdInContainers();
-      checkDuplicateContainerNameOrId(containers);
     }
   }
 
@@ -169,16 +164,26 @@ public class Account {
    */
   public JSONObject toJson() throws JSONException {
     JSONObject metadata = new JSONObject();
-    metadata.put(ACCOUNT_METADATA_VERSION_KEY, HIGHEST_ACCOUNT_METADATA_VERSION);
+    metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
     metadata.put(ACCOUNT_ID_KEY, id);
     metadata.put(ACCOUNT_NAME_KEY, name);
-    metadata.put(ACCOUNT_STATUS_KEY, status);
+    metadata.put(STATUS_KEY, status);
     JSONArray containerArray = new JSONArray();
     for (Container container : containerIdToContainerMap.values()) {
       containerArray.put(container.toJson());
     }
     metadata.put(CONTAINERS_KEY, containerArray);
     return metadata;
+  }
+
+  /**
+   * Deserializes a {@link JSONObject} to an account object.
+   * @param json The {@link JSONObject} to deserialize.
+   * @return An account object deserialized from the {@link JSONObject}.
+   * @throws JSONException If parsing the {@link JSONObject} fails.
+   */
+  public static Account fromJson(JSONObject json) throws JSONException {
+    return new Account(json);
   }
 
   /**
@@ -215,15 +220,6 @@ public class Account {
    */
   public Collection<Container> getAllContainers() {
     return Collections.unmodifiableCollection(containerIdToContainerMap.values());
-  }
-
-  /**
-   * Adds a {@link Container} to this account and updates internal maps accordingly.
-   * @param container The container to update this account.
-   */
-  private void updateContainerMap(Container container) {
-    containerIdToContainerMap.put(container.getId(), container);
-    containerNameToContainerMap.put(container.getName(), container);
   }
 
   /**
@@ -270,20 +266,30 @@ public class Account {
   }
 
   /**
-   * Checks if required fields are missing to build.
+   * Adds a {@link Container} to this account and updates internal maps accordingly.
+   * @param container The container to update this account.
    */
-  private void checkAccountIdInContainers() {
-    for (Container container : containerIdToContainerMap.values()) {
-      if (container.getParentAccountId() != id) {
-        throw new IllegalStateException(
-            "Container does not belong to this account because parentAccountId=" + container.getParentAccountId()
-                + " is not the same as accountId=" + id);
-      }
+  private void updateContainerMap(Container container) {
+    containerIdToContainerMap.put(container.getId(), container);
+    containerNameToContainerMap.put(container.getName(), container);
+  }
+
+  /**
+   * Checks if the parent account id in a {@link Container} matches the id of this account.
+   * @param container The {@link Container} to check.
+   * @throws IllegalStateException If the container's parentAccountId does not match the id of this account.
+   */
+  private void checkParentAccountIdInContainers(Container container) {
+    if (container.getParentAccountId() != id) {
+      throw new IllegalStateException(
+          "Container does not belong to this account because parentAccountId=" + container.getParentAccountId()
+              + " is not the same as accountId=" + id);
     }
   }
 
   /**
    * Checks if any required field is missing for a {@link Account}.
+   * @throws IllegalStateException If any of the required field is missing.
    */
   private void checkRequiredFieldsForBuild() {
     if (id == null || name == null || status == null) {
@@ -293,19 +299,22 @@ public class Account {
   }
 
   /**
-   * Checks if there are containers that have different ids but the same names, or vise versa.
-   * @param containers A collection of containers to check duplicate name or id.
-   * @throws IllegalStateException if there are containers that have different ids but the same names, or vise versa.
+   * Checks a {@link Container}'s id or name conflicts with those in {@link #containerIdToContainerMap} or
+   * {@link #containerNameToContainerMap}.
+   * @param container A {@code Container} to check conflicting name or id.
+   * @throws IllegalStateException If there are containers that have different ids but the same names, or vise versa.
+   * @throws JSONException If fails to parse {@link JSONObject} in a {@link Container}.
    */
-  private void checkDuplicateContainerNameOrId(Collection<Container> containers) {
-    int expectedKvPairs = containers == null ? 0 : containers.size();
-    Set<Short> containerIdSet = containerIdToContainerMap.keySet();
-    Set<String> containerNameSet = containerNameToContainerMap.keySet();
-    if (containerIdSet.size() != expectedKvPairs || containerNameSet.size() != expectedKvPairs) {
-      StringBuilder sb = new StringBuilder("Duplicate container id or name exists. Container list=");
-      for (Container container : containers) {
-        sb.append("[id=" + container.getId() + ", name=" + container.getName() + "] ");
-      }
+  private void checkDuplicateContainerNameOrId(Container container) throws JSONException {
+    if (containerIdToContainerMap.containsKey(container.getId()) || containerNameToContainerMap.containsKey(
+        container.getName())) {
+      Container conflictContainer = containerIdToContainerMap.get(container.getId());
+      conflictContainer =
+          conflictContainer == null ? containerNameToContainerMap.get(container.getName()) : conflictContainer;
+      StringBuilder sb =
+          new StringBuilder("Duplicate container id or name exists. container=").append(container.toJson().toString())
+              .append(" conflicts with container=")
+              .append(conflictContainer.toJson().toString());
       throw new IllegalStateException(sb.toString());
     }
   }

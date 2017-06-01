@@ -30,8 +30,8 @@ import org.json.JSONObject;
  *   within the same {@link Account}, but can be the same across different {@link Account}s.
  * </p>
  * <p>
- *   Container is serialized into {@link JSONObject} in the highest metadata version, which is version 1 for now.
- *   Below lists all the metadata versions and their formats:
+ *   Container is serialized into {@link JSONObject} in the {@code CURRENT_JSON_VERSION}, which is version 1
+ *   for now. Below lists all the metadata versions and their formats:
  * </p>
  *  <pre><code>
  *  {
@@ -51,15 +51,15 @@ import org.json.JSONObject;
  */
 public class Container {
   // static variables
-  static final String CONTAINER_METADATA_VERSION_KEY = "version";
+  static final String JSON_VERSION_KEY = "version";
   static final String CONTAINER_NAME_KEY = "containerName";
   static final String CONTAINER_ID_KEY = "containerId";
-  static final String CONTAINER_STATUS_KEY = "status";
-  static final String CONTAINER_DESCRIPTION_KEY = "description";
-  static final String CONTAINER_IS_PRIVATE_KEY = "isPrivate";
-  static final String CONTAINER_PARENT_ACCOUNT_ID_KEY = "parentAccountId";
-  static final short CONTAINER_METADATA_VERSION_1 = 1;
-  static final short HIGHEST_CONTAINER_METADATA_VERSION = CONTAINER_METADATA_VERSION_1;
+  static final String STATUS_KEY = "status";
+  static final String DESCRIPTION_KEY = "description";
+  static final String IS_PRIVATE_KEY = "isPrivate";
+  static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final short JSON_VERSION_1 = 1;
+  static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   // container field variables
   private final Short id;
   private final String name;
@@ -73,24 +73,24 @@ public class Container {
    * @param metadata The metadata of the container in JSON.
    * @throws JSONException If fails to parse metadata.
    */
-  Container(JSONObject metadata) throws JSONException {
+  private Container(JSONObject metadata) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
-    short metadataVersion = (short) metadata.getInt(CONTAINER_METADATA_VERSION_KEY);
+    short metadataVersion = (short) metadata.getInt(JSON_VERSION_KEY);
     switch (metadataVersion) {
-      case CONTAINER_METADATA_VERSION_1:
+      case JSON_VERSION_1:
         this.id = (short) metadata.getInt(CONTAINER_ID_KEY);
         this.name = metadata.getString(CONTAINER_NAME_KEY);
-        this.status = ContainerStatus.valueOf(metadata.getString(CONTAINER_STATUS_KEY));
-        this.description = metadata.optString(CONTAINER_DESCRIPTION_KEY);
-        this.isPrivate = metadata.getBoolean(CONTAINER_IS_PRIVATE_KEY);
-        this.parentAccountId = (short) metadata.getInt(CONTAINER_PARENT_ACCOUNT_ID_KEY);
+        this.status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
+        this.description = metadata.optString(DESCRIPTION_KEY);
+        this.isPrivate = metadata.getBoolean(IS_PRIVATE_KEY);
+        this.parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
         checkRequiredFields();
         break;
 
       default:
-        throw new IllegalStateException("Unsupported container metadata version=" + metadataVersion);
+        throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
     }
   }
 
@@ -169,13 +169,13 @@ public class Container {
    */
   public JSONObject toJson() throws JSONException {
     JSONObject metadata = new JSONObject();
-    metadata.put(CONTAINER_METADATA_VERSION_KEY, HIGHEST_CONTAINER_METADATA_VERSION);
+    metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
     metadata.put(CONTAINER_ID_KEY, id);
     metadata.put(CONTAINER_NAME_KEY, name);
-    metadata.put(CONTAINER_STATUS_KEY, status);
-    metadata.put(CONTAINER_DESCRIPTION_KEY, description);
-    metadata.put(CONTAINER_IS_PRIVATE_KEY, isPrivate);
-    metadata.put(CONTAINER_PARENT_ACCOUNT_ID_KEY, parentAccountId);
+    metadata.put(STATUS_KEY, status);
+    metadata.put(DESCRIPTION_KEY, description);
+    metadata.put(IS_PRIVATE_KEY, isPrivate);
+    metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
     return metadata;
   }
 
@@ -231,7 +231,17 @@ public class Container {
   }
 
   /**
-   * Checks if any required fields is missiong for a {@link Container}.
+   * Deserializes a {@link JSONObject} to a container object.
+   * @param json The {@link JSONObject} to deserialize.
+   * @return A container object deserialized from the {@link JSONObject}.
+   * @throws JSONException If parsing the {@link JSONObject} fails.
+   */
+  public static Container fromJson(JSONObject json) throws JSONException {
+    return new Container(json);
+  }
+
+  /**
+   * Checks if any required fields is missing for a {@link Container}.
    */
   private void checkRequiredFields() {
     if (id == null || name == null || status == null || isPrivate == null || parentAccountId == null) {

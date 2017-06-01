@@ -24,6 +24,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Account.JSON_VERSION_1;
+import static com.github.ambry.account.Account.JSON_VERSION_KEY;
+import static com.github.ambry.account.Account.STATUS_KEY;
 import static com.github.ambry.account.Container.*;
 import static org.junit.Assert.*;
 
@@ -53,21 +56,21 @@ public class AccountContainerTest {
    */
   @Before
   public void init() throws JSONException {
-    accountJsonLike.put(ACCOUNT_METADATA_VERSION_KEY, ACCOUNT_METADATA_VERSION_1);
+    accountJsonLike.put(JSON_VERSION_KEY, JSON_VERSION_1);
     accountJsonLike.put(ACCOUNT_ID_KEY, refAccountId);
     accountJsonLike.put(ACCOUNT_NAME_KEY, refAccountName);
-    accountJsonLike.put(ACCOUNT_STATUS_KEY, refAccountStatus);
+    accountJsonLike.put(STATUS_KEY, refAccountStatus);
     accountJsonLike.put(CONTAINERS_KEY, new JSONArray());
     JSONArray containerArray = new JSONArray();
     for (int i = 0; i < 2; i++) {
       JSONObject containerJsonLike = new JSONObject();
-      containerJsonLike.put(CONTAINER_METADATA_VERSION_KEY, CONTAINER_METADATA_VERSION_1);
+      containerJsonLike.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_1);
       containerJsonLike.put(CONTAINER_ID_KEY, refContainerIds.get(i));
       containerJsonLike.put(CONTAINER_NAME_KEY, refContainerNames.get(i));
-      containerJsonLike.put(CONTAINER_STATUS_KEY, refContainerStatuses.get(i));
-      containerJsonLike.put(CONTAINER_DESCRIPTION_KEY, refContainerDescriptions.get(i));
-      containerJsonLike.put(CONTAINER_IS_PRIVATE_KEY, refContainerPrivacies.get(i));
-      containerJsonLike.put(CONTAINER_PARENT_ACCOUNT_ID_KEY, refAccountId);
+      containerJsonLike.put(Container.STATUS_KEY, refContainerStatuses.get(i));
+      containerJsonLike.put(DESCRIPTION_KEY, refContainerDescriptions.get(i));
+      containerJsonLike.put(IS_PRIVATE_KEY, refContainerPrivacies.get(i));
+      containerJsonLike.put(PARENT_ACCOUNT_ID_KEY, refAccountId);
       containerJsonLikeList.add(containerJsonLike);
       containerArray.put(containerJsonLike);
     }
@@ -80,7 +83,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testConstructAccountFromJson() throws Exception {
-    assertAccountAgainstReference(new Account(accountJsonLike), true, true);
+    assertAccountAgainstReference(Account.fromJson(accountJsonLike), true, true);
   }
 
   /**
@@ -155,7 +158,7 @@ public class AccountContainerTest {
   public void testConstructContainerFromJson() throws JSONException {
     List<Container> containersFromJson = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
-      Container containerFromJson = new Container(containerJsonLikeList.get(i));
+      Container containerFromJson = Container.fromJson(containerJsonLikeList.get(i));
       containersFromJson.add(containerFromJson);
       assertContainer(containerFromJson, i);
     }
@@ -194,14 +197,14 @@ public class AccountContainerTest {
     badMetadata.remove(ACCOUNT_ID_KEY);
     assertCreatAccountWithBadJsonMetadata(badMetadata, JSONException.class);
 
-    // unsupported account metadata version
+    // unsupported account json version
     badMetadata = new JSONObject(accountJsonLike, JSONObject.getNames(accountJsonLike));
-    badMetadata.put(ACCOUNT_METADATA_VERSION_KEY, 2);
+    badMetadata.put(JSON_VERSION_KEY, 2);
     assertCreatAccountWithBadJsonMetadata(badMetadata, IllegalStateException.class);
 
     // invalid account status
     badMetadata = new JSONObject(accountJsonLike, JSONObject.getNames(accountJsonLike));
-    badMetadata.put(ACCOUNT_STATUS_KEY, "invalidAccountStatus");
+    badMetadata.put(STATUS_KEY, "invalidAccountStatus");
     assertCreatAccountWithBadJsonMetadata(badMetadata, IllegalArgumentException.class);
 
     // null container metadata
@@ -209,7 +212,7 @@ public class AccountContainerTest {
 
     // invalid container status
     badMetadata = new JSONObject(containerJsonLikeList.get(0), JSONObject.getNames(containerJsonLikeList.get(0)));
-    badMetadata.put(CONTAINER_STATUS_KEY, "invalidContainerStatus");
+    badMetadata.put(Container.STATUS_KEY, "invalidContainerStatus");
     assertCreatContainerWithBadJsonMetadata(badMetadata, IllegalArgumentException.class);
 
     // required fields are missing.
@@ -217,9 +220,9 @@ public class AccountContainerTest {
     badMetadata.remove(CONTAINER_ID_KEY);
     assertCreatContainerWithBadJsonMetadata(badMetadata, JSONException.class);
 
-    // unsupported container metadata version
+    // unsupported container json version
     badMetadata = new JSONObject(containerJsonLikeList.get(0), JSONObject.getNames(containerJsonLikeList.get(0)));
-    badMetadata.put(CONTAINER_METADATA_VERSION_KEY, 2);
+    badMetadata.put(Container.JSON_VERSION_KEY, 2);
     assertCreatContainerWithBadJsonMetadata(badMetadata, IllegalStateException.class);
   }
 
@@ -229,10 +232,10 @@ public class AccountContainerTest {
    */
   @Test
   public void testToString() throws JSONException {
-    Account account = new Account(accountJsonLike);
+    Account account = Account.fromJson(accountJsonLike);
     assertEquals("Account[" + account.getId() + "]", account.toString());
     for (int i = 0; i < 2; i++) {
-      Container container = new Container(containerJsonLikeList.get(i));
+      Container container = Container.fromJson(containerJsonLikeList.get(i));
       assertEquals("Container[" + account.getId() + ":" + container.getId() + "]", container.toString());
     }
   }
@@ -253,7 +256,7 @@ public class AccountContainerTest {
     // set containers
     List<Container> containers = new ArrayList<>();
     for (int i = 0; i < 2; i++) {
-      Container container = new Container(containerJsonLikeList.get(i));
+      Container container = Container.fromJson(containerJsonLikeList.get(i));
       containers.add(container);
       accountBuilder.addOrUpdateContainer(container);
     }
@@ -324,7 +327,7 @@ public class AccountContainerTest {
   @Test
   public void testRemoveContainerAndUpdateAccount() throws JSONException {
     // set an account with different field value
-    Account origin = new Account(accountJsonLike);
+    Account origin = Account.fromJson(accountJsonLike);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     short updatedAccountId = refAccountId + 1;
     String updatedAccountName = refAccountName + "-updated";
@@ -358,11 +361,6 @@ public class AccountContainerTest {
     accountBuilder.setId(refAccountId);
     updatedAccount = accountBuilder.build();
     assertEquals(origin.getAllContainers().toString(), updatedAccount.getAllContainers().toString());
-
-    // remove a null container
-    accountBuilder.removeContainer(null);
-    updatedAccount = accountBuilder.build();
-    assertEquals(origin.getAllContainers().toString(), updatedAccount.getAllContainers().toString());
   }
 
   /**
@@ -371,18 +369,21 @@ public class AccountContainerTest {
    */
   @Test
   public void testUpdateContainerInAccount() throws JSONException {
-    Account account = new Account(accountJsonLike);
+    Account account = Account.fromJson(accountJsonLike);
     AccountBuilder accountBuilder = new AccountBuilder(account);
 
     // updating with different containers
     for (int i = 0; i < 2; i++) {
       Container container = account.getContainerById(refContainerIds.get(i));
+      accountBuilder.removeContainer(container);
       ContainerBuilder containerBuilder = new ContainerBuilder(container);
+      short updatedContainerId = (short) (container.getId() + 100);
       String updatedContainerName = container.getName() + "-updated";
       Container.ContainerStatus updatedContainerStatus = Container.ContainerStatus.INACTIVE;
       String updatedContainerDescription = container.getDescription() + "--updated";
       boolean updatedIsPrivate = !container.getIsPrivate();
-      containerBuilder.setName(updatedContainerName)
+      containerBuilder.setId(updatedContainerId)
+          .setName(updatedContainerName)
           .setStatus(updatedContainerStatus)
           .setDescription(updatedContainerDescription)
           .setIsPrivate(updatedIsPrivate);
@@ -391,15 +392,30 @@ public class AccountContainerTest {
 
       // build account and assert
       Account updatedAccount = accountBuilder.build();
+      assertEquals("container id is not correctly updated", updatedContainerId,
+          updatedAccount.getContainerById(updatedContainerId).getId());
       assertEquals("container name is not correctly updated", updatedContainerName,
-          updatedAccount.getContainerById(refContainerIds.get(i)).getName());
+          updatedAccount.getContainerById(updatedContainerId).getName());
       assertEquals("container status is not correctly updated", updatedContainerStatus,
-          updatedAccount.getContainerById(refContainerIds.get(i)).getStatus());
+          updatedAccount.getContainerById(updatedContainerId).getStatus());
       assertEquals("container description is not correctly updated", updatedContainerDescription,
-          updatedAccount.getContainerById(refContainerIds.get(i)).getDescription());
+          updatedAccount.getContainerById(updatedContainerId).getDescription());
       assertEquals("container isPrivate attribute is not correctly updated", updatedIsPrivate,
-          updatedAccount.getContainerById(refContainerIds.get(i)).getIsPrivate());
+          updatedAccount.getContainerById(updatedContainerId).getIsPrivate());
     }
+  }
+
+  /**
+   * Tests updating the parent account id for a container.
+   * @throws JSONException
+   */
+  @Test
+  public void testUpdateContainerParentAccountId() throws JSONException {
+    ContainerBuilder containerBuilder = new ContainerBuilder(Container.fromJson(containerJsonLikeList.get(0)));
+    short newParentAccountId = (short) (refContainerIds.get(0) + 1);
+    containerBuilder.setParentAccountId(newParentAccountId);
+    assertEquals("Container's parent account id is incorrectly updated.", newParentAccountId,
+        containerBuilder.build().getParentAccountId());
   }
 
   /**
@@ -408,7 +424,7 @@ public class AccountContainerTest {
    */
   @Test
   public void testRemoveNonExistContainer() throws JSONException {
-    Account origin = new Account(accountJsonLike);
+    Account origin = Account.fromJson(accountJsonLike);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     ContainerBuilder containerBuilder =
         new ContainerBuilder((short) 999, refContainerNames.get(0), refContainerStatuses.get(0),
@@ -436,8 +452,8 @@ public class AccountContainerTest {
     assertEquals(refAccountStatus, account.getStatus());
     if (compareMetadata) {
       assertEquals("Wrong metadata JsonObject from toJson()", accountJsonLike.toString(), account.toJson().toString());
-      assertEquals("Wrong behavior in serialize and then deserialize", account, new Account(account.toJson()));
-      assertEquals("Failed to compare account to a reference account", new Account(accountJsonLike), account);
+      assertEquals("Wrong behavior in serialize and then deserialize", account, Account.fromJson(account.toJson()));
+      assertEquals("Failed to compare account to a reference account", Account.fromJson(accountJsonLike), account);
     }
     if (compareContainer) {
       Collection<Container> containersFromAccount = account.getAllContainers();
@@ -464,7 +480,7 @@ public class AccountContainerTest {
     assertEquals(refContainerPrivacies.get(index), container.getIsPrivate());
     assertEquals(refAccountId, container.getParentAccountId());
     assertEquals(containerJsonLikeList.get(index).toString(), container.toJson().toString());
-    assertEquals(new Container(containerJsonLikeList.get(index)), container);
+    assertEquals(Container.fromJson(containerJsonLikeList.get(index)), container);
   }
 
   /**
@@ -491,7 +507,7 @@ public class AccountContainerTest {
    */
   private void assertCreatAccountWithBadJsonMetadata(JSONObject metadata, Class<?> exceptionClass) {
     try {
-      new Account(metadata);
+      Account.fromJson(metadata);
       fail("should have thrown");
     } catch (Exception e) {
       System.out.println(e.getMessage());
@@ -507,7 +523,7 @@ public class AccountContainerTest {
    */
   private void assertCreatContainerWithBadJsonMetadata(JSONObject metadata, Class<?> exceptionClass) {
     try {
-      new Container(metadata);
+      Container.fromJson(metadata);
       fail("should have thrown");
     } catch (Exception e) {
       System.out.println(e.getMessage());
