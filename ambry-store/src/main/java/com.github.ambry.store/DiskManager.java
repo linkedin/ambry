@@ -120,7 +120,10 @@ class DiskManager {
         try {
           List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
           for (BlobStore blobStore : stores.values()) {
-            requirementsList.add(blobStore.getDiskSpaceRequirements());
+            DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
+            if (requirements != null) {
+              requirementsList.add(requirements);
+            }
           }
           diskSpaceAllocator.initializePool(requirementsList);
         } catch (StoreException e) {

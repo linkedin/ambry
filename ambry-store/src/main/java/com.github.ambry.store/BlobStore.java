@@ -435,7 +435,7 @@ class BlobStore implements Store {
 
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
     checkStarted();
-    return null;
+    return log.getDiskSpaceRequirements();
   }
 
   /**
