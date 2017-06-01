@@ -84,7 +84,7 @@ class Verifier implements Runnable {
                   new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
               channel1 = connectionPool.checkOutConnection("localhost", port, 10000);
               ArrayList<BlobId> ids = new ArrayList<BlobId>();
-              ids.add(new BlobId(payload.blobId, clusterMap));
+              ids.add(BlobId.fromStringId(payload.blobId, clusterMap));
               partitionRequestInfoList.clear();
               PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
@@ -120,7 +120,7 @@ class Verifier implements Runnable {
 
               // get user metadata
               ids.clear();
-              ids.add(new BlobId(payload.blobId, clusterMap));
+              ids.add(BlobId.fromStringId(payload.blobId, clusterMap));
               partitionRequestInfoList.clear();
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
@@ -146,7 +146,7 @@ class Verifier implements Runnable {
 
               // get blob
               ids.clear();
-              ids.add(new BlobId(payload.blobId, clusterMap));
+              ids.add(BlobId.fromStringId(payload.blobId, clusterMap));
               partitionRequestInfoList.clear();
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);

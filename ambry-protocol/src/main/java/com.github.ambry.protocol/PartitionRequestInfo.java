@@ -61,7 +61,7 @@ public class PartitionRequestInfo {
     ArrayList<BlobId> ids = new ArrayList<BlobId>(blobCount);
     PartitionId partitionId = null;
     while (blobCount > 0) {
-      BlobId id = new BlobId(stream, clusterMap);
+      BlobId id = BlobId.fromDataInputStream(stream, clusterMap);
       if (partitionId == null) {
         partitionId = id.getPartition();
       }

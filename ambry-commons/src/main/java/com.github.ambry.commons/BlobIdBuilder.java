@@ -20,9 +20,10 @@ import com.github.ambry.clustermap.PartitionId;
  * A builder class for {@link BlobId}. This class is not thread safe.
  */
 public class BlobIdBuilder {
+  private Byte flag;
+  private Byte datacenterId;
   private Short accountId;
   private Short containerId;
-  private Short datacenterId;
   private PartitionId partitionId;
 
   /**
@@ -35,16 +36,38 @@ public class BlobIdBuilder {
 
   /**
    * Construct a {@code BlobIdBuilder}.
+   * @param flag The flag to be set to the blob id.
+   * @param datacenterId The id of the datacenter to be set to the blob id.
    * @param accountId The id of the {@link Account} to be set to the blob id.
    * @param containerId The id of the {@link Container} to be set to the blob id.
-   * @param datacenterId The id of the datacenter to be set to the blob id.
    * @param partitionId The {@link PartitionId} to be set to the blob id.
    */
-  public BlobIdBuilder(Short accountId, Short containerId, Short datacenterId, PartitionId partitionId) {
+  public BlobIdBuilder(Byte flag, Byte datacenterId, Short accountId, Short containerId, PartitionId partitionId) {
+    this.flag = flag;
+    this.datacenterId = datacenterId;
     this.accountId = accountId;
     this.containerId = containerId;
-    this.datacenterId = datacenterId;
     this.partitionId = partitionId;
+  }
+
+  /**
+   * Sets flag to the builder.
+   * @param flag The flag for the blobId to set.
+   * @return this builder.
+   */
+  public BlobIdBuilder setFlag(Byte flag) {
+    this.flag = flag;
+    return this;
+  }
+
+  /**
+   * Sets datacenterId to the builder.
+   * @param datacenterId The id of the datacenter to set.
+   * @return this builder.
+   */
+  public BlobIdBuilder setDatacenterId(Byte datacenterId) {
+    this.datacenterId = datacenterId;
+    return this;
   }
 
   /**
@@ -67,15 +90,6 @@ public class BlobIdBuilder {
     return this;
   }
 
-  /**
-   * Sets datacenterId to the builder.
-   * @param datacenterId The id of the datacenter to set.
-   * @return this builder.
-   */
-  public BlobIdBuilder setDatacenterId(Short datacenterId) {
-    this.datacenterId = datacenterId;
-    return this;
-  }
 
   /**
    * Sets partitionId to the builder.
@@ -92,6 +106,6 @@ public class BlobIdBuilder {
    * @return A {@link BlobId}.
    */
   public BlobId build() {
-    return new BlobId(accountId, containerId, datacenterId, partitionId);
+    return new BlobId(flag, datacenterId, accountId, containerId, partitionId);
   }
 }

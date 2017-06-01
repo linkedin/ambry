@@ -410,7 +410,7 @@ public class HardDeleteVerifier {
 
             // read blob id
             BlobId id;
-            id = new BlobId(new DataInputStream(streamlog), map);
+            id = BlobId.fromDataInputStream(new DataInputStream(streamlog), map);
 
             IndexValue indexValue = rangeMap.get(id);
             boolean isDeleted = false;
@@ -797,7 +797,7 @@ public class HardDeleteVerifier {
     boolean caughtExceptionInOld = false;
 
     try {
-      id = new BlobId(new DataInputStream(streamlog), map);
+      id = BlobId.fromDataInputStream(new DataInputStream(streamlog), map);
     } catch (IOException e) {
       caughtException = true;
     } catch (IllegalArgumentException e) {
@@ -805,7 +805,7 @@ public class HardDeleteVerifier {
     }
 
     try {
-      idInOld = new BlobId(new DataInputStream(oldStreamlog), map);
+      idInOld = BlobId.fromDataInputStream(new DataInputStream(oldStreamlog), map);
     } catch (IOException e) {
       caughtExceptionInOld = true;
     } catch (IllegalArgumentException e) {

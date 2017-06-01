@@ -187,7 +187,7 @@ public class PutRequest extends RequestOrResponse {
     static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
-      BlobId id = new BlobId(stream, map);
+      BlobId id = BlobId.fromDataInputStream(stream, map);
       BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
       ByteBuffer metadata = Utils.readIntBuffer(stream);
       BlobType blobType = BlobType.values()[stream.readShort()];
@@ -206,7 +206,7 @@ public class PutRequest extends RequestOrResponse {
       String clientId = Utils.readIntString(stream);
       CrcInputStream crcInputStream = new CrcInputStream(stream);
       stream = new DataInputStream(crcInputStream);
-      BlobId id = new BlobId(stream, map);
+      BlobId id = BlobId.fromDataInputStream(stream, map);
       BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
       ByteBuffer metadata = Utils.readIntBuffer(stream);
       BlobType blobType = BlobType.values()[stream.readShort()];

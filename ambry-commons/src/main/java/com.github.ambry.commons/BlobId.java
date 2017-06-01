@@ -34,13 +34,13 @@ import static com.github.ambry.clustermap.Datacenter.*;
 
 /**
  * <p>
- *   BlobId uniquely identifies a stored blob. A blobId is a reference that is returned back to a caller when posting
- * a blob, and later will be required to fetch the blob.
+ *   BlobId uniquely identifies a stored blob. A blobId is a reference that is returned back to a caller when
+ *   posting a blob, and later will be required to fetch the blob.
  * </p>
- *
  * <p>
- *   There are two versions of format for blob de/serialization. Version 1, which includes {@code partitionId} of the
- * blob. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this blob is assigned.
+ *   There are two versions of format for blob de/serialization. Version 1, which includes {@code partitionId}
+ *   of the blob. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this
+ *   blob is assigned.
  * </p>
  * <pre>
  * +---------------------------------------------+
@@ -49,72 +49,56 @@ import static com.github.ambry.clustermap.Datacenter.*;
  * +---------------------------------------------+
  * </pre>
  * <p>
- *   Version 2, which includes {@code accountId}, {@code containerId}, {@code datacenterId}, and {@code partitionId}
- * of the blob. The {@code accountId} is the id of the {@link Account} the blob belongs to, the {@code containerId} is
- * the {@link Container} the blob belongs to, and the {@code datacenterId} is the id of the datacenter where this blob
- * was originally posted (not through replication). The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition}
- * to which this blob is assigned.
+ *   Version 2, which includes{@code flag}, {@code accountId}, {@code containerId}, {@code datacenterId}, and
+ *   {@code partitionId} of the blob. {@code flag} is a single byte that carries the meta information for this
+ *   blobId. The {@code datacenterId} is the id of the datacenter where this blob was originally posted (not
+ *   through replication). The {@code accountId} is the id of the {@link Account} the blob belongs to. The
+ *   {@code containerId} is the {@link Container} the blob belongs to. The {@code partitionId} is the
+ *   {@link com.github.ambry.clustermap.Partition} to which this blob is assigned.
  * </p>
  * <pre>
- * +---------+-----------+-------------+--------------+-------------+----------+----------+
- * | version | accountId | containerId | datacenterId | partitionId | uuidSize | uuid     |
- * | (short) | (short)   | (short)     | (short)      | (n bytes)   | (short)  | (n bytes)|
- * +---------+-----------+-------------+--------------+-------------+----------+----------+
+ * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
+ * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
+ * | (short) | (byte)| (byte)       | (short)   | (short)     | (n bytes)   | (short)  | (n bytes)|
+ * +---------+----------------------+-----------+-------------+-------------+----------+----------+
  * </pre>
  */
 public class BlobId extends StoreKey {
   static final short BLOB_ID_V1 = 1;
   static final short BLOB_ID_V2 = 2;
+  static final byte DEFAULT_FLAG = 0;
   private static final short VERSION_SIZE_IN_BYTES = 2;
   private static final int UUID_SIZE_IN_BYTES = 4;
+  private static final short FLAG_SIZE_IN_BYTES = 1;
+  private static final short DATACENTER_ID_SIZE_IN_BYTES = 1;
   private static final short ACCOUNT_ID_SIZE_IN_BYTES = 2;
   private static final short CONTAINER_ID_SIZE_IN_BYTES = 2;
-  private static final short DATACENTER_ID_SIZE_IN_BYTES = 2;
   // the version to indicate the serialized format.
   private Short version;
+  private Byte flag;
+  private Byte datacenterId;
   private Short accountId;
   private Short containerId;
-  private Short datacenterId;
   private PartitionId partitionId;
   private String uuid;
 
   /**
    * Constructs a new unique BlobId. This will construct a blob in version 2, so the serialization embeds accountId,
    * containerId, datacenterId, and partitionId.
+   * @param flag A byte to embed additional information of this blobId.
+   * @param datacenterId The id of the datacenter to be embedded into the blob.
    * @param accountId The id of the {@link Account} to be embedded into the blob.
    * @param containerId The id of the {@link Container} to be embedded into the blob.
-   * @param datacenterId The id of the datacenter to be embedded into the blob.
    * @param partitionId The partition where this blob is to be stored.
    */
-  BlobId(Short accountId, Short containerId, Short datacenterId, PartitionId partitionId) {
+  BlobId(Byte flag, Byte datacenterId, Short accountId, Short containerId, PartitionId partitionId) {
+    this.flag = flag;
+    this.datacenterId = datacenterId;
     this.accountId = accountId;
     this.containerId = containerId;
-    this.datacenterId = datacenterId;
     this.partitionId = partitionId;
     uuid = UUID.randomUUID().toString();
     populateMissingFieldsAndDetermineVersion();
-  }
-
-  /**
-   * Re-constructs existing blobId by deserializing from BlobId "string"
-   *
-   * @param id of Blob as output by BlobId.getID()
-   * @param clusterMap of the cluster that the blob id belongs to
-   * @throws IOException
-   */
-  public BlobId(String id, ClusterMap clusterMap) throws IOException {
-    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap, true);
-  }
-
-  /**
-   * Re-constructs existing blobId by deserializing from data input stream
-   *
-   * @param stream from which to deserialize the blobid
-   * @param clusterMap of the cluster that the blob id belongs to
-   * @throws IOException
-   */
-  public BlobId(DataInputStream stream, ClusterMap clusterMap) throws IOException {
-    this(stream, clusterMap, false);
   }
 
   /**
@@ -131,14 +115,16 @@ public class BlobId extends StoreKey {
     this.version = stream.readShort();
     switch (version) {
       case BLOB_ID_V1:
+        flag = DEFAULT_FLAG;
+        datacenterId = LEGACY_DATACENTER_ID;
         accountId = LEGACY_ACCOUNT_ID;
         containerId = LEGACY_CONTAINER_ID;
-        datacenterId = LEGACY_DATACENTER_ID;
         break;
       case BLOB_ID_V2:
+        flag = stream.readByte();
+        datacenterId = stream.readByte();
         accountId = stream.readShort();
         containerId = stream.readShort();
-        datacenterId = stream.readShort();
         break;
       default:
         throw new IllegalArgumentException("blob id version " + version + " not supported for blob id");
@@ -154,6 +140,29 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * Re-constructs existing blobId by deserializing from BlobId "string"
+   *
+   * @param id of Blob as output by BlobId.getID()
+   * @param clusterMap of the cluster that the blob id belongs to
+   * @throws IOException
+   */
+  public static BlobId fromStringId(String id, ClusterMap clusterMap) throws IOException {
+    return new BlobId(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))),
+        clusterMap, true);
+  }
+
+  /**
+   * Re-constructs existing blobId by deserializing from data input stream
+   *
+   * @param stream from which to deserialize the blobid
+   * @param clusterMap of the cluster that the blob id belongs to
+   * @throws IOException
+   */
+  public static BlobId fromDataInputStream(DataInputStream stream, ClusterMap clusterMap) throws IOException {
+    return new BlobId(stream, clusterMap, false);
+  }
+
+  /**
    * Size of blob id when it is serialized into bytes.
    * @return The byte count of the serialized blob id.
    */
@@ -162,8 +171,9 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V1:
         return (short) (VERSION_SIZE_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_IN_BYTES + uuid.length());
       case BLOB_ID_V2:
-        return (short) (VERSION_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES + CONTAINER_ID_SIZE_IN_BYTES
-            + DATACENTER_ID_SIZE_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_IN_BYTES + uuid.length());
+        return (short) (VERSION_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + DATACENTER_ID_SIZE_IN_BYTES
+            + ACCOUNT_ID_SIZE_IN_BYTES + CONTAINER_ID_SIZE_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_IN_BYTES
+            + uuid.length());
       default:
         throw new IllegalArgumentException("blob id version=" + version + " not supported");
     }
@@ -204,6 +214,15 @@ public class BlobId extends StoreKey {
     return datacenterId;
   }
 
+  /**
+   * Gets the flag metadata of this blob id. If this information was not available when the blob id was formed, it
+   * will return 0.
+   * @return The flag of the blobId.
+   */
+  public short getFlag() {
+    return flag;
+  }
+
   @Override
   public byte[] toBytes() {
     ByteBuffer idBuf = ByteBuffer.allocate(sizeInBytes());
@@ -211,11 +230,14 @@ public class BlobId extends StoreKey {
     switch (version) {
       case BLOB_ID_V1:
         break;
+
       case BLOB_ID_V2:
+        idBuf.put(flag);
+        idBuf.put(datacenterId);
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);
-        idBuf.putShort(datacenterId);
         break;
+
       default:
         throw new IllegalArgumentException("blob id version=" + version + " not supported");
     }
@@ -238,11 +260,14 @@ public class BlobId extends StoreKey {
     switch (version) {
       case BLOB_ID_V1:
         break;
+
       case BLOB_ID_V2:
+        sb.append(":").append(flag);
+        sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
         sb.append(":").append(containerId);
-        sb.append(":").append(datacenterId);
         break;
+
       default:
         throw new IllegalArgumentException("blob id version=" + version + " not supported");
     }
@@ -284,13 +309,16 @@ public class BlobId extends StoreKey {
     if (!version.equals(blobId.version)) {
       return false;
     }
+    if (!flag.equals(blobId.flag)) {
+      return false;
+    }
+    if (!datacenterId.equals(blobId.datacenterId)) {
+      return false;
+    }
     if (!accountId.equals(blobId.accountId)) {
       return false;
     }
     if (!containerId.equals(blobId.containerId)) {
-      return false;
-    }
-    if (!datacenterId.equals(blobId.datacenterId)) {
       return false;
     }
     if (!partitionId.equals(blobId.partitionId)) {
@@ -306,22 +334,27 @@ public class BlobId extends StoreKey {
 
   /**
    * Populate the missing fields with legacy values, and determine the version of format to serialize. Only
-   * when all the three fields of {@code accountId}, {@code containerId} and {@code datacenterId} are available,
-   * the serialization format version will be set to {@link #BLOB_ID_V2}, otherwise {@link #BLOB_ID_V1}.
+   * when all the four fields of {@code flag}, {@code datacenterId}, {@code accountId}, and {@code containerId}
+   * are available, the serialization format version will be set to {@link #BLOB_ID_V2}, otherwise it will be
+   * {@link #BLOB_ID_V1}.
    */
   private void populateMissingFieldsAndDetermineVersion() {
-    version = accountId == null && containerId == null && datacenterId == null ? BlobId.BLOB_ID_V1 : BlobId.BLOB_ID_V2;
+    version = flag == null && accountId == null && containerId == null && datacenterId == null ? BlobId.BLOB_ID_V1
+        : BlobId.BLOB_ID_V2;
     if (partitionId == null) {
       throw new IllegalStateException("partitionId is null");
+    }
+    if (flag == null) {
+      flag = DEFAULT_FLAG;
+    }
+    if (datacenterId == null) {
+      datacenterId = Datacenter.LEGACY_DATACENTER_ID;
     }
     if (accountId == null) {
       accountId = Account.LEGACY_ACCOUNT_ID;
     }
     if (containerId == null) {
       containerId = Container.LEGACY_CONTAINER_ID;
-    }
-    if (datacenterId == null) {
-      datacenterId = Datacenter.LEGACY_DATACENTER_ID;
     }
   }
 }

@@ -77,7 +77,7 @@ class DumpDataHelper {
         totalRecordSize += header.getMessageSize() + buffer.capacity();
         // read blob id
         InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-        blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
+        blobId = BlobId.fromDataInputStream(new DataInputStream(streamlog), clusterMap);
         totalRecordSize += blobId.sizeInBytes();
         if (header.getBlobPropertiesRecordRelativeOffset()
             != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {

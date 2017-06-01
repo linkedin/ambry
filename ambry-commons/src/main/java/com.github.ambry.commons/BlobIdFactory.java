@@ -33,6 +33,6 @@ public class BlobIdFactory implements StoreKeyFactory {
 
   @Override
   public StoreKey getStoreKey(DataInputStream value) throws IOException {
-    return new BlobId(value, clusterMap);
+    return BlobId.fromDataInputStream(value, clusterMap);
   }
 }
