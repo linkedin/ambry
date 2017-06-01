@@ -65,6 +65,7 @@ class CuratedLogIndexState {
   private static final long HARD_DELETE_START_OFFSET = 11;
   private static final long HARD_DELETE_LAST_PART_SIZE = 13;
 
+  static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
   static final int MAX_IN_MEM_ELEMENTS = 5;
   static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
   static final StoreKeyFactory STORE_KEY_FACTORY;
@@ -603,7 +604,7 @@ class CuratedLogIndexState {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     sessionId = UUID.randomUUID();
     index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
-        hardDelete, metrics, time, sessionId, incarnationId);
+        hardDelete, DISK_IO_SCHEDULER, metrics, time, sessionId, incarnationId);
   }
 
   /**

@@ -529,7 +529,8 @@ public class AmbryRequests implements RequestAPI {
             logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
           } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
             error = ServerErrorCode.Unknown_Error;
-            logger.error("Triggering compaction failed for {}", adminRequest);
+            logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
+                adminRequest);
           }
           response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
       }

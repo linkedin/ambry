@@ -17,6 +17,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -32,6 +33,10 @@ import org.slf4j.LoggerFactory;
  */
 class CompactionManager {
   static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
+
+  private enum Trigger {
+    PERIODIC, ADMIN
+  }
 
   private final String mountPath;
   private final StoreConfig storeConfig;
@@ -59,14 +64,23 @@ class CompactionManager {
     this.stores = stores;
     this.time = time;
     this.metrics = metrics;
-    compactionExecutor = storeConfig.storeEnableCompaction ? new CompactionExecutor() : null;
-    try {
-      CompactionPolicyFactory compactionPolicyFactory =
-          Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
-      compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
-    } catch (Exception e) {
-      throw new IllegalStateException(
-          "Error creating compaction policy using compactionPolicyFactory " + storeConfig.storeCompactionPolicyFactory);
+    if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
+      EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
+      for (String trigger : storeConfig.storeCompactionTriggers) {
+        triggers.add(Trigger.valueOf(trigger.toUpperCase()));
+      }
+      compactionExecutor = new CompactionExecutor(triggers);
+      try {
+        CompactionPolicyFactory compactionPolicyFactory =
+            Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
+        compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
+      } catch (Exception e) {
+        throw new IllegalStateException("Error creating compaction policy using compactionPolicyFactory "
+            + storeConfig.storeCompactionPolicyFactory);
+      }
+    } else {
+      compactionExecutor = null;
+      compactionPolicy = null;
     }
   }
 
@@ -143,6 +157,7 @@ class CompactionManager {
    * A {@link Runnable} that cycles through the stores and executes compaction if required.
    */
   private class CompactionExecutor implements Runnable {
+    private final EnumSet<Trigger> triggers;
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
@@ -153,6 +168,13 @@ class CompactionManager {
     private volatile boolean enabled = true;
 
     volatile boolean isRunning = false;
+
+    /**
+     * @param triggers the {@link EnumSet} of active compaction triggers.
+     */
+    CompactionExecutor(EnumSet<Trigger> triggers) {
+      this.triggers = triggers;
+    }
 
     /**
      * Starts by resuming any compactions that were left halfway. In steady state, it cycles through the stores at a
@@ -182,7 +204,9 @@ class CompactionManager {
         }
         // continue to do compactions as required.
         long expectedNextCheckTime = time.milliseconds() + waitTimeMs;
-        storesToCheck.addAll(stores);
+        if (triggers.contains(Trigger.PERIODIC)) {
+          storesToCheck.addAll(stores);
+        }
         while (enabled) {
           try {
             while (enabled && storesToCheck.peek() != null) {
@@ -216,11 +240,16 @@ class CompactionManager {
             try {
               if (enabled) {
                 if (storesToCheck.peek() == null) {
-                  long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
-                  logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
-                  time.await(waitCondition, actualWaitTimeMs);
+                  if (triggers.contains(Trigger.PERIODIC)) {
+                    long actualWaitTimeMs = expectedNextCheckTime - time.milliseconds();
+                    logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
+                    time.await(waitCondition, actualWaitTimeMs);
+                  } else {
+                    logger.trace("Going to wait until compaction thread at {} is woken up", mountPath);
+                    waitCondition.await();
+                  }
                 }
-                if (time.milliseconds() >= expectedNextCheckTime) {
+                if (triggers.contains(Trigger.PERIODIC) && time.milliseconds() >= expectedNextCheckTime) {
                   expectedNextCheckTime = time.milliseconds() + waitTimeMs;
                   storesToCheck.addAll(stores);
                 }
@@ -259,7 +288,7 @@ class CompactionManager {
      * @return {@code true} if the scheduling was successful. {@code false} if not.
      */
     boolean scheduleNextForCompaction(BlobStore store) {
-      if (!enabled || !store.isStarted() || storesToSkip.contains(store)) {
+      if (!enabled || !triggers.contains(Trigger.ADMIN) || !store.isStarted() || storesToSkip.contains(store)) {
         return false;
       }
       lock.lock();

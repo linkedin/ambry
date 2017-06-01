@@ -32,8 +32,13 @@ public class ThrottlerTest {
     time.currentMilliseconds = 11;
     time.sleepTimeExpected = 1489;
     throttler.maybeThrottle(100);
-    time.currentMilliseconds = 22;
-    time.sleepTimeExpected = 4989;
+    Assert.assertEquals(time.currentMilliseconds, 1500);
+    time.sleepTimeExpected = 3511;
+    throttler.maybeThrottle(500);
+    Assert.assertEquals(time.currentMilliseconds, 5011);
+    throttler.disable();
+    // no more sleeps after disable
+    time.sleepTimeExpected = 0;
     throttler.maybeThrottle(500);
     Assert.assertEquals(time.currentMilliseconds, 5011);
   }

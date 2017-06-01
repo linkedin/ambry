@@ -318,7 +318,8 @@ public class HardDeleterTest {
     MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
         MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId) throws StoreException {
       super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-          new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1), incarnationId);
+          new DiskIOScheduler(null), new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1),
+          incarnationId);
     }
 
     /**

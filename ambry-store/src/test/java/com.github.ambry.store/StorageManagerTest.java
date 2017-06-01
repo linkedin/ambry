@@ -228,7 +228,7 @@ public class StorageManagerTest {
   private StorageManager createAndStartStoreManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
       throws StoreException, InterruptedException {
     Properties properties = new Properties();
-    properties.put("store.enable.compaction", "true");
+    properties.put("store.compaction.triggers", "Periodic,Admin");
     StorageManager storageManager =
         new StorageManager(new StoreConfig(new VerifiableProperties(properties)), Utils.newScheduler(1, false),
             metricRegistry, replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
