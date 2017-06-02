@@ -17,6 +17,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.apache.helix.ClusterMessagingService;
@@ -86,7 +87,7 @@ public class HelixParticipantTest {
     helixManagerFactory.helixManager.beBad = true;
     HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
     try {
-      helixParticipant.initialize("localhost", 2200);
+      helixParticipant.initialize("localhost", 2200, Collections.EMPTY_LIST);
       fail("Initialization should have failed");
     } catch (IOException e) {
       // OK
@@ -121,7 +122,7 @@ public class HelixParticipantTest {
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
-    participant.initialize("localhost", 2200);
+    participant.initialize("localhost", 2200, Collections.EMPTY_LIST);
     MockHelixManager helixManager = helixManagerFactory.helixManager;
     assertTrue(helixManager.isConnected());
     assertEquals(LeaderStandbySMD.name, helixManager.stateModelDef);

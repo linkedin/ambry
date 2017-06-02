@@ -34,15 +34,32 @@ public class ServerConfig {
   public final int serverSchedulerNumOfthreads;
 
   /**
-   * The option to enable or disable publishing stats.
+   * The option to enable or disable publishing stats locally.
    */
   @Config("server.stats.publish.enabled")
   @Default("false")
   public final boolean serverStatsPublishEnabled;
 
+  /**
+   * The option to enable or disable publishing stats via Helix Health Report
+   */
+  @Config("server.stats.health.report.enabled")
+  @Default("false")
+  public final boolean serverStatsHealthReportEnabled;
+
+  /**
+   * The period in minutes which cluster wide quota stats is aggregated.
+   */
+  @Config("server.quota.stats.aggregate.interval.in.minutes")
+  @Default("60")
+  public final long serverQuotaStatsAggregateIntervalInMinutes;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
     serverStatsPublishEnabled = verifiableProperties.getBoolean("server.stats.publish.enabled", false);
+    serverStatsHealthReportEnabled = verifiableProperties.getBoolean("server.stats.health.report.enabled", false);
+    serverQuotaStatsAggregateIntervalInMinutes =
+        verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
   }
 }
