@@ -26,6 +26,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,7 +91,7 @@ public class StorageManager {
     /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
        We do this by making sure that the retention period for deleted messages (which determines the end point for hard
        deletes) is always greater than the log flush period. */
-    if (config.storeDeletedMessageRetentionDays < config.storeDataFlushIntervalSeconds / Time.SecsPerDay + 1) {
+    if (config.storeDeletedMessageRetentionDays < TimeUnit.SECONDS.toDays(config.storeDataFlushIntervalSeconds) + 1) {
       throw new StoreException("Message retention days must be greater than the store flush interval period",
           StoreErrorCodes.Initialization_Error);
     }
