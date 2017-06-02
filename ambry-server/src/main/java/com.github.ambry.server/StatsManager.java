@@ -135,7 +135,7 @@ class StatsManager {
       try {
         long fetchAndAggregatePerStoreStartTimeMs = time.milliseconds();
         StatsSnapshot statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
-        aggregate(aggregatedSnapshot, statsSnapshot);
+        StatsSnapshot.aggregate(aggregatedSnapshot, statsSnapshot);
         metrics.fetchAndAggregateTimePerStoreMs.update(time.milliseconds() - fetchAndAggregatePerStoreStartTimeMs);
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
@@ -156,7 +156,7 @@ class StatsManager {
       unreachableStores.add(partitionId.toString());
     } else {
       try {
-        statsSnapshot = store.getStoreStats().getStatsSnapshot();
+        statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
       } catch (StoreException e) {
         unreachableStores.add(partitionId.toString());
       }
