@@ -360,7 +360,7 @@ public class IndexTest {
     assertFalse("Hard delete did work even though no message is past retention time",
         state.index.hardDeleter.hardDelete());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
-    state.advanceTime(SystemTime.getInstance().milliseconds() + 2 * Time.MsPerSec * Time.SecsPerDay);
+    state.advanceTime(SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(2));
     assertTrue("Hard delete did not do any work", state.index.hardDeleter.hardDelete());
     long expectedProgress = state.index.getAbsolutePositionInLogForOffset(state.logOrder.lastKey());
     assertEquals("Hard delete did not make expected progress", expectedProgress, state.index.hardDeleter.getProgress());
@@ -1263,7 +1263,7 @@ public class IndexTest {
     state.reloadIndex(true, false);
     assertTrue("Hard delete is not enabled", state.index.hardDeleter.isRunning());
     // IndexSegment still uses real time so advance time so that it goes 2 days past the real time.
-    state.advanceTime(2 * Time.MsPerSec * Time.SecsPerDay);
+    state.advanceTime(TimeUnit.DAYS.toMillis(2));
     long expectedProgress = state.index.getAbsolutePositionInLogForOffset(state.logOrder.lastKey());
     // give it some time so that hard delete completes one cycle
     waitUntilExpectedProgress(expectedProgress, 5000);
@@ -1310,7 +1310,7 @@ public class IndexTest {
     }
 
     // advance time so that deleted entries becomes eligible to be hard deleted
-    state.advanceTime(2 * Time.MsPerSec * Time.SecsPerDay);
+    state.advanceTime(TimeUnit.DAYS.toMillis(2));
     // resume and verify new entries have been hard deleted
     state.index.hardDeleter.resume();
     assertFalse("Hard deletes should have been resumed ", state.index.hardDeleter.isPaused());
