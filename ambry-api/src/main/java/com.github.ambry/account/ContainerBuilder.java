@@ -43,7 +43,7 @@ public class ContainerBuilder {
     name = origin.getName();
     status = origin.getStatus();
     description = origin.getDescription();
-    isPrivate = origin.getIsPrivate();
+    isPrivate = origin.isPrivate();
     parentAccountId = origin.getParentAccountId();
   }
 

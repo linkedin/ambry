@@ -150,7 +150,7 @@ public class Container {
    * Gets the boolean value if the entries in this container is private.
    * @return A boolean indicating if the entries in this container are private.
    */
-  public boolean getIsPrivate() {
+  public boolean isPrivate() {
     return isPrivate;
   }
 

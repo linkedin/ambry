@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.JSONException;
@@ -51,14 +52,23 @@ public class AccountBuilder {
 
   /**
    * Constructor. The builder will not include any {@link Container} information.
-   * @param id The id of the {@link Account} to build.
-   * @param name The name of the {@link Account}.
-   * @param status The status of the {@link Account}.
+   * @param id The id of the {@link Account} to build. Can be {@code null}, but should be set before
+   *           calling {@link #build()}.
+   * @param name The name of the {@link Account}. Can be {@code null}, but should be set before
+   *           calling {@link #build()}.
+   * @param status The status of the {@link Account}. Can be {@code null}, but should be set before
+   *           calling {@link #build()}.
+   * @param containers A collection of {@link Container}s to add. Can be {@code null}.
    */
-  public AccountBuilder(Short id, String name, AccountStatus status) {
+  public AccountBuilder(Short id, String name, AccountStatus status, Collection<Container> containers) {
     this.id = id;
     this.name = name;
     this.status = status;
+    if (containers != null) {
+      for (Container container : containers) {
+        idToContainerMetadataMap.put(container.getId(), container);
+      }
+    }
   }
 
   /**
@@ -122,7 +132,7 @@ public class AccountBuilder {
   }
 
   /**
-   * Builds an {@link Account} object. {@code id}, {@code name}, and {@code status} are required before building.
+   * Builds an {@link Account} object. {@code id}, {@code name}, and {@code status} must be set before building.
    * @return An {@link Account} object.
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
