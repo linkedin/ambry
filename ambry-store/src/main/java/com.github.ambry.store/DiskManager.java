@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,7 @@ class DiskManager {
   private final StorageManagerMetrics metrics;
   private final Time time;
   private final DiskIOScheduler diskIOScheduler;
+  private final ScheduledExecutorService longLivedTaskScheduler;
   private final CompactionManager compactionManager;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -66,11 +68,12 @@ class DiskManager {
     this.metrics = metrics;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(config, time));
+    longLivedTaskScheduler = Utils.newScheduler(1, true);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
-        BlobStore store = new BlobStore(storeId, config, scheduler, diskIOScheduler, metrics, replica.getReplicaPath(),
-            replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
+        BlobStore store = new BlobStore(storeId, config, scheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
+            replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
         stores.put(replica.getPartitionId(), store);
       }
     }
@@ -157,6 +160,10 @@ class DiskManager {
             "Could not shutdown " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
       compactionManager.awaitTermination();
+      longLivedTaskScheduler.shutdown();
+      if (!longLivedTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
+        logger.error("Could not terminate long live tasks after DiskManager shutdown");
+      }
     } finally {
       metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
@@ -207,6 +214,9 @@ class DiskManager {
     // cleanup ops
     Throttler cleanupOpsThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, 10, true, time);
     throttlers.put(CLEANUP_OPS_JOB_NAME, cleanupOpsThrottler);
+    // stats
+    Throttler statsIndexScanThrottler = new Throttler(config.storeStatsIndexEntriesPerSecond, 1000, true, time);
+    throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, statsIndexScanThrottler);
     return throttlers;
   }
 }
