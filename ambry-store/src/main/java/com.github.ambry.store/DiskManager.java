@@ -160,7 +160,6 @@ class DiskManager {
             "Could not shutdown " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
       compactionManager.awaitTermination();
-      diskIOScheduler.close();
       longLivedTaskScheduler.shutdown();
       if (!longLivedTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
         logger.error("Could not terminate long live tasks after DiskManager shutdown");
