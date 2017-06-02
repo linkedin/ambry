@@ -369,19 +369,21 @@ public class AccountContainerTest {
     Account origin = Account.fromJson(accountJsonLike);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
 
-    // first, remove container
-    Container removed = null;
-    for (Container container : origin.getAllContainers()) {
-      removed = container;
+    // first, remove 10 containers
+    ArrayList<Container> containers = new ArrayList<>(origin.getAllContainers());
+    Set<Container> removed = new HashSet<>();
+    while (removed.size() < 10) {
+      Container container = containers.get(random.nextInt(containers.size()));
+      removed.add(container);
       accountBuilder.removeContainer(container);
-      break;
     }
-    assertNotNull("Removed should not be null", removed);
 
     Account account = accountBuilder.build();
-    assertEquals("Wrong number of containers", CONTAINER_COUNT - 1, account.getAllContainers().size());
-    for (Container container : account.getAllContainers()) {
-      assertFalse(container.getId() == removed.getId());
+    assertEquals("Wrong number of containers", CONTAINER_COUNT - 10, account.getAllContainers().size());
+
+    for (Container removedContainer : removed) {
+      assertNull("Container not removed ", account.getContainerById(removedContainer.getId()));
+      assertNull("Container not removed ", account.getContainerByName(removedContainer.getName()));
     }
 
     // then, remove the rest containers
@@ -456,7 +458,7 @@ public class AccountContainerTest {
     Account origin = Account.fromJson(accountJsonLike);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     ContainerBuilder containerBuilder =
-        new ContainerBuilder((short) 999, refContainerNames.get(0), refContainerStatuses.get(0),
+        new ContainerBuilder((short) -999, refContainerNames.get(0), refContainerStatuses.get(0),
             refContainerDescriptions.get(0), refContainerPrivacyValues.get(0), refAccountId);
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
