@@ -34,6 +34,8 @@ import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -228,7 +230,7 @@ public class HardDeleterTest {
       helper.delete(blobId08);
 
       // Let enough time to pass so that the above records become eligible for hard deletes.
-      time.currentMilliseconds = time.currentMilliseconds + 2 * Time.SecsPerDay * Time.MsPerSec;
+      time.currentMilliseconds = time.currentMilliseconds + TimeUnit.DAYS.toMillis(2);
 
       for (int i = 0; i < 3; i++) {
         assertEquals("There should have been no progress reported for hard deletes", 0, index.getHardDeleteProgress());
