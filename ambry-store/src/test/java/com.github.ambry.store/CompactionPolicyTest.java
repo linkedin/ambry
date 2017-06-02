@@ -166,7 +166,7 @@ public class CompactionPolicyTest {
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);
       }
       verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - (messageRetentionDays * Time.SecsPerDay * Time.MsPerSec),
+          new CompactionDetails(time.milliseconds() - TimeUnit.DAYS.toMillis(messageRetentionDays),
               bestCandidates), blobStore, compactionPolicy);
     }
   }
@@ -192,7 +192,7 @@ public class CompactionPolicyTest {
       properties.setProperty("store.deleted.message.retention.days", String.valueOf(messageRetentionInDays));
     }
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    time.sleep(2 * config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec);
+    time.sleep(2 * TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays));
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(maxBlobSize);
