@@ -16,654 +16,445 @@ package com.github.ambry.tools.admin;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.Config;
+import com.github.ambry.config.Default;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
-import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.BlockingChannelConnectionPool;
-import com.github.ambry.network.ChannelOutput;
-import com.github.ambry.network.ConnectedChannel;
-import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.network.ConnectionPoolTimeoutException;
-import com.github.ambry.network.Port;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.protocol.GetRequest;
-import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
-import java.io.BufferedReader;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileReader;
+import java.io.Closeable;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * Tool to perform blob operations directly with the server for a blobid
+ * Tool to validate the presence of equivalence of blobs across replicas.
  * Features supported so far are:
- * Get blob (in other words deserialize blob) for a given blobid from all replicas
- * Get blob (in other words deserialize blob) for a given blobid from replicas for a datacenter
- * Get blob (in other words deserialize blob) for a given blobid for a specific replica
- *
+ * Get blob from all replicas and compare the record across replicas for a list of blob ids.
+ * Get blob from all replicas in a datacenter and compare the record across replicas for a list of blob ids.
+ * Get blob from a specific replica and ensure that it deserializes correctly for a list of blob ids.
+
  */
-public class BlobValidator {
-  private final ConnectionPool connectionPool;
-  private final Map<String, Exception> invalidBlobs;
+public class BlobValidator implements Closeable {
+  private static final Logger LOGGER = LoggerFactory.getLogger(BlobValidator.class);
+
   private final Throttler throttler;
-  private static final Logger logger = LoggerFactory.getLogger(BlobValidator.class);
-
-  public BlobValidator(ConnectionPool connectionPool, long replicasToContactPerSec) {
-    this.connectionPool = connectionPool;
-    invalidBlobs = new HashMap<>();
-    throttler = new Throttler(replicasToContactPerSec, 1000, true, SystemTime.getInstance());
-  }
-
-  public static void main(String args[]) {
-    ConnectionPool connectionPool = null;
-    try {
-      OptionParser parser = new OptionParser();
-
-      ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file")
-              .withRequiredArg()
-              .describedAs("hardware_layout")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file")
-              .withRequiredArg()
-              .describedAs("partition_layout")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
-          "The type of operation to execute - VALIDATE_BLOB_ON_REPLICA/"
-              + "/VALIDATE_BLOB_ON_DATACENTER/VALIDATE_BLOB_ON_ALL_REPLICAS")
-          .withRequiredArg()
-          .describedAs("The type of operation")
-          .ofType(String.class)
-          .defaultsTo("VALIDATE_BLOB_ON_ALL_REPLICAS");
-
-      ArgumentAcceptingOptionSpec<String> ambryBlobIdListOpt =
-          parser.accepts("blobIds", "Comma separated blobIds to execute get on")
-              .withRequiredArg()
-              .describedAs("Blob Ids")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> blobIdFilePathOpt =
-          parser.accepts("blobIdsFilePath", "File path referring to list of blobIds, one blobId per line")
-              .withRequiredArg()
-              .describedAs("blobIdsFilePath")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> replicaHostOpt =
-          parser.accepts("replicaHost", "The replica host to execute get on")
-              .withRequiredArg()
-              .describedAs("The host name")
-              .defaultsTo("localhost")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> replicaPortOpt =
-          parser.accepts("replicaPort", "The replica port to execute get on")
-              .withRequiredArg()
-              .describedAs("The host name")
-              .defaultsTo("15088")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> datacenterOpt =
-          parser.accepts("datacenter", "Datacenter for which the replicas should be chosen from")
-              .withRequiredArg()
-              .describedAs("The file name with absolute path")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> expiredBlobsOpt =
-          parser.accepts("includeExpiredBlob", "Included expired blobs too")
-              .withRequiredArg()
-              .describedAs("Whether to include expired blobs while querying or not")
-              .defaultsTo("false")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<Long> replicasToContactPerSecOpt = parser.accepts("replicasToContactPerSec",
-          "The throttling value to determine how many replica can be contacted per sec")
-          .withRequiredArg()
-          .describedAs("Replicas to contact per sec")
-          .ofType(Long.class)
-          .defaultsTo(1L);
-
-      ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
-              .withOptionalArg()
-              .describedAs("Comma separated list")
-              .defaultsTo("")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
-          .withOptionalArg()
-          .describedAs("The file path of SSL key store")
-          .defaultsTo("")
-          .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
-          .withOptionalArg()
-          .describedAs("The type of SSL key store")
-          .defaultsTo("")
-          .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path")
-              .withOptionalArg()
-              .describedAs("The file path of SSL trust store")
-              .defaultsTo("")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password")
-              .withOptionalArg()
-              .describedAs("The password of SSL key store")
-              .defaultsTo("")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
-          .withOptionalArg()
-          .describedAs("The password of SSL private key")
-          .defaultsTo("")
-          .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password")
-              .withOptionalArg()
-              .describedAs("The password of SSL trust store")
-              .defaultsTo("")
-              .ofType(String.class);
-
-      ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
-              .withOptionalArg()
-              .describedAs("Comma separated list")
-              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
-              .ofType(String.class);
-
-      OptionSet options = parser.parse(args);
-
-      ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
-      listOpt.add(hardwareLayoutOpt);
-      listOpt.add(partitionLayoutOpt);
-      for (OptionSpec opt : listOpt) {
-        if (!options.has(opt)) {
-          logger.error("Missing required argument \"" + opt + "\"");
-          parser.printHelpOn(System.err);
-          System.exit(1);
-        }
-      }
-
-      ToolUtils.validateSSLOptions(options, parser, sslEnabledDatacentersOpt, sslKeystorePathOpt, sslKeystoreTypeOpt,
-          sslTruststorePathOpt, sslKeystorePasswordOpt, sslKeyPasswordOpt, sslTruststorePasswordOpt);
-      String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
-      Properties sslProperties;
-      if (sslEnabledDatacenters.length() != 0) {
-        sslProperties = ToolUtils.createSSLProperties(sslEnabledDatacenters, options.valueOf(sslKeystorePathOpt),
-            options.valueOf(sslKeystoreTypeOpt), options.valueOf(sslKeystorePasswordOpt),
-            options.valueOf(sslKeyPasswordOpt), options.valueOf(sslTruststorePathOpt),
-            options.valueOf(sslTruststorePasswordOpt), options.valueOf(sslCipherSuitesOpt));
-      } else {
-        sslProperties = new Properties();
-      }
-      ToolUtils.addClusterMapProperties(sslProperties);
-
-      Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
-      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
-      SSLConfig sslConfig = new SSLConfig(vProps);
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
-      ConnectionPoolConfig connectionPoolConfig =
-          new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool =
-          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
-
-      String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
-      String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      logger.trace("Hardware layout and partition layout parsed");
-      ClusterMap map =
-          ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
-              hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
-
-      String blobIdListStr = options.valueOf(ambryBlobIdListOpt);
-      String blobIdFilePath = options.valueOf(blobIdFilePathOpt);
-      String datacenter = options.valueOf(datacenterOpt);
-      logger.trace("Datacenter {}", datacenter);
-      String typeOfOperation = options.valueOf(typeOfOperationOpt);
-      logger.trace("Type of Operation {}", typeOfOperation);
-      String replicaHost = options.valueOf(replicaHostOpt);
-      logger.trace("ReplciaHost {}", replicaHost);
-
-      boolean expiredBlobs = Boolean.parseBoolean(options.valueOf(expiredBlobsOpt));
-      logger.trace("Exp blobs {}", expiredBlobs);
-      int replicaPort = Integer.parseInt(options.valueOf(replicaPortOpt));
-      logger.trace("ReplicPort {}", replicaPort);
-
-      long replicasToContactPerSec = options.valueOf(replicasToContactPerSecOpt);
-      BlobValidator blobValidator = new BlobValidator(connectionPool, replicasToContactPerSec);
-
-      Set<BlobId> blobIdSet = blobValidator.generateBlobIds(blobIdListStr, blobIdFilePath, map);
-      if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_REPLICA")) {
-        blobValidator.validate(new String[]{replicaHost});
-        blobValidator.validateBlobOnReplica(blobIdSet, map, replicaHost, replicaPort, expiredBlobs);
-      } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_DATACENTER")) {
-        blobValidator.validate(new String[]{datacenter});
-        blobValidator.validateBlobOnDatacenter(blobIdSet, map, datacenter, expiredBlobs);
-      } else if (typeOfOperation.equalsIgnoreCase("VALIDATE_BLOB_ON_ALL_REPLICAS")) {
-        blobValidator.validateBlobOnAllReplicas(blobIdSet, map, expiredBlobs);
-      } else {
-        logger.error("Invalid Type of Operation ");
-        System.exit(1);
-      }
-    } catch (Exception e) {
-      logger.error("Closed with exception ", e);
-    } finally {
-      if (connectionPool != null) {
-        connectionPool.shutdown();
-      }
-    }
-  }
+  private final ServerAdminTool serverAdminTool;
 
   /**
-   * Validates that elements of values are not null
-   * @param values
+   * The different operations supported by BlobValidator.
    */
-  private void validate(String[] values) {
-    for (String value : values) {
-      if (value == null) {
-        logger.error("Value {} has to be set ", value);
-        System.exit(0);
+  private enum Operation {
+    ValidateBlobOnReplica, ValidateBlobOnDatacenter, ValidateBlobOnAllReplicas
+  }
+
+  /**
+   * Config values associated with the BlobValidator.
+   */
+  private static class BlobValidatorConfig {
+
+    /**
+     * The path to the hardware layout file.
+     */
+    @Config("hardware.layout.file.path")
+    final String hardwareLayoutFilePath;
+
+    /**
+     * The path to the partition layout file.
+     */
+    @Config("partition.layout.file.path")
+    final String partitionLayoutFilePath;
+
+    /**
+     * The type of operation.
+     * Operations are: ValidateBlobOnReplica,ValidateBlobOnDatacenter,ValidateBlobOnAllReplicas
+     */
+    @Config("type.of.operation")
+    final Operation typeOfOperation;
+
+    /**
+     * The path of the file that contains blob ids. The blob ids should be comma separated with no spaces.
+     * One of this or "blob.ids" must be present.
+     */
+    @Config("blob.ids.file.path")
+    final String blobIdsFilePath;
+
+    /**
+     * Comma separated list of the blob ids to operate on.
+     * One of this or "blob.ids.file.path" must be present.
+     */
+    @Config("blob.ids")
+    final String[] blobIds;
+
+    /**
+     * The hostname of the target server as it appears in the partition layout if applicable.
+     * Applicable to: ValidateBlobOnReplica
+     */
+    @Config("hostname")
+    @Default("localhost")
+    final String hostname;
+
+    /**
+     * The port of the target server in the partition layout (need not be the actual port to connect to) if applicable.
+     * Applicable to: ValidateBlobOnReplica
+     */
+    @Config("port")
+    @Default("6667")
+    final int port;
+
+    /**
+     * The target datacenter if applicable
+     * Applicable to: ValidateBlobOnDatacenter
+     */
+    @Config("datacenter")
+    @Default("")
+    final String datacenter;
+
+    /**
+     * The get option to use to do the get operation (if applicable)
+     * Applicable for: GetBlobProperties,GetUserMetadata,GetBlob
+     */
+    @Config("get.option")
+    @Default("None")
+    final GetOption getOption;
+
+    /**
+     * Replicas to contact per second (for throttling_
+     */
+    @Config("replicas.to.contact.per.sec")
+    @Default("None")
+    final int replicasToContactPerSec;
+
+    /**
+     * Constructs the configs associated with the tool.
+     * @param verifiableProperties the props to use to load the config.
+     */
+    BlobValidatorConfig(VerifiableProperties verifiableProperties) {
+      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
+      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+      typeOfOperation = Operation.valueOf(verifiableProperties.getString("type.of.operation"));
+      if (verifiableProperties.containsKey("blob.ids.file.path")) {
+        blobIdsFilePath = verifiableProperties.getString("blob.ids.file.path");
+        blobIds = null;
+      } else {
+        blobIdsFilePath = null;
+        blobIds = verifiableProperties.getString("blob.ids").split(",");
       }
+      hostname = verifiableProperties.getString("hostname", "localhost");
+      port = verifiableProperties.getIntInRange("port", 6667, 1, 65535);
+      datacenter = verifiableProperties.getString("datacenter", "");
+      getOption = GetOption.valueOf(verifiableProperties.getString("get.option", "None"));
+      replicasToContactPerSec =
+          verifiableProperties.getIntInRange("replicas.to.contact.per.sec", 1, 1, Integer.MAX_VALUE);
     }
   }
 
   /**
-   * Generate list of blobs to be filtered based on the arguments
-   * @param blobIdListStr Comma separated list of blobIds. Could be {@code null}
-   * @param blobIdsFilePath File path referring to a file containing one blobId per line. Could be {@code null}
-   * @param map the {@link ClusterMap} to use to generate the BlobId
-   * @return Set of BlobIds to be filtered.
+   * Runs the BlobValidator
+   * @param args associated arguments.
+   * @throws Exception
+   */
+  public static void main(String args[]) throws Exception {
+    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
+    BlobValidatorConfig config = new BlobValidatorConfig(verifiableProperties);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    ClusterMap clusterMap =
+        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+            config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
+    List<BlobId> blobIds = getBlobIds(config, clusterMap);
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new SSLFactory(
+        new SSLConfig(verifiableProperties)) : null;
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    BlobValidator validator = new BlobValidator(config.replicasToContactPerSec, sslFactory, verifiableProperties);
+    LOGGER.info("Validation starting");
+    switch (config.typeOfOperation) {
+      case ValidateBlobOnAllReplicas:
+        Map<BlobId, List<String>> mismatchDetailsMap =
+            validator.validateBlobsOnAllReplicas(blobIds, config.getOption, clusterMap, storeKeyFactory);
+        logMismatches(mismatchDetailsMap);
+        break;
+      case ValidateBlobOnDatacenter:
+        if (config.datacenter.isEmpty() || !clusterMap.hasDatacenter(config.datacenter)) {
+          throw new IllegalArgumentException("Please provide a valid datacenter");
+        }
+        mismatchDetailsMap =
+            validator.validateBlobsOnDatacenter(config.datacenter, blobIds, config.getOption, clusterMap,
+                storeKeyFactory);
+        logMismatches(mismatchDetailsMap);
+        break;
+      case ValidateBlobOnReplica:
+        DataNodeId dataNodeId = clusterMap.getDataNodeId(config.hostname, config.port);
+        if (dataNodeId == null) {
+          throw new IllegalArgumentException(
+              "Could not find a data node corresponding to " + config.hostname + ":" + config.port);
+        }
+        List<ServerErrorCode> validErrorCodes =
+            Arrays.asList(ServerErrorCode.No_Error, ServerErrorCode.Blob_Deleted, ServerErrorCode.Blob_Expired);
+        Map<BlobId, ServerErrorCode> blobIdToErrorCode =
+            validator.validateBlobsOnReplica(dataNodeId, blobIds, config.getOption, clusterMap, storeKeyFactory);
+        for (Map.Entry<BlobId, ServerErrorCode> entry : blobIdToErrorCode.entrySet()) {
+          ServerErrorCode errorCode = entry.getValue();
+          if (!validErrorCodes.contains(errorCode)) {
+            LOGGER.error("[" + entry.getKey() + "] received error code: " + errorCode);
+          }
+        }
+        break;
+      default:
+        throw new IllegalStateException("Recognized but unsupported operation: " + config.typeOfOperation);
+    }
+    LOGGER.info("Validation complete");
+    validator.close();
+    clusterMap.close();
+  }
+
+  @Override
+  public void close() throws IOException {
+    throttler.disable();
+    serverAdminTool.close();
+  }
+
+  /**
+   * Gets the list of {@link BlobId} that need to be operated upon.
+   * @param config the {@link BlobValidatorConfig} to use.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @return the list of {@link BlobId} that need to be operated upon.
    * @throws IOException
    */
-  private Set<BlobId> generateBlobIds(String blobIdListStr, String blobIdsFilePath, ClusterMap map) throws IOException {
-    Set<String> blobIdStrSet = new HashSet<String>();
-    if (blobIdListStr != null) {
-      String[] blobArray = blobIdListStr.split(",");
-      blobIdStrSet.addAll(Arrays.asList(blobArray));
-    } else {
-      BufferedReader br = new BufferedReader(new FileReader(new File(blobIdsFilePath)));
-      String line;
-      while ((line = br.readLine()) != null) {
-        blobIdStrSet.add(line);
-      }
+  private static List<BlobId> getBlobIds(BlobValidatorConfig config, ClusterMap clusterMap) throws IOException {
+    String[] ids = config.blobIds;
+    if (config.blobIdsFilePath != null) {
+      String content = new String(Files.readAllBytes(Paths.get(config.blobIdsFilePath)));
+      ids = content.split(",");
     }
-    Set<BlobId> blobIdSet = new HashSet<BlobId>();
-    for (String blobIdStr : blobIdStrSet) {
-      try {
-        BlobId blobId = new BlobId(blobIdStr, map);
-        blobIdSet.add(blobId);
-      } catch (Exception e) {
-        logger.error("Exception thrown for blobId {}", blobIdStr, e);
-        invalidBlobs.put(blobIdStr, e);
-      }
+    List<BlobId> blobIds = new ArrayList<>();
+    for (String id : ids) {
+      blobIds.add(new BlobId(id, clusterMap));
     }
-    return blobIdSet;
+    return blobIds;
   }
 
-  private void validateBlobOnAllReplicas(Set<BlobId> blobIdSet, ClusterMap clusterMap, boolean expiredBlobs)
-      throws InterruptedException {
-    for (BlobId blobId : blobIdSet) {
-      logger.info("Validating blob {} on all replicas", blobId);
-      validateBlobOnAllReplicas(blobId, clusterMap, expiredBlobs);
-    }
-    if (invalidBlobs.size() != 0) {
-      logger.error("Invalid blobIds {}", invalidBlobs);
-    }
-  }
-
-  private void validateBlobOnAllReplicas(BlobId blobId, ClusterMap clusterMap, boolean expiredBlobs)
-      throws InterruptedException {
-    Map<ServerErrorCode, ArrayList<ReplicaId>> responseMap = new HashMap<ServerErrorCode, ArrayList<ReplicaId>>();
-    Map<ReplicaId, ServerResponse> replicaIdBlobContentMap = new HashMap<>();
-    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      ServerErrorCode serverErrorCode;
-      try {
-        serverErrorCode = validateBlobOnReplica(blobId, clusterMap, replicaId, expiredBlobs, replicaIdBlobContentMap);
-      } catch (MessageFormatException e) {
-        serverErrorCode = ServerErrorCode.Data_Corrupt;
-      } catch (IOException e) {
-        serverErrorCode = ServerErrorCode.IO_Error;
-      } catch (Exception e) {
-        serverErrorCode = ServerErrorCode.Unknown_Error;
-      }
-      if (responseMap.containsKey(serverErrorCode)) {
-        responseMap.get(serverErrorCode).add(replicaId);
-      } else {
-        ArrayList<ReplicaId> replicaList = new ArrayList<ReplicaId>();
-        replicaList.add(replicaId);
-        responseMap.put(serverErrorCode, replicaList);
-      }
-    }
-    compareListOfBlobContent(blobId.getID(), replicaIdBlobContentMap);
-    boolean errorLoggingRequired = false;
-    if (responseMap.keySet().size() != 1 || !replicaIdBlobContentMap.keySet().contains(ServerErrorCode.No_Error)) {
-      errorLoggingRequired = true;
-    }
-    if (errorLoggingRequired) {
-      logger.error("Summary of responses for {}", blobId);
-    } else {
-      logger.debug("Summary of responses for {}", blobId);
-    }
-    for (ServerErrorCode serverErrorCode : responseMap.keySet()) {
-      if (errorLoggingRequired) {
-        logger.error("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
-      } else {
-        logger.debug("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
-      }
-    }
-  }
-
-  private void validateBlobOnDatacenter(Set<BlobId> blobIdSet, ClusterMap clusterMap, String datacenter,
-      boolean expiredBlobs) {
-    for (BlobId blobId : blobIdSet) {
-      logger.debug("Validating blob {} on datacenter {}", blobId, datacenter);
-      validateBlobOnDatacenter(blobId, clusterMap, datacenter, expiredBlobs);
-    }
-  }
-
-  private void validateBlobOnDatacenter(BlobId blobId, ClusterMap clusterMap, String datacenter, boolean expiredBlobs) {
-    Map<ServerErrorCode, ArrayList<ReplicaId>> responseMap = new HashMap<ServerErrorCode, ArrayList<ReplicaId>>();
-    Map<ReplicaId, ServerResponse> replicaIdBlobContentMap = new HashMap<>();
-    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-      if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
-        ServerErrorCode serverErrorCode;
-        try {
-          serverErrorCode = validateBlobOnReplica(blobId, clusterMap, replicaId, expiredBlobs, replicaIdBlobContentMap);
-        } catch (MessageFormatException e) {
-          serverErrorCode = ServerErrorCode.Data_Corrupt;
-        } catch (IOException e) {
-          serverErrorCode = ServerErrorCode.IO_Error;
-        } catch (Exception e) {
-          serverErrorCode = ServerErrorCode.Unknown_Error;
-        }
-        if (responseMap.containsKey(serverErrorCode)) {
-          responseMap.get(serverErrorCode).add(replicaId);
-        } else {
-          ArrayList<ReplicaId> replicaList = new ArrayList<ReplicaId>();
-          replicaList.add(replicaId);
-          responseMap.put(serverErrorCode, replicaList);
-        }
-      }
-    }
-    compareListOfBlobContent(blobId.getID(), replicaIdBlobContentMap);
-    boolean errorLoggingRequired = false;
-    if (responseMap.keySet().size() != 1 || !replicaIdBlobContentMap.keySet().contains(ServerErrorCode.No_Error)) {
-      errorLoggingRequired = true;
-    }
-    if (errorLoggingRequired) {
-      logger.error("Summary of responses for {}", blobId);
-    } else {
-      logger.debug("Summary of responses for {}", blobId);
-    }
-    for (ServerErrorCode serverErrorCode : responseMap.keySet()) {
-      if (errorLoggingRequired) {
-        logger.error("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
-      } else {
-        logger.debug("{} : {}", serverErrorCode, responseMap.get(serverErrorCode));
+  /**
+   * Logs all mismatches
+   * @param mismatchDetailsMap a map that contains a mapping from blob id to mismatch messages
+   */
+  private static void logMismatches(Map<BlobId, List<String>> mismatchDetailsMap) {
+    for (Map.Entry<BlobId, List<String>> entry : mismatchDetailsMap.entrySet()) {
+      BlobId blobId = entry.getKey();
+      List<String> mismatchDetailsList = entry.getValue();
+      for (String mismatchDetails : mismatchDetailsList) {
+        LOGGER.error("[" + blobId + "] : " + mismatchDetails);
       }
     }
   }
 
   /**
-   * Compares {@link ServerResponse} for a list of replicas
-   * @param blobId the blobId for which the comparison is made
-   * @param replicaIdBlobContentMap the map containing the replica to their respective {@link ServerResponse}
+   * Constructs a BlobValidator
+   * @param replicasToContactPerSec the number of replicas to contact in a second.
+   * @param sslFactory the {@link SSLFactory} to use.
+   * @param verifiableProperties the {@link VerifiableProperties} to use to construct configs.
+   * @throws Exception
    */
-  private void compareListOfBlobContent(String blobId, Map<ReplicaId, ServerResponse> replicaIdBlobContentMap) {
-    Iterator<ReplicaId> replicaIdIterator = replicaIdBlobContentMap.keySet().iterator();
-    ReplicaId replicaId1 = replicaIdIterator.next();
-    ServerResponse replica1ServerResponse = replicaIdBlobContentMap.get(replicaId1);
-    while (replicaIdIterator.hasNext()) {
-      ReplicaId replicaId2 = replicaIdIterator.next();
-      ServerResponse replica2ServerResponse = replicaIdBlobContentMap.get(replicaId2);
-      if (!replica1ServerResponse.equals(replica2ServerResponse)) {
-        logger.error("ServerResponse mismatch for {} from {} and {}. Response from {} : {}, Response from {} : {}",
-            blobId, replicaId1, replicaId2, replicaId1, replica1ServerResponse, replicaId2, replica2ServerResponse);
-      }
-    }
+  BlobValidator(long replicasToContactPerSec, SSLFactory sslFactory, VerifiableProperties verifiableProperties)
+      throws Exception {
+    throttler = new Throttler(replicasToContactPerSec, 1000, true, SystemTime.getInstance());
+    serverAdminTool = new ServerAdminTool(new MetricRegistry(), sslFactory, verifiableProperties);
   }
 
-  private void validateBlobOnReplica(Set<BlobId> blobIdSet, ClusterMap clusterMap, String replicaHost, int replicaPort,
-      boolean expiredBlobs) throws Exception {
-    Map<BlobId, ServerErrorCode> resultMap = new HashMap<BlobId, ServerErrorCode>();
-    // find the replicaId based on given host name and port number
-    for (BlobId blobId : blobIdSet) {
-      Map<ReplicaId, ServerResponse> replicaIdBlobContentMap = new HashMap<>();
-      ReplicaId targetReplicaId = null;
-      for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
-        if (replicaId.getDataNodeId().getHostname().equals(replicaHost)) {
-          Port port = replicaId.getDataNodeId().getPortToConnectTo();
-          if (port.getPort() == replicaPort) {
-            targetReplicaId = replicaId;
-            break;
-          }
-        }
-      }
-      if (targetReplicaId == null) {
-        throw new Exception("Can not find blob " + blobId.getID() + " in host " + replicaHost);
-      }
-      logger.debug("Validating blob {} on replica {}:{}\n", blobId, replicaHost, replicaPort);
-      ServerErrorCode response = null;
-      try {
-        response = validateBlobOnReplica(blobId, clusterMap, targetReplicaId, expiredBlobs, replicaIdBlobContentMap);
-        if (response == ServerErrorCode.No_Error) {
-          logger.trace("Successfully read the blob {}", blobId);
-        } else {
-          logger.error("Failed to read the blob {} due to {}", blobId, response);
-        }
-        resultMap.put(blobId, response);
-      } catch (MessageFormatException e) {
-        resultMap.put(blobId, ServerErrorCode.Data_Corrupt);
-      } catch (IOException e) {
-        resultMap.put(blobId, ServerErrorCode.IO_Error);
-      } catch (Exception e) {
-        resultMap.put(blobId, ServerErrorCode.Unknown_Error);
-      }
+  /**
+   * Validates each {@link BlobId} in {@code blobIds} on all of its replicas.
+   * @param blobIds the {@link BlobId}s to operate on.
+   * @param getOption the {@link GetOption} to use with the {@link com.github.ambry.protocol.GetRequest}.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use.
+   * @return a mapping from {@link BlobId} to details about any mismatches.
+   * @throws InterruptedException
+   */
+  Map<BlobId, List<String>> validateBlobsOnAllReplicas(List<BlobId> blobIds, GetOption getOption, ClusterMap clusterMap,
+      StoreKeyFactory storeKeyFactory) throws InterruptedException {
+    Map<BlobId, List<String>> mismatchDetailsMap = new HashMap<>();
+    for (BlobId blobId : blobIds) {
+      LOGGER.info("Validating blob {} on all replicas", blobId);
+      List<String> mismatchDetails = validateBlobOnAllReplicas(blobId, getOption, clusterMap, storeKeyFactory);
+      mismatchDetailsMap.put(blobId, mismatchDetails);
     }
-    logger.debug("Overall Summary");
-    for (BlobId blobId : resultMap.keySet()) {
-      logger.debug("{} :: {}", blobId, resultMap.get(blobId));
-    }
+    return mismatchDetailsMap;
   }
 
-  private ServerErrorCode validateBlobOnReplica(BlobId blobId, ClusterMap clusterMap, ReplicaId replicaId,
-      boolean expiredBlobs, Map<ReplicaId, ServerResponse> replicaBlobContentMap)
-      throws MessageFormatException, IOException, ConnectionPoolTimeoutException, InterruptedException {
-    ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
-    blobIds.add(blobId);
-    ConnectedChannel connectedChannel = null;
-    AtomicInteger correlationId = new AtomicInteger(1);
-    BlobProperties properties = null;
-    byte[] userMetadataInBytes = null;
-    byte[] blobContentInBytes = null;
+  /**
+   * Validates each {@link BlobId} in {@code blobIds} on all of its replicas in {@code datacenter}.
+   * @param datacenter the datacenter in which the blob ids have to be validated.
+   * @param blobIds the {@link BlobId}s to operate on.
+   * @param getOption the {@link GetOption} to use with the {@link com.github.ambry.protocol.GetRequest}.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use.
+   * @return a mapping from {@link BlobId} to details about any mismatches.
+   * @throws InterruptedException
+   */
+  Map<BlobId, List<String>> validateBlobsOnDatacenter(String datacenter, List<BlobId> blobIds, GetOption getOption,
+      ClusterMap clusterMap, StoreKeyFactory storeKeyFactory) throws InterruptedException {
+    Map<BlobId, List<String>> mismatchDetailsMap = new HashMap<>();
+    for (BlobId blobId : blobIds) {
+      LOGGER.info("Validating blob {} in {}", blobId, datacenter);
+      List<String> mismatchDetails =
+          validateBlobOnDatacenter(datacenter, blobId, getOption, clusterMap, storeKeyFactory);
+      mismatchDetailsMap.put(blobId, mismatchDetails);
+    }
+    return mismatchDetailsMap;
+  }
 
-    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
-    ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
-    partitionRequestInfos.add(partitionRequestInfo);
+  /**
+   * Validates each {@link BlobId} in {@code blobIds} on {@code dataNodeId}.
+   * @param dataNodeId the {@link DataNodeId} where the blobs have to be validated.
+   * @param blobIds the {@link BlobId}s to operate on.
+   * @param getOption the {@link GetOption} to use with the {@link com.github.ambry.protocol.GetRequest}.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use.
+   * @return a mapping from {@link BlobId} to the response error codes from {@code dataNodeId}
+   * @throws InterruptedException
+   */
+  Map<BlobId, ServerErrorCode> validateBlobsOnReplica(DataNodeId dataNodeId, List<BlobId> blobIds, GetOption getOption,
+      ClusterMap clusterMap, StoreKeyFactory storeKeyFactory) throws InterruptedException {
+    Map<BlobId, ServerErrorCode> blobIdToErrorCode = new HashMap<>();
+    for (BlobId blobId : blobIds) {
+      LOGGER.info("Validating blob {} in {}", blobId, dataNodeId);
+      ServerResponse response = getRecordFromNode(dataNodeId, blobId, getOption, clusterMap, storeKeyFactory);
+      blobIdToErrorCode.put(blobId, response.serverErrorCode);
+    }
+    return blobIdToErrorCode;
+  }
 
-    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
+  /**
+   * Validates {@code blobId} on all of its replicas.
+   * @param blobId the {@link BlobId} to operate on.
+   * @param getOption the {@link GetOption} to use with the {@link com.github.ambry.protocol.GetRequest}.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use.
+   * @return a list of details if there are mismatches. Zero sized list if there aren't any mismatches.
+   * @throws InterruptedException
+   */
+  private List<String> validateBlobOnAllReplicas(BlobId blobId, GetOption getOption, ClusterMap clusterMap,
+      StoreKeyFactory storeKeyFactory) throws InterruptedException {
+    Map<DataNodeId, ServerResponse> dataNodeIdBlobContentMap = new HashMap<>();
+    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
+      ServerResponse response =
+          getRecordFromNode(replicaId.getDataNodeId(), blobId, getOption, clusterMap, storeKeyFactory);
+      dataNodeIdBlobContentMap.put(replicaId.getDataNodeId(), response);
+    }
+    return getMismatchDetails(blobId.getID(), dataNodeIdBlobContentMap);
+  }
 
+  /**
+   * Validates {@code blobId} on all of its replicas in {@code datacenter}
+   * @param datacenter the datacenter in which {@code blobId} have to be validated.
+   * @param blobId the {@link BlobId} to operate on.
+   * @param getOption the {@link GetOption} to use with the {@link com.github.ambry.protocol.GetRequest}.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use.
+   * @return a list of details if there are mismatches. Zero sized list if there aren't any mismatches.
+   * @throws InterruptedException
+   */
+  private List<String> validateBlobOnDatacenter(String datacenter, BlobId blobId, GetOption getOption,
+      ClusterMap clusterMap, StoreKeyFactory storeKeyFactory) throws InterruptedException {
+    Map<DataNodeId, ServerResponse> dataNodeIdBlobContentMap = new HashMap<>();
+    for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
+      if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
+        ServerResponse response =
+            getRecordFromNode(replicaId.getDataNodeId(), blobId, getOption, clusterMap, storeKeyFactory);
+        dataNodeIdBlobContentMap.put(replicaId.getDataNodeId(), response);
+      }
+    }
+    return getMismatchDetails(blobId.getID(), dataNodeIdBlobContentMap);
+  }
+
+  /**
+   * Gets the {@link ServerResponse} from {@code dataNodeId} for {@code blobId}.
+   * @param dataNodeId the {@link DataNodeId} to query.
+   * @param blobId the {@link BlobId} to operate on.
+   * @param getOption the {@link GetOption} to use with the {@link com.github.ambry.protocol.GetRequest}.
+   * @param clusterMap the {@link ClusterMap} instance to use.
+   * @param storeKeyFactory the {@link StoreKeyFactory} to use.
+   * @return the {@link ServerResponse} from {@code dataNodeId} for {@code blobId}.
+   * @throws InterruptedException
+   */
+  private ServerResponse getRecordFromNode(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
+      ClusterMap clusterMap, StoreKeyFactory storeKeyFactory) throws InterruptedException {
+    LOGGER.debug("Getting {} from {}", blobId, dataNodeId);
+    ServerResponse serverResponse;
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo();
-      connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
-
-      GetRequest getRequest =
-          new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
-              partitionRequestInfos, getOption);
-      logger.trace("----- Contacting {}:{} ------", replicaId.getDataNodeId().getHostname(), port.toString());
-      logger.trace("Get Request to verify replica blob properties : {}", getRequest);
-      GetResponse getResponse = null;
-
-      getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
-      if (getResponse == null) {
-        logger.error(" Get Response from Stream to verify replica blob properties is null ");
-        throw new IOException("Get Response from Stream to verify replica blob properties is null");
-      }
-      ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-      logger.trace("Get Response from Stream to verify replica blob properties : {}", getResponse.getError());
-      if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        logger.trace(
-            "getBlobProperties error on response {} error code on partition {} ambryReplica {} port {} blobId {}",
-            getResponse.getError(), serverResponseCode, replicaId.getDataNodeId().getHostname(), port.toString(),
-            blobId);
-        if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return ServerErrorCode.Blob_Not_Found;
-        } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        } else if (serverResponseCode == ServerErrorCode.Blob_Expired) {
-          if (getOption != GetOption.Include_Expired_Blobs) {
-            replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-            return serverResponseCode;
-          }
-        } else {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        }
+      Pair<ServerErrorCode, BlobAll> response =
+          serverAdminTool.getAll(dataNodeId, blobId, getOption, clusterMap, storeKeyFactory);
+      ServerErrorCode errorCode = response.getFirst();
+      if (errorCode == ServerErrorCode.No_Error) {
+        BlobAll blobAll = response.getSecond();
+        ByteBuffer buffer = blobAll.getBlobData().getStream().getByteBuffer();
+        byte[] blobBytes = new byte[buffer.remaining()];
+        buffer.get(blobBytes);
+        serverResponse = new ServerResponse(errorCode, blobAll.getStoreKey(), blobAll.getBlobInfo().getBlobProperties(),
+            blobAll.getBlobInfo().getUserMetadata(), blobBytes);
       } else {
-        properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
-        logger.trace(
-            "Blob Properties : Content Type : {}, OwnerId : {}, Size : {}, CreationTimeInMs : {}, ServiceId : {}, TTL : {}",
-            properties.getContentType(), properties.getOwnerId(), properties.getBlobSize(),
-            properties.getCreationTimeInMs(), properties.getServiceId(), properties.getTimeToLiveInSeconds());
+        serverResponse = new ServerResponse(errorCode, null, null, null, null);
       }
-
-      getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
-          partitionRequestInfos, getOption);
-      logger.trace("Get Request to check blob usermetadata : {}", getRequest);
-      getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
-      if (getResponse == null) {
-        logger.error(" Get Response from Stream to verify replica blob usermetadata is null ");
-        throw new IOException("Get Response from Stream to verify replica blob usermetadata is null");
-      }
-      logger.trace("Get Response to check blob usermetadata : {}", getResponse.getError());
-
-      serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-      if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        logger.trace(
-            "usermetadata get error on response {} error code on partition " + "{} ambryReplica {} port {} blobId {}",
-            getResponse.getError(), serverResponseCode, replicaId.getDataNodeId().getHostname(), port.toString(),
-            blobId);
-        if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        } else if (serverResponseCode == ServerErrorCode.Blob_Expired) {
-          if (getOption != GetOption.Include_Expired_Blobs) {
-            replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-            return serverResponseCode;
-          }
-        } else {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        }
-      } else {
-        ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(getResponse.getInputStream());
-        userMetadataInBytes = userMetadata.array();
-        logger.trace("Usermetadata deserialized. Size {}", userMetadata.capacity());
-      }
-
-      getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
-          partitionRequestInfos, getOption);
-      logger.trace("Get Request to get blob : {}", getRequest);
-      getResponse = getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
-      if (getResponse == null) {
-        logger.error(" Get Response from Stream to verify replica blob is null ");
-        logger.trace("{} STATE FAILED", blobId);
-        throw new IOException("Get Response from Stream to verify replica blob is null");
-      }
-      logger.trace("Get Response to get blob : {}", getResponse.getError());
-      serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
-      if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        logger.trace("blob get error on response {} error code on partition {}" + " ambryReplica {} port {} blobId {}",
-            getResponse.getError(), serverResponseCode, replicaId.getDataNodeId().getHostname(), port.toString(),
-            blobId);
-        if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        } else if (serverResponseCode == ServerErrorCode.Blob_Expired) {
-          if (getOption != GetOption.Include_Expired_Blobs) {
-            replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-            return serverResponseCode;
-          }
-        } else {
-          replicaBlobContentMap.put(replicaId, new ServerResponse(serverResponseCode, null, null, null));
-          return serverResponseCode;
-        }
-      } else {
-        BlobData blobData = MessageFormatRecord.deserializeBlob(getResponse.getInputStream());
-        byte[] blobFromAmbry = new byte[(int) blobData.getSize()];
-        int blobSizeToRead = (int) blobData.getSize();
-        int blobSizeRead = 0;
-        while (blobSizeRead < blobSizeToRead) {
-          blobSizeRead += blobData.getStream().read(blobFromAmbry, blobSizeRead, blobSizeToRead - blobSizeRead);
-        }
-        logger.trace("ServerResponse deserialized. Size {}", blobData.getSize());
-        blobContentInBytes = blobFromAmbry;
-      }
-      replicaBlobContentMap.put(replicaId,
-          new ServerResponse(ServerErrorCode.No_Error, properties, userMetadataInBytes, blobContentInBytes));
-      return ServerErrorCode.No_Error;
-    } catch (MessageFormatException mfe) {
-      logger.error("MessageFormat Exception Error ", mfe);
-      connectionPool.destroyConnection(connectedChannel);
-      connectedChannel = null;
-      throw mfe;
-    } catch (IOException e) {
-      logger.error("IOException ", e);
-      connectionPool.destroyConnection(connectedChannel);
-      connectedChannel = null;
-      throw e;
+    } catch (MessageFormatException e) {
+      LOGGER.error("Error while deserializing record for {} from {}", blobId, dataNodeId, e);
+      serverResponse = new ServerResponse(ServerErrorCode.Data_Corrupt, null, null, null, null);
+    } catch (Exception e) {
+      LOGGER.error("Error while getting record for {} from {}", blobId, dataNodeId, e);
+      serverResponse = new ServerResponse(ServerErrorCode.Unknown_Error, null, null, null, null);
     } finally {
-      if (connectedChannel != null) {
-        connectionPool.checkInConnection(connectedChannel);
-      }
       throttler.maybeThrottle(1);
     }
+    LOGGER.debug("ServerError code is {} for blob {} from {}", serverResponse.serverErrorCode, blobId, dataNodeId);
+    return serverResponse;
+  }
+
+  /**
+   * Compares {@link ServerResponse} for a list of replicas.
+   * @param blobId the blobId for which the comparison is made
+   * @param dataNodeIdBlobContentMap the map containing the replica to their respective {@link ServerResponse}
+   * @return a list of details if there are mismatches. Zero sized list if there aren't any mismatches.
+   */
+  private List<String> getMismatchDetails(String blobId, Map<DataNodeId, ServerResponse> dataNodeIdBlobContentMap) {
+    List<String> mismatchDetailsList = new ArrayList<>();
+    Iterator<DataNodeId> dataNodeIdIterator = dataNodeIdBlobContentMap.keySet().iterator();
+    DataNodeId dataNodeId1 = dataNodeIdIterator.next();
+    ServerResponse dataNode1ServerResponse = dataNodeIdBlobContentMap.get(dataNodeId1);
+    while (dataNodeIdIterator.hasNext()) {
+      DataNodeId dataNodeId2 = dataNodeIdIterator.next();
+      ServerResponse dataNode2ServerResponse = dataNodeIdBlobContentMap.get(dataNodeId2);
+      String mismatchDetails = dataNode1ServerResponse.getMismatchDetails(dataNode2ServerResponse);
+      if (mismatchDetails != null) {
+        mismatchDetails = "Mismatch for [" + blobId + "] between [" + dataNodeId1 + "] and [" + dataNodeId2 + "] - "
+            + mismatchDetails;
+        mismatchDetailsList.add(mismatchDetails);
+      }
+    }
+    return mismatchDetailsList;
   }
 
   /**
@@ -672,114 +463,94 @@ public class BlobValidator {
    */
   class ServerResponse {
     final ServerErrorCode serverErrorCode;
+    final StoreKey storeKey;
     final BlobProperties blobProperties;
     final byte[] userMetadata;
     final byte[] blobData;
 
-    public ServerResponse(ServerErrorCode serverErrorCode, BlobProperties blobProperties, byte[] userMetadata,
-        byte[] blobData) {
+    ServerResponse(ServerErrorCode serverErrorCode, StoreKey storeKey, BlobProperties blobProperties,
+        byte[] userMetadata, byte[] blobData) {
       this.serverErrorCode = serverErrorCode;
+      this.storeKey = storeKey;
       this.blobProperties = blobProperties;
       this.userMetadata = userMetadata;
       this.blobData = blobData;
     }
 
     /**
-     * Compares this {@link ServerResponse} with the other
-     * @param that the {@link ServerResponse} that needs to be compared with this {@link ServerResponse}
-     * @return
+     * Gets details about any mismatches.
+     * @param that the {@link ServerResponse} to compare against.
+     * @return details about any mismatches.
      */
-    public boolean equals(ServerResponse that) {
-      if (serverErrorCode.equals(that.serverErrorCode)) {
-        if (serverErrorCode.equals(ServerErrorCode.No_Error)) {
-          return compareBlobProperties(that) && Arrays.equals(userMetadata, that.userMetadata) && Arrays.equals(
-              blobData, that.blobData);
+    String getMismatchDetails(ServerResponse that) {
+      String mismatchDetails = null;
+      if (!serverErrorCode.equals(that.serverErrorCode)) {
+        mismatchDetails = "ServerErrorCode mismatch: " + serverErrorCode + " v/s " + that.serverErrorCode;
+      } else if (serverErrorCode == ServerErrorCode.No_Error) {
+        if (!storeKey.equals(that.storeKey)) {
+          mismatchDetails = "StoreKey mismatch: " + storeKey + " v/s " + that.storeKey;
         } else {
-          return true;
+          mismatchDetails = compareBlobProperties(that);
+          if (mismatchDetails == null) {
+            if (!Arrays.equals(userMetadata, that.userMetadata)) {
+              mismatchDetails = "UserMetadata does not match";
+            } else if (!Arrays.equals(blobData, that.blobData)) {
+              mismatchDetails = "Blob data does not match";
+            }
+          }
         }
       }
-      return false;
+      return mismatchDetails;
     }
 
-    private boolean compareBlobProperties(ServerResponse that) {
+    /**
+     * Gets details about any mismatches in {@link BlobProperties}
+     * @param that the {@link ServerResponse} to compare against.
+     * @return details about any mismatches.
+     */
+    private String compareBlobProperties(ServerResponse that) {
+      String mismatchDetails = null;
       if (blobProperties == null || that.blobProperties == null) {
-        logger.error("Either of BlobProperties is null ");
-        return false;
-      }
-      if (blobProperties.getBlobSize() != that.blobProperties.getBlobSize()) {
-        logger.error("Size Mismatch {} , ", blobProperties.getBlobSize(), that.blobProperties.getBlobSize());
-        return false;
-      }
-      if (blobProperties.getTimeToLiveInSeconds() != that.blobProperties.getTimeToLiveInSeconds()) {
-        logger.error("TTL Mismatch {} , ", blobProperties.getTimeToLiveInSeconds(),
-            that.blobProperties.getTimeToLiveInSeconds());
-        return false;
-      }
-      if (blobProperties.getCreationTimeInMs() != that.blobProperties.getCreationTimeInMs()) {
-        logger.error("CreationTime Mismatch {} , ", blobProperties.getCreationTimeInMs(),
-            that.blobProperties.getCreationTimeInMs());
-
-        return false;
-      }
-      if (blobProperties.getContentType() != null && that.blobProperties.getContentType() != null
+        mismatchDetails = "Either of BlobProperties is null";
+      } else if (blobProperties.getBlobSize() != that.blobProperties.getBlobSize()) {
+        mismatchDetails =
+            "Size mismatch: " + blobProperties.getBlobSize() + " v/s " + that.blobProperties.getBlobSize();
+      } else if (blobProperties.getTimeToLiveInSeconds() != that.blobProperties.getTimeToLiveInSeconds()) {
+        mismatchDetails = "TTL mismatch: " + blobProperties.getTimeToLiveInSeconds() + " v/s "
+            + that.blobProperties.getTimeToLiveInSeconds();
+      } else if (blobProperties.getCreationTimeInMs() != that.blobProperties.getCreationTimeInMs()) {
+        mismatchDetails = "Creation time mismatch: " + blobProperties.getCreationTimeInMs() + " v/s "
+            + that.blobProperties.getCreationTimeInMs();
+      } else if (blobProperties.getContentType() != null && that.blobProperties.getContentType() != null
           && (!blobProperties.getContentType().equals(that.blobProperties.getContentType()))) {
-        logger.error("Content type Mismatch {} , ", blobProperties.getContentType(),
-            that.blobProperties.getContentType());
-        return false;
+        mismatchDetails = "Content type mismatch: " + blobProperties.getContentType() + " v/s "
+            + that.blobProperties.getContentType();
       } else if (blobProperties.getContentType() == null || that.blobProperties.getContentType() == null) {
-        logger.error("ContentType Mismatch {} , ", blobProperties.getContentType(),
-            that.blobProperties.getContentType());
-        return false;
-      }
-
-      if (blobProperties.getOwnerId() != null && that.blobProperties.getOwnerId() != null
+        mismatchDetails = "Content type mismatch: " + blobProperties.getContentType() + " v/s "
+            + that.blobProperties.getContentType();
+      } else if (blobProperties.getOwnerId() != null && that.blobProperties.getOwnerId() != null
           && (!blobProperties.getOwnerId().equals(that.blobProperties.getOwnerId()))) {
-        logger.error("OwnerId Mismatch {}, ", blobProperties.getOwnerId(), that.blobProperties.getOwnerId());
-        return false;
+        mismatchDetails =
+            "Owner ID mismatch: " + blobProperties.getOwnerId() + " v/s " + that.blobProperties.getOwnerId();
       } else if (blobProperties.getOwnerId() == null || that.blobProperties.getOwnerId() == null) {
-        logger.error("OwnerId Mismatch {} , ", blobProperties.getOwnerId(), that.blobProperties.getOwnerId());
-        return false;
-      }
-
-      if (blobProperties.getServiceId() != null && that.blobProperties.getServiceId() != null
-          && (!blobProperties.getServiceId().equals(that.blobProperties.getServiceId()))) {
-        logger.error("ServiceId Mismatch {} , ", blobProperties.getServiceId(), that.blobProperties.getServiceId());
-        return false;
+        mismatchDetails =
+            "Owner ID mismatch: " + blobProperties.getOwnerId() + " v/s " + that.blobProperties.getOwnerId();
+      } else if (blobProperties.getServiceId() != null && that.blobProperties.getServiceId() != null && (!blobProperties
+          .getServiceId()
+          .equals(that.blobProperties.getServiceId()))) {
+        mismatchDetails =
+            "Service ID mismatch: " + blobProperties.getServiceId() + " v/s " + that.blobProperties.getServiceId();
       } else if (blobProperties.getServiceId() == null || that.blobProperties.getServiceId() == null) {
-        logger.error("ServiceId Mismatch {} , ", blobProperties.getServiceId(), that.blobProperties.getServiceId());
-        return false;
+        mismatchDetails =
+            "Service ID mismatch: " + blobProperties.getServiceId() + " v/s " + that.blobProperties.getServiceId();
       }
-      return true;
+      return mismatchDetails;
     }
 
     public String toString() {
-      return serverErrorCode + ", " + blobProperties + ", UserMetadata size " + ((userMetadata != null)
-          ? userMetadata.length : 0) + ", " + "blobContent size " + ((blobData != null) ? blobData.length : 0);
+      return "[StoreKey=" + storeKey + ",ServerErrorCode=" + serverErrorCode + ",BlobProperties=" + blobProperties
+          + ",UserMetadata size=" + ((userMetadata != null) ? userMetadata.length : 0) + "," + "Blob data size=" + (
+          (blobData != null) ? blobData.length : 0) + "]";
     }
-  }
-
-  /**
-   * Method to send request and receive response to and from a blocking channel. If it fails, blocking channel is destroyed
-   *
-   * @param blockingChannel
-   * @param getRequest
-   * @param clusterMap
-   * @return
-   */
-  public static GetResponse getGetResponseFromStream(ConnectedChannel blockingChannel, GetRequest getRequest,
-      ClusterMap clusterMap) {
-    GetResponse getResponse = null;
-    try {
-      blockingChannel.send(getRequest);
-      ChannelOutput channelOutput = blockingChannel.receive();
-      InputStream stream = channelOutput.getInputStream();
-      getResponse = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-    } catch (Exception exception) {
-      blockingChannel = null;
-      exception.printStackTrace();
-      logger.error("Exception Error", exception);
-      return null;
-    }
-    return getResponse;
   }
 }

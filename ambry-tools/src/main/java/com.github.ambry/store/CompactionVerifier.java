@@ -22,6 +22,7 @@ import com.github.ambry.config.Default;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
@@ -194,7 +195,7 @@ public class CompactionVerifier implements Closeable {
    * @throws Exception if the verifier encountered problems.
    */
   public static void main(String args[]) throws Exception {
-    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     CompactionVerifierConfig verifierConfig = new CompactionVerifierConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     assert !storeConfig.storeEnableHardDelete : "Hard delete cannot be enabled in the properties";

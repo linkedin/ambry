@@ -13,6 +13,8 @@
  */
 package com.github.ambry.tools.util;
 
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +26,7 @@ import joptsimple.OptionSpec;
 
 
 /**
- * util functions for ambry tool
+ * util functions for Ambry tools
  */
 public final class ToolUtils {
   public static void validateSSLOptions(OptionSet options, OptionParser parser,
@@ -75,15 +77,6 @@ public final class ToolUtils {
     return props;
   }
 
-  public static Properties createConnectionPoolProperties() {
-    Properties props = new Properties();
-    props.put("connectionpool.read.buffer.size.bytes", "20000000");
-    props.put("connectionpool.write.buffer.size.bytes", "20000000");
-    props.put("connectionpool.read.timeout.ms", "10000");
-    props.put("connectionpool.connect.timeout.ms", "2000");
-    return props;
-  }
-
   /**
    * Adds cluster map properties with dummy values for tools to function
    * @param properties the {@link Properties} that need to be updated
@@ -109,6 +102,31 @@ public final class ToolUtils {
         parser.printHelpOn(System.err);
         System.exit(1);
       }
+    }
+  }
+
+  /**
+   * Fetches the properties from Property file and generates the {@link VerifiableProperties}
+   * @param args String array containing the arguments passed in
+   * @return the {@link VerifiableProperties} generated from the properties in the property file
+   * @throws IOException
+   */
+  public static VerifiableProperties getVerifiableProperties(String[] args) throws IOException {
+    OptionParser parser = new OptionParser();
+    ArgumentAcceptingOptionSpec<String> propsFileOpt = parser.accepts("propsFile", "Properties file path")
+        .withRequiredArg()
+        .describedAs("propsFile")
+        .ofType(String.class);
+
+    OptionSet options = parser.parse(args);
+    String propsFilePath = options.valueOf(propsFileOpt);
+    if (propsFilePath == null) {
+      parser.printHelpOn(System.err);
+      throw new IllegalArgumentException("Missing required arg: propsFile");
+    } else {
+      Properties properties = Utils.loadProps(propsFilePath);
+      addClusterMapProperties(properties);
+      return new VerifiableProperties(properties);
     }
   }
 }

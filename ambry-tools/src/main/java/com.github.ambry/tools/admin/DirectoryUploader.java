@@ -65,12 +65,12 @@ import joptsimple.OptionSpec;
  *    or a single replica if a hostname and port is specified
  * 4. Write the output to out file
  */
-public class ServerTool {
+public class DirectoryUploader {
   private ConnectionPool connectionPool;
   private PartitionId partitionId;
   private DataNodeId dataNodeId = null;
 
-  public ServerTool() throws Exception {
+  private DirectoryUploader() throws Exception {
     Properties properties = new Properties();
     ToolUtils.addClusterMapProperties(properties);
     VerifiableProperties vProps = new VerifiableProperties(properties);
@@ -396,12 +396,12 @@ public class ServerTool {
               hardwareLayoutPath, partitionLayoutPath)).getClusterMap();
       File logFile = new File(outFile);
       writer = new FileWriter(logFile);
-      ServerTool serverTool = new ServerTool();
-      serverTool.setPartitionId(map, partition, enableVerboseLogging);
+      DirectoryUploader directoryUploader = new DirectoryUploader();
+      directoryUploader.setPartitionId(map, partition, enableVerboseLogging);
       if (nodeHostname != null && nodePort != null) {
-        serverTool.setDataNodeId(map, nodeHostname, nodePort, enableVerboseLogging);
+        directoryUploader.setDataNodeId(map, nodeHostname, nodePort, enableVerboseLogging);
       }
-      serverTool.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging);
+      directoryUploader.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging);
     } catch (Exception e) {
       System.err.println("Error on exit " + e);
     } finally {

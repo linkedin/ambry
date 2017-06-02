@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;
@@ -79,7 +80,7 @@ public class ConsistencyCheckerTool {
   }
 
   public static void main(String args[]) throws Exception {
-    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     MetricRegistry registry = new MetricRegistry();
     StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
     JmxReporter reporter = null;

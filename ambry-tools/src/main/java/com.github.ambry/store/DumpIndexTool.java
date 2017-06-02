@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
@@ -101,7 +102,7 @@ public class DumpIndexTool {
   }
 
   public static void main(String args[]) throws Exception {
-    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     MetricRegistry registry = new MetricRegistry();
     StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
     JmxReporter reporter = null;
