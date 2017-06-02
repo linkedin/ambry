@@ -132,7 +132,8 @@ public class AccountBuilder {
   }
 
   /**
-   * Builds an {@link Account} object. {@code id}, {@code name}, and {@code status} must be set before building.
+   * Builds an {@link Account} object. {@code id}, {@code name}, {@code status}, and {@code containers} (if any)
+   * must be set before building.
    * @return An {@link Account} object.
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */

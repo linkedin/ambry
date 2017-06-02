@@ -110,7 +110,7 @@ public class AccountContainerTest {
     // second container with (id=1, name="0")
     containers.add(new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0),
         refContainerPrivacyValues.get(0), refAccountId).build());
-    createAccountWithBadContainers(containers, IllegalStateException.class);
+    createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
   /**
@@ -125,7 +125,7 @@ public class AccountContainerTest {
     // second container with (id=0, name="1")
     containers.add(new ContainerBuilder((short) 0, "1", refContainerStatuses.get(0), refContainerDescriptions.get(0),
         refContainerPrivacyValues.get(0), refAccountId).build());
-    createAccountWithBadContainers(containers, IllegalStateException.class);
+    createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
   /**
@@ -146,7 +146,7 @@ public class AccountContainerTest {
     // second container with (id=10, name="11")
     containers.add(new ContainerBuilder((short) 10, "11", refContainerStatuses.get(0), refContainerDescriptions.get(0),
         refContainerPrivacyValues.get(0), refAccountId).build());
-    createAccountWithBadContainers(containers, IllegalStateException.class);
+    createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
   /**
@@ -171,7 +171,7 @@ public class AccountContainerTest {
     // container with parentAccountId = refAccountId + 1
     containers.add(new ContainerBuilder(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
         refContainerDescriptions.get(0), refContainerPrivacyValues.get(0), (short) (refAccountId + 1)).build());
-    createAccountWithBadContainers(containers, IllegalStateException.class);
+    createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
   /**
@@ -183,45 +183,45 @@ public class AccountContainerTest {
     JSONObject badMetadata;
 
     // null account metadata
-    creatAccountWithBadJsonMetadata(null, IllegalArgumentException.class);
+    creatAccountWithBadJsonMetadataAndFail(null, IllegalArgumentException.class);
 
     // account metadata in wrong format
     badMetadata = new JSONObject();
     badMetadata.put("badKey", "badValue");
-    creatAccountWithBadJsonMetadata(badMetadata, JSONException.class);
+    creatAccountWithBadJsonMetadataAndFail(badMetadata, JSONException.class);
 
     // required fields are missing in the metadata
     badMetadata = new JSONObject(accountJsonLike, JSONObject.getNames(accountJsonLike));
     badMetadata.remove(ACCOUNT_ID_KEY);
-    creatAccountWithBadJsonMetadata(badMetadata, JSONException.class);
+    creatAccountWithBadJsonMetadataAndFail(badMetadata, JSONException.class);
 
     // unsupported account json version
     badMetadata = new JSONObject(accountJsonLike, JSONObject.getNames(accountJsonLike));
     badMetadata.put(JSON_VERSION_KEY, 2);
-    creatAccountWithBadJsonMetadata(badMetadata, IllegalStateException.class);
+    creatAccountWithBadJsonMetadataAndFail(badMetadata, IllegalStateException.class);
 
     // invalid account status
     badMetadata = new JSONObject(accountJsonLike, JSONObject.getNames(accountJsonLike));
     badMetadata.put(STATUS_KEY, "invalidAccountStatus");
-    creatAccountWithBadJsonMetadata(badMetadata, IllegalArgumentException.class);
+    creatAccountWithBadJsonMetadataAndFail(badMetadata, IllegalArgumentException.class);
 
     // null container metadata
-    creatContainerWithBadJsonMetadata(null, IllegalArgumentException.class);
+    creatContainerWithBadJsonMetadataAndFail(null, IllegalArgumentException.class);
 
     // invalid container status
     badMetadata = new JSONObject(containerJsonLikeList.get(0), JSONObject.getNames(containerJsonLikeList.get(0)));
     badMetadata.put(Container.STATUS_KEY, "invalidContainerStatus");
-    creatContainerWithBadJsonMetadata(badMetadata, IllegalArgumentException.class);
+    creatContainerWithBadJsonMetadataAndFail(badMetadata, IllegalArgumentException.class);
 
     // required fields are missing.
     badMetadata = new JSONObject(containerJsonLikeList.get(0), JSONObject.getNames(containerJsonLikeList.get(0)));
     badMetadata.remove(CONTAINER_ID_KEY);
-    creatContainerWithBadJsonMetadata(badMetadata, JSONException.class);
+    creatContainerWithBadJsonMetadataAndFail(badMetadata, JSONException.class);
 
     // unsupported container json version
     badMetadata = new JSONObject(containerJsonLikeList.get(0), JSONObject.getNames(containerJsonLikeList.get(0)));
     badMetadata.put(Container.JSON_VERSION_KEY, 2);
-    creatContainerWithBadJsonMetadata(badMetadata, IllegalStateException.class);
+    creatContainerWithBadJsonMetadataAndFail(badMetadata, IllegalStateException.class);
   }
 
   /**
@@ -295,9 +295,9 @@ public class AccountContainerTest {
   @Test
   public void testFieldMissingToBuildAccount() {
     // test when required fields are null
-    buildAccountWithMissingFields(null, refAccountName, refAccountStatus, IllegalStateException.class);
-    buildAccountWithMissingFields(refAccountId, null, refAccountStatus, IllegalStateException.class);
-    buildAccountWithMissingFields(refAccountId, refAccountName, null, IllegalStateException.class);
+    buildAccountWithMissingFieldsAndFail(null, refAccountName, refAccountStatus, IllegalStateException.class);
+    buildAccountWithMissingFieldsAndFail(refAccountId, null, refAccountStatus, IllegalStateException.class);
+    buildAccountWithMissingFieldsAndFail(refAccountId, refAccountName, null, IllegalStateException.class);
   }
 
   /**
@@ -306,24 +306,24 @@ public class AccountContainerTest {
   @Test
   public void testFieldMissingToBuildContainer() {
     // test when required fields are null
-    buildContainerWithMissingFields(null, refContainerNames.get(0), refContainerStatuses.get(0),
+    buildContainerWithMissingFieldsAndFail(null, refContainerNames.get(0), refContainerStatuses.get(0),
         refContainerPrivacyValues.get(0), refAccountId, IllegalStateException.class);
-    buildContainerWithMissingFields(refContainerIds.get(0), null, refContainerStatuses.get(0),
+    buildContainerWithMissingFieldsAndFail(refContainerIds.get(0), null, refContainerStatuses.get(0),
         refContainerPrivacyValues.get(0), refAccountId, IllegalStateException.class);
-    buildContainerWithMissingFields(refContainerIds.get(0), refContainerNames.get(0), null,
+    buildContainerWithMissingFieldsAndFail(refContainerIds.get(0), refContainerNames.get(0), null,
         refContainerPrivacyValues.get(0), refAccountId, IllegalStateException.class);
-    buildContainerWithMissingFields(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0), null,
-        refAccountId, IllegalStateException.class);
-    buildContainerWithMissingFields(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
-        refContainerPrivacyValues.get(0), null, IllegalStateException.class);
+    buildContainerWithMissingFieldsAndFail(refContainerIds.get(0), refContainerNames.get(0),
+        refContainerStatuses.get(0), null, refAccountId, IllegalStateException.class);
+    buildContainerWithMissingFieldsAndFail(refContainerIds.get(0), refContainerNames.get(0),
+        refContainerStatuses.get(0), refContainerPrivacyValues.get(0), null, IllegalStateException.class);
   }
 
   /**
-   * Tests removing containers from an account, and then update the account.
+   * Tests update an {@link Account}.
    * @throws JSONException
    */
   @Test
-  public void testRemoveContainerAndUpdateAccount() throws JSONException {
+  public void testUpdateAccount() throws JSONException {
     // set an account with different field value
     Account origin = Account.fromJson(accountJsonLike);
     AccountBuilder accountBuilder = new AccountBuilder(origin);
@@ -336,11 +336,12 @@ public class AccountContainerTest {
 
     try {
       accountBuilder.build();
+      fail("Should have thrown");
     } catch (IllegalStateException e) {
       // expected, as new account id does not match the parentAccountId of the two containers.
     }
 
-    // remove two existing containers.
+    // remove all existing containers.
     for (Container container : origin.getAllContainers()) {
       accountBuilder.removeContainer(container);
     }
@@ -361,6 +362,37 @@ public class AccountContainerTest {
   }
 
   /**
+   * Tests removing containers in AccountBuilder.
+   */
+  @Test
+  public void testRemovingContainers() throws JSONException {
+    Account origin = Account.fromJson(accountJsonLike);
+    AccountBuilder accountBuilder = new AccountBuilder(origin);
+
+    // first, remove container
+    Container removed = null;
+    for (Container container : origin.getAllContainers()) {
+      removed = container;
+      accountBuilder.removeContainer(container);
+      break;
+    }
+    assertNotNull("Removed should not be null", removed);
+
+    Account account = accountBuilder.build();
+    assertEquals("Wrong number of containers", CONTAINER_COUNT - 1, account.getAllContainers().size());
+    for (Container container : account.getAllContainers()) {
+      assertFalse(container.getId() == removed.getId());
+    }
+
+    // then, remove the rest containers
+    for (Container container : origin.getAllContainers()) {
+      accountBuilder.removeContainer(container);
+    }
+    account = accountBuilder.build();
+    assertEquals("Wrong container number.", 0, account.getAllContainers().size());
+  }
+
+  /**
    * Tests updating containers in an account.
    * @throws JSONException
    */
@@ -374,7 +406,7 @@ public class AccountContainerTest {
       Container container = account.getContainerById(refContainerIds.get(i));
       accountBuilder.removeContainer(container);
       ContainerBuilder containerBuilder = new ContainerBuilder(container);
-      short updatedContainerId = (short) (container.getId() + 100);
+      short updatedContainerId = (short) (-1 * (container.getId()));
       String updatedContainerName = container.getName() + "-updated";
       Container.ContainerStatus updatedContainerStatus = Container.ContainerStatus.INACTIVE;
       String updatedContainerDescription = container.getDescription() + "--updated";
@@ -489,7 +521,7 @@ public class AccountContainerTest {
    * @param containers A list of invalid {@link Container}s.
    * @param exceptionClass The class of expected exception.
    */
-  private void createAccountWithBadContainers(List<Container> containers, Class<?> exceptionClass) {
+  private void createAccountWithBadContainersAndFail(List<Container> containers, Class<?> exceptionClass) {
     try {
       new Account(refAccountId, refAccountName, refAccountStatus, containers);
       fail("should have thrown");
@@ -504,7 +536,7 @@ public class AccountContainerTest {
    * @param metadata An invalid metadata in Json.
    * @param exceptionClass The class of expected exception.
    */
-  private void creatAccountWithBadJsonMetadata(JSONObject metadata, Class<?> exceptionClass) {
+  private void creatAccountWithBadJsonMetadataAndFail(JSONObject metadata, Class<?> exceptionClass) {
     try {
       Account.fromJson(metadata);
       fail("should have thrown");
@@ -519,7 +551,7 @@ public class AccountContainerTest {
    * @param metadata An invalid metadata in Json.
    * @param exceptionClass The class of expected exception.
    */
-  private void creatContainerWithBadJsonMetadata(JSONObject metadata, Class<?> exceptionClass) {
+  private void creatContainerWithBadJsonMetadataAndFail(JSONObject metadata, Class<?> exceptionClass) {
     try {
       Container.fromJson(metadata);
       fail("should have thrown");
@@ -535,7 +567,8 @@ public class AccountContainerTest {
    * @param status The status for the {@link Account} to build.
    * @param exceptionClass The class of expected exception.
    */
-  private void buildAccountWithMissingFields(Short id, String name, AccountStatus status, Class<?> exceptionClass) {
+  private void buildAccountWithMissingFieldsAndFail(Short id, String name, AccountStatus status,
+      Class<?> exceptionClass) {
     try {
       new AccountBuilder(id, name, status, null).build();
       fail("Should have thrown");
@@ -553,7 +586,7 @@ public class AccountContainerTest {
    * @param parentAccountId The id of the parent {@link Account} for the {@link Container} to build.
    * @param exceptionClass The class of expected exception.
    */
-  private void buildContainerWithMissingFields(Short id, String name, ContainerStatus status, Boolean isPrivate,
+  private void buildContainerWithMissingFieldsAndFail(Short id, String name, ContainerStatus status, Boolean isPrivate,
       Short parentAccountId, Class<?> exceptionClass) {
     try {
       ContainerBuilder containerBuilder =
