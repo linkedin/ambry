@@ -114,6 +114,17 @@ project(':ambry-clustermap') {
     }
 }
 
+project(':ambry-account') {
+    dependencies {
+        compile project(':ambry-api'),
+            project(':ambry-utils')
+        compile "org.apache.helix:helix-core:$helixVersion"
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "org.json:json:$jsonVersion"
+        testCompile project(':ambry-utils').sourceSets.test.output
+    }
+}
+
 project(':ambry-commons') {
     dependencies {
         compile project(':ambry-api'),
