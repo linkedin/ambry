@@ -57,8 +57,7 @@ public class PutRequest extends RequestOrResponse {
   private static final short Put_Request_Version_V2 = 2;
   private static final short Put_Request_Version_V3 = 3;
 
-  // @todo change this to V3 once all cluster nodes understand V3.
-  private static final short currentVersion = Put_Request_Version_V2;
+  private static final short currentVersion = Put_Request_Version_V3;
 
   /**
    * Construct a PutRequest
@@ -99,9 +98,7 @@ public class PutRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     long sizeInBytes = sizeExcludingBlobAndCrcSize() + blobSize;
-    if (currentVersion == Put_Request_Version_V3) {
-      sizeInBytes += Crc_Field_Size_InBytes;
-    }
+    sizeInBytes += Crc_Field_Size_InBytes;
     return sizeInBytes;
   }
 

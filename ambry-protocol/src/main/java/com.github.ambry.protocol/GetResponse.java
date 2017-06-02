@@ -40,8 +40,7 @@ public class GetResponse extends Response {
   static final short Get_Response_Version_V1 = 1;
   static final short Get_Response_Version_V2 = 2;
 
-  // @todo change this to V2 once all cluster nodes understand V2.
-  private static final short currentVersion = Get_Response_Version_V1;
+  private static final short currentVersion = Get_Response_Version_V2;
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       Send send, ServerErrorCode error) {
