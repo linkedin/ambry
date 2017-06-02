@@ -157,16 +157,22 @@ public class AmbryServer {
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
+      logger.info("Creating StatsManager to publish stats");
+      List<PartitionId> partitionIds = new ArrayList<>();
+      for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
+        partitionIds.add(replicaId.getPartitionId());
+      }
+      statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
       if (serverConfig.serverStatsPublishEnabled) {
-        logger.info("Creating StatsManager to publish stats");
-        List<PartitionId> partitionIds = new ArrayList<>();
-        for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
-          partitionIds.add(replicaId.getPartitionId());
-        }
-        statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
         statsManager.start();
       }
-      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port);
+
+      List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
+      if (serverConfig.serverStatsHealthReportEnabled) {
+        ambryHealthReports.add(new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
+      }
+
+      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port, ambryHealthReports);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;

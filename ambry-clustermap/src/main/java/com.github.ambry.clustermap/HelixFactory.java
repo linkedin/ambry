@@ -30,8 +30,7 @@ public class HelixFactory {
    * @param zkAddr the address identifying the zk service to which this request is to be made.
    * @return the constructed {@link HelixManager}.
    */
-  HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType,
-      String zkAddr) {
+  HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
     return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
   }
 }

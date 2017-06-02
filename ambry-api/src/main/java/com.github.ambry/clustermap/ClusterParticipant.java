@@ -14,17 +14,24 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
+import java.util.List;
 
 
 /**
  * A ClusterParticipant is a component that makes up the Ambry cluster.
  */
 public interface ClusterParticipant extends AutoCloseable {
+
   /**
    * Initialize the participant.
+   * @param hostname the hostname to use when registering as a participant.
+   * @param port the port to use when registering as a participant.
+   * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
+   * @throws IOException
    */
-  void initialize(String hostname, int port) throws IOException;
+  void initialize(String hostname, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException;
 
   /**
    * Terminate the participant.
