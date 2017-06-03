@@ -88,8 +88,8 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
   @Override
   public boolean remove(String path, int options) {
     if (path.equals("/")) {
-      notifyListeners("/", HelixPropertyStoreUtils.StoreOperationType.DELETE);
       pathToRecords.clear();
+      notifyListeners("/", HelixPropertyStoreUtils.StoreOperationType.DELETE);
       return true;
     } else {
       throw new IllegalStateException("Not implemented");

@@ -15,26 +15,26 @@ package com.github.ambry.commons;
 
 /**
  * A {@code Notifier} is a hub that dispatches messages of various topics to {@link TopicListener}s.
- * After a {@link TopicListener} has subscribed to a topic through the {@code Notifier}, a message of
- * that topic will be received by the {@link TopicListener}. A topic can be subscribed by multiple
- * {@link TopicListener}, and a {@link TopicListener} can subscribe multiple topics.
+ * After a {@link TopicListener} has subscribed to a topic through the {@code Notifier}, a message can
+ * be published for that topic, and will be received by the {@link TopicListener}. A topic can be
+ * subscribed by multiple {@link TopicListener}, and a {@link TopicListener} can subscribe multiple topics.
  *
  * @param <T> The type of message.
  */
 public interface Notifier<T> {
 
   /**
-   * Sends a message for the specified topic. The {@link TopicListener}s that have subscribed to the
+   * Publishes a message for the specified topic. The {@link TopicListener}s that have subscribed to the
    * topic will receive the message.
    * @param topic The topic the message is sent for.
    * @param message The message to send for the topic.
    * @return {@code true} if the message has been sent out successfully, {@code false} otherwise.
    */
-  public boolean sendMessage(String topic, T message);
+  public boolean publish(String topic, T message);
 
   /**
    * Let a {@link TopicListener} subscribe a topic. After subscription, it will receive the messages
-   * sent for the topic.
+   * published for the topic.
    * @param topic The topic to subscribe.
    * @param listener The {@link TopicListener} who subscribes the topic.
    */

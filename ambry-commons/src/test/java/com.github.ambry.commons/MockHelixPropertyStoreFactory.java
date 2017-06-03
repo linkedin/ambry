@@ -26,7 +26,7 @@ import org.apache.helix.store.HelixPropertyStore;
  */
 class MockHelixPropertyStoreFactory<T> extends HelixPropertyStoreFactory<T> {
   // an internal map from store root path to a store.
-  Map<String, MockHelixPropertyStore<T>> storeKeyToMockStoreMap = new HashMap<>();
+  private final Map<String, MockHelixPropertyStore<T>> storeKeyToMockStoreMap = new HashMap<>();
 
   @Override
   HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig, List<String> subscribedPaths) {

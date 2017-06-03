@@ -25,5 +25,5 @@ public interface TopicListener<T> {
    * @param topic The topic this {@code TopicListener} subscribes.
    * @param message The message for the topic.
    */
-  public void onMessageReceive(String topic, T message);
+  public void onMessage(String topic, T message);
 }

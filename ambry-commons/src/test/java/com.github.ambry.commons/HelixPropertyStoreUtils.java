@@ -15,7 +15,8 @@ package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -46,9 +47,8 @@ class HelixPropertyStoreUtils {
      * @param storeFactory The factory to generate a {@link HelixPropertyStore}.
      */
     HelixStoreOperator(HelixPropertyStoreConfig storeConfig, HelixPropertyStoreFactory storeFactory) {
-      ArrayList<String> paths = new ArrayList<>();
-      paths.add(storeConfig.rootPath);
-      store = storeFactory.getHelixPropertyStore(storeConfig, paths);
+      List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
+      store = storeFactory.getHelixPropertyStore(storeConfig, subscribedPaths);
     }
 
     /**
@@ -162,6 +162,7 @@ class HelixPropertyStoreUtils {
   static void deleteStoreIfExists(HelixPropertyStoreConfig storeConfig, HelixPropertyStoreFactory storeFactory)
       throws Exception {
     HelixStoreOperator storeOperator = new HelixStoreOperator(storeConfig, storeFactory);
+    // check if the store exists by checking if root path (e.g., "/") exists in the store.
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
     }

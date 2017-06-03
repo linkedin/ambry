@@ -14,9 +14,8 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
@@ -45,7 +44,8 @@ public class HelixNotifier implements Notifier<String> {
   private static final String MESSAGE_KEY = "message";
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final HelixPropertyStore<ZNRecord> helixStore;
-  private final Map<TopicListener, HelixPropertyListener> topicListenerToHelixListenerMap = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<TopicListener, HelixPropertyListener> topicListenerToHelixListenerMap =
+      new ConcurrentHashMap<>();
 
   /**
    * Constructor.
@@ -56,8 +56,7 @@ public class HelixNotifier implements Notifier<String> {
     if (storeFactory == null) {
       throw new IllegalArgumentException("storeFactory cannot be null.");
     }
-    List<String> subscribedPaths = new ArrayList<>();
-    subscribedPaths.add(storeConfig.rootPath + TOPIC_PATH);
+    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + TOPIC_PATH);
     helixStore = storeFactory.getHelixPropertyStore(storeConfig, subscribedPaths);
     logger.info("HelixNotifier started, topicPath={}", storeConfig.rootPath + TOPIC_PATH);
   }
@@ -65,22 +64,26 @@ public class HelixNotifier implements Notifier<String> {
   /**
    * {@inheritDoc}
    *
-   * Return {@code true} does not guarantee all the {@link TopicListener} will receive the message. It just indicates
+   * Returns {@code true} does not guarantee all the {@link TopicListener} will receive the message. It just indicates
    * the message has been successfully sent out.
    */
   @Override
-  public boolean sendMessage(String topic, String message) {
+  public boolean publish(String topic, String message) {
     if (topic == null) {
       throw new IllegalArgumentException("topic cannot be null");
     }
     if (message == null) {
       throw new IllegalArgumentException("message cannot be null");
     }
-    String topicPath = makeTopicPath(topic);
+    String topicPath = getTopicPath(topic);
     ZNRecord record = new ZNRecord(topicPath);
     record.setSimpleField(MESSAGE_KEY, message);
     boolean res = helixStore.set(topicPath, record, AccessOption.PERSISTENT);
-    logger.trace("message={} has been sent to topic={}", message, topic);
+    if (res) {
+      logger.trace("message={} has been published for topic={}", message, topic);
+    } else {
+      logger.error("failed to publish message={} for topic={}", message, topic);
+    }
     return res;
   }
 
@@ -95,7 +98,7 @@ public class HelixNotifier implements Notifier<String> {
     if (topicListener == null) {
       throw new IllegalArgumentException("listener cannot be null");
     }
-    String topicPath = makeTopicPath(topic);
+    String topicPath = getTopicPath(topic);
     HelixPropertyListener helixListener = new HelixPropertyListener() {
       @Override
       public void onDataChange(String path) {
@@ -132,7 +135,7 @@ public class HelixNotifier implements Notifier<String> {
     if (topicListener == null) {
       throw new IllegalArgumentException("topicListener cannot be null");
     }
-    String topicPath = makeTopicPath(topic);
+    String topicPath = getTopicPath(topic);
     HelixPropertyListener helixListener = topicListenerToHelixListenerMap.remove(topicListener);
     helixStore.unsubscribe(topicPath, helixListener);
     logger.trace("TopicListener={} has been unsubscribed from topic={}", topicListener, topic);
@@ -151,7 +154,7 @@ public class HelixNotifier implements Notifier<String> {
       if (zNRecord != null) {
         message = zNRecord.getSimpleField(MESSAGE_KEY);
         long startTimeMs = System.currentTimeMillis();
-        topicListener.onMessageReceive(topic, message);
+        topicListener.onMessage(topic, message);
         logger.trace("Message has been sent to TopicListener={} on topic={} with message={} using {}ms", topicListener,
             topic, message, System.currentTimeMillis() - startTimeMs);
       } else {
@@ -159,17 +162,17 @@ public class HelixNotifier implements Notifier<String> {
             topicListener, topic);
       }
     } catch (Exception e) {
-      logger.warn("Failed to send message to TopicListener={} for topic={} with message={}", topicListener, topic,
+      logger.error("Failed to send message to TopicListener={} for topic={} with message={}", topicListener, topic,
           message, e);
     }
   }
 
   /**
-   * Makes {@link HelixPropertyStore} path for a topic.
-   * @param topic The topic to make path
+   * Gets {@link HelixPropertyStore} path for a topic.
+   * @param topic The topic to get its path
    * @return A path in the {@link HelixPropertyStore} for the topic.
    */
-  private String makeTopicPath(String topic) {
+  private String getTopicPath(String topic) {
     return TOPIC_PATH + "/" + topic;
   }
 }
