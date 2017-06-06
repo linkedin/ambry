@@ -33,6 +33,20 @@ import org.apache.zookeeper.data.Stat;
 class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccessor<T> {
   private final Map<String, T> pathToRecords = new HashMap<>();
   private final Map<String, Set<HelixPropertyListener>> pathToListeners = new HashMap<>();
+  private boolean shouldFailSetOperation = false;
+  private boolean shouldRemoveRecordBeforeNotify = false;
+
+  /**
+   * Constructor for {@code MockHelixPropertyStore}.
+   * @param shouldFailSetOperation A binary indicator to specify if the {@link #set(String, Object, int)} operation
+   *                               should fail.
+   * @param shouldRemoveRecordBeforeNotify A boolean indicator to specify if the record should be removed before
+   *                                        notifying listeners.
+   */
+  MockHelixPropertyStore(boolean shouldFailSetOperation, boolean shouldRemoveRecordBeforeNotify) {
+    this.shouldFailSetOperation = shouldFailSetOperation;
+    this.shouldRemoveRecordBeforeNotify = shouldRemoveRecordBeforeNotify;
+  }
 
   @Override
   public void start() {
@@ -69,6 +83,9 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
 
   @Override
   public boolean set(String path, T record, int options) {
+    if (shouldFailSetOperation) {
+      return false;
+    }
     System.out.println("Setting to store path: " + path + ", record: " + record.toString());
     return setAndNotify(path, record);
   }
@@ -221,7 +238,9 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
     HelixPropertyStoreUtils.StoreOperationType operationType =
         pathToRecords.get(path) == null ? HelixPropertyStoreUtils.StoreOperationType.CREATE
             : HelixPropertyStoreUtils.StoreOperationType.WRITE;
-    pathToRecords.put(path, record);
+    if (!shouldRemoveRecordBeforeNotify) {
+      pathToRecords.put(path, record);
+    }
     notifyListeners(path, operationType);
     return true;
   }

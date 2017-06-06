@@ -58,7 +58,7 @@ public class HelixNotifierTest {
   public void setup() throws Exception {
     resetReferenceTopicsAndMessages();
     resetListeners();
-    storeFactory = new MockHelixPropertyStoreFactory<>();
+    storeFactory = new MockHelixPropertyStoreFactory<>(false, false);
     HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
     notifier = new HelixNotifier(storeConfig, storeFactory);
   }
@@ -262,6 +262,7 @@ public class HelixNotifierTest {
     // subscribe to null topic
     try {
       notifier.subscribe(null, listeners.get(0));
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -269,6 +270,7 @@ public class HelixNotifierTest {
     // subscribe using null listener
     try {
       notifier.subscribe(refTopics.get(0), null);
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -276,6 +278,7 @@ public class HelixNotifierTest {
     // publish message to a null topic
     try {
       notifier.publish(null, refMessages.get(0));
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -283,6 +286,7 @@ public class HelixNotifierTest {
     // publish null message to a topic
     try {
       notifier.publish(refTopics.get(0), null);
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -290,6 +294,7 @@ public class HelixNotifierTest {
     // unsubscribe a null listener from a topic
     try {
       notifier.unsubscribe(refTopics.get(0), null);
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -297,9 +302,43 @@ public class HelixNotifierTest {
     // unsubscribe a listener from a null topic
     try {
       notifier.unsubscribe(null, listeners.get(0));
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
+
+    // pass null storeFactory to construct a HelixNotifier
+    try {
+      new HelixNotifier(storeConfig, null);
+      fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+  }
+
+  /**
+   * Tests when publishing a message through {@link HelixNotifier} fails, it will not throw exception or fail the
+   * caller's thread.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void testFailToPublishMessage() throws Exception {
+    storeFactory = new MockHelixPropertyStoreFactory<>(true, false);
+    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
+    notifier = new HelixNotifier(storeConfig, storeFactory);
+    notifier.publish(refTopics.get(0), refMessages.get(0));
+  }
+
+  @Test
+  public void testReadNullRecordWhenSendMessageToLocalListeners() throws Exception {
+    storeFactory = new MockHelixPropertyStoreFactory<>(false, true);
+    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
+    notifier = new HelixNotifier(storeConfig, storeFactory);
+    notifier.publish(refTopics.get(0), refMessages.get(0));
+    notifier.subscribe(refTopics.get(0), listeners.get(0));
+    latch0.set(new CountDownLatch(1));
+    notifier.publish(refTopics.get(0), refMessages.get(0));
+    assertEquals("TopicListener incorrectly called when the record is null", 1, latch0.get().getCount());
   }
 
   /**

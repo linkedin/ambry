@@ -27,6 +27,20 @@ import org.apache.helix.store.HelixPropertyStore;
 class MockHelixPropertyStoreFactory<T> extends HelixPropertyStoreFactory<T> {
   // an internal map from store root path to a store.
   private final Map<String, MockHelixPropertyStore<T>> storeKeyToMockStoreMap = new HashMap<>();
+  private boolean shouldFailSetOperation = false;
+  private boolean shouldRemoveRecordBeforeNotify = false;
+
+  /**
+   * Constructor.
+   * @param shouldFailSetOperation A binary indicator to specify if the {@link HelixPropertyStore#set(String, Object, int)}
+   *                               operation should fail.
+   * @param shouldRemoveRecordBeforeNotify A boolean indicator to specify if the record should be removed before
+   *                                        notifying listeners.
+   */
+  MockHelixPropertyStoreFactory(boolean shouldFailSetOperation, boolean shouldRemoveRecordBeforeNotify) {
+    this.shouldFailSetOperation = shouldFailSetOperation;
+    this.shouldRemoveRecordBeforeNotify = shouldRemoveRecordBeforeNotify;
+  }
 
   @Override
   HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig, List<String> subscribedPaths) {
@@ -36,7 +50,7 @@ class MockHelixPropertyStoreFactory<T> extends HelixPropertyStoreFactory<T> {
     String storeRootPath = storeConfig.zkClientConnectString + storeConfig.rootPath;
     MockHelixPropertyStore<T> store = storeKeyToMockStoreMap.get(storeRootPath);
     if (store == null) {
-      store = new MockHelixPropertyStore<>();
+      store = new MockHelixPropertyStore<>(shouldFailSetOperation, shouldRemoveRecordBeforeNotify);
       storeKeyToMockStoreMap.put(storeRootPath, store);
     }
     return store;
