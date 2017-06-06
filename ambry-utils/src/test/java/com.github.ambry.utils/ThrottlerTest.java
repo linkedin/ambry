@@ -18,40 +18,67 @@ import org.junit.Test;
 
 
 /**
- * Mocks time and tests the throttler code
+ * Tests {@link Throttler}.
  */
 public class ThrottlerTest {
+  private final MockTime time = new MockTime();
+
+  /**
+   * Basic test
+   * @throws InterruptedException
+   */
   @Test
   public void throttlerTest() throws InterruptedException {
-    MockThrottlerTime time = new MockThrottlerTime();
-    time.currentMilliseconds = 0;
-    time.sleepTimeExpected = 0;
+    time.setCurrentMilliseconds(0);
     Throttler throttler = new Throttler(100, 10, true, time);
+    throttler.maybeThrottle(0);
+    Assert.assertEquals(0, time.milliseconds());
     throttler.maybeThrottle(50);
-    Assert.assertEquals(time.currentMilliseconds, 0);
-    time.currentMilliseconds = 11;
-    time.sleepTimeExpected = 1489;
+    Assert.assertEquals(0, time.milliseconds());
+    time.setCurrentMilliseconds(11);
     throttler.maybeThrottle(100);
-    Assert.assertEquals(time.currentMilliseconds, 1500);
-    time.sleepTimeExpected = 3511;
+    Assert.assertEquals(1500, time.milliseconds());
     throttler.maybeThrottle(500);
-    Assert.assertEquals(time.currentMilliseconds, 5011);
+    Assert.assertEquals(5011, time.milliseconds());
     throttler.disable();
     // no more sleeps after disable
-    time.sleepTimeExpected = 0;
     throttler.maybeThrottle(500);
-    Assert.assertEquals(time.currentMilliseconds, 5011);
+    Assert.assertEquals(5011, time.milliseconds());
   }
 
-  class MockThrottlerTime extends MockTime {
-    long sleepTimeExpected;
+  /**
+   * Tests for different check intervals - positive, zero and check every time.
+   * @throws InterruptedException
+   */
+  @Test
+  public void checkIntervalTest() throws InterruptedException {
+    time.setCurrentMilliseconds(0);
+    // positive check interval
+    Throttler throttler = new Throttler(100, 10, true, time);
+    throttler.maybeThrottle(150);
+    // no throttling because checkInterval has not elapsed
+    Assert.assertEquals(0, time.milliseconds());
+    time.setCurrentMilliseconds(11);
+    throttler.maybeThrottle(0);
+    Assert.assertEquals(1500, time.milliseconds());
 
-    @Override
-    public void sleep(long ms) {
-      currentMilliseconds += ms;
-      if (sleepTimeExpected != ms) {
-        throw new IllegalArgumentException();
-      }
-    }
+    // zero check interval
+    time.setCurrentMilliseconds(0);
+    throttler = new Throttler(100, 0, true, time);
+    throttler.maybeThrottle(130);
+    // no throttling because checkInterval has not elapsed
+    Assert.assertEquals(0, time.milliseconds());
+    time.setCurrentNanoSeconds(10);
+    throttler.maybeThrottle(20);
+    Assert.assertEquals(1500, time.milliseconds());
+
+    // no check interval, check every time
+    time.setCurrentMilliseconds(0);
+    throttler = new Throttler(100, -1, true, time);
+    throttler.maybeThrottle(0);
+    // no throttling because no work done
+    Assert.assertEquals(0, time.milliseconds());
+    throttler.maybeThrottle(150);
+    Assert.assertEquals(1500, time.milliseconds());
   }
 }

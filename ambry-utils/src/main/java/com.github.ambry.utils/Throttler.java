@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
  * an appropriate amount of time when maybeThrottle() is called to attain the desired rate.
  */
 public class Throttler {
-
   private double desiredRatePerSec;
   private long checkIntervalMs;
   private boolean throttleDown;
@@ -37,7 +36,7 @@ public class Throttler {
 
   /**
    * @param desiredRatePerSec: The rate we want to hit in units/sec
-   * @param checkIntervalMs: The interval at which to check our rate
+   * @param checkIntervalMs: The interval at which to check our rate. If < 0, rate is checked on every call
    * @param throttleDown: Does throttling increase or decrease our rate?
    * @param time: The time implementation to use
    **/
@@ -63,8 +62,8 @@ public class Throttler {
 
       // if we have completed an interval AND we have observed something, maybe
       // we should take a little nap
-      if (elapsedNs > checkIntervalMs * Time.NsPerMs && observedSoFar > 0) {
-        double rateInSecs = (observedSoFar * Time.NsPerSec) / elapsedNs;
+      if ((checkIntervalMs < 0 || elapsedNs > checkIntervalMs * Time.NsPerMs) && observedSoFar > 0) {
+        double rateInSecs = elapsedNs > 0 ? (observedSoFar * Time.NsPerSec) / elapsedNs : Double.MAX_VALUE;
         boolean needAdjustment = !(throttleDown ^ (rateInSecs > desiredRatePerSec));
         if (needAdjustment) {
           // solve for the amount of time to sleep to make us hit the desired rate
