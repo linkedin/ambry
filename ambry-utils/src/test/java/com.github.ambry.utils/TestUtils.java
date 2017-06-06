@@ -14,6 +14,9 @@
 package com.github.ambry.utils;
 
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 
 /**
@@ -63,5 +66,17 @@ public class TestUtils {
     byte[] bytes = new byte[size];
     RANDOM.nextBytes(bytes);
     return bytes;
+  }
+
+  /**
+   * Awaits on the passed-in {@link CountDownLatch}. If times out throws an exception.
+   * @param latch The latch to await on.
+   * @param timeoutMs Timeout in millisecond.
+   * @throws Exception If awaits for more than the specified time, throw a {@link TimeoutException}.
+   */
+  public static void awaitLatchOrTimeout(CountDownLatch latch, long timeoutMs) throws Exception {
+    if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+      throw new TimeoutException("Too long time to complete operation.");
+    }
   }
 }
