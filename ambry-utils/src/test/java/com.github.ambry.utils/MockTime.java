@@ -13,6 +13,7 @@
  */
 package com.github.ambry.utils;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
 
@@ -20,10 +21,10 @@ import java.util.concurrent.locks.Condition;
  * A mock time class
  */
 public class MockTime extends Time {
-  public long currentMilliseconds;
+  private long currentNanoSeconds;
 
   public MockTime(long initialMilliseconds) {
-    currentMilliseconds = initialMilliseconds;
+    setCurrentMilliseconds(initialMilliseconds);
   }
 
   public MockTime() {
@@ -32,22 +33,22 @@ public class MockTime extends Time {
 
   @Override
   public long milliseconds() {
-    return currentMilliseconds;
+    return TimeUnit.NANOSECONDS.toMillis(currentNanoSeconds);
   }
 
   @Override
   public long nanoseconds() {
-    return currentMilliseconds * NsPerMs;
+    return currentNanoSeconds;
   }
 
   @Override
   public long seconds() {
-    return currentMilliseconds / MsPerSec;
+    return TimeUnit.NANOSECONDS.toSeconds(currentNanoSeconds);
   }
 
   @Override
   public void sleep(long ms) {
-    currentMilliseconds += ms;
+    currentNanoSeconds += TimeUnit.MILLISECONDS.toNanos(ms);
   }
 
   @Override
@@ -58,5 +59,13 @@ public class MockTime extends Time {
   @Override
   public void await(Condition c, long ms) throws InterruptedException {
     sleep(ms);
+  }
+
+  public void setCurrentMilliseconds(long currentMilliseconds) {
+    setCurrentNanoSeconds(TimeUnit.MILLISECONDS.toNanos(currentMilliseconds));
+  }
+
+  public void setCurrentNanoSeconds(long currentNanoSeconds) {
+    this.currentNanoSeconds = currentNanoSeconds;
   }
 }

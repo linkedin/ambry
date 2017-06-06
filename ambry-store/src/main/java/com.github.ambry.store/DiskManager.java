@@ -212,7 +212,7 @@ class DiskManager {
   private Map<String, Throttler> getThrottlers(StoreConfig config, Time time) {
     Map<String, Throttler> throttlers = new HashMap<>();
     // cleanup ops
-    Throttler cleanupOpsThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, 10, true, time);
+    Throttler cleanupOpsThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, -1, true, time);
     throttlers.put(CLEANUP_OPS_JOB_NAME, cleanupOpsThrottler);
     // stats
     Throttler statsIndexScanThrottler = new Throttler(config.storeStatsIndexEntriesPerSecond, 1000, true, time);
