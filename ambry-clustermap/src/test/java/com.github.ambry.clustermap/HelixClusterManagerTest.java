@@ -281,6 +281,9 @@ public class HelixClusterManagerTest {
     assertStateEquivalency();
   }
 
+  /**
+   * Test that the changes to the sealed states of replicas get reflected correctly in the cluster manager.
+   */
   @Test
   public void sealedReplicaChangeTest() throws Exception {
     if (useComposite) {

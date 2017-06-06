@@ -186,6 +186,7 @@ public class DynamicClusterManagerComponentsTest {
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica3);
     AmbryReplica replica4 = new AmbryReplica(partition2, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, true);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica4);
+    sealedStateChangeCounter.incrementAndGet();
 
     assertEquals(replica1.getDiskId().getMountPath(), replica1.getMountPath());
     List<AmbryReplica> peerReplicas = replica1.getPeerReplicaIds();
@@ -217,7 +218,8 @@ public class DynamicClusterManagerComponentsTest {
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
     replica4.setSealedState(false);
-    assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
+    sealedStateChangeCounter.incrementAndGet();
+    assertEquals(partition2.getPartitionState(), PartitionState.READ_WRITE);
   }
 
   /**

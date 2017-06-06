@@ -67,8 +67,8 @@ public class MockHelixCluster {
     return helixAdmins.keySet();
   }
 
-  void  setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
-    for (MockHelixAdmin helixAdmin: helixAdmins.values()) {
+  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       if (helixAdmin.getInstancesInCluster(clusterName).contains(instance)) {
         helixAdmin.setReplicaSealedState(partition, instance, isSealed);
       }
@@ -161,7 +161,7 @@ public class MockHelixCluster {
 
   InstanceConfig getInstanceConfig(String instanceName) {
     InstanceConfig instanceConfig = null;
-    for (MockHelixAdmin helixAdmin: helixAdmins.values()) {
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       if (helixAdmin.getUpInstances().contains(instanceName)) {
         instanceConfig = helixAdmin.getInstanceConfig(null, instanceName);
         break;
@@ -170,9 +170,14 @@ public class MockHelixCluster {
     return instanceConfig;
   }
 
+  /**
+   * Get the instances that have replicas for the given partition.
+   * @param partition the partition name of the partition.
+   * @return the list of instances that have replicas for this partition.
+   */
   List<String> getInstancesForPartition(String partition) {
     List<String> instances = new ArrayList<>();
-    for (MockHelixAdmin helixAdmin: helixAdmins.values()) {
+    for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       instances.addAll(helixAdmin.getInstancesForPartition(partition));
     }
     return instances;

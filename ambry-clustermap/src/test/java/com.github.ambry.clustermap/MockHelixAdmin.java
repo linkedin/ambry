@@ -46,6 +46,11 @@ public class MockHelixAdmin implements HelixAdmin {
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
   private long totalDiskCapacity;
 
+  /**
+   * Get the instances that have replicas for the given partition.
+   * @param partition the partition name of the partition.
+   * @return the set of instances that have replicas for this partition.
+   */
   Set<String> getInstancesForPartition(String partition) {
     return partitionToInstances.containsKey(partition) ? partitionToInstances.get(partition) : Collections.EMPTY_SET;
   }
@@ -127,7 +132,13 @@ public class MockHelixAdmin implements HelixAdmin {
     return true;
   }
 
-  void  setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+  /**
+   * Set or reset the sealed state of the replica for the given partition on the given instance.
+   * @param partition the {@link AmbryPartition}
+   * @param instance the instance name.
+   * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
+   */
+  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
     InstanceConfig instanceConfig = getInstanceConfig(clusterName, instance);
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
     if (isSealed) {
@@ -209,6 +220,9 @@ public class MockHelixAdmin implements HelixAdmin {
     }
   }
 
+  /**
+   * Trigger an instance config change notification.
+   */
   private void triggerInstanceConfigChangeNotification() {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
       helixManager.triggerConfigChangeNotification(false);
