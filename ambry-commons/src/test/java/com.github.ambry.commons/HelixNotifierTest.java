@@ -26,7 +26,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import static com.github.ambry.commons.TestUtils.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 

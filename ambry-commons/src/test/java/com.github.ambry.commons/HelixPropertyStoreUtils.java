@@ -25,7 +25,7 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 
-import static com.github.ambry.commons.TestUtils.*;
+import static com.github.ambry.utils.TestUtils.*;
 
 
 /**
