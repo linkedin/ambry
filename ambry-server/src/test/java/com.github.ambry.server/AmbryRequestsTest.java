@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -545,6 +546,8 @@ public class AmbryRequestsTest {
       }
     };
 
+    private static final VerifiableProperties PROPS = new VerifiableProperties(new Properties());
+
     /**
      * if {@code true}, a {@code null} {@link Store} is returned on a call to {@link #getStore(PartitionId)}. Otherwise
      * {@link #store} is returned.
@@ -564,8 +567,8 @@ public class AmbryRequestsTest {
     PartitionId compactionScheduledPartitionId = null;
 
     MockStorageManager() throws StoreException {
-      super(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, true),
-          new MetricRegistry(), Collections.EMPTY_LIST, null, null, null, new MockTime());
+      super(new StoreConfig(PROPS), new DiskManagerConfig(PROPS), new MetricRegistry(), Collections.EMPTY_LIST, null,
+          null, null, new MockTime(), Utils.newScheduler(1, true));
     }
 
     @Override

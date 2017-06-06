@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -44,19 +45,20 @@ public class StorageManager {
 
   /**
    * Constructs a {@link StorageManager}
-   * @param config the settings for store configuration.
-   * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
+   * @param storeConfig the settings for store configuration.
+   * @param diskManagerConfig the settings for disk manager configuration
    * @param registry the {@link MetricRegistry} used for store-related metrics.
    * @param replicas all the replicas on this disk.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
+   * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    */
-  public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
+  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig, MetricRegistry registry,
       List<? extends ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time) throws StoreException {
-    verifyConfigs(config);
+      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService scheduler) throws StoreException {
+    verifyConfigs(storeConfig, diskManagerConfig);
     metrics = new StorageManagerMetrics(registry);
     this.time = time;
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
@@ -73,7 +75,8 @@ public class StorageManager {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager =
-          new DiskManager(disk, replicasForDisk, config, scheduler, metrics, keyFactory, recovery, hardDelete, time);
+          new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, metrics, keyFactory, recovery,
+              hardDelete, time, scheduler);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
@@ -82,17 +85,21 @@ public class StorageManager {
   }
 
   /**
-   * Verify that the {@link StoreConfig} has valid settings.
-   * @param config the {@link StoreConfig} to verify.
-   * @throws StoreException if the {@link StoreConfig} is invalid.
+   * Verify that the {@link StoreConfig} and {@link DiskManagerConfig} has valid settings.
+   * @param storeConfig the {@link StoreConfig} to verify.
+   * @param diskManagerConfig the {@link DiskManagerConfig} to verify
+   * @throws StoreException if the {@link StoreConfig} or {@link DiskManagerConfig} is invalid.
    */
-  private void verifyConfigs(StoreConfig config) throws StoreException {
+  private void verifyConfigs(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig) throws StoreException {
     /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
        We do this by making sure that the retention period for deleted messages (which determines the end point for hard
        deletes) is always greater than the log flush period. */
-    if (config.storeDeletedMessageRetentionDays < TimeUnit.SECONDS.toDays(config.storeDataFlushIntervalSeconds) + 1) {
+    if (config.storeDeletedMessageRetentionDays < TimeUnit.SECONDS.toDays(storeConfig.storeDataFlushIntervalSeconds) + 1) {
       throw new StoreException("Message retention days must be greater than the store flush interval period",
           StoreErrorCodes.Initialization_Error);
+    }
+    if (diskManagerConfig.diskReserveFileDirName.length() == 0) {
+      throw new StoreException("Reserve file directory name is empty", StoreErrorCodes.Initialization_Error);
     }
   }
 

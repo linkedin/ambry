@@ -675,6 +675,19 @@ public class BlobStoreTest {
     verifyOperationFailuresOnInactiveStore(store);
   }
 
+  @Test
+  public void diskSpaceRequirementsTest() throws StoreException {
+    DiskSpaceRequirements requirements = store.getDiskSpaceRequirements();
+    if (!isLogSegmented) {
+      assertNull("Expected null DiskSpaceRequirements for non segmented log", requirements);
+      return;
+    }
+    assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
+    // expect three log segments to be already allocated (from setup process)
+    assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - 3, requirements.getSegmentsNeeded());
+    assertEquals(0, requirements.getSwapSegmentsInUse());
+  }
+
   // helpers
   // general
 

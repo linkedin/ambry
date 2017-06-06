@@ -20,6 +20,7 @@ import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -61,7 +62,7 @@ class BlobStore implements Store {
   private BlobStoreCompactor compactor;
   private PersistentIndex index;
   private BlobStoreStats blobStoreStats;
-  private boolean started;
+  private volatile boolean started;
   private FileLock fileLock;
 
   /**
@@ -433,9 +434,22 @@ class BlobStore implements Store {
     }
   }
 
+  /**
+   * @return the {@link DiskSpaceRequirements} for this store to provide to
+   * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this store uses a non-segmented
+   * log. This is because it does not require any additional/swap segments.
+   * @throws StoreException
+   */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    checkStarted();
-    return log.getDiskSpaceRequirements();
+    synchronized (lock) {
+      checkStarted();
+      DiskSpaceRequirements requirements = log.getDiskSpaceRequirements();
+      if (requirements != null) {
+        requirements = new DiskSpaceRequirements(requirements.getSegmentSizeInBytes(), requirements.getSegmentsNeeded(),
+            requirements.getSwapSegmentsInUse() + compactor.getSwapSegmentsInUse());
+      }
+      return requirements;
+    }
   }
 
   /**

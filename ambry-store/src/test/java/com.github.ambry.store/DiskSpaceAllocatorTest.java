@@ -35,6 +35,7 @@ import static org.junit.Assert.*;
 
 
 public class DiskSpaceAllocatorTest {
+  private int requiredSwapSegmentsPerSize = 0;
   private File tempDir;
   private File allocatedFileDir;
   private File reserveFileDir;
@@ -72,19 +73,18 @@ public class DiskSpaceAllocatorTest {
     freeAndVerify(f3, 20);
     verifyPoolState(new ExpectedStateBuilder().add(50, 0).add(20, 1).build());
 
-    alloc.initializePool(
-        Arrays.asList(new DiskSpaceRequirements(50, 2, true), new DiskSpaceRequirements(21, 1, false)));
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)));
     // return files that were allocated before initialization to the pool
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(21, 1).build());
     freeAndVerify(f1, 50);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 4).add(21, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).build());
     freeAndVerify(f2, 20);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 4).add(20, 1).add(21, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(20, 1).add(21, 1).build());
     // allocate and free file from initialized pool
     File f4 = allocateAndVerify("file4", 50);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(20, 1).add(21, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(20, 1).add(21, 1).build());
     freeAndVerify(f4, 50);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 4).add(20, 1).add(21, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(20, 1).add(21, 1).build());
   }
 
   /**
@@ -95,8 +95,8 @@ public class DiskSpaceAllocatorTest {
   public void concurrencyTest() throws Exception {
     alloc = constructAllocator();
     List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
-    requirementsList.add(new DiskSpaceRequirements(10, 500, false));
-    requirementsList.add(new DiskSpaceRequirements(5, 251, false));
+    requirementsList.add(new DiskSpaceRequirements(10, 500, 1));
+    requirementsList.add(new DiskSpaceRequirements(5, 251, 0));
     alloc.initializePool(requirementsList);
     verifyPoolState(new ExpectedStateBuilder().add(10, 500).add(5, 251).build());
     exec = Executors.newCachedThreadPool();
@@ -121,28 +121,28 @@ public class DiskSpaceAllocatorTest {
   @Test
   public void sizeNotInPoolTest() throws Exception {
     alloc = constructAllocator();
-    alloc.initializePool(
-        Arrays.asList(new DiskSpaceRequirements(50, 2, true), new DiskSpaceRequirements(21, 1, false)));
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).build());
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)));
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(21, 1).build());
     File f1 = allocateAndVerify("file1", 25);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).add(25, 0).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(21, 1).add(25, 0).build());
     freeAndVerify(f1, 25);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).add(25, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(21, 1).add(25, 1).build());
     // try checking out same file again
     File f2 = allocateAndVerify("file2", 25);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).add(25, 0).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(21, 1).add(25, 0).build());
     freeAndVerify(f2, 25);
-    verifyPoolState(new ExpectedStateBuilder().add(50, 3).add(21, 1).add(25, 1).build());
+    verifyPoolState(new ExpectedStateBuilder().add(50, 2).add(21, 1).add(25, 1).build());
   }
 
   @Test
   public void subsequentStartupTest() throws Exception {
+    requiredSwapSegmentsPerSize = 1;
     alloc = constructAllocator();
     List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
-    requirementsList.add(new DiskSpaceRequirements(5, 6, false));
-    requirementsList.add(new DiskSpaceRequirements(3, 7, true));
-    requirementsList.add(new DiskSpaceRequirements(5, 4, true));
-    requirementsList.add(new DiskSpaceRequirements(6, 3, false));
+    requirementsList.add(new DiskSpaceRequirements(5, 6, 0));
+    requirementsList.add(new DiskSpaceRequirements(3, 7, 0));
+    requirementsList.add(new DiskSpaceRequirements(5, 4, 0));
+    requirementsList.add(new DiskSpaceRequirements(6, 3, 1));
     alloc.initializePool(requirementsList);
     verifyPoolState(new ExpectedStateBuilder().add(3, 8).add(5, 11).add(6, 3).build());
     File f1 = allocateAndVerify("file1", 5);
@@ -166,12 +166,44 @@ public class DiskSpaceAllocatorTest {
     freeAndVerify(f1, 6);
     verifyPoolState(new ExpectedStateBuilder().add(3, 9).add(5, 12).add(6, 2).build());
     requirementsList.clear();
-    requirementsList.add(new DiskSpaceRequirements(3, 20, false));
-    requirementsList.add(new DiskSpaceRequirements(5, 6, false));
+    requirementsList.add(new DiskSpaceRequirements(3, 20, 1));
+    requirementsList.add(new DiskSpaceRequirements(5, 6, 1));
     alloc.initializePool(requirementsList);
     verifyPoolState(new ExpectedStateBuilder().add(3, 20).add(5, 6).build());
     freeAndVerify(f2, 6);
     verifyPoolState(new ExpectedStateBuilder().add(3, 20).add(5, 6).add(6, 1).build());
+  }
+
+  /**
+   * Test various swap segment usage combinations
+   * @throws Exception
+   */
+  @Test
+  public void swapSegmentRequirementTest() throws Exception {
+    requiredSwapSegmentsPerSize = 4;
+    alloc = constructAllocator();
+    List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
+    requirementsList.add(new DiskSpaceRequirements(3, 7, 0));
+    requirementsList.add(new DiskSpaceRequirements(5, 6, 1));
+    requirementsList.add(new DiskSpaceRequirements(5, 4, 2));
+    requirementsList.add(new DiskSpaceRequirements(6, 3, 1));
+    // This should result in 0 swap segments b/c 0 > 4 - 10
+    requirementsList.add(new DiskSpaceRequirements(7, 3, 10));
+    Collections.shuffle(requirementsList);
+    alloc.initializePool(requirementsList);
+    verifyPoolState(new ExpectedStateBuilder().add(3, 11).add(5, 11).add(6, 6).add(7, 3).build());
+    // test reinitialization with different requirements, and num swap used for each size
+    requiredSwapSegmentsPerSize = 3;
+    alloc = constructAllocator();
+    requirementsList.clear();
+    requirementsList.add(new DiskSpaceRequirements(3, 2, 0));
+    requirementsList.add(new DiskSpaceRequirements(3, 2, 0));
+    requirementsList.add(new DiskSpaceRequirements(5, 6, 1));
+    requirementsList.add(new DiskSpaceRequirements(5, 4, 2));
+    requirementsList.add(new DiskSpaceRequirements(7, 3, 1));
+    Collections.shuffle(requirementsList);
+    alloc.initializePool(requirementsList);
+    verifyPoolState(new ExpectedStateBuilder().add(3, 7).add(5, 10).add(7, 5).build());
   }
 
   /**
@@ -198,7 +230,7 @@ public class DiskSpaceAllocatorTest {
   public void initFailureTest() throws Exception {
     // build a pool with files that we can modify permissions on to induce failures
     alloc = constructAllocator();
-    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 2, false)));
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 2, 0)));
     verifyPoolState(new ExpectedStateBuilder().add(50, 2).build());
     File fileSizeDir = new File(reserveFileDir, "50");
 
@@ -218,7 +250,7 @@ public class DiskSpaceAllocatorTest {
     alloc = constructAllocator();
     assertTrue("Could not make non-writable", fileSizeDir.setWritable(false));
     try {
-      alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, false)));
+      alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, 0)));
       fail("Expected StoreException");
     } catch (StoreException e) {
       assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
@@ -234,7 +266,7 @@ public class DiskSpaceAllocatorTest {
   @Test
   public void allocateAndFreeFailureTest() throws Exception {
     alloc = constructAllocator();
-    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, false)));
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, 0)));
     verifyPoolState(new ExpectedStateBuilder().add(50, 1).build());
     // test when a destination file already exists
     File f1 = new File(allocatedFileDir, "f1");
@@ -334,7 +366,7 @@ public class DiskSpaceAllocatorTest {
   }
 
   private DiskSpaceAllocator constructAllocator() throws StoreException {
-    return new DiskSpaceAllocator(reserveFileDir);
+    return new DiskSpaceAllocator(reserveFileDir, requiredSwapSegmentsPerSize);
   }
 
   /**

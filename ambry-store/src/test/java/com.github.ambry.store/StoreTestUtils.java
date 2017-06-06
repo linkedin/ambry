@@ -65,7 +65,7 @@ class StoreTestUtils {
    */
   static DiskSpaceAllocator getDiskSpaceAllocator() {
     try {
-      return new DiskSpaceAllocator(StoreTestUtils.createTempDirectory("reserve-pool"));
+      return new DiskSpaceAllocator(StoreTestUtils.createTempDirectory("reserve-pool"), 1);
     } catch (Exception e) {
       throw new IllegalStateException("Exception while constructing DiskSpaceAllocator", e);
     }

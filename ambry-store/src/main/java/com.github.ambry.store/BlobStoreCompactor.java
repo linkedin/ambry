@@ -240,6 +240,14 @@ class BlobStoreCompactor {
   }
 
   /**
+   * @return the number of temporary log segment files this compactor is currently using.
+   */
+  int getSwapSegmentsInUse() {
+    String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
+    return tempSegments == null ? 0 : tempSegments.length;
+  }
+
+  /**
    * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
    * and compaction can resume smoothly on a call to {@link #resumeCompaction()}. Expected to be called before the
    * {@link PersistentIndex} is instantiated in the {@link BlobStore}.

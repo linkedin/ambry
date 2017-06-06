@@ -146,7 +146,7 @@ public class IndexReadPerformance {
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
       File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
       reserveFileDir.deleteOnExit();
-      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir);
+      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir, 1);
       Log log = new Log(System.getProperty("user.dir"), 1000, 1000, diskSpaceAllocator, metrics);
 
       Properties props = new Properties();

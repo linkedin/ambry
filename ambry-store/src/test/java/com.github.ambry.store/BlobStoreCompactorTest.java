@@ -203,6 +203,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
+    assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse());
     try {
       compactor.resumeCompaction();
       fail("Should have failed because there is no compaction in progress");
@@ -1079,6 +1080,7 @@ public class BlobStoreCompactorTest {
     }
 
     assertFalse("No compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
+    assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse());
     long logSegmentSizeAfterCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
     long indexSegmentCountAfterCompaction = state.index.getIndexSegments().size();
@@ -1146,6 +1148,8 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     state.initIndex(state.metricRegistry);
     compactor.initialize(state.index);
+    assertEquals("Wrong number of swap segments in use",
+        tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse());
     try {
       if (CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID)) {
         compactor.resumeCompaction();

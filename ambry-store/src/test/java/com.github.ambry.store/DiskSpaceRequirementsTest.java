@@ -29,8 +29,9 @@ public class DiskSpaceRequirementsTest {
    */
   @Test
   public void invalidArgumentsTest() {
-    doInvalidArgumentsTest(-1, 10, true);
-    doInvalidArgumentsTest(10, -1, true);
+    doInvalidArgumentsTest(-1, 0, 0);
+    doInvalidArgumentsTest(0, -1, 0);
+    doInvalidArgumentsTest(0, 0, -1);
   }
 
   /**
@@ -40,22 +41,22 @@ public class DiskSpaceRequirementsTest {
   public void validArgumentsTest() {
     long segmentSizeInBytes = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
     long segmentsNeeded = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
-    boolean swapRequired = RANDOM.nextBoolean();
-    DiskSpaceRequirements requirements = new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapRequired);
+    long swapUsed = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
+    DiskSpaceRequirements requirements = new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapUsed);
     assertEquals("segment size doesn't match", segmentSizeInBytes, requirements.getSegmentSizeInBytes());
     assertEquals("segments needed doesn't match", segmentsNeeded, requirements.getSegmentsNeeded());
-    assertEquals("swap required doesn't match", swapRequired, requirements.isSwapRequired());
+    assertEquals("swap used doesn't match", swapUsed, requirements.getSwapSegmentsInUse());
   }
 
   /**
    * Expect an {@link IllegalArgumentException} when constructing the object.
    * @param segmentSizeInBytes the segment size in bytes.
    * @param segmentsNeeded the number of segments needed.
-   * @param swapRequired whether swap segments are required.
+   * @param swapUsed the number of swap segments used.
    */
-  private void doInvalidArgumentsTest(long segmentSizeInBytes, long segmentsNeeded, boolean swapRequired) {
+  private void doInvalidArgumentsTest(long segmentSizeInBytes, long segmentsNeeded, long swapUsed) {
     try {
-      new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapRequired);
+      new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapUsed);
       fail("Should have encountered IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       // Expected

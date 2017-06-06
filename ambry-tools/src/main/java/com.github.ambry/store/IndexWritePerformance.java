@@ -126,7 +126,7 @@ public class IndexWritePerformance {
       StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
       File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
       reserveFileDir.deleteOnExit();
-      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir);
+      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir, 1);
       Log log = new Log(System.getProperty("user.dir"), 10, 10, diskSpaceAllocator, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);

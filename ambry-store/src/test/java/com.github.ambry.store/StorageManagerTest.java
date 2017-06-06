@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
@@ -233,10 +234,11 @@ public class StorageManagerTest {
       throws StoreException, InterruptedException {
     Properties properties = new Properties();
     properties.put("store.compaction.triggers", "Periodic,Admin");
+    VerifiableProperties vProps = new VerifiableProperties(properties);
     StorageManager storageManager =
-        new StorageManager(new StoreConfig(new VerifiableProperties(properties)), Utils.newScheduler(1, false),
-            metricRegistry, replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
-            new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+        new StorageManager(new StoreConfig(vProps), new DiskManagerConfig(vProps), metricRegistry, replicas,
+            new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
+            SystemTime.getInstance(), Utils.newScheduler(1, false));
     return storageManager;
   }
 

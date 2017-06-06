@@ -21,34 +21,48 @@ package com.github.ambry.store;
 class DiskSpaceRequirements {
   private final long segmentSizeInBytes;
   private final long segmentsNeeded;
-  private final boolean swapRequired;
+  private final long swapSegmentsInUse;
 
   /**
-   * @param segmentSizeInBytes The size of each segment needed, in bytes.
-   * @param segmentsNeeded The number of additional segments needed in the
-   * @param swapRequired {@code true} if a swap segment of {@code segmentSizeInBytes} is required. (i.e. for compaction)
+   * @param segmentSizeInBytes the size of each segment needed, in bytes.
+   * @param segmentsNeeded the number of additional segments needed in the disk space pool.
+   * @param swapSegmentsInUse the number of swap segments currently in use by this in entity.
    */
-  public DiskSpaceRequirements(long segmentSizeInBytes, long segmentsNeeded, boolean swapRequired) {
-    if (segmentSizeInBytes < 0) {
-      throw new IllegalArgumentException("Segment size cannot be negative: " + segmentSizeInBytes);
-    }
-    if (segmentsNeeded < 0) {
-      throw new IllegalArgumentException("Segments needed cannot be negative: " + segmentsNeeded);
+  public DiskSpaceRequirements(long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
+    if (segmentSizeInBytes < 0 || segmentsNeeded < 0 || swapSegmentsInUse < 0) {
+      throw new IllegalArgumentException(
+          "Arguments cannot be negative. segmentSizeInBytes: " + segmentSizeInBytes + ", segmentsNeeded: "
+              + segmentsNeeded + ", swapSegmentsInUse: " + swapSegmentsInUse);
     }
     this.segmentSizeInBytes = segmentSizeInBytes;
     this.segmentsNeeded = segmentsNeeded;
-    this.swapRequired = swapRequired;
+    this.swapSegmentsInUse = swapSegmentsInUse;
   }
 
+  /**
+   * @return the size of each segment needed, in bytes.
+   */
   public long getSegmentsNeeded() {
     return segmentsNeeded;
   }
 
+  /**
+   * @return the number of additional segments needed in the disk space pool
+   */
   public long getSegmentSizeInBytes() {
     return segmentSizeInBytes;
   }
 
-  public boolean isSwapRequired() {
-    return swapRequired;
+  /**
+   * @return the number of swap segments currently in use by this entity.
+   */
+  public long getSwapSegmentsInUse() {
+    return swapSegmentsInUse;
+  }
+
+  @Override
+  public String toString() {
+    return "DiskSpaceRequirements{segmentSizeInBytes=" + segmentSizeInBytes + ", segmentsNeeded=" + segmentsNeeded
+        + ", swapSegmentsInUse=" + swapSegmentsInUse + '}';
   }
 }

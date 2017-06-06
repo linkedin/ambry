@@ -17,7 +17,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -260,12 +260,13 @@ public class StatsManagerTest {
    * Mocked {@link StorageManager} that is intended to have only the overwritten methods to be called and return
    * predefined values.
    */
-  private class MockStorageManager extends StorageManager {
+  private static class MockStorageManager extends StorageManager {
+    private static final VerifiableProperties PROPS = new VerifiableProperties(new Properties());
     private final Map<PartitionId, Store> storeMap;
 
     MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
-      super(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
-          new MetricRegistry(), new ArrayList<ReplicaId>(), null, null, null, SystemTime.getInstance());
+      super(new StoreConfig(PROPS), new DiskManagerConfig(PROPS), new MetricRegistry(), new ArrayList<>(), null, null,
+          null, SystemTime.getInstance(), Utils.newScheduler(1, false));
       storeMap = map;
     }
 

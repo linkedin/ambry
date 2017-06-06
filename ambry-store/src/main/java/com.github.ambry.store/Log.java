@@ -14,12 +14,12 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -39,7 +39,6 @@ import org.slf4j.LoggerFactory;
 class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
-  private final boolean isLogSegmented;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final StoreMetrics metrics;
   private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
@@ -48,6 +47,7 @@ class Log implements Write {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
 
+  private boolean isLogSegmented;
   private LogSegment activeSegment = null;
 
   /**
@@ -77,6 +77,7 @@ class Log implements Write {
       throw new IOException("Could not read from directory: " + dataDir);
     } else {
       initialize(getSegmentsToLoad(segmentFiles), segmentCapacityInBytes);
+      this.isLogSegmented = isExistingLogSegmented();
     }
   }
 
@@ -236,12 +237,14 @@ class Log implements Write {
     return new Offset(segment.getName(), segment.getEndOffset());
   }
 
-  DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    if (isLogSegmented) {
-      return new DiskSpaceRequirements(getSegmentCapacity(), remainingUnallocatedSegments.get(), true);
-    } else {
-      return null;
-    }
+  /**
+   * @return the {@link DiskSpaceRequirements} for this log to provide to
+   * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this is a non-segmented log.
+   * This is because it does not require any additional/swap segments.
+   */
+  DiskSpaceRequirements getDiskSpaceRequirements() {
+    return isLogSegmented ? new DiskSpaceRequirements(getSegmentCapacity(), remainingUnallocatedSegments.get(), 0)
+        : null;
   }
 
   /**
@@ -322,6 +325,19 @@ class Log implements Write {
   }
 
   /**
+   * @return {@code true} if the data directory contains segments that aren't old-style single segment log files.
+   * This should be run after a log is initialized to get the actual log segmentation state.
+   * @throws IOException
+   */
+  private boolean isExistingLogSegmented() throws IOException {
+    File[] segmentFiles = new File(dataDir).listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
+    if (segmentFiles == null) {
+      throw new IOException("Could not read from directory: " + dataDir);
+    }
+    return !(segmentFiles.length == 1 && LogSegmentNameHelper.nameFromFilename(segmentFiles[0].getName()).isEmpty());
+  }
+
+  /**
    * Initializes the log.
    * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log. These are not in any order
    * @param segmentCapacityInBytes the capacity of a single {@link LogSegment}.
@@ -364,7 +380,6 @@ class Log implements Write {
    * @throws IOException if there is any I/O error freeing the log segment.
    */
   private void free(LogSegment logSegment) throws IOException {
-    // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
     File segmentFile = logSegment.getView().getFirst();
     logSegment.close();
     diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());

@@ -567,7 +567,19 @@ public class LogTest {
         assertEquals("Prev segment not as expected", segment, log.getPrevSegment(nextSegment));
       }
     }
-    assertNull("Next segment should be null", nextSegment);
+    DiskSpaceRequirements requirements = log.getDiskSpaceRequirements();
+    if (log.getCapacityInBytes() == expectedSegmentCapacity) {
+      assertNull("DiskSpaceRequirements should be null on non segmented logs", requirements);
+    } else {
+      assertEquals("DiskSpaceRequirements has wrong segments size", expectedSegmentCapacity,
+          requirements.getSegmentSizeInBytes());
+      long expectedSegmentsNeeded = (log.getCapacityInBytes() / expectedSegmentCapacity) - expectedSegmentNames.size();
+      assertEquals("DiskSpaceRequirements has wrong number of segments needed", expectedSegmentsNeeded,
+          requirements.getSegmentsNeeded());
+      assertEquals("DiskSpaceRequirements should not have any swap segments in use", 0,
+          requirements.getSwapSegmentsInUse());
+      assertNull("Next segment should be null", nextSegment);
+    }
   }
 
   /**
