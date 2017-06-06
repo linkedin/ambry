@@ -64,8 +64,7 @@ public class Throttler {
       // we should take a little nap
       if ((checkIntervalMs < 0 || elapsedNs > checkIntervalMs * Time.NsPerMs) && observedSoFar > 0) {
         double rateInSecs = elapsedNs > 0 ? (observedSoFar * Time.NsPerSec) / elapsedNs : Double.MAX_VALUE;
-        boolean needAdjustment = !(throttleDown ^ (rateInSecs > desiredRatePerSec));
-        if (needAdjustment) {
+        if (throttleDown == rateInSecs > desiredRatePerSec) {
           // solve for the amount of time to sleep to make us hit the desired rate
           double desiredRateMs = desiredRatePerSec / Time.MsPerSec;
           double elapsedMs = elapsedNs / Time.NsPerMs;
