@@ -140,7 +140,7 @@ public class PutRequest extends RequestOrResponse {
       // try and write out as much of the blob now.
       if (!bufferToSend.hasRemaining()) {
         written += channel.write(blob);
-        okayToWriteCrc = !blob.hasRemaining() && currentVersion == Put_Request_Version_V3;
+        okayToWriteCrc = !blob.hasRemaining();
       }
 
       if (okayToWriteCrc && crcBuf.hasRemaining()) {
