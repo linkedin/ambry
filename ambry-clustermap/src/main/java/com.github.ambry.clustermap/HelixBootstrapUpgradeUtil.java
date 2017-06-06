@@ -72,7 +72,6 @@ import org.json.JSONObject;
  *    "datacenter" : "dc1",                                # [datacenterName]
  *    "rackId" : "1611",                                   # [rackId]
  *    "sslPort": "27088"                                   # [sslPort]
- *                                                         #  @todo: version.
  *  }
  *}
  */

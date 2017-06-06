@@ -39,8 +39,7 @@ public class ReplicaMetadataResponse extends Response {
   static final short Replica_Metadata_Response_Version_V1 = 1;
   static final short Replica_Metadata_Response_Version_V2 = 2;
 
-  // @todo change this to V2 once all cluster nodes understand V2.
-  private static final short currentVersion = Replica_Metadata_Response_Version_V1;
+  private static final short currentVersion = Replica_Metadata_Response_Version_V2;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
