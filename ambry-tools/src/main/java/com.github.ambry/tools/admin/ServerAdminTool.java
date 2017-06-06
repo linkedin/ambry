@@ -379,8 +379,9 @@ public class ServerAdminTool implements Closeable {
   ServerErrorCode triggerCompaction(DataNodeId dataNodeId, String partitionIdStr, ClusterMap clusterMap)
       throws IOException, TimeoutException {
     PartitionId targetPartitionId = null;
-    for (PartitionId partitionId : clusterMap.getAllPartitionIds()) {
-      if (partitionId.toString().equals(partitionIdStr)) {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    for (PartitionId partitionId : partitionIds) {
+      if (partitionId.isEqual(partitionIdStr)) {
         targetPartitionId = partitionId;
         break;
       }
