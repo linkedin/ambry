@@ -29,18 +29,14 @@ import java.util.List;
 class MessageInfoListSerde {
 
   private final List<MessageInfo> messageInfoList;
-  static final short MessageInfoListVersion_V1 = 1;
-  static final short MessageInfoListVersion_V2 = 2;
-  static final short MessageInfoListVersion_V3 = 3;
+  static final short VERSION_1 = 1;
+  static final short VERSION_2 = 2;
+  static final short VERSION_3 = 3;
 
   private final short version;
 
   private static final byte CRC_PRESENT = (byte) 1;
   private static final byte DELETED = (byte) 1;
-
-  static final int SHORT_FIELD_SIZE_IN_BYTES = 2;
-  static final int INT_FIELD_SIZE_IN_BYTES = 4;
-  static final int LONG_FIELD_SIZE_IN_BYTES = 8;
 
   MessageInfoListSerde(List<MessageInfo> messageInfoList, short version) {
     this.messageInfoList = messageInfoList;
@@ -49,33 +45,33 @@ class MessageInfoListSerde {
 
   int getMessageInfoListSize() {
     if (messageInfoList == null) {
-      return INT_FIELD_SIZE_IN_BYTES;
+      return Integer.BYTES;
     }
     int size = 0;
-    size += INT_FIELD_SIZE_IN_BYTES;
+    size += Integer.BYTES;
     for (MessageInfo messageInfo : messageInfoList) {
       size += messageInfo.getStoreKey().sizeInBytes();
       // message size
-      size += LONG_FIELD_SIZE_IN_BYTES;
+      size += Long.BYTES;
       // expiration time
-      size += LONG_FIELD_SIZE_IN_BYTES;
+      size += Long.BYTES;
       // whether deleted
       size += 1;
-      if (version == MessageInfoListVersion_V2 || version == MessageInfoListVersion_V3) {
+      if (version == VERSION_2 || version == VERSION_3) {
         // whether crc is present
         size += 1;
         if (messageInfo.getCrc() != null) {
           // crc
-          size += LONG_FIELD_SIZE_IN_BYTES;
+          size += Long.BYTES;
         }
       }
-      if (version == MessageInfoListVersion_V3) {
+      if (version == VERSION_3) {
         // accountId
-        size += SHORT_FIELD_SIZE_IN_BYTES;
+        size += Short.BYTES;
         // containerId
-        size += SHORT_FIELD_SIZE_IN_BYTES;
+        size += Short.BYTES;
         // operationTime
-        size += LONG_FIELD_SIZE_IN_BYTES;
+        size += Long.BYTES;
       }
     }
     return size;
@@ -89,7 +85,7 @@ class MessageInfoListSerde {
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
         outputBuffer.put(messageInfo.isDeleted() ? DELETED : (byte) ~DELETED);
-        if (version == MessageInfoListVersion_V2 || version == MessageInfoListVersion_V3) {
+        if (version == VERSION_2 || version == VERSION_3) {
           Long crc = messageInfo.getCrc();
           if (crc != null) {
             outputBuffer.put(CRC_PRESENT);
@@ -98,7 +94,7 @@ class MessageInfoListSerde {
             outputBuffer.put((byte) ~CRC_PRESENT);
           }
         }
-        if (version == MessageInfoListVersion_V3) {
+        if (version == VERSION_3) {
           outputBuffer.putShort(messageInfo.getAccountId());
           outputBuffer.putShort(messageInfo.getContainerId());
           outputBuffer.putLong(messageInfo.getOperationTimeMs());
@@ -117,19 +113,17 @@ class MessageInfoListSerde {
       long ttl = stream.readLong();
       boolean isDeleted = stream.readByte() == DELETED;
       Long crc = null;
-      if (versionToDeserializeIn == MessageInfoListVersion_V2 || versionToDeserializeIn == MessageInfoListVersion_V3) {
+      if (versionToDeserializeIn == VERSION_2 || versionToDeserializeIn == VERSION_3) {
         crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
       }
-      if (versionToDeserializeIn == MessageInfoListVersion_V1 || versionToDeserializeIn == MessageInfoListVersion_V2) {
-        messageListInfo.add(new MessageInfo.MessageInfoBuilder(id, size).setDeleted(isDeleted)
-            .setExpirationTimeMs(ttl)
-            .setCRC(crc)
-            .build());
-      } else if (versionToDeserializeIn == MessageInfoListVersion_V3) {
+      if (versionToDeserializeIn == VERSION_1 || versionToDeserializeIn == VERSION_2) {
+        messageListInfo.add(
+            new MessageInfo.Builder(id, size).setDeleted(isDeleted).setExpirationTimeMs(ttl).setCRC(crc).build());
+      } else if (versionToDeserializeIn == VERSION_3) {
         short accountId = stream.readShort();
         short containerId = stream.readShort();
         long operationTime = stream.readLong();
-        messageListInfo.add(new MessageInfo.MessageInfoBuilder(id, size).setDeleted(isDeleted)
+        messageListInfo.add(new MessageInfo.Builder(id, size).setDeleted(isDeleted)
             .setExpirationTimeMs(ttl)
             .setCRC(crc)
             .setAccountId(accountId)

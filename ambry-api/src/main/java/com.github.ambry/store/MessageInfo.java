@@ -32,7 +32,7 @@ public class MessageInfo {
   private short containerId;
   private long operationTimeMs;
 
-  public static class MessageInfoBuilder {
+  public static class Builder {
     private final StoreKey key;
     private final long size;
     private long expirationTimeInMs = Utils.Infinite_Time;
@@ -42,37 +42,37 @@ public class MessageInfo {
     private short containerId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
     private long operationTimeMs = Utils.Infinite_Time;
 
-    public MessageInfoBuilder(StoreKey key, long size) {
+    public Builder(StoreKey key, long size) {
       this.key = key;
       this.size = size;
     }
 
-    public MessageInfoBuilder setExpirationTimeMs(long expirationTimeInMs) {
+    public Builder setExpirationTimeMs(long expirationTimeInMs) {
       this.expirationTimeInMs = expirationTimeInMs;
       return this;
     }
 
-    public MessageInfoBuilder setDeleted(boolean isDeleted) {
+    public Builder setDeleted(boolean isDeleted) {
       this.isDeleted = isDeleted;
       return this;
     }
 
-    public MessageInfoBuilder setCRC(Long crc) {
+    public Builder setCRC(Long crc) {
       this.crc = crc;
       return this;
     }
 
-    public MessageInfoBuilder setAccountId(short accountId) {
+    public Builder setAccountId(short accountId) {
       this.accountId = accountId;
       return this;
     }
 
-    public MessageInfoBuilder setContainerId(short containerId) {
+    public Builder setContainerId(short containerId) {
       this.containerId = containerId;
       return this;
     }
 
-    public MessageInfoBuilder setOperationTimeMs(long operationTimeMs) {
+    public Builder setOperationTimeMs(long operationTimeMs) {
       this.operationTimeMs = operationTimeMs;
       return this;
     }

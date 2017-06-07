@@ -250,7 +250,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     long operationTime = random.nextLong();
-    MessageInfo messageInfo = new MessageInfo.MessageInfoBuilder(id1, 1000).setExpirationTimeMs(1000)
+    MessageInfo messageInfo = new Builder(id1, 1000).setExpirationTimeMs(1000)
         .setAccountId(accountId)
         .setContainerId(containerId)
         .setOperationTimeMs(operationTime)
@@ -364,7 +364,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     long operationTime = random.nextLong();
-    MessageInfo messageInfo = new MessageInfo.MessageInfoBuilder(id1, 1000).setAccountId(accountId)
+    MessageInfo messageInfo = new Builder(id1, 1000).setAccountId(accountId)
         .setContainerId(containerId)
         .setOperationTimeMs(operationTime)
         .build();

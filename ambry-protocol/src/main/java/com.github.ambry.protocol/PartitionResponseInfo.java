@@ -110,11 +110,11 @@ public class PartitionResponseInfo {
   private static short getMessageInfoListVersion(short getResponseVersion) {
     switch (getResponseVersion) {
       case GetResponse.Get_Response_Version_V1:
-        return MessageInfoListSerde.MessageInfoListVersion_V1;
+        return MessageInfoListSerde.VERSION_1;
       case GetResponse.Get_Response_Version_V2:
-        return MessageInfoListSerde.MessageInfoListVersion_V2;
+        return MessageInfoListSerde.VERSION_2;
       case GetResponse.Get_Response_Version_V3:
-        return MessageInfoListSerde.MessageInfoListVersion_V3;
+        return MessageInfoListSerde.VERSION_3;
       default:
         throw new IllegalArgumentException("Unknown GetResponse version encountered: " + getResponseVersion);
     }

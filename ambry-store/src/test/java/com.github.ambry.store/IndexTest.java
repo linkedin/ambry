@@ -195,8 +195,7 @@ public class IndexTest {
           throw new IllegalStateException("No ID was set before making a call to getBlobReadInfo()");
         }
         IndexValue value = state.getExpectedValue(id, true);
-        return new MessageInfo.MessageInfoBuilder(id, value.getSize()).setExpirationTimeMs(value.getExpiresAtMs())
-            .build();
+        return new MessageInfo.Builder(id, value.getSize()).setExpirationTimeMs(value.getExpiresAtMs()).build();
       }
     };
     state.reloadIndex(true, false);
@@ -660,21 +659,18 @@ public class IndexTest {
   @Test
   public void recoveryFailureTest() {
     // recovery info contains a PUT for a key that already exists
-    MessageInfo info = new MessageInfo.MessageInfoBuilder(state.liveKeys.iterator().next(),
-        CuratedLogIndexState.PUT_RECORD_SIZE).build();
+    MessageInfo info =
+        new MessageInfo.Builder(state.liveKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE).build();
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a PUT for a key that has been deleted
-    info = new MessageInfo.MessageInfoBuilder(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE)
-        .build();
+    info = new MessageInfo.Builder(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE).build();
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a DELETE for a key that has been deleted
-    info =
-        new MessageInfo.MessageInfoBuilder(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE)
-            .setDeleted(true)
-            .build();
+    info = new MessageInfo.Builder(state.deletedKeys.iterator().next(),
+        CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(true).build();
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
     // recovery info that contains a PUT beyond the end offset of the log segment
-    info = new MessageInfo.MessageInfoBuilder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build();
+    info = new MessageInfo.Builder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build();
     doRecoveryFailureTest(info, StoreErrorCodes.Index_Creation_Failure);
   }
 
@@ -748,8 +744,7 @@ public class IndexTest {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
-        return Collections.singletonList(
-            new MessageInfo.MessageInfoBuilder(newId, CuratedLogIndexState.PUT_RECORD_SIZE).build());
+        return Collections.singletonList(new MessageInfo.Builder(newId, CuratedLogIndexState.PUT_RECORD_SIZE).build());
       }
     };
     state.reloadIndex(true, true);
@@ -931,8 +926,7 @@ public class IndexTest {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
-        return Collections.singletonList(
-            new MessageInfo.MessageInfoBuilder(newId, CuratedLogIndexState.PUT_RECORD_SIZE).build());
+        return Collections.singletonList(new MessageInfo.Builder(newId, CuratedLogIndexState.PUT_RECORD_SIZE).build());
       }
     };
     // change in incarnationId
@@ -1458,20 +1452,21 @@ public class IndexTest {
     // 1 PUT record that will be deleted in the next log segment
     MockId idToCreateAndDeleteAcrossSegments = state.getUniqueId();
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
-    activeSegmentInfos.add(new MessageInfo.MessageInfoBuilder(idToCreateAndDeleteAcrossSegments,
-        CuratedLogIndexState.PUT_RECORD_SIZE).build());
+    activeSegmentInfos.add(
+        new MessageInfo.Builder(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE).build());
     // 1 PUT record that will remain and covers almost the rest of the active segment.
     long size =
         activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() - (CuratedLogIndexState.DELETE_RECORD_SIZE
             - 1);
     state.appendToLog(size);
-    activeSegmentInfos.add(new MessageInfo.MessageInfoBuilder(state.getUniqueId(), size).build());
+    activeSegmentInfos.add(new MessageInfo.Builder(state.getUniqueId(), size).build());
     MockId idToCreateAndDeleteInSameSegment = state.getUniqueId();
     final List<MessageInfo> nextSegmentInfos = getCuratedSingleSegmentRecoveryInfos(idToCreateAndDeleteInSameSegment);
     // 1 DELETE record for the PUT in the previous segment
     state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
-    nextSegmentInfos.add(new MessageInfo.MessageInfoBuilder(idToCreateAndDeleteAcrossSegments,
-        CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(true).build());
+    nextSegmentInfos.add(
+        new MessageInfo.Builder(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(
+            true).build());
     final AtomicInteger returnTracker = new AtomicInteger(0);
     state.recovery = new MessageStoreRecovery() {
       @Override
@@ -1515,23 +1510,21 @@ public class IndexTest {
     List<MessageInfo> infos = new ArrayList<>();
     state.appendToLog(3 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // 1 DELETE for a PUT not in the infos
-    infos.add(new MessageInfo.MessageInfoBuilder(state.getIdToDeleteFromLogSegment(state.log.getFirstSegment()),
+    infos.add(new MessageInfo.Builder(state.getIdToDeleteFromLogSegment(state.log.getFirstSegment()),
         CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(true).build());
     // 3 PUT
-    infos.add(new MessageInfo.MessageInfoBuilder(idToCreateAndDelete, CuratedLogIndexState.PUT_RECORD_SIZE).build());
-    infos.add(new MessageInfo.MessageInfoBuilder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build());
-    infos.add(new MessageInfo.MessageInfoBuilder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build());
+    infos.add(new MessageInfo.Builder(idToCreateAndDelete, CuratedLogIndexState.PUT_RECORD_SIZE).build());
+    infos.add(new MessageInfo.Builder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build());
+    infos.add(new MessageInfo.Builder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build());
     // 1 DELETE for a PUT in the infos
     infos.add(
-        new MessageInfo.MessageInfoBuilder(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(
-            true).build());
+        new MessageInfo.Builder(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(true).build());
     // 1 expired PUT
-    infos.add(new MessageInfo.MessageInfoBuilder(state.getUniqueId(),
-        CuratedLogIndexState.PUT_RECORD_SIZE).setExpirationTimeMs(0).build());
+    infos.add(new MessageInfo.Builder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).setExpirationTimeMs(0)
+        .build());
     // 1 delete for PUT that does not exist in the index
     infos.add(
-        new MessageInfo.MessageInfoBuilder(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(
-            true).build());
+        new MessageInfo.Builder(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE).setDeleted(true).build());
     return infos;
   }
 
@@ -1572,7 +1565,7 @@ public class IndexTest {
         switch (returnTracker.getAndIncrement()) {
           case 0:
             return Collections.singletonList(
-                new MessageInfo.MessageInfoBuilder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build());
+                new MessageInfo.Builder(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE).build());
           default:
             return Collections.emptyList();
         }

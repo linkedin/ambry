@@ -775,7 +775,7 @@ class PersistentIndex {
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     IndexEntryType.ANY, indexSegments);
-            messageEntries.add(new MessageInfo.MessageInfoBuilder(entry.getKey(), value.getSize()).setDeleted(
+            messageEntries.add(new MessageInfo.Builder(entry.getKey(), value.getSize()).setDeleted(
                 value.isFlagSet(IndexValue.Flags.Delete_Index)).setExpirationTimeMs(value.getExpiresAtMs()).build());
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
@@ -1077,7 +1077,7 @@ class PersistentIndex {
           IndexValue value =
               findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot), IndexEntryType.ANY,
                   indexSegments);
-          messageEntries.add(new MessageInfo.MessageInfoBuilder(entry.getKey(), value.getSize()).setDeleted(
+          messageEntries.add(new MessageInfo.Builder(entry.getKey(), value.getSize()).setDeleted(
               value.isFlagSet(IndexValue.Flags.Delete_Index)).setExpirationTimeMs(value.getExpiresAtMs()).build());
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
@@ -1166,7 +1166,7 @@ class PersistentIndex {
       if (!messageInfo.isDeleted()) {
         // ok to use most recent ref to filter out deleted records.
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
-        messageInfo = new MessageInfo.MessageInfoBuilder(messageInfo.getStoreKey(), messageInfo.getSize()).setDeleted(
+        messageInfo = new MessageInfo.Builder(messageInfo.getStoreKey(), messageInfo.getSize()).setDeleted(
             indexValue.isFlagSet(IndexValue.Flags.Delete_Index))
             .setExpirationTimeMs(messageInfo.getExpirationTimeInMs())
             .build();
@@ -1332,7 +1332,7 @@ class PersistentIndex {
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     IndexEntryType.ANY, indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              messageEntries.add(new MessageInfo.MessageInfoBuilder(entry.getKey(), value.getSize()).setDeleted(true)
+              messageEntries.add(new MessageInfo.Builder(entry.getKey(), value.getSize()).setDeleted(true)
                   .setExpirationTimeMs(value.getExpiresAtMs())
                   .build());
             }

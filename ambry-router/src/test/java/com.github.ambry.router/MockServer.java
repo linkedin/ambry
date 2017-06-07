@@ -294,7 +294,7 @@ class MockServer {
       ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
       List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(1);
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
-      messageInfoList.add(new MessageInfo.MessageInfoBuilder(key, byteBufferSize).build());
+      messageInfoList.add(new MessageInfo.Builder(key, byteBufferSize).build());
       PartitionResponseInfo partitionResponseInfo =
           partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
               getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList)

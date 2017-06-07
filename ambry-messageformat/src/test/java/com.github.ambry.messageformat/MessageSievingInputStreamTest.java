@@ -72,7 +72,7 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo1 = new MessageInfo.MessageInfoBuilder(key1, messageFormatStream1.getSize()).build();
+    MessageInfo msgInfo1 = new MessageInfo.Builder(key1, messageFormatStream1.getSize()).build();
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -95,7 +95,7 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo2 = new MessageInfo.MessageInfoBuilder(key2, messageFormatStream2.getSize()).build();
+    MessageInfo msgInfo2 = new MessageInfo.Builder(key2, messageFormatStream2.getSize()).build();
 
     // create message stream for blob 3
     StoreKey key3 = new MockId("id3");
@@ -118,7 +118,7 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo3 = new MessageInfo.MessageInfoBuilder(key3, messageFormatStream3.getSize()).build();
+    MessageInfo msgInfo3 = new MessageInfo.Builder(key3, messageFormatStream3.getSize()).build();
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
@@ -212,7 +212,7 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo1 = new MessageInfo.MessageInfoBuilder(key1, messageFormatStream1.getSize()).build();
+    MessageInfo msgInfo1 = new MessageInfo.Builder(key1, messageFormatStream1.getSize()).build();
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -235,7 +235,7 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo2 = new MessageInfo.MessageInfoBuilder(key2, messageFormatStream2.getSize()).build();
+    MessageInfo msgInfo2 = new MessageInfo.Builder(key2, messageFormatStream2.getSize()).build();
 
     // corrupt the message stream
     byte[] corruptMessageStream = new byte[(int) messageFormatStream2.getSize()];
@@ -264,7 +264,7 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo3 = new MessageInfo.MessageInfoBuilder(key3, messageFormatStream3.getSize()).build();
+    MessageInfo msgInfo3 = new MessageInfo.Builder(key3, messageFormatStream3.getSize()).build();
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
@@ -347,14 +347,13 @@ public class MessageSievingInputStreamTest {
               : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                   blobContentSize, blobType);
 
-      MessageInfo msgInfo1 = new MessageInfo.MessageInfoBuilder(key1, messageFormatStream1.getSize()).build();
+      MessageInfo msgInfo1 = new MessageInfo.Builder(key1, messageFormatStream1.getSize()).build();
 
       // create message stream for blob 2 and mark it as deleted
       StoreKey key2 = new MockId("id2");
       MessageFormatInputStream messageFormatStream2 = new DeleteMessageFormatInputStream(key2);
 
-      MessageInfo msgInfo2 =
-          new MessageInfo.MessageInfoBuilder(key2, messageFormatStream2.getSize()).setDeleted(true).build();
+      MessageInfo msgInfo2 = new MessageInfo.Builder(key2, messageFormatStream2.getSize()).setDeleted(true).build();
 
       // create message stream for blob 3
       StoreKey key3 = new MockId("id3");
@@ -377,7 +376,7 @@ public class MessageSievingInputStreamTest {
               : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                   blobContentSize, blobType);
 
-      MessageInfo msgInfo3 = new MessageInfo.MessageInfoBuilder(key3, messageFormatStream3.getSize()).build();
+      MessageInfo msgInfo3 = new MessageInfo.Builder(key3, messageFormatStream3.getSize()).build();
 
       //create input stream for all blob messages together
       byte[] totalMessageContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()

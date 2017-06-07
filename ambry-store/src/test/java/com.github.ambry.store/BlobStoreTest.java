@@ -705,8 +705,7 @@ public class BlobStoreTest {
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId();
       long crc = random.nextLong();
-      MessageInfo info =
-          new MessageInfo.MessageInfoBuilder(id, size).setExpirationTimeMs(expiresAtMs).setCRC(crc).build();
+      MessageInfo info = new MessageInfo.Builder(id, size).setExpirationTimeMs(expiresAtMs).setCRC(crc).build();
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);
@@ -729,7 +728,7 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private MessageInfo delete(MockId idToDelete) throws StoreException {
-    MessageInfo info = new MessageInfo.MessageInfoBuilder(idToDelete, DELETE_RECORD_SIZE).build();
+    MessageInfo info = new MessageInfo.Builder(idToDelete, DELETE_RECORD_SIZE).build();
     ByteBuffer buffer = ByteBuffer.allocate(DELETE_RECORD_SIZE);
     store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
     deletedKeys.add(idToDelete);
@@ -1076,7 +1075,7 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyPutFailure(MockId idToPut, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info = new MessageInfo.MessageInfoBuilder(idToPut, PUT_RECORD_SIZE).build();
+    MessageInfo info = new MessageInfo.Builder(idToPut, PUT_RECORD_SIZE).build();
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
@@ -1095,7 +1094,7 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info = new MessageInfo.MessageInfoBuilder(idToDelete, DELETE_RECORD_SIZE).build();
+    MessageInfo info = new MessageInfo.Builder(idToDelete, DELETE_RECORD_SIZE).build();
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
@@ -1173,8 +1172,7 @@ public class BlobStoreTest {
     List<MessageInfo> messageInfoList = new ArrayList<>();
     for (int i = 0; i < mockIdList.size(); i++) {
       bufferList.add(ByteBuffer.allocate(PUT_RECORD_SIZE));
-      messageInfoList.add(
-          new MessageInfo.MessageInfoBuilder(mockIdList.get(i), PUT_RECORD_SIZE).setCRC(crcList.get(i)).build());
+      messageInfoList.add(new MessageInfo.Builder(mockIdList.get(i), PUT_RECORD_SIZE).setCRC(crcList.get(i)).build());
     }
     MessageWriteSet writeSet = new MockMessageWriteSet(messageInfoList, bufferList);
     // Put the initial two messages.
