@@ -145,10 +145,10 @@ public class BlobValidator implements Closeable {
     final GetOption getOption;
 
     /**
-     * Replicas to contact per second (for throttling_
+     * Replicas to contact per second (for throttling)
      */
     @Config("replicas.to.contact.per.sec")
-    @Default("None")
+    @Default("1")
     final int replicasToContactPerSec;
 
     /**

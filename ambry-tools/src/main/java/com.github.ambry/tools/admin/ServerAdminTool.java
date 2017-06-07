@@ -71,6 +71,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Tool to support admin related operations on Ambry server
+ * Currently supports:
+ * 1. Get of either BlobProperties, UserMetadata or blob data for a particular blob from a particular storage node.
+ * 2. Triggering of compaction of a particular partition on a particular node.
  */
 public class ServerAdminTool implements Closeable {
   private static final int MAX_CONNECTIONS_PER_SERVER = 1;
