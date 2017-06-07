@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceConfigChangeListener;
@@ -67,6 +68,7 @@ class HelixClusterManager implements ClusterMap {
   private long clusterWiseAllocatedUsableCapacityBytes;
   private final HelixClusterManagerCallback helixClusterManagerCallback;
   private final AtomicReference<Exception> initializationException = new AtomicReference<>();
+  private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
 
   /**
@@ -315,7 +317,10 @@ class HelixClusterManager implements ClusterMap {
           } catch (Exception e) {
             initializationException.compareAndSet(null, e);
           }
+        } else {
+          updateSealedStateOfReplicas(configs);
         }
+        sealedStateChangeCounter.incrementAndGet();
         helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
       }
     }
@@ -338,6 +343,21 @@ class HelixClusterManager implements ClusterMap {
         allInstances.add(instanceName);
       }
       logger.info("Initialized cluster information from {}", dcName);
+    }
+
+    /**
+     * Go over the given list of {@link InstanceConfig}s and update the sealed states of replicas.
+     * @param instanceConfigs the list of {@link InstanceConfig}s containing the up-to-date information about the
+     *                        sealed states of replicas.
+     */
+    private void updateSealedStateOfReplicas(List<InstanceConfig> instanceConfigs) {
+      for (InstanceConfig instanceConfig : instanceConfigs) {
+        AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName());
+        HashSet<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
+        for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
+          replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+        }
+      }
     }
 
     /**
@@ -423,11 +443,9 @@ class HelixClusterManager implements ClusterMap {
               }
             }
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
-            if (sealedReplicas.contains(partitionName)) {
-              mappedPartition.setState(PartitionState.READ_ONLY);
-            }
             // Create replica associated with this node.
-            AmbryReplica replica = new AmbryReplica(mappedPartition, disk, replicaCapacity);
+            AmbryReplica replica =
+                new AmbryReplica(mappedPartition, disk, replicaCapacity, sealedReplicas.contains(partitionName));
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }
@@ -491,6 +509,15 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
       return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
+    }
+
+    /**
+     * Get the value counter representing the sealed state change for partitions.
+     * @return the value of the counter representing the sealed state change for partitions.
+     */
+    @Override
+    public long getSealedStateChangeCounter() {
+      return sealedStateChangeCounter.get();
     }
 
     /**

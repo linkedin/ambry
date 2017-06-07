@@ -27,17 +27,20 @@ class AmbryReplica implements ReplicaId {
   private final AmbryPartition partition;
   private final AmbryDisk disk;
   private final long capacityBytes;
+  private volatile boolean isSealed;
 
   /**
    * Instantiate an AmbryReplica instance.
    * @param partition the {@link AmbryPartition} of which this is a replica.
    * @param disk the {@link AmbryDisk} on which this replica resides.
    * @param capacityBytes the capacity in bytes for this replica.
+   * @param isSealed whether this replica is in sealed state.
    */
-  AmbryReplica(AmbryPartition partition, AmbryDisk disk, long capacityBytes) {
+  AmbryReplica(AmbryPartition partition, AmbryDisk disk, long capacityBytes, boolean isSealed) {
     this.partition = partition;
     this.disk = disk;
     this.capacityBytes = capacityBytes;
+    this.isSealed = isSealed;
     validate();
   }
 
@@ -81,6 +84,21 @@ class AmbryReplica implements ReplicaId {
   @Override
   public long getCapacityInBytes() {
     return capacityBytes;
+  }
+
+  /**
+   * @return true if this replica is in sealed state.
+   */
+  boolean isSealed() {
+    return isSealed;
+  }
+
+  /**
+   * Set the sealed state of this replica.
+   * @param isSealed true if the replica is to be set as sealed; false otherwise.
+   */
+  void setSealedState(boolean isSealed) {
+    this.isSealed = isSealed;
   }
 
   @Override

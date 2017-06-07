@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,6 +45,15 @@ public class MockHelixAdmin implements HelixAdmin {
   private Map<String, Set<String>> partitionToInstances = new HashMap<>();
   private Map<String, PartitionState> partitionToPartitionStates = new HashMap<>();
   private long totalDiskCapacity;
+
+  /**
+   * Get the instances that have replicas for the given partition.
+   * @param partition the partition name of the partition.
+   * @return the set of instances that have replicas for this partition.
+   */
+  Set<String> getInstancesForPartition(String partition) {
+    return partitionToInstances.containsKey(partition) ? partitionToInstances.get(partition) : Collections.EMPTY_SET;
+  }
 
   @Override
   public List<String> getClusters() {
@@ -125,6 +133,24 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * Set or reset the sealed state of the replica for the given partition on the given instance.
+   * @param partition the {@link AmbryPartition}
+   * @param instance the instance name.
+   * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
+   */
+  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+    InstanceConfig instanceConfig = getInstanceConfig(clusterName, instance);
+    List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    if (isSealed) {
+      sealedReplicas.add(partition.toPathString());
+    } else {
+      sealedReplicas.remove(partition.toPathString());
+    }
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    triggerInstanceConfigChangeNotification();
+  }
+
+  /**
    * Associate the given Helix manager with this admin.
    * @param helixManager the {@link MockHelixManager} to associate this admin with.
    */
@@ -191,6 +217,15 @@ public class MockHelixAdmin implements HelixAdmin {
   private void triggerLiveInstanceChangeNotification() {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
       helixManager.triggerLiveInstanceNotification(false);
+    }
+  }
+
+  /**
+   * Trigger an instance config change notification.
+   */
+  private void triggerInstanceConfigChangeNotification() {
+    for (MockHelixManager helixManager : helixManagersForThisAdmin) {
+      helixManager.triggerConfigChangeNotification(false);
     }
   }
 
