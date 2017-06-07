@@ -124,8 +124,12 @@ class DeleteOperation {
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
-        logger.trace("Making request to a remote replica in", replica.getDataNodeId().getDatacenterName());
+        logger.trace("Making request with correlationId {} to a remote replica {} in {} ",
+            deleteRequest.getCorrelationId(), replica.getDataNodeId(), replica.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
+      } else {
+        logger.trace("Making request with correlationId {} to a local replica {} ", deleteRequest.getCorrelationId(),
+            replica.getDataNodeId());
       }
       routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestRate.mark();
     }
@@ -163,9 +167,14 @@ class DeleteOperation {
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
+      logger.trace("DeleteRequest with correlationId {} timed out for replica {} ", deleteRequest.getCorrelationId(),
+          replica.getDataNodeId());
       updateOperationState(replica, RouterErrorCode.OperationTimedOut);
     } else {
       if (deleteResponse == null) {
+        logger.trace(
+            "DeleteRequest with correlationId {} received UnexpectedInternalError on response deserialization for replica {} ",
+            deleteRequest.getCorrelationId(), replica.getDataNodeId());
         updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
       } else {
         // The true case below should not really happen. This means a response has been received
@@ -181,7 +190,7 @@ class DeleteOperation {
           updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
         } else {
           // The status of operation tracker will be updated within the processServerError method.
-          processServerError(replica, deleteResponse.getError());
+          processServerError(replica, deleteResponse.getError(), deleteResponse.getCorrelationId());
         }
       }
     }
@@ -208,9 +217,12 @@ class DeleteOperation {
   private void cleanupExpiredInflightRequests() {
     Iterator<Map.Entry<Integer, DeleteRequestInfo>> itr = deleteRequestInfos.entrySet().iterator();
     while (itr.hasNext()) {
-      DeleteRequestInfo deleteRequestInfo = itr.next().getValue();
+      Map.Entry<Integer, DeleteRequestInfo> deleteRequestInfoEntry = itr.next();
+      DeleteRequestInfo deleteRequestInfo = deleteRequestInfoEntry.getValue();
       if (time.milliseconds() - deleteRequestInfo.startTimeMs > routerConfig.routerRequestTimeoutMs) {
         itr.remove();
+        logger.trace("Delete Request with correlationid {} in flight has expired for replica {} ",
+            deleteRequestInfoEntry.getKey(), deleteRequestInfo.replica.getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
@@ -224,14 +236,15 @@ class DeleteOperation {
    * to a {@link RouterErrorCode}, and then makes corresponding state update.
    * @param replica The replica for which the ServerErrorCode was generated.
    * @param serverErrorCode The ServerErrorCode received from the replica.
+   * @param correlationId the correlationId of the request
    */
-  private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode) {
+  private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode, int correlationId) {
     switch (serverErrorCode) {
       case No_Error:
       case Blob_Deleted:
         operationTracker.onResponse(replica, true);
         if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
-          logger.trace("Cross colo request successful for remote replica in ",
+          logger.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
               replica.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoSuccessCount.inc();
         }
@@ -253,7 +266,8 @@ class DeleteOperation {
         break;
     }
     if (serverErrorCode != ServerErrorCode.No_Error) {
-      logger.trace("Server returned an error: ", serverErrorCode);
+      logger.trace("Replica {} returned an error {} for a delete request with correlationId : {} ",
+          replica.getDataNodeId(), serverErrorCode, correlationId);
     }
   }
 

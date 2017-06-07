@@ -109,6 +109,8 @@ class GetBlobInfoOperation extends GetOperation {
       Map.Entry<Integer, GetRequestInfo> entry = inFlightRequestsIterator.next();
       if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
         onErrorResponse(entry.getValue().replicaId);
+        logger.trace("GetBlobInfoRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
+            entry.getValue().replicaId.getDataNodeId());
         // Do not notify this as a failure to the response handler, as this timeout could simply be due to
         // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
         // response and the response handler will be notified accordingly.
@@ -138,8 +140,12 @@ class GetBlobInfoOperation extends GetOperation {
       requestRegistrationCallback.registerRequestToSend(this, request);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
-        logger.trace("Making request to a remote replica in", replicaId.getDataNodeId().getDatacenterName());
+        logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
+            replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
+      } else {
+        logger.trace("Making request with correlationId {} to a local replica {} ", correlationId,
+            replicaId.getDataNodeId());
       }
       routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestRate.mark();
     }
@@ -169,10 +175,15 @@ class GetBlobInfoOperation extends GetOperation {
     routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs.update(
         requestLatencyMs);
     if (responseInfo.getError() != null) {
+      logger.trace("GetBlobInfoRequest with correlationId {} timed out for replica {} ", correlationId,
+          getRequestInfo.replicaId.getDataNodeId());
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
       onErrorResponse(getRequestInfo.replicaId);
     } else {
       if (getResponse == null) {
+        logger.trace(
+            "GetBlobInfoRequest with correlationId {} received an unexpected error on response deserialization from replica {} ",
+            correlationId, getRequestInfo.replicaId.getDataNodeId());
         setOperationException(new RouterException("Response deserialization received an unexpected error",
             RouterErrorCode.UnexpectedInternalError));
         onErrorResponse(getRequestInfo.replicaId);
@@ -183,6 +194,8 @@ class GetBlobInfoOperation extends GetOperation {
           // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
           // There is no other way to handle it.
           routerMetrics.unknownReplicaResponseError.inc();
+          logger.trace("GetBlobInfoRequest with correlationId {} mismatch from response {} for replica {} ",
+              correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
           setOperationException(new RouterException(
               "The correlation id in the GetResponse " + getResponse.getCorrelationId()
                   + "is not the same as the correlation id in the associated GetRequest: " + correlationId,
@@ -195,6 +208,8 @@ class GetBlobInfoOperation extends GetOperation {
           } catch (IOException | MessageFormatException e) {
             // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
             // detection.
+            logger.trace("GetBlobInfoRequest with correlationId {} response deserialization failed for replica {} ",
+                correlationId, getRequestInfo.replicaId.getDataNodeId());
             routerMetrics.responseDeserializationErrorCount.inc();
             setOperationException(new RouterException("Response deserialization received an unexpected error", e,
                 RouterErrorCode.UnexpectedInternalError));
@@ -231,12 +246,16 @@ class GetBlobInfoOperation extends GetOperation {
           handleBody(getResponse.getInputStream());
           operationTracker.onResponse(getRequestInfo.replicaId, true);
           if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
-            logger.trace("Cross colo request successful for remote replica in ",
+            logger.trace("Cross colo request successful for remote replica in {} ",
                 getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
             routerMetrics.crossColoSuccessCount.inc();
           }
         } else {
           // process and set the most relevant exception.
+          if (getError != ServerErrorCode.No_Error) {
+            logger.trace("Replica  {} returned error {} with correlationId {} ",
+                getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
+          }
           processServerError(getError);
           if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired) {
             // this is a successful response and one that completes the operation regardless of whether the
@@ -248,6 +267,8 @@ class GetBlobInfoOperation extends GetOperation {
         }
       }
     } else {
+      logger.trace("Replica {} returned an error {} for a GetBlobInfoRequest with correlationId : {} ",
+          getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
       onErrorResponse(getRequestInfo.replicaId);
     }
   }
@@ -285,7 +306,6 @@ class GetBlobInfoOperation extends GetOperation {
    * @param errorCode the {@link ServerErrorCode} to process.
    */
   private void processServerError(ServerErrorCode errorCode) {
-    logger.trace("Server returned an error: ", errorCode);
     switch (errorCode) {
       case Blob_Deleted:
         logger.trace("Requested blob was deleted");

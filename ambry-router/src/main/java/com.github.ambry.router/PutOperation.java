@@ -282,16 +282,16 @@ class PutOperation {
       operationCompleted = true;
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
-      logger.trace("Successfully put chunk with blob id: " + chunk.getChunkBlobId());
+      logger.trace("Successfully put chunk with blob id: {} ", chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
       if (chunk.failedAttempts > 0) {
-        logger.trace("Slipped put succeeded for chunk: " + chunk.getChunkBlobId());
+        logger.trace("Slipped put succeeded for chunk: {}", chunk.getChunkBlobId());
         routerMetrics.slippedPutSuccessCount.inc();
       } else {
-        logger.trace("Successfully put chunk: " + chunk.getChunkBlobId());
+        logger.trace("Successfully put chunk: {} ", chunk.getChunkBlobId());
       }
       operationCompleted = true;
     }
@@ -849,7 +849,7 @@ class PutOperation {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
           if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
-            logger.trace("Attempt to put chunk with id: " + chunkBlobId + " failed, attempting slipped put");
+            logger.trace("Attempt to put chunk with id: {} failed, attempting slipped put ", chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
             prepareForSending();
           } else {
@@ -897,6 +897,8 @@ class PutOperation {
         Map.Entry<Integer, ChunkPutRequestInfo> entry = inFlightRequestsIterator.next();
         if (time.milliseconds() - entry.getValue().startTimeMs > routerConfig.routerRequestTimeoutMs) {
           onErrorResponse(entry.getValue().replicaId);
+          logger.trace("PutRequest with correlationId {} in flight has expired for replica {} ", entry.getKey(),
+              entry.getValue().replicaId.getDataNodeId());
           // Do not notify this as a failure to the response handler, as this timeout could simply be due to
           // connection unavailability. If there is indeed a network error, the NetworkClient will provide an error
           // response and the response handler will be notified accordingly.
@@ -927,8 +929,12 @@ class PutOperation {
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
         if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
-          logger.trace("Making request to a remote replica in", replicaId.getDataNodeId().getDatacenterName());
+          logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
+              replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoRequestCount.inc();
+        } else {
+          logger.trace("Making request with correlationId {} to a local replica {} ", correlationId,
+              replicaId.getDataNodeId());
         }
         routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).putRequestRate.mark();
       }
@@ -987,10 +993,15 @@ class PutOperation {
           requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
+        logger.trace("PutRequest with correlationId {} timed out for replica {} ", correlationId,
+            chunkPutRequestInfo.replicaId.getDataNodeId());
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
         isSuccessful = false;
       } else {
         if (putResponse == null) {
+          logger.trace(
+              "PutRequest with correlationId {} received an unexpected error on response deserialization from replica {} ",
+              correlationId, chunkPutRequestInfo.replicaId.getDataNodeId());
           setChunkException(new RouterException("Response deserialization received an unexpected error",
               RouterErrorCode.UnexpectedInternalError));
           isSuccessful = false;
@@ -1014,6 +1025,9 @@ class PutOperation {
               isSuccessful = true;
             } else {
               // chunkException will be set within processServerError.
+              logger.trace("Replica {} returned an error {} for a PutRequest with correlationId : {} ",
+                  chunkPutRequestInfo.replicaId.getDataNodeId(), putResponse.getError(),
+                  putResponse.getCorrelationId());
               processServerError(putResponse.getError());
               isSuccessful = false;
             }
@@ -1023,7 +1037,7 @@ class PutOperation {
       if (isSuccessful) {
         operationTracker.onResponse(chunkPutRequestInfo.replicaId, true);
         if (RouterUtils.isRemoteReplica(routerConfig, chunkPutRequestInfo.replicaId)) {
-          logger.trace("Cross colo request successful for remote replica in ",
+          logger.trace("Cross colo request successful for remote replica in {} ",
               chunkPutRequestInfo.replicaId.getDataNodeId().getDatacenterName());
           routerMetrics.crossColoSuccessCount.inc();
         }
@@ -1063,7 +1077,6 @@ class PutOperation {
       // BlobId_Already_Exists are outliers (should not really happen) that those should really
       // result in Ambry_Unavailable or UnexpectedInternalError.
       // However, for metrics, we will need to distinguish them here.
-      logger.trace("Server returned an error: ", error);
       setChunkException(new RouterException("Could not complete operation, server returned: " + error,
           RouterErrorCode.AmbryUnavailable));
     }
