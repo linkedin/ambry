@@ -17,6 +17,8 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.router.ByteRange;
+import com.github.ambry.router.CopyingAsyncWritableChannel;
+import com.github.ambry.router.ReadableStreamChannel;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -28,6 +30,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import org.json.JSONObject;
 
 
 /**
@@ -89,5 +92,17 @@ public class RestTestUtils {
     } catch (IOException | GeneralSecurityException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  /**
+   * Reads the response received from the {@code channel} and decodes it into a {@link JSONObject}.
+   * @param channel the {@link ReadableStreamChannel} that contains the response
+   * @return the response decoded into a {@link JSONObject}.
+   * @throws Exception
+   */
+  public static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel) throws Exception {
+    CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel((int) channel.getSize());
+    channel.readInto(asyncWritableChannel, null).get();
+    return new JSONObject(new String(asyncWritableChannel.getData()));
   }
 }

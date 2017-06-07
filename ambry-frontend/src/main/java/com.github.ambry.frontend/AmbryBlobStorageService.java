@@ -155,12 +155,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
       if (operationOrBlobId.equalsIgnoreCase(OPERATION_GET_PEERS)) {
-        getPeersHandler.handle(restRequest, restResponseChannel, new Callback<ReadableStreamChannel>() {
-          @Override
-          public void onCompletion(ReadableStreamChannel result, Exception exception) {
-            submitResponse(restRequest, restResponseChannel, result, exception);
-          }
-        });
+        getPeersHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         RestRequestMetrics requestMetrics =
             restRequest.getSSLSession() != null ? frontendMetrics.getBlobSSLMetrics : frontendMetrics.getBlobMetrics;

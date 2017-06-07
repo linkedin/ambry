@@ -31,10 +31,10 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
@@ -51,9 +51,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import static org.junit.Assert.*;
 
@@ -85,17 +85,13 @@ public class GetPeersHandlerTest {
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
       assertNotNull("There should be a response", channel);
-      CopyingAsyncWritableChannel writableChannel = new CopyingAsyncWritableChannel();
-      channel.readInto(writableChannel, null).get(1, TimeUnit.SECONDS);
-      byte[] peerStrBytes = writableChannel.getData();
-      String peersStr = new String(peerStrBytes);
-      List<String> peers = peersStr.length() > 0 ? Arrays.asList(peersStr.split(",")) : new ArrayList<String>();
-      Set<String> expectedPeers = clusterMap.getPeers(datanode);
-      assertTrue("Peer list returned does not match expected for " + datanode, expectedPeers.containsAll(peers));
-      assertEquals("Content-type is not as expected", "text/plain",
+      assertEquals("Content-type is not as expected", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-      assertEquals("Content-length is not as expected", peerStrBytes.length,
+      assertEquals("Content-length is not as expected", channel.getSize(),
           Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+      Set<String> expectedPeers = clusterMap.getPeers(datanode);
+      Set<String> peersFromResponse = getPeersFromResponse(RestTestUtils.getJsonizedResponseBody(channel));
+      assertEquals("Peer list returned does not match expected for " + datanode, expectedPeers, peersFromResponse);
     }
   }
 
@@ -137,6 +133,24 @@ public class GetPeersHandlerTest {
 
   // helpers
   // general
+
+  /**
+   * Gets the peers from the response as a {@link Set} of strings, each of the from host:port.
+   * @param response the {@link JSONObject} that contains the peers.
+   * @return the peers from the response as a {@link Set} of strings, each of the from host:port.
+   * @throws Exception
+   */
+  static Set<String> getPeersFromResponse(JSONObject response) throws Exception {
+    JSONArray peers = response.getJSONArray(GetPeersHandler.PEERS_FIELD_NAME);
+    Set<String> peersFromResponse = new HashSet<>(peers.length());
+    for (int i = 0; i < peers.length(); i++) {
+      JSONObject peer = peers.getJSONObject(i);
+      String peerStr =
+          peer.getString(GetPeersHandler.NAME_QUERY_PARAM) + ":" + peer.getInt(GetPeersHandler.PORT_QUERY_PARAM);
+      peersFromResponse.add(peerStr);
+    }
+    return peersFromResponse;
+  }
 
   /**
    * Get a {@link RestRequest} that requests for the peers of the given {@code datanode}
@@ -245,7 +259,7 @@ public class GetPeersHandlerTest {
     @Override
     public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
         Callback<Void> callback) {
-      throw new NotImplementedException();
+      throw new IllegalStateException();
     }
 
     @Override
@@ -309,22 +323,22 @@ class TailoredPeersClusterMap implements ClusterMap {
 
   @Override
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override
   public List<? extends PartitionId> getWritablePartitionIds() {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override
   public List<? extends PartitionId> getAllPartitionIds() {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override
   public boolean hasDatacenter(String datacenterName) {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override
@@ -355,17 +369,17 @@ class TailoredPeersClusterMap implements ClusterMap {
 
   @Override
   public List<? extends DataNodeId> getDataNodeIds() {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override
   public MetricRegistry getMetricRegistry() {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    throw new NotImplementedException();
+    throw new IllegalStateException();
   }
 
   @Override

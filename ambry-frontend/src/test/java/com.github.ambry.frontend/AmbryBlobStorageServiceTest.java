@@ -552,14 +552,10 @@ public class AmbryBlobStorageServiceTest {
         MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
         doOperation(createRestRequest(RestMethod.GET, uri, null, null), restResponseChannel);
         byte[] peerStrBytes = restResponseChannel.getResponseBody();
-        String peersStr = new String(peerStrBytes);
-        List<String> peers = peersStr.length() > 0 ? Arrays.asList(peersStr.split(",")) : new ArrayList<String>();
+        Set<String> peersFromResponse =
+            GetPeersHandlerTest.getPeersFromResponse(new JSONObject(new String(peerStrBytes)));
         Set<String> expectedPeers = clusterMap.getPeers(datanode);
-        assertTrue("Peer list returned does not match expected for " + datanode, expectedPeers.containsAll(peers));
-        assertEquals("Content-type is not as expected", "text/plain",
-            restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-        assertEquals("Content-length is not as expected", peerStrBytes.length,
-            Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+        assertEquals("Peer list returned does not match expected for " + datanode, expectedPeers, peersFromResponse);
       }
     }
     // test one bad request
