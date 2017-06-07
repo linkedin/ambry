@@ -392,7 +392,7 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(BlobProperties_Format_V1.class);
 
     public static int getBlobPropertiesRecordSize(BlobProperties properties) {
-      return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSize(properties) + Crc_Size;
+      return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties) + Crc_Size;
     }
 
     public static void serializeBlobPropertiesRecord(ByteBuffer outputBuffer, BlobProperties properties) {

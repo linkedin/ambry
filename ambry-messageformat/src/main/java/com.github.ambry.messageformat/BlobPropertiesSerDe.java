@@ -54,7 +54,7 @@ public class BlobPropertiesSerDe {
   private static final int IssuerAccountId_Field_Size_In_Bytes = 2;
 
   // @TODO: remove this to add accountId and containerId once putBlobPropertiesToBuffer is changed to version2
-  public static int getBlobPropertiesSize(BlobProperties properties) {
+  public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
@@ -68,7 +68,7 @@ public class BlobPropertiesSerDe {
    * @return the size of the {@link BlobProperties} to serialize in Version 2
    * @TODO: will be used once putBlobPropertiesToBuffer is changed to version2
    */
-  public static int getBlobPropertiesV2Size(BlobProperties properties) {
+  public static int getBlobPropertiesV2SerDeSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
@@ -78,28 +78,29 @@ public class BlobPropertiesSerDe {
   }
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
-    long version = stream.readShort();
+    short version = stream.readShort();
     BlobProperties toReturn;
-    if (version == Version1 || version == Version2) {
-      long ttl = stream.readLong();
-      boolean isPrivate = stream.readByte() == 1 ? true : false;
-      long creationTime = stream.readLong();
-      long blobSize = stream.readLong();
-      String contentType = Utils.readIntString(stream);
-      String ownerId = Utils.readIntString(stream);
-      String serviceId = Utils.readIntString(stream);
-      if (version == Version1) {
+    long ttl = stream.readLong();
+    boolean isPrivate = stream.readByte() == 1 ? true : false;
+    long creationTime = stream.readLong();
+    long blobSize = stream.readLong();
+    String contentType = Utils.readIntString(stream);
+    String ownerId = Utils.readIntString(stream);
+    String serviceId = Utils.readIntString(stream);
+    switch (version) {
+      case Version1:
         toReturn = new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
-      } else {
+        break;
+      case Version2:
         short accountId = stream.readShort();
         short containerId = stream.readShort();
         short issuerAccountId = stream.readShort();
         toReturn =
             new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
                 containerId, issuerAccountId);
-      }
-    } else {
-      throw new IllegalArgumentException("stream has unknown blob property version " + version);
+        break;
+      default:
+        throw new IllegalArgumentException("stream has unknown blob property version " + version);
     }
     return toReturn;
   }
@@ -116,7 +117,7 @@ public class BlobPropertiesSerDe {
   }
 
   /**
-   * Serialied {@link BlobProperties} to buffer in version {@link #Version2}
+   * Serialized {@link BlobProperties} to buffer in version {@link #Version2}
    * @param outputBuffer the {@link ByteBuffer} to write the {@link BlobProperties}
    * @param properties the {@link BlobProperties} to be serialized
    */

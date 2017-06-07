@@ -131,7 +131,7 @@ public class MessageFormatRecordTest {
 
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
-    // Test Blob property V1 Record
+    // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
     short[] versions = new short[]{BlobPropertiesSerDe.Version1, BlobPropertiesSerDe.Version2};
     for (short version : versions) {
       BlobProperties properties;
@@ -161,7 +161,6 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
       Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
       Assert.assertEquals(properties.getServiceId(), result.getServiceId());
-      // @TODO: fix this once BlobProperty V2 is enabled
       if (version == BlobPropertiesSerDe.Version1) {
         Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getAccountId());
         Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getContainerId());
@@ -196,7 +195,7 @@ public class MessageFormatRecordTest {
 
   //  TODO: remove this once BlobProperties V2 is enabled
   public static int getBlobPropertiesV2RecordSize(BlobProperties properties) {
-    int size = BlobPropertiesSerDe.getBlobPropertiesV2Size(properties);
+    int size = BlobPropertiesSerDe.getBlobPropertiesV2SerDeSize(properties);
     return Version_Field_Size_In_Bytes + size + Crc_Size;
   }
 

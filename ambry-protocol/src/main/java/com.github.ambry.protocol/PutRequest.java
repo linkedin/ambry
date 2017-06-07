@@ -104,7 +104,7 @@ public class PutRequest extends RequestOrResponse {
 
   private int sizeExcludingBlobAndCrcSize() {
     // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob type)
-    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSize(properties)
+    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties)
         + UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
   }
 
