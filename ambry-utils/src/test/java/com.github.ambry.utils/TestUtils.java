@@ -72,9 +72,10 @@ public class TestUtils {
    * Awaits on the passed-in {@link CountDownLatch}. If times out throws an exception.
    * @param latch The latch to await on.
    * @param timeoutMs Timeout in millisecond.
-   * @throws Exception If awaits for more than the specified time, throw a {@link TimeoutException}.
+   * @throws TimeoutException If awaits for more than the specified time, throw a {@link TimeoutException}.
    */
-  public static void awaitLatchOrTimeout(CountDownLatch latch, long timeoutMs) throws Exception {
+  public static void awaitLatchOrTimeout(CountDownLatch latch, long timeoutMs)
+      throws TimeoutException, InterruptedException {
     if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
       throw new TimeoutException("Too long time to complete operation.");
     }

@@ -337,6 +337,12 @@ public class HelixNotifierTest {
     helixNotifier.publish(refTopics.get(0), refMessages.get(0));
   }
 
+  /**
+   * Tests a corner case when a {@link HelixNotifier} sends messages to local {@link TopicListener}s, there is a
+   * slight chance that when the {@link HelixNotifier} tries to fetch the message, it is already deleted by someone
+   * else, and may fetch {@code null}. This test ensures that in this case no exception will be thrown.
+   * @throws Exception Any unexpected exception.
+   */
   @Test
   public void testReadNullRecordWhenSendMessageToLocalListeners() throws Exception {
     helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(false, true));
