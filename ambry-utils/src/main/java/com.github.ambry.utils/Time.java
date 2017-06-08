@@ -29,7 +29,6 @@ public abstract class Time {
   public static final int MsPerSec = 1000;
   public static final int NsPerMs = NsPerUs * UsPerMs;
   public static final int NsPerSec = NsPerMs * MsPerSec;
-  public static final int UsPerSec = UsPerMs * MsPerSec;
   public static final int SecsPerMin = 60;
 
   public abstract long milliseconds();
