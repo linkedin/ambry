@@ -25,6 +25,7 @@ allprojects {
     apply plugin: 'eclipse'
     apply plugin: 'idea'
     apply plugin: 'project-report'
+    apply plugin: 'jacoco'
 
     repositories {
         mavenCentral()
@@ -35,6 +36,7 @@ allprojects {
 subprojects {
     apply plugin: 'java'
     sourceCompatibility = 1.8
+    targetCompatibility = 1.8
 
     sourceSets {
         test {
@@ -76,12 +78,12 @@ subprojects {
     // but run integration tests too when running the test target
     check.dependsOn -= test
     check.dependsOn += unitTest
-    
+
     task testJar(type: Jar) {
         from sourceSets.test.output
         classifier = 'test'
     }
-    
+
     artifacts {
         archives testJar
     }
@@ -302,4 +304,23 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
             }
         }
     }
+}
+
+task codeCoverageReport(type: JacocoReport) {
+    executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
+
+    subprojects.each {
+        sourceSets it.sourceSets.main
+    }
+
+    reports {
+        xml.enabled true
+        xml.destination "${buildDir}/reports/jacoco/report.xml"
+        html.enabled true
+        csv.enabled true
+    }
+}
+
+codeCoverageReport.dependsOn {
+    subprojects*.unitTest
 }
