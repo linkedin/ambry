@@ -540,15 +540,15 @@ public final class ServerTestUtil {
         }
       }
       deleteFolderContent(new File(dataNode.getMountPaths().get(0)), false);
-      int totalblobs = 0;
       for (int i = 0; i < blobIds.size(); i++) {
         for (ReplicaId replicaId : blobIds.get(i).getPartition().getReplicaIds()) {
           if (replicaId.getMountPath().compareToIgnoreCase(dataNode.getMountPaths().get(0)) == 0) {
             if (blobsDeleted.contains(blobIds.get(i))) {
-              notificationSystem.decrementDeletedReplica(blobIds.get(i).getID());
+              notificationSystem.decrementDeletedReplica(blobIds.get(i).getID(), dataNode.getHostname(),
+                  dataNode.getPort());
             } else {
-              totalblobs++;
-              notificationSystem.decrementCreatedReplica(blobIds.get(i).getID());
+              notificationSystem.decrementCreatedReplica(blobIds.get(i).getID(), dataNode.getHostname(),
+                  dataNode.getPort());
             }
           }
         }
@@ -657,9 +657,11 @@ public final class ServerTestUtil {
       }
       for (int i = 0; i < blobIds.size(); i++) {
         if (blobsChecked.contains(blobIds.get(i))) {
-          notificationSystem.decrementDeletedReplica(blobIds.get(i).getID());
+          notificationSystem.decrementDeletedReplica(blobIds.get(i).getID(), dataNode.getHostname(),
+              dataNode.getPort());
         } else {
-          notificationSystem.decrementCreatedReplica(blobIds.get(i).getID());
+          notificationSystem.decrementCreatedReplica(blobIds.get(i).getID(), dataNode.getHostname(),
+              dataNode.getPort());
         }
       }
       serverList.get(0).startup();
@@ -1140,16 +1142,16 @@ public final class ServerTestUtil {
       for (File toDelete : mountFile.listFiles()) {
         deleteFolderContent(toDelete, true);
       }
-      notificationSystem.decrementCreatedReplica(blobId2.getID());
-      notificationSystem.decrementCreatedReplica(blobId3.getID());
-      notificationSystem.decrementCreatedReplica(blobId4.getID());
-      notificationSystem.decrementCreatedReplica(blobId5.getID());
-      notificationSystem.decrementCreatedReplica(blobId6.getID());
-      notificationSystem.decrementCreatedReplica(blobId7.getID());
-      notificationSystem.decrementCreatedReplica(blobId8.getID());
-      notificationSystem.decrementCreatedReplica(blobId9.getID());
-      notificationSystem.decrementCreatedReplica(blobId10.getID());
-      notificationSystem.decrementCreatedReplica(blobId11.getID());
+      notificationSystem.decrementCreatedReplica(blobId2.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId3.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId4.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId5.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId6.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId7.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId8.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId9.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId10.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobId11.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
 
       cluster.getServers().get(0).startup();
       notificationSystem.awaitBlobCreations(blobId2.getID());

@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import junit.framework.Assert;
 
 import static org.junit.Assert.*;
@@ -166,12 +167,68 @@ class ServerShutdown implements Runnable {
 }
 
 class Tracker {
-  public CountDownLatch totalReplicasDeleted;
-  public CountDownLatch totalReplicasCreated;
+  private final int numberOfReplicas;
+  private CountDownLatch totalReplicasCreated;
+  private CountDownLatch totalReplicasDeleted;
 
-  public Tracker(int expectedNumberOfReplicas) {
-    totalReplicasDeleted = new CountDownLatch(expectedNumberOfReplicas);
+  private ConcurrentHashMap<String, Boolean> creationSrcHosts = new ConcurrentHashMap<>();
+  private ConcurrentHashMap<String, Boolean> deletionSrcHosts = new ConcurrentHashMap<>();
+
+  private AtomicInteger creationNotificationsReceived = new AtomicInteger(0);
+  private AtomicInteger deletionNotificationsReceived = new AtomicInteger(0);
+
+  Tracker(int expectedNumberOfReplicas) {
+    numberOfReplicas = expectedNumberOfReplicas;
     totalReplicasCreated = new CountDownLatch(expectedNumberOfReplicas);
+    totalReplicasDeleted = new CountDownLatch(expectedNumberOfReplicas);
+  }
+
+  void trackCreation(String srcHost, int srcPort) {
+    creationNotificationsReceived.incrementAndGet();
+    if (creationSrcHosts.putIfAbsent(getKey(srcHost, srcPort), true) == null) {
+      totalReplicasCreated.countDown();
+      System.out.println(creationSrcHosts.size());
+      System.out.println(numberOfReplicas - totalReplicasCreated.getCount());
+    }
+  }
+
+  void trackDeletion(String srcHost, int srcPort) {
+    deletionNotificationsReceived.incrementAndGet();
+    if (deletionSrcHosts.putIfAbsent(getKey(srcHost, srcPort), true) == null) {
+      totalReplicasDeleted.countDown();
+    }
+  }
+
+  boolean awaitBlobCreations() throws InterruptedException {
+    return totalReplicasCreated.await(10, TimeUnit.SECONDS);
+  }
+
+  boolean awaitBlobDeletions() throws InterruptedException {
+    return totalReplicasDeleted.await(10, TimeUnit.SECONDS);
+  }
+
+  void decrementCreated(String host, int port) {
+    if (creationSrcHosts.remove(getKey(host, port)) != null) {
+      totalReplicasCreated = decrementCount(totalReplicasCreated);
+    }
+  }
+
+  void decrementDeleted(String host, int port) {
+    if (deletionSrcHosts.remove(getKey(host, port)) != null) {
+      totalReplicasDeleted = decrementCount(totalReplicasDeleted);
+    }
+  }
+
+  private CountDownLatch decrementCount(CountDownLatch latch) {
+    long finalCount = latch.getCount() + 1;
+    if (finalCount > numberOfReplicas) {
+      throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
+    }
+    return new CountDownLatch((int) finalCount);
+  }
+
+  private String getKey(String srcHost, int srcPort) {
+    return srcHost + ":" + srcPort;
   }
 }
 
@@ -181,8 +238,8 @@ class Tracker {
  */
 class MockNotificationSystem implements NotificationSystem {
 
-  ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
-  int numberOfReplicas;
+  private ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
+  private int numberOfReplicas;
 
   public MockNotificationSystem(int numberOfReplicas) {
     this.numberOfReplicas = numberOfReplicas;
@@ -202,19 +259,13 @@ class MockNotificationSystem implements NotificationSystem {
   @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
-    Tracker tracker = objectTracker.get(blobId);
-    if (tracker == null) {
-      tracker = new Tracker(numberOfReplicas);
-      objectTracker.put(blobId, tracker);
-    }
-    tracker.totalReplicasCreated.countDown();
+    objectTracker.computeIfAbsent(blobId, k -> new Tracker(numberOfReplicas)).trackCreation(sourceHost, port);
   }
 
   @Override
   public synchronized void onBlobReplicaDeleted(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
-    Tracker tracker = objectTracker.get(blobId);
-    tracker.totalReplicasDeleted.countDown();
+    objectTracker.get(blobId).trackDeletion(sourceHost, port);
   }
 
   @Override
@@ -222,53 +273,35 @@ class MockNotificationSystem implements NotificationSystem {
     // ignore
   }
 
-  public void awaitBlobCreations(String blobId) {
+  void awaitBlobCreations(String blobId) {
     try {
       Tracker tracker = objectTracker.get(blobId);
-      if (!tracker.totalReplicasCreated.await(2, TimeUnit.SECONDS)) {
-        Assert.fail(
-            "Failed awaiting for " + blobId + " creations, current count " + tracker.totalReplicasCreated.getCount());
+      if (!tracker.awaitBlobCreations()) {
+        Assert.fail("Failed awaiting for " + blobId + " creations");
       }
     } catch (InterruptedException e) {
       // ignore
     }
   }
 
-  public void awaitBlobDeletions(String blobId) {
+  void awaitBlobDeletions(String blobId) {
     try {
       Tracker tracker = objectTracker.get(blobId);
-      if (!tracker.totalReplicasDeleted.await(2, TimeUnit.SECONDS)) {
-        Assert.fail(
-            "Failed awaiting for " + blobId + " deletions, current count " + tracker.totalReplicasDeleted.getCount());
+      if (!tracker.awaitBlobDeletions()) {
+        Assert.fail("Failed awaiting for " + blobId + " deletions");
       }
     } catch (InterruptedException e) {
       // ignore
     }
   }
 
-  public synchronized void decrementCreatedReplica(String blobId) {
+  synchronized void decrementCreatedReplica(String blobId, String host, int port) {
     Tracker tracker = objectTracker.get(blobId);
-    long currentCount = tracker.totalReplicasCreated.getCount();
-    long finalCount = currentCount + 1;
-    if (finalCount > numberOfReplicas) {
-      throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
-    }
-    tracker.totalReplicasCreated = new CountDownLatch(numberOfReplicas);
-    while (tracker.totalReplicasCreated.getCount() > finalCount) {
-      tracker.totalReplicasCreated.countDown();
-    }
+    tracker.decrementCreated(host, port);
   }
 
-  public synchronized void decrementDeletedReplica(String blobId) {
+  synchronized void decrementDeletedReplica(String blobId, String host, int port) {
     Tracker tracker = objectTracker.get(blobId);
-    long currentCount = tracker.totalReplicasDeleted.getCount();
-    long finalCount = currentCount + 1;
-    if (finalCount > numberOfReplicas) {
-      throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
-    }
-    tracker.totalReplicasDeleted = new CountDownLatch(numberOfReplicas);
-    while (tracker.totalReplicasDeleted.getCount() > finalCount) {
-      tracker.totalReplicasDeleted.countDown();
-    }
+    tracker.decrementDeleted(host, port);
   }
 }
