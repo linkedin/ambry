@@ -570,10 +570,11 @@ class PersistentIndex {
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
+   * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  void markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
-    markAsDeleted(id, fileSpan, null);
+  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
+    return markAsDeleted(id, fileSpan, null);
   }
 
   /**
@@ -581,9 +582,10 @@ class PersistentIndex {
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise.
+   * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  private void markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info) throws StoreException {
+  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info) throws StoreException {
     validateFileSpan(fileSpan, true);
     IndexValue value = findKey(id);
     if (value == null && info == null) {
@@ -608,6 +610,8 @@ class PersistentIndex {
     }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
+    return new IndexValue(newValue.getSize(), newValue.getOffset(), newValue.getFlags(), newValue.getExpiresAtMs(),
+        newValue.getOperationTimeInMs(), newValue.getServiceId(), newValue.getContainerId());
   }
 
   /**

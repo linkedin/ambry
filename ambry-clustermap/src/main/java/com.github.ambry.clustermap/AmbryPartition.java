@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
@@ -28,6 +30,8 @@ class AmbryPartition extends PartitionId {
   private final Long id;
   private final ClusterManagerCallback clusterManagerCallback;
   private volatile PartitionState state;
+  private long lastUpdatedSealedStateChangeCounter = 0;
+  private final Lock stateChangeLock = new ReentrantLock();
 
   private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
   private static final short CURRENT_VERSION = 1;
@@ -58,6 +62,27 @@ class AmbryPartition extends PartitionId {
 
   @Override
   public PartitionState getPartitionState() {
+    // If there was a change to the sealed state of replicas in the cluster manager since the last check, refresh the
+    // state of this partition. We do this to avoid querying every time this method is called, considering how
+    // update to sealed states of replicas are relatively rare.
+    long currentCounterValue = clusterManagerCallback.getSealedStateChangeCounter();
+    // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
+    // state in that case.
+    if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
+      try {
+        lastUpdatedSealedStateChangeCounter = currentCounterValue;
+        boolean isSealed = false;
+        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
+          if (replica.isSealed()) {
+            isSealed = true;
+            break;
+          }
+        }
+        state = isSealed ? PartitionState.READ_ONLY : PartitionState.READ_WRITE;
+      } finally {
+        stateChangeLock.unlock();
+      }
+    }
     return state;
   }
 
@@ -93,14 +118,6 @@ class AmbryPartition extends PartitionId {
    */
   String toPathString() {
     return id.toString();
-  }
-
-  /**
-   * Set the state of this partition.
-   * @param newState the updated {@link PartitionState}.
-   */
-  void setState(PartitionState newState) {
-    state = newState;
   }
 
   /**

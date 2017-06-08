@@ -383,10 +383,8 @@ public final class ServerTestUtil {
 
       // Now that the blob is created and replicated, test the cases where a put request arrives for the same blob id
       // later than replication.
-      // @todo Once PutRequest starts going out in V3, ReplicaMetadataResponse goes out in V2 and GetResponse goes
-      // @todo out in V2, the expected error is No_Error for the first case here, where the blob is exactly the same.
       testLatePutRequest(blobIds.get(0), properties, usermetadata, data, channel1, channel2, channel3,
-          ServerErrorCode.Blob_Already_Exists);
+          ServerErrorCode.No_Error);
       // Test the case where a put arrives with the same id as one in the server, but the blob is not identical.
       BlobProperties differentProperties = new BlobProperties(properties.getBlobSize(), properties.getServiceId());
       testLatePutRequest(blobIds.get(0), differentProperties, usermetadata, data, channel1, channel2, channel3,

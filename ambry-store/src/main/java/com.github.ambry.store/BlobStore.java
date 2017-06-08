@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,7 @@ class BlobStore implements Store {
   private final String storeId;
   private final String dataDir;
   private final ScheduledExecutorService taskScheduler;
+  private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   /* A lock that prevents concurrent writes to the log */
@@ -75,13 +77,15 @@ class BlobStore implements Store {
     SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
   }
 
-  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler, DiskIOScheduler diskIOScheduler,
+  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
     this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
+    this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
@@ -89,7 +93,6 @@ class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.time = time;
-    blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
   }
 
   @Override
@@ -132,7 +135,14 @@ class BlobStore implements Store {
             metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         metrics.initializeIndexGauges(index, capacityInBytes);
-        blobStoreStats = new BlobStoreStats(index, time, diskIOScheduler);
+        long logSegmentForecastOffsetMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
+        long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
+        long queueProcessingPeriodInMs =
+            TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes);
+        blobStoreStats =
+            new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
+                queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
+                taskScheduler, diskIOScheduler, metrics);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -241,6 +251,9 @@ class BlobStore implements Store {
             }
             FileSpan fileSpan = new FileSpan(indexEntries.get(0).getValue().getOffset(), endOffsetOfLastMessage);
             index.addToIndex(indexEntries, fileSpan);
+            for (IndexEntry newEntry : indexEntries) {
+              blobStoreStats.handleNewPutEntry(newEntry.getValue());
+            }
             logger.trace("Store : {} message set written to index ", dataDir);
           }
         }
@@ -278,6 +291,7 @@ class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.deleteResponse.time();
     try {
+      List<IndexValue> indexValuesToDelete = new ArrayList<>();
       List<MessageInfo> infoList = messageSetToDelete.getMessageSetInfo();
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       for (MessageInfo info : infoList) {
@@ -290,6 +304,7 @@ class BlobStore implements Store {
               "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
               StoreErrorCodes.ID_Deleted);
         }
+        indexValuesToDelete.add(value);
       }
       synchronized (lock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -307,10 +322,12 @@ class BlobStore implements Store {
         Offset endOffsetOfLastMessage = log.getEndOffset();
         messageSetToDelete.writeTo(log);
         logger.trace("Store : {} delete mark written to log", dataDir);
+        int correspondingPutIndex = 0;
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          index.markAsDeleted(info.getStoreKey(), fileSpan);
+          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan);
           endOffsetOfLastMessage = fileSpan.getEndOffset();
+          blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
         }
         logger.trace("Store : {} delete has been marked in the index ", dataDir);
       }
@@ -395,6 +412,7 @@ class BlobStore implements Store {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
+        blobStoreStats.close();
         compactor.close(30);
         index.close();
         log.close();
