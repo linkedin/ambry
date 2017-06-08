@@ -107,7 +107,7 @@ public class HardDeleter implements Runnable {
     this.diskIOScheduler = diskIOScheduler;
     this.time = time;
     scanSizeInBytes = Math.min(config.storeCleanupOperationsBytesPerSec * 10, 1024 * 1024);
-    messageRetentionSeconds = Math.toIntExact(TimeUnit.DAYS.toSeconds(Integer.toUnsignedLong(config.storeDeletedMessageRetentionDays)));
+    messageRetentionSeconds = (int) TimeUnit.DAYS.toSeconds(config.storeDeletedMessageRetentionDays);
   }
 
   @Override
