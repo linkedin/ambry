@@ -29,13 +29,7 @@ public abstract class Time {
   public static final int MsPerSec = 1000;
   public static final int NsPerMs = NsPerUs * UsPerMs;
   public static final int NsPerSec = NsPerMs * MsPerSec;
-  public static final int UsPerSec = UsPerMs * MsPerSec;
   public static final int SecsPerMin = 60;
-  public static final int MinsPerHour = 60;
-  public static final int HoursPerDay = 24;
-  public static final int SecsPerHour = SecsPerMin * MinsPerHour;
-  public static final int SecsPerDay = SecsPerHour * HoursPerDay;
-  public static final int MinsPerDay = MinsPerHour * HoursPerDay;
 
   public abstract long milliseconds();
 

@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -76,7 +77,7 @@ public class CompactionPolicyTest {
     properties.setProperty("store.compaction.policy.factory", compactionPolicyFactoryStr);
     Pair<MockBlobStore, StoreConfig> initState = initializeBlobStore(properties, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();
-    messageRetentionTimeInMs = config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec;
+    messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
     CompactionPolicyFactory compactionPolicyFactory = Utils.getObj(compactionPolicyFactoryStr, config, time);
@@ -166,7 +167,7 @@ public class CompactionPolicyTest {
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);
       }
       verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - (messageRetentionDays * Time.SecsPerDay * Time.MsPerSec),
+          new CompactionDetails(time.milliseconds() - TimeUnit.DAYS.toMillis(messageRetentionDays),
               bestCandidates), blobStore, compactionPolicy);
     }
   }
@@ -192,7 +193,7 @@ public class CompactionPolicyTest {
       properties.setProperty("store.deleted.message.retention.days", String.valueOf(messageRetentionInDays));
     }
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    time.sleep(2 * config.storeDeletedMessageRetentionDays * Time.SecsPerDay * Time.MsPerSec);
+    time.sleep(2 * TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays));
     MetricRegistry metricRegistry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(maxBlobSize);

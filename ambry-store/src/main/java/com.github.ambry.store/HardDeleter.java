@@ -31,6 +31,7 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -106,7 +107,7 @@ public class HardDeleter implements Runnable {
     this.diskIOScheduler = diskIOScheduler;
     this.time = time;
     scanSizeInBytes = Math.min(config.storeCleanupOperationsBytesPerSec * 10, 1024 * 1024);
-    messageRetentionSeconds = config.storeDeletedMessageRetentionDays * Time.SecsPerDay;
+    messageRetentionSeconds = (int) TimeUnit.DAYS.toSeconds(config.storeDeletedMessageRetentionDays);
   }
 
   @Override
