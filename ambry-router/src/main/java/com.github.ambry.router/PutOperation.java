@@ -993,14 +993,14 @@ class PutOperation {
           requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
-        logger.trace("PutRequest with correlationId {} timed out for replica {} ", correlationId,
+        logger.trace("PutRequest with response correlationId {} timed out for replica {} ", correlationId,
             chunkPutRequestInfo.replicaId.getDataNodeId());
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
         isSuccessful = false;
       } else {
         if (putResponse == null) {
           logger.trace(
-              "PutRequest with correlationId {} received an unexpected error on response deserialization from replica {} ",
+              "PutRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
               correlationId, chunkPutRequestInfo.replicaId.getDataNodeId());
           setChunkException(new RouterException("Response deserialization received an unexpected error",
               RouterErrorCode.UnexpectedInternalError));
@@ -1025,7 +1025,7 @@ class PutOperation {
               isSuccessful = true;
             } else {
               // chunkException will be set within processServerError.
-              logger.trace("Replica {} returned an error {} for a PutRequest with correlationId : {} ",
+              logger.trace("Replica {} returned an error {} for a PutRequest with response correlationId : {} ",
                   chunkPutRequestInfo.replicaId.getDataNodeId(), putResponse.getError(),
                   putResponse.getCorrelationId());
               processServerError(putResponse.getError());

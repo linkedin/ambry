@@ -167,13 +167,13 @@ class DeleteOperation {
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestLatencyMs.update(requestLatencyMs);
     // Check the error code from NetworkClient.
     if (responseInfo.getError() != null) {
-      logger.trace("DeleteRequest with correlationId {} timed out for replica {} ", deleteRequest.getCorrelationId(),
-          replica.getDataNodeId());
+      logger.trace("DeleteRequest with response correlationId {} timed out for replica {} ",
+          deleteRequest.getCorrelationId(), replica.getDataNodeId());
       updateOperationState(replica, RouterErrorCode.OperationTimedOut);
     } else {
       if (deleteResponse == null) {
         logger.trace(
-            "DeleteRequest with correlationId {} received UnexpectedInternalError on response deserialization for replica {} ",
+            "DeleteRequest with response correlationId {} received UnexpectedInternalError on response deserialization for replica {} ",
             deleteRequest.getCorrelationId(), replica.getDataNodeId());
         updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
       } else {
@@ -266,7 +266,7 @@ class DeleteOperation {
         break;
     }
     if (serverErrorCode != ServerErrorCode.No_Error) {
-      logger.trace("Replica {} returned an error {} for a delete request with correlationId : {} ",
+      logger.trace("Replica {} returned an error {} for a delete request with response correlationId : {} ",
           replica.getDataNodeId(), serverErrorCode, correlationId);
     }
   }

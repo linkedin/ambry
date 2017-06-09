@@ -644,14 +644,14 @@ class GetBlobOperation extends GetOperation {
       routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
           requestLatencyMs);
       if (responseInfo.getError() != null) {
-        logger.trace("GetBlobRequest with correlationId {} timed out for replica {} ", correlationId,
+        logger.trace("GetBlobRequest with response correlationId {} timed out for replica {} ", correlationId,
             getRequestInfo.replicaId.getDataNodeId());
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
         onErrorResponse(getRequestInfo.replicaId);
       } else {
         if (getResponse == null) {
           logger.trace(
-              "GetBlobRequest with correlationId {} received an unexpected error on response deserialization from replica {} ",
+              "GetBlobRequest with response correlationId {} received an unexpected error on response deserialization from replica {} ",
               correlationId, getRequestInfo.replicaId.getDataNodeId());
           chunkException = new RouterException("Response deserialization received an unexpected error",
               RouterErrorCode.UnexpectedInternalError);
@@ -662,7 +662,7 @@ class GetBlobOperation extends GetOperation {
             // out over a connection id, and the response received on a connection id must be for the latest request
             // sent over it. The check here ensures that is indeed the case. If not, log an error and fail this request.
             // There is no other way to handle it.
-            logger.trace("GetBlobRequest with correlationId {} mismatch from response {} for replica {} ",
+            logger.trace("GetBlobRequest with response correlationId {} mismatch from response {} for replica {} ",
                 correlationId, getResponse.getCorrelationId(), getRequestInfo.replicaId.getDataNodeId());
             routerMetrics.unknownReplicaResponseError.inc();
             chunkException = new RouterException(
@@ -677,7 +677,8 @@ class GetBlobOperation extends GetOperation {
             } catch (IOException | MessageFormatException e) {
               // This should really not happen. Again, we do not notify the ResponseHandler responsible for failure
               // detection.
-              logger.trace("GetBlobRequest with correlationId {} response deserialization failed for replica {} ",
+              logger.trace(
+                  "GetBlobRequest with response correlationId {} response deserialization failed for replica {} ",
                   correlationId, getRequestInfo.replicaId.getDataNodeId());
               routerMetrics.responseDeserializationErrorCount.inc();
               chunkException = new RouterException("Response deserialization received an unexpected error", e,
@@ -730,7 +731,7 @@ class GetBlobOperation extends GetOperation {
           }
         }
       } else {
-        logger.trace("Replica {} returned an error {} for a GetBlobRequest with correlationId : {} ",
+        logger.trace("Replica {} returned an error {} for a GetBlobRequest with response correlationId : {} ",
             getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
         onErrorResponse(getRequestInfo.replicaId);
       }
