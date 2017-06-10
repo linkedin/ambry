@@ -50,6 +50,9 @@ public enum ResponseStatus {
    * 404 Not Found - Resource was not found.
    */
   NotFound, /**
+   * 405 Method Not Allowed - The method request was not in the ones allowed for this endpoint.
+   */
+  MethodNotAllowed, /**
    * 407 - Proxy authentication required
    */
   ProxyAuthenticationRequired, /**
@@ -83,7 +86,7 @@ public enum ResponseStatus {
       case MalformedRequest:
       case MissingArgs:
       case UnsupportedHttpMethod:
-        return ResponseStatus.BadRequest;
+        return ResponseStatus.MethodNotAllowed;
       case ResourceDirty:
         return ResponseStatus.Forbidden;
       case Unauthorized:
