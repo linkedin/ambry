@@ -188,7 +188,7 @@ class AdminBlobStorageService implements BlobStorageService {
         restRequest.getSSLSession() != null ? adminMetrics.postBlobSSLMetrics : adminMetrics.postBlobMetrics;
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     Exception exception =
-        isUp ? new RestServiceException("POST is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
+        isUp ? new RestServiceException("POST is not supported. Allowed methods are: GET, HEAD, DELETE", RestServiceErrorCode.UnsupportedHttpMethod)
             : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
@@ -204,7 +204,7 @@ class AdminBlobStorageService implements BlobStorageService {
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     handlePrechecks(restRequest, restResponseChannel);
     Exception exception =
-        isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
+        isUp ? new RestServiceException("PUT is not supported. Allowed methods are: GET, HEAD, DELETE", RestServiceErrorCode.UnsupportedHttpMethod)
             : new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
