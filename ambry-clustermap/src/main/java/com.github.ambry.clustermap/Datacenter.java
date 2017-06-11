@@ -31,9 +31,7 @@ import org.slf4j.LoggerFactory;
  *
  * This class is meant to be used within the {@link StaticClusterManager}.
  */
-public class Datacenter {
-  // datacenterId = LEGACY_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
-  public static final byte LEGACY_DATACENTER_ID = -1;
+class Datacenter {
   private final HardwareLayout hardwareLayout;
   private final String name;
   private final ArrayList<DataNode> dataNodes;

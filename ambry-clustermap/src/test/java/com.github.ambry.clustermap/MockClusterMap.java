@@ -26,6 +26,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * Mock cluster map for unit tests.
@@ -187,7 +189,7 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public short getLocalDatacenterId() {
-    return Datacenter.LEGACY_DATACENTER_ID;
+    return LEGACY_DATACENTER_ID;
   }
 
   @Override

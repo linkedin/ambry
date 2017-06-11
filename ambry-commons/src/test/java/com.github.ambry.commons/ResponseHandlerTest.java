@@ -16,7 +16,6 @@ package com.github.ambry.commons;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.Datacenter;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
@@ -37,6 +36,8 @@ import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * Test handler code
@@ -48,7 +49,7 @@ public class ResponseHandlerTest {
     Set<ReplicaEventType> lastReplicaEvents;
 
     public DummyMap() {
-      lastReplicaEvents = new HashSet<ReplicaEventType>();
+      lastReplicaEvents = new HashSet<>();
       lastReplicaID = null;
     }
 
@@ -74,7 +75,7 @@ public class ResponseHandlerTest {
 
     @Override
     public short getLocalDatacenterId() {
-      return Datacenter.LEGACY_DATACENTER_ID;
+      return LEGACY_DATACENTER_ID;
     }
 
     @Override

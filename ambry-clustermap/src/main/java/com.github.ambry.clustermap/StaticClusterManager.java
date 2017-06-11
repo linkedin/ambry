@@ -28,6 +28,7 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -95,7 +96,7 @@ class StaticClusterManager implements ClusterMap {
 
   @Override
   public short getLocalDatacenterId() {
-    return Datacenter.LEGACY_DATACENTER_ID;
+    return LEGACY_DATACENTER_ID;
   }
 
   @Override

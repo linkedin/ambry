@@ -168,7 +168,7 @@ class HelixClusterManager implements ClusterMap {
 
   @Override
   public short getLocalDatacenterId() {
-    return Datacenter.LEGACY_DATACENTER_ID;
+    return LEGACY_DATACENTER_ID;
   }
 
   @Override

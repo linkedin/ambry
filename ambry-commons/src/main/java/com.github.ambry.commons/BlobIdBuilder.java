@@ -13,6 +13,8 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.PartitionId;
 
 
@@ -20,14 +22,14 @@ import com.github.ambry.clustermap.PartitionId;
  * A builder class for {@link BlobId}. This class is not thread safe.
  */
 public class BlobIdBuilder {
-  private Byte flag;
-  private Byte datacenterId;
-  private Short accountId;
-  private Short containerId;
-  private PartitionId partitionId;
+  protected Byte flag;
+  protected Byte datacenterId;
+  protected Short accountId;
+  protected Short containerId;
+  protected PartitionId partitionId;
 
   /**
-   * Constructs a {@code BlobIdBuilder}.
+   * Constructor.
    * @param partitionId The {@link PartitionId} to be set to the blob id.
    */
   public BlobIdBuilder(PartitionId partitionId) {
@@ -35,23 +37,8 @@ public class BlobIdBuilder {
   }
 
   /**
-   * Construct a {@code BlobIdBuilder}.
-   * @param flag The flag to be set to the blob id.
-   * @param datacenterId The id of the datacenter to be set to the blob id.
-   * @param accountId The id of the {@link Account} to be set to the blob id.
-   * @param containerId The id of the {@link Container} to be set to the blob id.
-   * @param partitionId The {@link PartitionId} to be set to the blob id.
-   */
-  public BlobIdBuilder(Byte flag, Byte datacenterId, Short accountId, Short containerId, PartitionId partitionId) {
-    this.flag = flag;
-    this.datacenterId = datacenterId;
-    this.accountId = accountId;
-    this.containerId = containerId;
-    this.partitionId = partitionId;
-  }
-
-  /**
-   * Sets flag to the builder.
+   * Sets flag value to the builder. There is no effect to call this method when {@link BlobId#CURRENT_VERSION} is set
+   * to {@link BlobId#BLOB_ID_V1}, and the flag value of the built {@link BlobId} will always be {@link BlobId#DEFAULT_FLAG}.
    * @param flag The flag for the blobId to set.
    * @return this builder.
    */
@@ -61,7 +48,9 @@ public class BlobIdBuilder {
   }
 
   /**
-   * Sets datacenterId to the builder.
+   * Sets datacenterId value to the builder. There is no effect to call this method when {@link BlobId#CURRENT_VERSION}
+   * is set to {@link BlobId#BLOB_ID_V1}, and the datacenterId value of the built {@link BlobId} will always be
+   * {@link com.github.ambry.clustermap.ClusterMapUtils#LEGACY_DATACENTER_ID}.
    * @param datacenterId The id of the datacenter to set.
    * @return this builder.
    */
@@ -71,7 +60,9 @@ public class BlobIdBuilder {
   }
 
   /**
-   * Sets accountId to the builder.
+   * Sets accountId value to the builder. There is no effect to call this method when {@link BlobId#CURRENT_VERSION} is
+   * set to {@link BlobId#BLOB_ID_V1}, and the accountId value of the built {@link BlobId} will always be
+   * {@link Account#LEGACY_ACCOUNT_ID}.
    * @param accountId The id of the {@link Account} to set.
    * @return this builder.
    */
@@ -81,7 +72,9 @@ public class BlobIdBuilder {
   }
 
   /**
-   * Sets containerId to the builder.
+   * Sets containerId value to the builder. There is no effect to call this method when {@link BlobId#CURRENT_VERSION}
+   * is set to {@link BlobId#BLOB_ID_V1}, and the containerId value of the built {@link BlobId} will always be
+   * {@link Container#LEGACY_CONTAINER_ID}.
    * @param containerId The id of the {@link Container} to set.
    * @return this builder.
    */
@@ -90,9 +83,8 @@ public class BlobIdBuilder {
     return this;
   }
 
-
   /**
-   * Sets partitionId to the builder.
+   * Sets partitionId value to the builder.
    * @param partitionId {@link PartitionId} to set.
    * @return this builder.
    */
