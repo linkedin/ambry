@@ -295,7 +295,7 @@ class CompactionManager {
       try {
         storesToCheck.addFirst(store);
         waitCondition.signal();
-        logger.info("Scheduled {} for compaction");
+        logger.info("Scheduled {} for compaction", store);
       } finally {
         lock.unlock();
       }

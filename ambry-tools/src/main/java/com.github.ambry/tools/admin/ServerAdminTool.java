@@ -149,12 +149,12 @@ public class ServerAdminTool implements Closeable {
     final GetOption getOption;
 
     /**
-     * The string representation of the partition to operate on (if applicable).
+     * Comma separated list of the string representations of the partitions to operate on (if applicable).
      * Applicable for: TriggerCompaction
      */
-    @Config("partition.id")
+    @Config("partition.ids")
     @Default("")
-    final String partitionId;
+    final String[] partitionIds;
 
     /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
@@ -176,7 +176,7 @@ public class ServerAdminTool implements Closeable {
       port = verifiableProperties.getIntInRange("port", 6667, 1, 65535);
       blobId = verifiableProperties.getString("blob.id", "");
       getOption = GetOption.valueOf(verifiableProperties.getString("get.option", "None"));
-      partitionId = verifiableProperties.getString("partition.id", "");
+      partitionIds = verifiableProperties.getString("partition.ids", "").split(",");
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -245,11 +245,18 @@ public class ServerAdminTool implements Closeable {
         }
         break;
       case TriggerCompaction:
-        ServerErrorCode errorCode = serverAdminTool.triggerCompaction(dataNodeId, config.partitionId, clusterMap);
-        if (errorCode == ServerErrorCode.No_Error) {
-          LOGGER.info("Compaction has been triggered for {} on {}", config.partitionId, dataNodeId);
+        if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
+          for (String partitionId : config.partitionIds) {
+            ServerErrorCode errorCode = serverAdminTool.triggerCompaction(dataNodeId, partitionId, clusterMap);
+            if (errorCode == ServerErrorCode.No_Error) {
+              LOGGER.info("Compaction has been triggered for {} on {}", partitionId, dataNodeId);
+            } else {
+              LOGGER.error("From {}, received server error code {} for trigger compaction request on {}", dataNodeId,
+                  errorCode, partitionId);
+            }
+          }
         } else {
-          LOGGER.error("From {}, received server error code {}", dataNodeId, errorCode);
+          LOGGER.error("There were no partitions provided to trigger compaction on");
         }
         break;
       default:
@@ -371,7 +378,7 @@ public class ServerAdminTool implements Closeable {
   }
 
   /**
-   * Triggers compaction on {@code dataNodeId} for the partition defined in {@link ServerAdminToolConfig#partitionId}.
+   * Triggers compaction on {@code dataNodeId} for the partition defined in {@code partitionIdStr}.
    * @param dataNodeId the {@link DataNodeId} to contact.
    * @param partitionIdStr the String representation of the {@link PartitionId} to compact.
    * @param clusterMap the {@link ClusterMap} to use.
