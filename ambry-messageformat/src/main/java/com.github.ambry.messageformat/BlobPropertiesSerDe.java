@@ -19,23 +19,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 
-// A class that derives from blob properties. It is mainly used to set
-// properties in BlobProperties that are not user editable
-class SystemMetadata extends BlobProperties {
-  public SystemMetadata(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTime) {
-    super(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds);
-    this.creationTimeInMs = creationTime;
-  }
-
-  public SystemMetadata(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTime, short accountId, short containerId, short issuerAccountId) {
-    super(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, accountId, containerId,
-        issuerAccountId);
-    this.creationTimeInMs = creationTime;
-  }
-}
-
 /**
  * Serializes and deserializes BlobProperties
  */
@@ -89,14 +72,14 @@ public class BlobPropertiesSerDe {
     String serviceId = Utils.readIntString(stream);
     switch (version) {
       case Version1:
-        toReturn = new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
+        toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
         break;
       case Version2:
         short accountId = stream.readShort();
         short containerId = stream.readShort();
         short issuerAccountId = stream.readShort();
         toReturn =
-            new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
+            new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
                 containerId, issuerAccountId);
         break;
       default:
@@ -132,6 +115,6 @@ public class BlobPropertiesSerDe {
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
-    outputBuffer.putShort(properties.getIssuerAccountId());
+    outputBuffer.putShort(properties.getCreatorAccountId());
   }
 }

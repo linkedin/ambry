@@ -129,6 +129,11 @@ public class MessageFormatRecordTest {
     }
   }
 
+  /**
+   * Tests BlobProperty format V1 serialize and deserialize. Tests for different versions of BlobProperties msg format.
+   * @throws IOException
+   * @throws MessageFormatException
+   */
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
     // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
@@ -161,15 +166,9 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
       Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
       Assert.assertEquals(properties.getServiceId(), result.getServiceId());
-      if (version == BlobPropertiesSerDe.Version1) {
-        Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getAccountId());
-        Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getContainerId());
-        Assert.assertEquals(BlobProperties.ACCOUNTID_CONTAINERID_DEFAULT_VALUE, result.getIssuerAccountId());
-      } else {
-        Assert.assertEquals(properties.getAccountId(), result.getAccountId());
-        Assert.assertEquals(properties.getContainerId(), result.getContainerId());
-        Assert.assertEquals(properties.getIssuerAccountId(), result.getIssuerAccountId());
-      }
+      Assert.assertEquals(properties.getAccountId(), result.getAccountId());
+      Assert.assertEquals(properties.getContainerId(), result.getContainerId());
+      Assert.assertEquals(properties.getCreatorAccountId(), result.getCreatorAccountId());
 
       // corrupt blob property V1 record
       stream.flip();
@@ -184,7 +183,7 @@ public class MessageFormatRecordTest {
   }
 
   // TODO: remove this once BlobProperties V2 is enabled
-  public static void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
+  private static void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
     int startOffset = outputBuffer.position();
     outputBuffer.putShort(BlobProperties_Version_V1);
     BlobPropertiesSerDe.putBlobPropertiesToBufferV2(outputBuffer, properties);
@@ -194,7 +193,7 @@ public class MessageFormatRecordTest {
   }
 
   //  TODO: remove this once BlobProperties V2 is enabled
-  public static int getBlobPropertiesV2RecordSize(BlobProperties properties) {
+  private static int getBlobPropertiesV2RecordSize(BlobProperties properties) {
     int size = BlobPropertiesSerDe.getBlobPropertiesV2SerDeSize(properties);
     return Version_Field_Size_In_Bytes + size + Crc_Size;
   }

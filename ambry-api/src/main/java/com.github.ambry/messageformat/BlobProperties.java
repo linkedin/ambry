@@ -23,18 +23,19 @@ import com.github.ambry.utils.Utils;
  */
 public class BlobProperties {
 
-  public static final short ACCOUNTID_CONTAINERID_DEFAULT_VALUE = -1;
+  public static final short ACCOUNTID_DEFAULT_VALUE = -1;
+  public static final short CONTAINERID_DEFAULT_VALUE = -1;
 
-  protected long blobSize;
-  protected String serviceId;
-  protected String ownerId;
-  protected String contentType;
-  protected boolean isPrivate;
-  protected long timeToLiveInSeconds;
-  protected long creationTimeInMs;
-  private short accountId;
-  private short containerId;
-  private short issuerAccountId;
+  private final long blobSize;
+  private final String serviceId;
+  private final String ownerId;
+  private final String contentType;
+  private final boolean isPrivate;
+  private final long timeToLiveInSeconds;
+  private final long creationTimeInMs;
+  private final short accountId;
+  private final short containerId;
+  private final short creatorAccountId;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -48,13 +49,13 @@ public class BlobProperties {
   /**
    * @param blobSize The size of the blob in bytes
    * @param serviceId The service id that is creating this blob
-   * @param accountId accountId of the user who uploaded the blob
+   * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
-   * @param issuerAccountId Issuer AccountId of the put request
+   * @param creatorAccountId refers to accountId of the creator of the blob
    */
-  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, short issuerAccountId) {
+  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, short creatorAccountId) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, issuerAccountId);
+        accountId, containerId, creatorAccountId);
   }
 
   /**
@@ -79,14 +80,14 @@ public class BlobProperties {
    * @param contentType The content type of the blob (eg: mime). Can be Null
    * @param isPrivate Is the blob secure
    * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
-   * @param accountId accountId of the user who uploaded the blob
+   * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
-   * @param issuerAccountId Issuer AccountId of the put request
+   * @param creatorAccountId refers to accountId of the creator of the blob
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, short accountId, short containerId, short issuerAccountId) {
+      long timeToLiveInSeconds, short accountId, short containerId, short creatorAccountId) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, issuerAccountId);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, creatorAccountId);
   }
 
   /**
@@ -102,7 +103,7 @@ public class BlobProperties {
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs,
-        ACCOUNTID_CONTAINERID_DEFAULT_VALUE, ACCOUNTID_CONTAINERID_DEFAULT_VALUE, ACCOUNTID_CONTAINERID_DEFAULT_VALUE);
+        ACCOUNTID_DEFAULT_VALUE, CONTAINERID_DEFAULT_VALUE, ACCOUNTID_DEFAULT_VALUE);
   }
 
   /**
@@ -113,10 +114,12 @@ public class BlobProperties {
    * @param isPrivate Is the blob secure
    * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
    * @param creationTimeInMs The time at which the blob is created.
-   * @param issuerAccountId Issuer AccountId of the put request
+   * @param accountId accountId of the user who owns the blob
+   * @param containerId containerId of the blob
+   * @param creatorAccountId refers to accountId of the creator of the blob
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, short issuerAccountId) {
+      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, short creatorAccountId) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -126,7 +129,7 @@ public class BlobProperties {
     this.timeToLiveInSeconds = timeToLiveInSeconds;
     this.accountId = accountId;
     this.containerId = containerId;
-    this.issuerAccountId = issuerAccountId;
+    this.creatorAccountId = creatorAccountId;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -153,10 +156,6 @@ public class BlobProperties {
     return serviceId;
   }
 
-  public void setServiceId(String serviceId) {
-    this.serviceId = serviceId;
-  }
-
   public long getCreationTimeInMs() {
     return creationTimeInMs;
   }
@@ -169,8 +168,8 @@ public class BlobProperties {
     return containerId;
   }
 
-  public short getIssuerAccountId() {
-    return issuerAccountId;
+  public short getCreatorAccountId() {
+    return creatorAccountId;
   }
 
   @Override
@@ -202,7 +201,7 @@ public class BlobProperties {
     }
     sb.append(", ").append("AccountId=").append(getAccountId());
     sb.append(", ").append("ContainerId=").append(getContainerId());
-    sb.append(", ").append("IssuerAccountId=").append(getIssuerAccountId());
+    sb.append(", ").append("CreatorAccountId=").append(getCreatorAccountId());
     sb.append("]");
     return sb.toString();
   }
