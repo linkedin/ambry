@@ -98,13 +98,13 @@ class FrontendMetrics {
   public final Histogram getSecurityRequestTimeInMs;
   public final Histogram headSecurityRequestTimeInMs;
   public final Histogram postSecurityRequestTimeInMs;
+  public final Histogram getPeersSecurityRequestTimeInMs;
   // AmbrySecurityService
   public final Histogram securityServiceProcessRequestTimeInMs;
   public final Histogram securityServiceProcessResponseTimeInMs;
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
   // GetPeersHandler
-  public final Histogram getPeersSecurityProcessingTimeInMs;
   public final Histogram getPeersProcessingTimeInMs;
 
   // Errors
@@ -241,6 +241,8 @@ class FrontendMetrics {
         MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityRequestCallbackProcessingTimeInMs"));
     postSecurityRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityRequestTimeInMs"));
+    getPeersSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityRequestTimeInMs"));
     // AmbrySecurityService
     securityServiceProcessRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestProcessingTimeInMs"));
@@ -250,8 +252,6 @@ class FrontendMetrics {
     idConverterProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
     // GetPeersHandler
-    getPeersSecurityProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityProcessingTimeInMs"));
     getPeersProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "ProcessingTimeInMs"));
 

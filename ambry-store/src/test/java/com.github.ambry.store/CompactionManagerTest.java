@@ -173,6 +173,9 @@ public class CompactionManagerTest {
     assertTrue("Should schedule compaction", compactionManager.scheduleNextForCompaction(lastStore));
     assertTrue("Compaction call did not come within the expected time",
         lastStore.compactCallsCountdown.await(1, TimeUnit.HOURS));
+    if (lastStore.callOrderException != null) {
+      throw lastStore.callOrderException;
+    }
     assertTrue("compact() should have been called", lastStore.compactCalled);
     compactionManager.disable();
     compactionManager.awaitTermination();

@@ -109,7 +109,7 @@ class GetPeersHandler {
     @Override
     public void onCompletion(Void result, Exception exception) {
       long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.getPeersSecurityProcessingTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
+      metrics.getPeersSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
       ReadableStreamChannel channel = null;
       try {
         if (exception == null) {
@@ -131,7 +131,7 @@ class GetPeersHandler {
         exception = e;
       } finally {
         metrics.getPeersProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - processingStartTimeMs);
-        callback.onCompletion(channel, exception);
+        callback.onCompletion(exception == null ? channel : null, exception);
       }
     }
 

@@ -80,7 +80,7 @@ public class GetPeersHandlerTest {
    */
   @Test
   public void handleGoodCaseTest() throws Exception {
-    for (String datanode : TailoredPeersClusterMap.datanodeNames) {
+    for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
       RestRequest restRequest = getRestRequest(datanode);
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
@@ -127,7 +127,7 @@ public class GetPeersHandlerTest {
     doBadArgsTest("host", null, RestServiceErrorCode.MissingArgs);
     doBadArgsTest("host", "abc", RestServiceErrorCode.InvalidArgs);
     doBadArgsTest("non-existent-host", "100", RestServiceErrorCode.NotFound);
-    String host = TailoredPeersClusterMap.datanodeNames[0].split(":")[0];
+    String host = TailoredPeersClusterMap.DATANODE_NAMES[0].split(":")[0];
     doBadArgsTest(host, "-1", RestServiceErrorCode.NotFound);
   }
 
@@ -201,7 +201,7 @@ public class GetPeersHandlerTest {
    * @throws Exception
    */
   private void verifyFailureWithMsg(String msg) throws Exception {
-    RestRequest restRequest = getRestRequest(TailoredPeersClusterMap.datanodeNames[0]);
+    RestRequest restRequest = getRestRequest(TailoredPeersClusterMap.DATANODE_NAMES[0]);
     try {
       sendRequestGetResponse(restRequest, new MockRestResponseChannel());
       fail("Request should have failed");
@@ -276,10 +276,9 @@ public class GetPeersHandlerTest {
  * Can also throw exceptions on demand.
  */
 class TailoredPeersClusterMap implements ClusterMap {
-  static final String[] datanodeNames = {"host1:100", "host1:200", "host2:100", "host3:100"};
+  static final String[] DATANODE_NAMES = {"host1:100", "host1:200", "host2:100", "host3:100"};
 
   private static final String DC_NAME = "Datacenter";
-  private static final String[] mountPathsArr = {"/tmp1", "/tmp2", "/tmp3", "/tmp4"};
 
   private final Map<String, MockDataNodeId> datanodes = new HashMap<>();
   private final Map<String, Set<String>> peerMap = new HashMap<>();
@@ -288,7 +287,7 @@ class TailoredPeersClusterMap implements ClusterMap {
   RuntimeException exceptionToThrow = null;
 
   TailoredPeersClusterMap() {
-    for (String datanodeName : datanodeNames) {
+    for (String datanodeName : DATANODE_NAMES) {
       String[] parts = datanodeName.split(":");
       Port port = new Port(Integer.parseInt(parts[1]), PortType.PLAINTEXT);
       List<String> mountPaths = Collections.singletonList("/" + datanodeName);
@@ -297,28 +296,28 @@ class TailoredPeersClusterMap implements ClusterMap {
     }
 
     List<MockDataNodeId> partNodes = new ArrayList<>();
-    partNodes.add(datanodes.get(datanodeNames[0]));
-    partNodes.add(datanodes.get(datanodeNames[1]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[0]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[1]));
     partitions.add(new MockPartitionId(0, partNodes, 0));
     partNodes.clear();
-    partNodes.add(datanodes.get(datanodeNames[0]));
-    partNodes.add(datanodes.get(datanodeNames[1]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[0]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[1]));
     partitions.add(new MockPartitionId(1, partNodes, 0));
     partNodes.clear();
-    partNodes.add(datanodes.get(datanodeNames[0]));
-    partNodes.add(datanodes.get(datanodeNames[2]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[0]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[2]));
     partitions.add(new MockPartitionId(2, partNodes, 0));
     partNodes.clear();
-    partNodes.add(datanodes.get(datanodeNames[0]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[0]));
     partitions.add(new MockPartitionId(3, partNodes, 0));
     partNodes.clear();
-    partNodes.add(datanodes.get(datanodeNames[3]));
+    partNodes.add(datanodes.get(DATANODE_NAMES[3]));
     partitions.add(new MockPartitionId(4, partNodes, 0));
 
-    peerMap.put(datanodeNames[0], new HashSet(Arrays.asList(datanodeNames[1], datanodeNames[2])));
-    peerMap.put(datanodeNames[1], new HashSet(Arrays.asList(datanodeNames[0])));
-    peerMap.put(datanodeNames[2], Collections.singleton(datanodeNames[0]));
-    peerMap.put(datanodeNames[3], Collections.EMPTY_SET);
+    peerMap.put(DATANODE_NAMES[0], new HashSet(Arrays.asList(DATANODE_NAMES[1], DATANODE_NAMES[2])));
+    peerMap.put(DATANODE_NAMES[1], new HashSet(Arrays.asList(DATANODE_NAMES[0])));
+    peerMap.put(DATANODE_NAMES[2], Collections.singleton(DATANODE_NAMES[0]));
+    peerMap.put(DATANODE_NAMES[3], Collections.EMPTY_SET);
   }
 
   @Override

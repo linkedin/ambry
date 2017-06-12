@@ -542,7 +542,7 @@ public class AmbryBlobStorageServiceTest {
             securityServiceFactory, clusterMap);
     ambryBlobStorageService.start();
     // test good requests
-    for (String datanode : TailoredPeersClusterMap.datanodeNames) {
+    for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
       String[] parts = datanode.split(":");
       String baseUri =
           AmbryBlobStorageService.OPERATION_GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
