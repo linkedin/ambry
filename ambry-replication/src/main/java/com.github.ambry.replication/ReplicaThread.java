@@ -477,8 +477,7 @@ class ReplicaThread implements Runnable {
         // deleted yet locally
         if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(messageInfo.getStoreKey())) {
           MessageFormatInputStream deleteStream = new DeleteMessageFormatInputStream(messageInfo.getStoreKey());
-          MessageInfo info =
-              new MessageInfo.Builder(messageInfo.getStoreKey(), deleteStream.getSize()).setDeleted(true).build();
+          MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);

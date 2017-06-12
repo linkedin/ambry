@@ -47,8 +47,7 @@ class MessageInfoListSerde {
     if (messageInfoList == null) {
       return Integer.BYTES;
     }
-    int size = 0;
-    size += Integer.BYTES;
+    int size = Integer.BYTES;
     for (MessageInfo messageInfo : messageInfoList) {
       size += messageInfo.getStoreKey().sizeInBytes();
       // message size
@@ -57,21 +56,33 @@ class MessageInfoListSerde {
       size += Long.BYTES;
       // whether deleted
       size += 1;
-      if (version == VERSION_2 || version == VERSION_3) {
-        // whether crc is present
-        size += 1;
-        if (messageInfo.getCrc() != null) {
-          // crc
+      switch (version) {
+        case VERSION_1:
+          break;
+        case VERSION_2:
+          // whether crc is present
+          size += 1;
+          if (messageInfo.getCrc() != null) {
+            // crc
+            size += Long.BYTES;
+          }
+          break;
+        case VERSION_3:
+          // whether crc is present
+          size += 1;
+          if (messageInfo.getCrc() != null) {
+            // crc
+            size += Long.BYTES;
+          }
+          // accountId
+          size += Short.BYTES;
+          // containerId
+          size += Short.BYTES;
+          // operationTime
           size += Long.BYTES;
-        }
-      }
-      if (version == VERSION_3) {
-        // accountId
-        size += Short.BYTES;
-        // containerId
-        size += Short.BYTES;
-        // operationTime
-        size += Long.BYTES;
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
       }
     }
     return size;
@@ -85,19 +96,32 @@ class MessageInfoListSerde {
         outputBuffer.putLong(messageInfo.getSize());
         outputBuffer.putLong(messageInfo.getExpirationTimeInMs());
         outputBuffer.put(messageInfo.isDeleted() ? DELETED : (byte) ~DELETED);
-        if (version == VERSION_2 || version == VERSION_3) {
-          Long crc = messageInfo.getCrc();
-          if (crc != null) {
-            outputBuffer.put(CRC_PRESENT);
-            outputBuffer.putLong(crc);
-          } else {
-            outputBuffer.put((byte) ~CRC_PRESENT);
-          }
-        }
-        if (version == VERSION_3) {
-          outputBuffer.putShort(messageInfo.getAccountId());
-          outputBuffer.putShort(messageInfo.getContainerId());
-          outputBuffer.putLong(messageInfo.getOperationTimeMs());
+        switch (version) {
+          case VERSION_1:
+            break;
+          case VERSION_2:
+            Long crc = messageInfo.getCrc();
+            if (crc != null) {
+              outputBuffer.put(CRC_PRESENT);
+              outputBuffer.putLong(crc);
+            } else {
+              outputBuffer.put((byte) ~CRC_PRESENT);
+            }
+            break;
+          case VERSION_3:
+            crc = messageInfo.getCrc();
+            if (crc != null) {
+              outputBuffer.put(CRC_PRESENT);
+              outputBuffer.putLong(crc);
+            } else {
+              outputBuffer.put((byte) ~CRC_PRESENT);
+            }
+            outputBuffer.putShort(messageInfo.getAccountId());
+            outputBuffer.putShort(messageInfo.getContainerId());
+            outputBuffer.putLong(messageInfo.getOperationTimeMs());
+            break;
+          default:
+            throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
         }
       }
     }
@@ -113,23 +137,24 @@ class MessageInfoListSerde {
       long ttl = stream.readLong();
       boolean isDeleted = stream.readByte() == DELETED;
       Long crc = null;
-      if (versionToDeserializeIn == VERSION_2 || versionToDeserializeIn == VERSION_3) {
-        crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
-      }
-      if (versionToDeserializeIn == VERSION_1 || versionToDeserializeIn == VERSION_2) {
-        messageListInfo.add(
-            new MessageInfo.Builder(id, size).setDeleted(isDeleted).setExpirationTimeMs(ttl).setCRC(crc).build());
-      } else if (versionToDeserializeIn == VERSION_3) {
-        short accountId = stream.readShort();
-        short containerId = stream.readShort();
-        long operationTime = stream.readLong();
-        messageListInfo.add(new MessageInfo.Builder(id, size).setDeleted(isDeleted)
-            .setExpirationTimeMs(ttl)
-            .setCRC(crc)
-            .setAccountId(accountId)
-            .setContainerId(containerId)
-            .setOperationTimeMs(operationTime)
-            .build());
+      switch (versionToDeserializeIn) {
+        case VERSION_1:
+          messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl, crc));
+          break;
+        case VERSION_2:
+          crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
+          messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl, crc));
+          break;
+        case VERSION_3:
+          crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
+          short accountId = stream.readShort();
+          short containerId = stream.readShort();
+          long operationTime = stream.readLong();
+          messageListInfo.add(new MessageInfo(id, size, isDeleted, ttl, crc, accountId, containerId, operationTime));
+          break;
+        default:
+          throw new IllegalArgumentException(
+              "Unknown version to deserialize MessageInfoList " + versionToDeserializeIn);
       }
     }
     return messageListInfo;

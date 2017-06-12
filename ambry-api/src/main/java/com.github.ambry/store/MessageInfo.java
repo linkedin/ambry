@@ -21,80 +21,145 @@ import com.github.ambry.utils.Utils;
  */
 public class MessageInfo {
 
-  public static final short ACCOUNTID_CONTAINERID_DEFAULT_VALUE = -1;
+  public static final short ACCOUNTID_DEFAULT_VALUE = -1;
+  public static final short CONTAINERID_DEFAULT_VALUE = -1;
 
   private final StoreKey key;
   private final long size;
-  private long expirationTimeInMs = Utils.Infinite_Time;
-  private boolean isDeleted = false;
-  private Long crc = null;
-  private short accountId;
-  private short containerId;
-  private long operationTimeMs;
+  private final long expirationTimeInMs;
+  private final boolean isDeleted;
+  private final Long crc;
+  private final short accountId;
+  private final short containerId;
+  private final long operationTimeMs;
 
-  public static class Builder {
-    private final StoreKey key;
-    private final long size;
-    private long expirationTimeInMs = Utils.Infinite_Time;
-    private boolean isDeleted = false;
-    private Long crc = null;
-    private short accountId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
-    private short containerId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
-    private long operationTimeMs = Utils.Infinite_Time;
-
-    public Builder(StoreKey key, long size) {
-      this.key = key;
-      this.size = size;
-    }
-
-    public Builder setExpirationTimeMs(long expirationTimeInMs) {
-      this.expirationTimeInMs = expirationTimeInMs;
-      return this;
-    }
-
-    public Builder setDeleted(boolean isDeleted) {
-      this.isDeleted = isDeleted;
-      return this;
-    }
-
-    public Builder setCRC(Long crc) {
-      this.crc = crc;
-      return this;
-    }
-
-    public Builder setAccountId(short accountId) {
-      this.accountId = accountId;
-      return this;
-    }
-
-    public Builder setContainerId(short containerId) {
-      this.containerId = containerId;
-      return this;
-    }
-
-    public Builder setOperationTimeMs(long operationTimeMs) {
-      this.operationTimeMs = operationTimeMs;
-      return this;
-    }
-
-    public MessageInfo build() {
-      return new MessageInfo(key, size, isDeleted, expirationTimeInMs, crc, accountId, containerId, operationTimeMs);
-    }
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @todo: remove this constructor once MessageInfo V3 is enabled
+   */
+  public MessageInfo(StoreKey key, long size, long expirationTimeInMs) {
+    this(key, size, false, expirationTimeInMs);
   }
 
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
    * @param size the size of this message.
-   * @param deleted whethe the message is deleted.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @todo: remove this constructor once MessageInfo V3 is enabled
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted) {
+    this(key, size, deleted, Utils.Infinite_Time);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @todo: remove this constructor once MessageInfo V3 is enabled
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs) {
+    this(key, size, deleted, expirationTimeInMs, null);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @todo: remove this constructor once MessageInfo V3 is enabled
+   */
+  public MessageInfo(StoreKey key, long size) {
+    this(key, size, Utils.Infinite_Time);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @param crc the crc associated with this message. If unavailable, pass in null.
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
+    this(key, size, deleted, expirationTimeInMs, crc, ACCOUNTID_DEFAULT_VALUE, CONTAINERID_DEFAULT_VALUE,
+        Utils.Infinite_Time);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   */
+  public MessageInfo(StoreKey key, long size, long expirationTimeInMs, short accountId, short containerId,
+      long operationTimeMs) {
+    this(key, size, false, expirationTimeInMs, accountId, containerId, operationTimeMs);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, short accountId, short containerId,
+      long operationTimeMs) {
+    this(key, size, deleted, Utils.Infinite_Time, accountId, containerId, operationTimeMs);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
+   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   */
+  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, short accountId,
+      short containerId, long operationTimeMs) {
+    this(key, size, deleted, expirationTimeInMs, null, accountId, containerId, operationTimeMs);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operation time in ms
+   */
+  public MessageInfo(StoreKey key, long size, short accountId, short containerId, long operationTimeMs) {
+    this(key, size, Utils.Infinite_Time, accountId, containerId, operationTimeMs);
+  }
+
+  /**
+   * Construct an instance of MessageInfo.
+   * @param key the {@link StoreKey} associated with this message.
+   * @param size the size of this message.
+   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param crc the crc associated with this message. If unavailable, pass in null.
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
    * @param operationTimeMs operation time in ms
    */
-  private MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc, short accountId,
+  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc, short accountId,
       short containerId, long operationTimeMs) {
+    if (operationTimeMs < Utils.Infinite_Time) {
+      throw new IllegalArgumentException("OperationTime cannot be negative " + operationTimeMs);
+    }
     this.key = key;
     this.size = size;
     this.isDeleted = deleted;

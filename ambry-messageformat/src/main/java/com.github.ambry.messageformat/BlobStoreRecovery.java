@@ -76,15 +76,16 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               // for validity
               MessageFormatRecord.deserializeUserMetadata(stream);
               MessageFormatRecord.deserializeBlob(stream);
-              MessageInfo info = new MessageInfo.Builder(key,
-                  header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize()).setExpirationTimeMs(
-                  Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()))
-                  .build();
+              MessageInfo info =
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                      Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(),
+                          properties.getTimeToLiveInSeconds()));
               messageRecovered.add(info);
             } else {
               boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
-              MessageInfo info = new MessageInfo.Builder(key,
-                  header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize()).setDeleted(deleteFlag).build();
+              MessageInfo info =
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                      deleteFlag);
               messageRecovered.add(info);
             }
             startOffset = stream.getCurrentPosition();

@@ -27,6 +27,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -249,12 +250,8 @@ public class RequestResponseTest {
 
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
-    long operationTime = random.nextLong();
-    MessageInfo messageInfo = new Builder(id1, 1000).setExpirationTimeMs(1000)
-        .setAccountId(accountId)
-        .setContainerId(containerId)
-        .setOperationTimeMs(operationTime)
-        .build();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
     ArrayList<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
     PartitionResponseInfo partitionResponseInfo =
@@ -284,10 +281,10 @@ public class RequestResponseTest {
     if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
-      Assert.assertEquals("OperationTime mismatch ", operationTime, msgInfo.getOperationTimeMs());
+      Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNTID_CONTAINERID_DEFAULT_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", ACCOUNTID_CONTAINERID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", ACCOUNTID_DEFAULT_VALUE, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", CONTAINERID_DEFAULT_VALUE, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -363,11 +360,8 @@ public class RequestResponseTest {
 
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
-    long operationTime = random.nextLong();
-    MessageInfo messageInfo = new Builder(id1, 1000).setAccountId(accountId)
-        .setContainerId(containerId)
-        .setOperationTimeMs(operationTime)
-        .build();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    MessageInfo messageInfo = new MessageInfo(id1, 1000, accountId, containerId, operationTimeMs);
     List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
     ReplicaMetadataResponseInfo responseInfo =
@@ -401,10 +395,10 @@ public class RequestResponseTest {
     if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
-      Assert.assertEquals("OperationTime mismatch ", operationTime, msgInfo.getOperationTimeMs());
+      Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNTID_CONTAINERID_DEFAULT_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", ACCOUNTID_CONTAINERID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", ACCOUNTID_DEFAULT_VALUE, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", CONTAINERID_DEFAULT_VALUE, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }

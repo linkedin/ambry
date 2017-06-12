@@ -760,8 +760,9 @@ class IndexSegment {
         getIndexEntriesSince(key, findEntriesCondition, indexEntries, currentTotalSizeOfEntriesInBytes);
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue value = indexEntry.getValue();
-      MessageInfo info = new MessageInfo.Builder(indexEntry.getKey(), value.getSize()).setDeleted(
-          value.isFlagSet(IndexValue.Flags.Delete_Index)).setExpirationTimeMs(value.getExpiresAtMs()).build();
+      MessageInfo info =
+          new MessageInfo(indexEntry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+              value.getExpiresAtMs());
       entries.add(info);
     }
     return isNewEntriesAdded;

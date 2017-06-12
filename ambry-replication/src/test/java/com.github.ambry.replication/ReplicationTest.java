@@ -240,10 +240,8 @@ public class ReplicationTest {
         }
         index++;
       }
-      messageInfoList.set(index,
-          new MessageInfo.Builder(messageInfoFound.getStoreKey(), messageInfoFound.getSize()).setDeleted(true)
-              .setExpirationTimeMs(messageInfoFound.getExpirationTimeInMs())
-              .build());
+      messageInfoList.set(index, new MessageInfo(messageInfoFound.getStoreKey(), messageInfoFound.getSize(), true,
+          messageInfoFound.getExpirationTimeInMs()));
     }
 
     @Override
@@ -510,7 +508,7 @@ public class ReplicationTest {
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
       long streamSize = byteBuffer.limit();
       for (ArrayList<MessageInfo> messageInfoList : messageInfoListofLists) {
-        messageInfoList.add(new MessageInfo.Builder(id, streamSize).build());
+        messageInfoList.add(new MessageInfo(id, streamSize));
       }
       for (ArrayList<ByteBuffer> messageBufferList : messageBufferListofLists) {
         messageBufferList.add(byteBuffer);
@@ -555,7 +553,7 @@ public class ReplicationTest {
       BlobId idExpired = new BlobId(partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
-      remoteInfoList.add(new MessageInfo.Builder(idExpired, streamSize).setExpirationTimeMs(1).build());
+      remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
       remoteBufferList.add(byteBuffer);
 
       messageInfoNode1.put(partitionIds.get(i), localInfoList);
@@ -812,7 +810,7 @@ public class ReplicationTest {
       BlobId idExpired = new BlobId(partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
-      remoteInfoList.add(new MessageInfo.Builder(idExpired, streamSize).setExpirationTimeMs(1).build());
+      remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
       remoteBufferList.add(byteBuffer);
       messageInfoNode1.put(partitionIds.get(i), localInfoList);
       bufferListNode1.put(partitionIds.get(i), localBufferList);
@@ -1022,7 +1020,7 @@ public class ReplicationTest {
         data[j] ^= 0xFF;
       }
       long corruptStreamSize = corruptByteBuffer.limit();
-      remoteInfoList.add(new MessageInfo.Builder(corruptMessageId, corruptStreamSize).build());
+      remoteInfoList.add(new MessageInfo(corruptMessageId, corruptStreamSize));
       remoteBufferList.add(corruptByteBuffer);
       partitionIdToCorruptIdMap.put(partitionIds.get(i), corruptMessageId);
 
@@ -1034,7 +1032,7 @@ public class ReplicationTest {
       BlobId idExpired = new BlobId(partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
-      remoteInfoList.add(new MessageInfo.Builder(idExpired, streamSize).setExpirationTimeMs(1).build());
+      remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
       remoteBufferList.add(byteBuffer);
 
       messageInfoNode1.put(partitionIds.get(i), localInfoList);
