@@ -98,7 +98,7 @@ class DumpDataHelper {
             deleteMsg = "delete change " + deleteRecord.isDeleted();
           } else {
             deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
-                + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInSecs();
+                + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();
           }
         }
       } else {

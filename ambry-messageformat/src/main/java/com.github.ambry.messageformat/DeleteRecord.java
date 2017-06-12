@@ -21,27 +21,29 @@ import com.github.ambry.utils.Utils;
  */
 public class DeleteRecord {
 
-  public static final short ACCOUNTID_CONTAINERID_DEFAULT_VALUE = -1;
-  private short version;
-  private boolean isDeleted;
-  private short accountId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
-  private short containerId = ACCOUNTID_CONTAINERID_DEFAULT_VALUE;
-  private int deletionTimeInSecs = (int) Utils.Infinite_Time;
+  public static final short ACCOUNTID_DEFAULT_VALUE = -1;
+  public static final short CONTAINERID_DEFAULT_VALUE = -1;
+  private final short version;
+  private final short accountId;
+  private final short containerId;
+  private final long deletionTimeInMs;
 
-  DeleteRecord(boolean isDeleted) {
-    this.isDeleted = isDeleted;
+  DeleteRecord() {
+    accountId = ACCOUNTID_DEFAULT_VALUE;
+    containerId = CONTAINERID_DEFAULT_VALUE;
+    deletionTimeInMs = Utils.Infinite_Time;
     this.version = MessageFormatRecord.Delete_Version_V1;
   }
 
-  DeleteRecord(short accountId, short containerId, int deletionTimeInSecs) {
+  DeleteRecord(short accountId, short containerId, long deletionTimeInMs) {
     this.accountId = accountId;
     this.containerId = containerId;
-    this.deletionTimeInSecs = deletionTimeInSecs;
+    this.deletionTimeInMs = deletionTimeInMs;
     this.version = MessageFormatRecord.Delete_Version_V2;
   }
 
   public boolean isDeleted() {
-    return isDeleted;
+    return true;
   }
 
   public short getAccountId() {
@@ -52,8 +54,8 @@ public class DeleteRecord {
     return containerId;
   }
 
-  public int getDeletionTimeInSecs() {
-    return deletionTimeInSecs;
+  public long getDeletionTimeInMs() {
+    return deletionTimeInMs;
   }
 
   public short getVersion() {

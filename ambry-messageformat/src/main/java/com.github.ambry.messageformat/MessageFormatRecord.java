@@ -454,7 +454,7 @@ public class MessageFormatRecord {
             "corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new DeleteRecord(isDeleted);
+      return new DeleteRecord();
     }
   }
 
@@ -480,7 +480,7 @@ public class MessageFormatRecord {
 
     public static final int AccountId_Field_Size_In_Bytes = 2;
     public static final int ContainerId_Field_Size_In_Bytes = 2;
-    public static final int Deletion_Time_Field_Size_In_Bytes = 4;
+    public static final int Deletion_Time_Field_Size_In_Bytes = 8;
 
     private static Logger logger = LoggerFactory.getLogger(Delete_Format_V2.class);
 
@@ -490,12 +490,12 @@ public class MessageFormatRecord {
     }
 
     public static void serializeDeleteRecord(ByteBuffer outputBuffer, short accountId, short containerId,
-        int deletionTimeInSecs) {
+        long deletionTimeInMs) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Delete_Version_V2);
       outputBuffer.putShort(accountId);
       outputBuffer.putShort(containerId);
-      outputBuffer.putInt(deletionTimeInSecs);
+      outputBuffer.putLong(deletionTimeInMs);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
@@ -506,15 +506,14 @@ public class MessageFormatRecord {
       DataInputStream dataStream = new DataInputStream(crcStream);
       short accountId = dataStream.readShort();
       short containerId = dataStream.readShort();
-      int deletionTimeInSecs = dataStream.readInt();
+      long deletionTimeInMs = dataStream.readLong();
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger.error(
-            "corrupt data while parsing delete record V2 Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
-        throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException("delete record data is corrupt (mismatch in CRC) ",
+            MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new DeleteRecord(accountId, containerId, deletionTimeInSecs);
+      return new DeleteRecord(accountId, containerId, deletionTimeInMs);
     }
   }
 

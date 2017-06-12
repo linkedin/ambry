@@ -17,6 +17,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -138,6 +139,7 @@ public class MessageFormatRecordTest {
   }
 
   /**
+   <<<<<<< HEAD
    * Tests {@link MessageFormatRecord#BlobProperties_Version_V1} for different versions of {@link BlobPropertiesSerDe}
    * @throws IOException
    * @throws MessageFormatException
@@ -236,6 +238,11 @@ public class MessageFormatRecordTest {
     outputBuffer.putShort(properties.getCreatorAccountId());
   }
 
+  /**
+   * Tests DeleteRecord V1 for serialization and deserialization
+   * @throws IOException
+   * @throws MessageFormatException
+   */
   @Test
   public void testDeleteRecordV1() throws IOException, MessageFormatException {
     // Test delete V1 record
@@ -253,20 +260,25 @@ public class MessageFormatRecordTest {
     deleteRecord.put(10, (byte) 4);
     try {
       MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-      Assert.assertEquals(true, false);
+      fail("Deserialization of a corrupt delete record V1 should have failed ");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }
   }
 
+  /**
+   * Tests DeleteRecord V2 for serialization and deserialization
+   * @throws IOException
+   * @throws MessageFormatException
+   */
   @Test
   public void testDeleteRecordV2() throws IOException, MessageFormatException {
     // Test delete V2 record
     ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize());
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    int deletionTimeSecs = TestUtils.RANDOM.nextInt();
-    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord, accountId, containerId, deletionTimeSecs);
+    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord, accountId, containerId, deletionTimeMs);
     deleteRecord.flip();
     DeleteRecord deserializeDeleteRecord =
         MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
@@ -274,14 +286,14 @@ public class MessageFormatRecordTest {
         MessageFormatRecord.Delete_Version_V2);
     Assert.assertEquals("AccountId mismatch ", accountId, deserializeDeleteRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch ", containerId, deserializeDeleteRecord.getContainerId());
-    Assert.assertEquals("DeletionTime mismatch ", deletionTimeSecs, deserializeDeleteRecord.getDeletionTimeInSecs());
+    Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializeDeleteRecord.getDeletionTimeInMs());
 
     // corrupt delete V2 record
     deleteRecord.flip();
     deleteRecord.put(10, (byte) 4);
     try {
       MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-      Assert.assertEquals(true, false);
+      fail("Deserialization of a corrupt delete record V2 should have failed ");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }

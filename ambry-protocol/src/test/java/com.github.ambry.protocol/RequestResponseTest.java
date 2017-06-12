@@ -303,7 +303,7 @@ public class RequestResponseTest {
     for (short version : versions) {
       short accountId = Utils.getRandomShort(random);
       short containerId = Utils.getRandomShort(random);
-      int deletionTimeSecs = random.nextInt();
+      int deletionTimeSecs = (int) (SystemTime.getInstance().seconds() + random.nextInt(60 * 60 * 24 * 365));
       int correlationId = random.nextInt();
       DeleteRequest deleteRequest;
       if (version == DeleteRequest.Delete_Request_Version_V1) {
@@ -319,7 +319,7 @@ public class RequestResponseTest {
       DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
       requestStream.readLong(); // read length
       requestStream.readShort(); // read short
-      DeleteRequest.ReceivedDeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
+      DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
       Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
       Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
       if (version == DeleteRequest.Delete_Request_Version_V2) {
