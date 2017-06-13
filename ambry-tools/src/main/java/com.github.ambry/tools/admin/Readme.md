@@ -21,18 +21,22 @@ These tools are used to dump the data parsing the storage files.
 * Compare index entries to log contents
 
 ## BlobValidator
-This tool is used to perform read operations for a blob directly from the server.
+This tool can be used validate blobs in a single replica, in all replicas in a datacenter or across all replicas.
 
 #### Operations supported:
-* Get blob(deserialize blob) for a given blob id for all its replicas
-* Get blob(deserialize blob) for a given blob id for local replicas in a datacenter
-* Get blob(deserialize blob) for a given blob id for the given replica
+* Get blob from all replicas and compare the record across replicas for a list of blob ids.
+* Get blob from all replicas in a datacenter and compare the record across replicas for a list of blob ids.
+* Get blob from a specific replica and ensure that it deserializes correctly for a list of blob ids.
 
-## AdminTool
-This tool exposes some admin APIs to get more information for debugging purposes
+## ServerAdminTool
+This tool can be used to operate on a single ambry server. Please refer to the config documentation and the class 
+documentation for usage details.
 
 #### Operations supported
-* List replicas for a blobid
+* GetBlobProperties
+* GetBlobUserMetadata
+* GetBlob
+* TriggerCompaction
 
 ## Examples
 
@@ -187,41 +191,16 @@ file.to.read=[replicaTokenFile]
 ```
 
 ### BlobValidator
+This tool can be used validate blobs in a single replica, in all replicas in a datacenter or across all replicas. Please
+refer to the config documentation and the class  documentation for usage details.
 
-#### Get blob from all replicas
 ```bash
-java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --blobIds [comma separate list
-of blobIds]
+java -cp ambry.jar com.github.ambry.tools.admin.ServerAdminTool --propsFile [props file path]
 ```
 
-#### Get blob from all replicas using a file for list of blobIds
+### ServerAdminTool
 ```bash
-java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_ALL_REPLICAS --blobIdsFilePath [Path to a
-file containing blobIds(one per line)]
-```
-
-#### Get blob from all replicas from a datacenter
-```bash
-java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_DATACENTER --fabric [fabric]
---blobIds [comma separate list of blobIds]
-```
-
-#### Get blob from a replica
-```bash
-java -cp ambry.jar com.github.ambry.tools.admin.BlobValidator --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation VALIDATE_BLOB_ON_REPLICA --blobIds [comma separate list of blobIds]
---replicaHost [replicaHost] --replicaPort [replicaPort]
-```
-
-### AdminTool
-
-#### List Replicas
-```bash
-java -cp ambry.jar com.github.ambry.tools.admin.AdminTool --hardwareLayout [HardwareLayoutFile]
---partitionLayout [PartitionLayoutFile] --typeOfOperation LIST_REPLICAS --ambryBlobId [blobid]
+java -cp ambry.jar com.github.ambry.tools.admin.ServerAdminTool --propsFile [props file path]
 ```
 
 ### ConsistencyCheckerTool

@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -52,7 +53,7 @@ public class DumpReplicaTokenTool {
   }
 
   public static void main(String args[]) throws Exception {
-    VerifiableProperties verifiableProperties = StoreToolsUtil.getVerifiableProperties(args);
+    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
     DumpReplicaTokenTool dumpReplicaTokenTool = new DumpReplicaTokenTool(verifiableProperties);
     dumpReplicaTokenTool.dumpReplicaToken();
   }
