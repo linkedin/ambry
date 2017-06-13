@@ -116,7 +116,8 @@ public class ConsistencyCheckerTool {
         realInconsistentBlobs);
     if (realInconsistentBlobs.size() > 0) {
       logger.info("\nDumping Inconsistent blobs ");
-      dumpInconsistentBlobs(rootDir.listFiles(), realInconsistentBlobs);
+      // @TODO: This needs fixes. Doesn't work as some properties in verifiableProperties needs to be fixed
+      // dumpInconsistentBlobs(rootDir.listFiles(), realInconsistentBlobs);
     }
     return realInconsistentBlobs.size() == 0;
   }
@@ -246,7 +247,7 @@ public class ConsistencyCheckerTool {
     DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties, metrics);
     for (File replica : replicas) {
       try {
-        dumpIndexTool.dumpIndexesForReplica(replica.getAbsolutePath(), blobIdList, 1);
+        dumpIndexTool.dumpIndexesForReplica(replica.getAbsolutePath(), blobIdList, Integer.MAX_VALUE);
       } catch (Exception e) {
         logger.error("Could not complete processing for {}", replica, e);
       }
