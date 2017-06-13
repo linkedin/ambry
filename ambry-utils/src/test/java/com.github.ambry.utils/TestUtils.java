@@ -73,6 +73,7 @@ public class TestUtils {
    * @param latch The latch to await on.
    * @param timeoutMs Timeout in millisecond.
    * @throws TimeoutException If awaits for more than the specified time, throw a {@link TimeoutException}.
+   * @throws InterruptedException If wait is interrupted.
    */
   public static void awaitLatchOrTimeout(CountDownLatch latch, long timeoutMs)
       throws TimeoutException, InterruptedException {

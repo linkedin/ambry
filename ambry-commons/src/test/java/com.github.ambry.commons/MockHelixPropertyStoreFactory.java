@@ -43,7 +43,8 @@ public class MockHelixPropertyStoreFactory<T> extends HelixPropertyStoreFactory<
   }
 
   @Override
-  public HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig, List<String> subscribedPaths) {
+  public HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig,
+      List<String> subscribedPaths) {
     if (storeConfig == null) {
       throw new IllegalArgumentException("storeConfig cannot be null");
     }

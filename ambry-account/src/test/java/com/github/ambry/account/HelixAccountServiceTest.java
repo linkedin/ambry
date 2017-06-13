@@ -382,8 +382,7 @@ public class HelixAccountServiceTest {
 
   /**
    * Tests updating a {@link Account}, which has the same id and name as an existing record, and will replace the
-   * existing record. This test corresponds to case A specified in the JavaDoc of
-   * {@link HelixAccountService#updateAccounts(Collection)}.
+   * existing record. This test corresponds to case A specified in the JavaDoc of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
   @Test
@@ -399,7 +398,7 @@ public class HelixAccountServiceTest {
   /**
    * Tests updating a {@link Account}, which has the same id as an existing record and a non-conflicting name with any
    * of the existing record. The new record will replace the existing record. This test corresponds to case B specified
-   * in the JavaDoc of {@link HelixAccountService#updateAccounts(Collection)}.
+   * in the JavaDoc of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
   @Test
@@ -415,7 +414,7 @@ public class HelixAccountServiceTest {
   /**
    * Tests updating a {@link Account}, which has a new id and name different from any of the existing record. The
    * new record will replace the existing record. This test corresponds to case C specified in the JavaDoc of
-   * {@link HelixAccountService#updateAccounts(Collection)}.
+   * {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
   @Test
@@ -430,7 +429,7 @@ public class HelixAccountServiceTest {
 
   /**
    * Tests updating a {@link Account}, which has a new id but a name conflicting with an existing record. The update
-   * operation will fail. This test corresponds to case D specified in the JavaDoc of {@link HelixAccountService#updateAccounts(Collection)}.
+   * operation will fail. This test corresponds to case D specified in the JavaDoc of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
   @Test
@@ -446,7 +445,7 @@ public class HelixAccountServiceTest {
   /**
    * Tests updating a {@link Account}, which has the same id as an existing record, but the name conflicting with
    * another existing record. The update operation will fail. This test corresponds to case E specified in the JavaDoc
-   * of {@link HelixAccountService#updateAccounts(Collection)}.
+   * of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
   @Test

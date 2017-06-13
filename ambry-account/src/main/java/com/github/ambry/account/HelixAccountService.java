@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  *   It is internally configured with the information where to fetch a full set of {@link Account} metadata from
  *   the {@link HelixPropertyStore}, and where in the {@link HelixPropertyStore} to update {@link Account} metadata.
  *   The full {@link Account} metadata will be cached locally, so serving an {@link Account} query will not incur
- *   any I/O operation.
+ *   any I/O operation, and the calls to a {@code HelixAccountService} is not blocking.
  * </p>
  * <p>
  *   When a {@link HelixAccountService} starts up, it will automatically fetch a full set of {@link Account} metadata
@@ -55,29 +55,16 @@ import org.slf4j.LoggerFactory;
  * </p>
  * <pre>
  * {
- *  {@link #ACCOUNT_METADATA_MAP_KEY} : accountMap
+ *  {@link #ACCOUNT_METADATA_MAP_KEY} : accountMap &#60String, String&#62
  * }
  * </pre>
- * where {@code accountMap} is a {@link Map} from accountId String to {@link Account} JSON string.
  * <p>
- *   When updating {@link Account}s, {@code HelixAccountService} ensures that there is no conflict between the
- *   {@link Account}s to update and the existing {@link Account}s. Below lists the cases how to handle possible
- *   conflict cases.
+ * where {@code accountMap} is a {@link Map} from accountId String to {@link Account} JSON string.
  * </p>
- * <pre>
- * Existing account in HelixPropertyStore
- * AccountId     AccountName
- * 1             "a"
- * 2             "b"
- *
- * Account to update
- * Case   AccountId   AccountName   If Conflict    Treatment                    Conflict reason
- * A      1           "a"           no             replace existing record      N/A
- * B      1           "c"           no             replace existing record      N/A
- * C      3           "c"           no             add a new record             N/A
- * D      3           "a"           yes            fail update                  conflicts with existing name.
- * E      1           "b"           yes            fail update                  conflicts with existing name.
- * </pre>
+ * <p>
+ *   Limited by {@link HelixPropertyStore}, the total size of {@link Account} data stored on the {@link ZNRecord} cannot
+ *   exceed 1MB.
+ * </p>
  */
 public class HelixAccountService implements AccountService, TopicListener<String> {
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
@@ -138,9 +125,6 @@ public class HelixAccountService implements AccountService, TopicListener<String
    *   Returning {@code true} indicates that the accounts have been successfully written into {@link HelixPropertyStore},
    *   {@code false} otherwise.
    * </p>
-   *
-   * @throws IllegalArgumentException if {@code accounts} is null, or there is conflict in the accounts to update, or
-   *                                  there is conflict between the account to update and the existing {@link Account}.
    */
   @Override
   public boolean updateAccounts(Collection<Account> accounts) {

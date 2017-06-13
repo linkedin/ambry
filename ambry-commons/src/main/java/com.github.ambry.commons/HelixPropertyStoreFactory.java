@@ -39,7 +39,8 @@ public class HelixPropertyStoreFactory<T> {
    * @param subscribedPaths A list of paths that could potentially be listened.
    * @return A {@link HelixPropertyStore} instance.
    */
-  public HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig, List<String> subscribedPaths) {
+  public HelixPropertyStore<T> getHelixPropertyStore(HelixPropertyStoreConfig storeConfig,
+      List<String> subscribedPaths) {
     if (storeConfig == null) {
       throw new IllegalArgumentException("zkClientConnectString cannot be null");
     }
