@@ -123,10 +123,12 @@ public class IndexWritePerformance {
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       writer = new FileWriter(logFile);
 
-      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
+      MetricRegistry metricRegistry = new MetricRegistry();
+      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), metricRegistry);
       File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
       reserveFileDir.deleteOnExit();
-      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir, 1);
+      DiskSpaceAllocator diskSpaceAllocator =
+          new DiskSpaceAllocator(reserveFileDir, 1, new StorageManagerMetrics(metricRegistry));
       Log log = new Log(System.getProperty("user.dir"), 10, 10, diskSpaceAllocator, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);

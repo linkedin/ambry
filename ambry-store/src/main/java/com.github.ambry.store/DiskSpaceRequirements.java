@@ -28,8 +28,8 @@ class DiskSpaceRequirements {
    * @param segmentsNeeded the number of additional segments needed in the disk space pool.
    * @param swapSegmentsInUse the number of swap segments currently in use by this in entity.
    */
-  public DiskSpaceRequirements(long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
-    if (segmentSizeInBytes < 0 || segmentsNeeded < 0 || swapSegmentsInUse < 0) {
+  DiskSpaceRequirements(long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
+    if (segmentSizeInBytes <= 0 || segmentsNeeded < 0 || swapSegmentsInUse < 0) {
       throw new IllegalArgumentException(
           "Arguments cannot be negative. segmentSizeInBytes: " + segmentSizeInBytes + ", segmentsNeeded: "
               + segmentsNeeded + ", swapSegmentsInUse: " + swapSegmentsInUse);
@@ -42,21 +42,21 @@ class DiskSpaceRequirements {
   /**
    * @return the size of each segment needed, in bytes.
    */
-  public long getSegmentsNeeded() {
+  long getSegmentsNeeded() {
     return segmentsNeeded;
   }
 
   /**
    * @return the number of additional segments needed in the disk space pool
    */
-  public long getSegmentSizeInBytes() {
+  long getSegmentSizeInBytes() {
     return segmentSizeInBytes;
   }
 
   /**
    * @return the number of swap segments currently in use by this entity.
    */
-  public long getSwapSegmentsInUse() {
+  long getSwapSegmentsInUse() {
     return swapSegmentsInUse;
   }
 

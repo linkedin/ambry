@@ -85,7 +85,7 @@ public class StorageManagerTest {
       }
     }
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
-    Utils.deleteDirectory(new File(mountPathToDelete));
+    Utils.deleteFileOrDirectory(new File(mountPathToDelete));
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
@@ -206,6 +206,7 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
     for (ReplicaId replica : replicas) {
+      System.out.println(replica.toString());
       Store store = storageManager.getStore(replica.getPartitionId());
       assertTrue("Store should be started", ((BlobStore) store).isStarted());
       assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(replica.getPartitionId()));

@@ -29,9 +29,9 @@ public class DiskSpaceRequirementsTest {
    */
   @Test
   public void invalidArgumentsTest() {
-    doInvalidArgumentsTest(-1, 0, 0);
-    doInvalidArgumentsTest(0, -1, 0);
-    doInvalidArgumentsTest(0, 0, -1);
+    doInvalidArgumentsTest(0, 0, 0);
+    doInvalidArgumentsTest(1, -1, 0);
+    doInvalidArgumentsTest(1, 0, -1);
   }
 
   /**
@@ -39,7 +39,7 @@ public class DiskSpaceRequirementsTest {
    */
   @Test
   public void validArgumentsTest() {
-    long segmentSizeInBytes = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
+    long segmentSizeInBytes = Utils.getRandomLong(RANDOM, Long.MAX_VALUE) + 1;
     long segmentsNeeded = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
     long swapUsed = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
     DiskSpaceRequirements requirements = new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapUsed);

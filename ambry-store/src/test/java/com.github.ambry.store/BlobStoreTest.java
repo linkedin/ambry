@@ -675,17 +675,51 @@ public class BlobStoreTest {
     verifyOperationFailuresOnInactiveStore(store);
   }
 
+  /**
+   * Tests that {@link BlobStore#getDiskSpaceRequirements()} functions as expected.
+   * @throws StoreException
+   */
   @Test
-  public void diskSpaceRequirementsTest() throws StoreException {
+  public void diskSpaceRequirementsTest() throws Exception {
+    // expect three log segments to be already allocated (from setup process)
+    int segmentsAllocated = 3;
+    doDiskSpaceRequirementsTest(segmentsAllocated, 0);
+
+    // try adding fake swap segment log segment.
+    File tempFile = File.createTempFile("sample-swap",
+        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir);
+    doDiskSpaceRequirementsTest(segmentsAllocated, 1);
+    assertTrue("Could not delete temp file", tempFile.delete());
+
+    addCuratedData(SEGMENT_CAPACITY);
+    segmentsAllocated += 1;
+    doDiskSpaceRequirementsTest(segmentsAllocated, 0);
+
+    File.createTempFile("sample-swap",
+        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir).deleteOnExit();
+    File.createTempFile("sample-swap",
+        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir).deleteOnExit();
+    addCuratedData(SEGMENT_CAPACITY);
+    segmentsAllocated += 1;
+    doDiskSpaceRequirementsTest(segmentsAllocated, 2);
+  }
+
+  /**
+   * Run the {@link BlobStore#getDiskSpaceRequirements()} test.
+   * @param segmentsAllocated the number of segments currently used by the blob store.
+   * @param numSwapSegments the number of swap segments currently used by the blob store.
+   * @throws Exception
+   */
+  private void doDiskSpaceRequirementsTest(int segmentsAllocated, int numSwapSegments) throws Exception {
     DiskSpaceRequirements requirements = store.getDiskSpaceRequirements();
     if (!isLogSegmented) {
       assertNull("Expected null DiskSpaceRequirements for non segmented log", requirements);
-      return;
+    } else {
+      assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
+      // expect three log segments to be already allocated (from setup process)
+      assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - segmentsAllocated, requirements.getSegmentsNeeded());
+      assertEquals(numSwapSegments, requirements.getSwapSegmentsInUse());
     }
-    assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
-    // expect three log segments to be already allocated (from setup process)
-    assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - 3, requirements.getSegmentsNeeded());
-    assertEquals(0, requirements.getSwapSegmentsInUse());
   }
 
   // helpers

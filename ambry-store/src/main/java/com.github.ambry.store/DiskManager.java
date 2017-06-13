@@ -48,7 +48,7 @@ class DiskManager {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
-  private volatile boolean running = false;
+  private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -73,8 +73,8 @@ class DiskManager {
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
-    diskSpaceAllocator = new DiskSpaceAllocator(new File(disk.getMountPath(), diskManagerConfig.diskReserveFileDirName),
-        diskManagerConfig.diskRequiredSwapSegmentsPerSize);
+    diskSpaceAllocator = new DiskSpaceAllocator(new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
+        diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();

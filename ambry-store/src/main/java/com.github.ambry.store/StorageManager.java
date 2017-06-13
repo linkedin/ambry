@@ -94,11 +94,12 @@ public class StorageManager {
     /* NOTE: We must ensure that the store never performs hard deletes on the part of the log that is not yet flushed.
        We do this by making sure that the retention period for deleted messages (which determines the end point for hard
        deletes) is always greater than the log flush period. */
-    if (config.storeDeletedMessageRetentionDays < TimeUnit.SECONDS.toDays(storeConfig.storeDataFlushIntervalSeconds) + 1) {
+    if (storeConfig.storeDeletedMessageRetentionDays
+        < TimeUnit.SECONDS.toDays(storeConfig.storeDataFlushIntervalSeconds) + 1) {
       throw new StoreException("Message retention days must be greater than the store flush interval period",
           StoreErrorCodes.Initialization_Error);
     }
-    if (diskManagerConfig.diskReserveFileDirName.length() == 0) {
+    if (diskManagerConfig.diskManagerReserveFileDirName.length() == 0) {
       throw new StoreException("Reserve file directory name is empty", StoreErrorCodes.Initialization_Error);
     }
   }
@@ -113,15 +114,12 @@ public class StorageManager {
       logger.info("Starting storage manager");
       List<Thread> startupThreads = new ArrayList<>();
       for (final DiskManager diskManager : diskManagers) {
-        Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), new Runnable() {
-          @Override
-          public void run() {
-            try {
-              diskManager.start();
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              logger.error("Disk manager startup thread interrupted for disk " + diskManager.getDisk(), e);
-            }
+        Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), () -> {
+          try {
+            diskManager.start();
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Disk manager startup thread interrupted for disk " + diskManager.getDisk(), e);
           }
         }, false);
         thread.start();
@@ -168,15 +166,12 @@ public class StorageManager {
       logger.info("Shutting down storage manager");
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final DiskManager diskManager : diskManagers) {
-        Thread thread = Utils.newThread("disk-manager-shutdown-" + diskManager.getDisk(), new Runnable() {
-          @Override
-          public void run() {
-            try {
-              diskManager.shutdown();
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              logger.error("Disk manager shutdown thread interrupted for disk " + diskManager.getDisk(), e);
-            }
+        Thread thread = Utils.newThread("disk-manager-shutdown-" + diskManager.getDisk(), () -> {
+          try {
+            diskManager.shutdown();
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Disk manager shutdown thread interrupted for disk " + diskManager.getDisk(), e);
           }
         }, false);
         thread.start();

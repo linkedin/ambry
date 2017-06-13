@@ -261,11 +261,11 @@ public class StatsManagerTest {
    * predefined values.
    */
   private static class MockStorageManager extends StorageManager {
-    private static final VerifiableProperties PROPS = new VerifiableProperties(new Properties());
+    private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
     private final Map<PartitionId, Store> storeMap;
 
     MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
-      super(new StoreConfig(PROPS), new DiskManagerConfig(PROPS), new MetricRegistry(), new ArrayList<>(), null, null,
+      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), new MetricRegistry(), new ArrayList<>(), null, null,
           null, SystemTime.getInstance(), Utils.newScheduler(1, false));
       storeMap = map;
     }

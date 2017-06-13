@@ -41,7 +41,6 @@ import static org.junit.Assert.*;
  * Tests for {@link StoreMessageReadSet} and {@link BlobReadOptions}.
  */
 public class StoreMessageReadSetTest {
-  private static final DiskSpaceAllocator DISK_SPACE_ALLOCATOR = StoreTestUtils.getDiskSpaceAllocator();
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
   static {
@@ -82,7 +81,8 @@ public class StoreMessageReadSetTest {
   public void storeMessageReadSetTest() throws IOException {
     int logCapacity = 2000;
     int segCapacity = 1000;
-    Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, DISK_SPACE_ALLOCATOR, metrics);
+    Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+        metrics);
     try {
       LogSegment firstSegment = log.getFirstSegment();
       int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());
@@ -198,7 +198,9 @@ public class StoreMessageReadSetTest {
     int logCapacity = 2000;
     int[] segCapacities = {2000, 1000};
     for (int segCapacity : segCapacities) {
-      Log log = new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, DISK_SPACE_ALLOCATOR, metrics);
+      Log log =
+          new Log(tempDir.getAbsolutePath(), logCapacity, segCapacity, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+              metrics);
       try {
         LogSegment firstSegment = log.getFirstSegment();
         int availableSegCapacity = (int) (segCapacity - firstSegment.getStartOffset());

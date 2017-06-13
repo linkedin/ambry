@@ -135,8 +135,6 @@ public class HardDeleterTest {
     }
   }
 
-  private static final DiskSpaceAllocator DISK_SPACE_ALLOCATOR = StoreTestUtils.getDiskSpaceAllocator();
-
   private MockIndex index = null;
   private HardDeleteTestHelper helper = null;
   private MockTime time = null;
@@ -151,7 +149,7 @@ public class HardDeleterTest {
       c.delete();
     }
     scheduler = Utils.newScheduler(1, false);
-    log = new Log(rootDirectory.getAbsolutePath(), 10000, 10000, DISK_SPACE_ALLOCATOR,
+    log = new Log(rootDirectory.getAbsolutePath(), 10000, 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
         new StoreMetrics(rootDirectory.getAbsolutePath(), new MetricRegistry()));
     Properties props = new Properties();
     // the test will set the tokens, so disable the index persistor.

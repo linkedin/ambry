@@ -29,6 +29,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
@@ -776,20 +781,24 @@ public class Utils {
   }
 
   /**
-   * Delete a directory recursively.
-   * @param file the directory to delete.
-   * @return {@code true} if successful, {@code false} if all files could not be deleted.
+   * Delete a directory recursively or delete a single file.
+   * @param file the file or directory to delete.
+   * @throws IOException if all files could not be deleted.
    */
-  public static boolean deleteDirectory(File file) {
-    File[] contents = file.listFiles();
-    if (contents != null) {
-      for (File f : contents) {
-        if (!deleteDirectory(f)) {
-          return false;
-        }
+  public static void deleteFileOrDirectory(File file) throws IOException {
+    Files.walkFileTree(file.toPath(), new SimpleFileVisitor<Path>() {
+      @Override
+      public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        Files.delete(file);
+        return FileVisitResult.CONTINUE;
       }
-    }
-    return file.delete();
+
+      @Override
+      public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+        Files.delete(dir);
+        return FileVisitResult.CONTINUE;
+      }
+    });
   }
 
   /**

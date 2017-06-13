@@ -32,32 +32,49 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * {@link DiskSpaceAllocator} handles the allocation of disk space to entities that require disk segments, such as the
+ * {@link BlobStore}s and {@link BlobStoreCompactor}s. The disk segments will be preallocated on platforms that support
+ * the fallocate syscall. The entities that require disk space register there requirements using the
+ * {@link #initializePool(Collection)} method. Disk space is allocated using the
+ * {@link DiskSpaceAllocator#allocate(File, long)} method. If a segment matching the requested size is not in the pool,
+ * it will be created at runtime. Disk space is returned to the pool using the
+ * {@link DiskSpaceAllocator#free(File, long)} method. It is up to the requester to keep track of the size of the
+ * segment requested.
+ *
+ * NOTE: Segments can be allocated and freed before pool initialization.  This will fall back to preallocating at
+ * runtime if the current pool does not include a segment of the correct size.
+ */
 class DiskSpaceAllocator {
   private static final Logger LOGGER = LoggerFactory.getLogger(DiskSpaceAllocator.class);
   private static final String RESERVE_FILE_PREFIX = "reserve_";
+  private static final String FILE_SIZE_DIR_PREFIX = "reserve_size_";
   private static final FileFilter RESERVE_FILE_FILTER =
       pathname -> pathname.isFile() && pathname.getName().startsWith(RESERVE_FILE_PREFIX);
-  private static final FileFilter FILE_SIZE_DIR_FILTER = pathname -> {
-    try {
-      return pathname.isDirectory() && Long.parseLong(pathname.getName()) >= 0;
-    } catch (NumberFormatException e) {
-      return false;
-    }
-  };
-
+  private static final FileFilter FILE_SIZE_DIR_FILTER =
+      pathname -> pathname.isDirectory() && getFileSizeForDirName(pathname.getName()) != null;
   private final ReserveFileMap reserveFiles;
   private final File reserveDir;
   private final long requiredSwapSegmentsPerSize;
+  private final StorageManagerMetrics metrics;
   private volatile boolean poolInitialized = false;
 
   /**
+   * This constructor will create the reserve directory if it does not exist and inventory any existing reserve files
+   * in the pool (adding them to the in-memory map). Any files that already exist in the pool can be checked out prior
+   * to calling {@link #initializePool(Collection)}. If a file of the correct size does not yet exist, a new file
+   * will be allocated at runtime.
    * @param reserveDir the directory where reserve files will reside. If this directory does not exist yet, it will
    *                   be created.
+   * @param requiredSwapSegmentsPerSize the number of swap segments needed for each segment size in the pool.
+   * @param metrics a {@link StorageManagerMetrics} instance.
    * @throws StoreException
    */
-  DiskSpaceAllocator(File reserveDir, long requiredSwapSegmentsPerSize) throws StoreException {
+  DiskSpaceAllocator(File reserveDir, long requiredSwapSegmentsPerSize, StorageManagerMetrics metrics)
+      throws StoreException {
     this.reserveDir = reserveDir;
     this.requiredSwapSegmentsPerSize = requiredSwapSegmentsPerSize;
+    this.metrics = metrics;
     try {
       prepareDirectory(reserveDir);
       reserveFiles = inventoryExistingReserveFiles();
@@ -67,25 +84,49 @@ class DiskSpaceAllocator {
   }
 
   /**
-   * @param requirementsList a list of {@link DiskSpaceRequirements}s objects that describe the number and segment size
-   *                         needed by each store.
-   * @throws StoreException
+   * This method will initialize the pool such that it matches the {@link DiskSpaceRequirements} passed in.
+   * The following steps are performed:
+   * <ol>
+   *   <li>
+   *     The requirements list is aggregated into an overall requirements map. This stage will ensure that the swap
+   *     segments requirements per each segment size described in a DiskSpaceRequirements struct (even if a blob store
+   *     needs 0 additional non-swap segments). The number of swap segments needed is calculated by counting the total
+   *     number of swap segments allocated to the stores (as described by the disk space requirements). If the number
+   *     of swap segments allocated is less than the required swap segment count (passed in via configuration) for a
+   *     certain segment size, the difference is added into the overall requirements map. This ensures that the total
+   *     (allocated and pooled) swap segment count equals the required count.
+   *   </li>
+   *   <li>
+   *     Unneeded segments are deleted. These are segments that were present in the pool on disk, but are not needed
+   *     according to the overall requirements.
+   *   </li>
+   *   <li>
+   *     Any additional required segments are added. For each segment size, additional files will be preallocated to
+   *     until the number of files at that size match the overall requirements map. If fallocate is supported on the
+   *     system, and the call fails, pool initialization will fail.
+   *   </li>
+   * </ol>
+   * @param requirementsList a collection of {@link DiskSpaceRequirements}s objects that describe the number and
+   *                         segment size needed by each store.
+   * @throws StoreException if the pool could not be allocated to meet the provided requirements
    */
   void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
     reserveFiles.rwLock.writeLock().lock();
+    long startTime = System.currentTimeMillis();
     try {
-      try {
-        Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
-        deleteUnneededSegments(overallRequirements);
-        addRequiredSegments(overallRequirements);
-        // TODO fill the disk with additional swap segments
-        poolInitialized = true;
-      } catch (Exception e) {
-        throw new StoreException("Exception while initializing DiskSpaceAllocator pool", e,
-            StoreErrorCodes.Initialization_Error);
-      }
+      Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
+      deleteExtraSegments(overallRequirements);
+      addRequiredSegments(overallRequirements);
+      // TODO fill the disk with additional swap segments
+      poolInitialized = true;
+    } catch (Exception e) {
+      throw new StoreException("Exception while initializing DiskSpaceAllocator pool", e,
+          StoreErrorCodes.Initialization_Error);
     } finally {
       reserveFiles.rwLock.writeLock().unlock();
+      long elapsedTime = System.currentTimeMillis() - startTime;
+      LOGGER.info("initializePool took {} ms", elapsedTime);
+      metrics.diskSpaceAllocatorStartTimeMs.update(elapsedTime);
     }
   }
 
@@ -94,15 +135,17 @@ class DiskSpaceAllocator {
    * provided file path
    * @param destinationFile the file path to move the allocated file to.
    * @param sizeInBytes the size in bytes of the requested file.
-   * @throws IOException
+   * @throws IOException if the file could not be moved to the destination.
    */
   void allocate(File destinationFile, long sizeInBytes) throws IOException {
     if (!poolInitialized) {
-      LOGGER.debug("Allocating segment before pool is fully initialized to " + destinationFile.getAbsolutePath());
+      LOGGER.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
+          destinationFile.getAbsolutePath());
     }
     File reserveFile = reserveFiles.remove(sizeInBytes);
     if (reserveFile == null) {
       LOGGER.info("Segment of size {} not found in pool; attempting to create a new preallocated file", sizeInBytes);
+      metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
       reserveFile = createReserveFile(sizeInBytes);
     }
     if (destinationFile.exists() || !reserveFile.renameTo(destinationFile)) {
@@ -120,7 +163,8 @@ class DiskSpaceAllocator {
    */
   void free(File fileToReturn, long sizeInBytes) throws IOException {
     if (!poolInitialized) {
-      LOGGER.debug("Freeing segment before pool is fully initialized");
+      LOGGER.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
+          fileToReturn.getAbsolutePath());
     }
     // For now, we delete the file and create a new one. Newer linux kernel versions support
     // additional fallocate flags, which will be useful for cleaning up returned files.
@@ -132,31 +176,54 @@ class DiskSpaceAllocator {
   }
 
   /**
-   * @return the number of swap segments that should be created in the pool for each segment size.
-   */
-  long getSwapSegmentsPerSize() {
-    return requiredSwapSegmentsPerSize;
-  }
-
-  /**
    * Inventory existing reserve directories and generate a {@link ReserveFileMap}.
    * @return a populated {@link ReserveFileMap}
    */
-  private ReserveFileMap inventoryExistingReserveFiles() {
+  private ReserveFileMap inventoryExistingReserveFiles() throws IOException {
     ReserveFileMap reserveFiles = new ReserveFileMap();
     File[] fileSizeDirs = reserveDir.listFiles(FILE_SIZE_DIR_FILTER);
-    if (fileSizeDirs != null) {
-      for (File fileSizeDir : fileSizeDirs) {
-        long sizeInBytes = Long.parseLong(fileSizeDir.getName());
-        File[] reserveFilesForSize = fileSizeDir.listFiles(RESERVE_FILE_FILTER);
-        if (reserveFilesForSize != null) {
-          for (File reserveFile : reserveFilesForSize) {
-            reserveFiles.add(sizeInBytes, reserveFile);
-          }
-        }
+    if (fileSizeDirs == null) {
+      throw new IOException("Error while listing directories in " + reserveDir.getAbsolutePath());
+    }
+    for (File fileSizeDir : fileSizeDirs) {
+      long sizeInBytes = getFileSizeForDirName(fileSizeDir.getName());
+      File[] reserveFilesForSize = fileSizeDir.listFiles(RESERVE_FILE_FILTER);
+      if (reserveFilesForSize == null) {
+        throw new IOException("Error while listing files in " + fileSizeDir.getAbsolutePath());
+      }
+      for (File reserveFile : reserveFilesForSize) {
+        reserveFiles.add(sizeInBytes, reserveFile);
       }
     }
     return reserveFiles;
+  }
+
+  /**
+   * Iterates over the provided requirements and creates a map that describes the number of segments that need to be in
+   * the pool for each segment size.
+   * @param requirementsList the collection of {@link DiskSpaceRequirements} objects to be accumulated
+   * @return a {@link Map} from segment sizes to the number of reserve segments needed at that size.
+   */
+  private Map<Long, Long> getOverallRequirements(Collection<DiskSpaceRequirements> requirementsList) {
+    Map<Long, Long> overallRequirements = new HashMap<>();
+    Map<Long, Long> swapSegmentsUsed = new HashMap<>();
+
+    for (DiskSpaceRequirements requirements : requirementsList) {
+      long segmentSizeInBytes = requirements.getSegmentSizeInBytes();
+      overallRequirements.put(segmentSizeInBytes,
+          overallRequirements.getOrDefault(segmentSizeInBytes, 0L) + requirements.getSegmentsNeeded());
+      swapSegmentsUsed.put(segmentSizeInBytes,
+          swapSegmentsUsed.getOrDefault(segmentSizeInBytes, 0L) + requirements.getSwapSegmentsInUse());
+    }
+    for (Map.Entry<Long, Long> sizeAndSegmentsNeeded : overallRequirements.entrySet()) {
+      long sizeInBytes = sizeAndSegmentsNeeded.getKey();
+      long origSegmentsNeeded = sizeAndSegmentsNeeded.getValue();
+      // Ensure that swap segments are only added to the requirements if the number of swap segments allocated to
+      // stores is lower than the minimum required swap segments.
+      long swapSegmentsNeeded = Math.max(requiredSwapSegmentsPerSize - swapSegmentsUsed.get(sizeInBytes), 0L);
+      overallRequirements.put(sizeInBytes, origSegmentsNeeded + swapSegmentsNeeded);
+    }
+    return Collections.unmodifiableMap(overallRequirements);
   }
 
   /**
@@ -164,14 +231,12 @@ class DiskSpaceAllocator {
    * @param overallRequirements a map between segment sizes in bytes and the number of segments needed for that size.
    * @throws IOException
    */
-  private void deleteUnneededSegments(Map<Long, Long> overallRequirements) throws IOException {
+  private void deleteExtraSegments(Map<Long, Long> overallRequirements) throws IOException {
     for (long sizeInBytes : reserveFiles.getFileSizeSet()) {
       Long segmentsNeeded = overallRequirements.get(sizeInBytes);
       if (segmentsNeeded == null || segmentsNeeded == 0) {
-        File dirToDelete = new File(reserveDir, Long.toString(sizeInBytes));
-        if (!Utils.deleteDirectory(dirToDelete)) {
-          throw new IOException("Could not delete the following reserve directory: " + dirToDelete.getAbsolutePath());
-        }
+        File dirToDelete = new File(reserveDir, generateFileSizeDirName(sizeInBytes));
+        Utils.deleteFileOrDirectory(dirToDelete);
       } else {
         while (reserveFiles.getCount(sizeInBytes) > segmentsNeeded) {
           File fileToDelete = reserveFiles.remove(sizeInBytes);
@@ -205,39 +270,13 @@ class DiskSpaceAllocator {
    * @throws IOException if the file could not be created, or if an error occured during the fallocate call.
    */
   private File createReserveFile(long sizeInBytes) throws IOException {
-    File fileSizeDir = prepareDirectory(new File(reserveDir, Long.toString(sizeInBytes)));
+    File fileSizeDir = prepareDirectory(new File(reserveDir, FILE_SIZE_DIR_PREFIX + sizeInBytes));
     File reserveFile;
     do {
       reserveFile = new File(fileSizeDir, generateFilename());
     } while (!reserveFile.createNewFile());
     Utils.preAllocateFileIfNeeded(reserveFile, sizeInBytes);
     return reserveFile;
-  }
-
-  /**
-   * @param requirementsList the list of {@link DiskSpaceRequirements} objects to be accumulated
-   * @return a {@link Map} from segment sizes to the number of reserve segments needed at that size.
-   */
-  private Map<Long, Long> getOverallRequirements(Collection<DiskSpaceRequirements> requirementsList) {
-    Map<Long, Long> overallRequirements = new HashMap<>();
-    Map<Long, Long> swapSegmentsUsed = new HashMap<>();
-
-    for (DiskSpaceRequirements requirements : requirementsList) {
-      long segmentSizeInBytes = requirements.getSegmentSizeInBytes();
-      overallRequirements.put(segmentSizeInBytes,
-          overallRequirements.getOrDefault(segmentSizeInBytes, 0L) + requirements.getSegmentsNeeded());
-      swapSegmentsUsed.put(segmentSizeInBytes,
-          swapSegmentsUsed.getOrDefault(segmentSizeInBytes, 0L) + requirements.getSwapSegmentsInUse());
-    }
-    for (Map.Entry<Long, Long> sizeAndSegmentsNeeded : overallRequirements.entrySet()) {
-      long sizeInBytes = sizeAndSegmentsNeeded.getKey();
-      long origSegmentsNeeded = sizeAndSegmentsNeeded.getValue();
-      // Ensure that swap segments are only added to the requirements if the number of swap segments allocated to
-      // stores is lower than the minimum required swap segments.
-      long swapSegmentsNeeded = Math.max(requiredSwapSegmentsPerSize - swapSegmentsUsed.get(sizeInBytes), 0L);
-      overallRequirements.put(sizeInBytes, origSegmentsNeeded + swapSegmentsNeeded);
-    }
-    return Collections.unmodifiableMap(overallRequirements);
   }
 
   /**
@@ -252,16 +291,40 @@ class DiskSpaceAllocator {
       dir.mkdir();
     }
     if (!dir.isDirectory()) {
-      throw new IOException("Directory could not be created or is not a directory: " + dir.getAbsolutePath());
+      throw new IOException(dir.getAbsolutePath() + " is not a directory or could not be created");
     }
     return dir;
   }
 
   /**
+   * @param sizeInBytes the size of the files in this directory
+   * @return a directory name for this size. This is reserve_size_{n} where {n} is {@code sizeInBytes}
+   */
+  private static String generateFileSizeDirName(long sizeInBytes) {
+    return FILE_SIZE_DIR_PREFIX + sizeInBytes;
+  }
+  /**
    * @return a filename for a reserve file. This is reserve_ followed by a random UUID.
    */
   private static String generateFilename() {
     return RESERVE_FILE_PREFIX + UUID.randomUUID();
+  }
+
+  /**
+   * Parse the file size from a file size directory name.
+   * @param fileSizeDirName the name of the file size directory.
+   * @return the parsed size in bytes, or {@code null} if the directory name was malformed.
+   */
+  private static Long getFileSizeForDirName(String fileSizeDirName) {
+    Long sizeInBytes = null;
+    if (fileSizeDirName.startsWith(FILE_SIZE_DIR_PREFIX)) {
+      String sizeString = fileSizeDirName.substring(FILE_SIZE_DIR_PREFIX.length());
+      try {
+        sizeInBytes = Long.parseLong(sizeString);
+      } catch (NumberFormatException ignored) {
+      }
+    }
+    return sizeInBytes;
   }
 
   private static class ReserveFileMap {

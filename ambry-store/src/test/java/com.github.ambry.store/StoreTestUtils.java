@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,7 +23,7 @@ import java.nio.file.Files;
  * Utility class for common functions used in tests of store classes.
  */
 class StoreTestUtils {
-
+  static final DiskSpaceAllocator DEFAULT_DISK_SPACE_ALLOCATOR = getDiskSpaceAllocator();
   /**
    * Creates a temporary directory whose name starts with the given {@code prefix}.
    * @param prefix the prefix of the directory name.
@@ -65,7 +66,8 @@ class StoreTestUtils {
    */
   static DiskSpaceAllocator getDiskSpaceAllocator() {
     try {
-      return new DiskSpaceAllocator(StoreTestUtils.createTempDirectory("reserve-pool"), 1);
+      return new DiskSpaceAllocator(StoreTestUtils.createTempDirectory("reserve-pool"), 1,
+          new StorageManagerMetrics(new MetricRegistry()));
     } catch (Exception e) {
       throw new IllegalStateException("Exception while constructing DiskSpaceAllocator", e);
     }

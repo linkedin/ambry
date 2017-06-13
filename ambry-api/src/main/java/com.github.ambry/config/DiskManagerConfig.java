@@ -20,17 +20,17 @@ public class DiskManagerConfig {
    * The name of the folder where the reserve disk segment pool will be.
    * A directory with this name will be created at the root of each disk.
    */
-  @Config("disk.reserve.file.dir.name")
+  @Config("disk.manager.reserve.file.dir.name")
   @Default("reserve-pool")
-  public final String diskReserveFileDirName;
+  public final String diskManagerReserveFileDirName;
 
-  @Config("disk.required.swap.segments.per.size")
+  @Config("disk.manager.required.swap.segments.per.size")
   @Default("1")
-  public final int diskRequiredSwapSegmentsPerSize;
+  public final int diskManagerRequiredSwapSegmentsPerSize;
 
   public DiskManagerConfig(VerifiableProperties verifiableProperties) {
-    diskReserveFileDirName = verifiableProperties.getString("disk.reserve.file.dir.name", "reserve-pool");
-    diskRequiredSwapSegmentsPerSize =
+    diskManagerReserveFileDirName = verifiableProperties.getString("disk.reserve.file.dir.name", "reserve-pool");
+    diskManagerRequiredSwapSegmentsPerSize =
         verifiableProperties.getIntInRange("disk.required.swap.segments.per.size", 1, 0, 1000);
   }
 }

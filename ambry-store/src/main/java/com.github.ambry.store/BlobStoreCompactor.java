@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 class BlobStoreCompactor {
   static final String INDEX_SEGMENT_READ_JOB_NAME = "blob_store_compactor_index_segment_read";
   static final String TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME = "compactor_clean_shutdown";
+  static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
   static final FilenameFilter TEMP_LOG_SEGMENTS_FILTER = new FilenameFilter() {
     private final String SUFFIX = LogSegmentNameHelper.SUFFIX + TEMP_LOG_SEGMENT_NAME_SUFFIX;
 
@@ -60,7 +61,6 @@ class BlobStoreCompactor {
   };
 
   private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
-  private static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
   private static final String METRICS_SUFFIX = BlobStore.SEPARATOR + "temp";
 
   private final File dataDir;
@@ -242,9 +242,13 @@ class BlobStoreCompactor {
   /**
    * @return the number of temporary log segment files this compactor is currently using.
    */
-  int getSwapSegmentsInUse() {
+  int getSwapSegmentsInUse() throws StoreException {
     String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
-    return tempSegments == null ? 0 : tempSegments.length;
+    if (tempSegments == null) {
+      throw new StoreException("Error occured while listing files in data dir:" + dataDir.getAbsolutePath(),
+          StoreErrorCodes.IOError);
+    }
+    return tempSegments.length;
   }
 
   /**

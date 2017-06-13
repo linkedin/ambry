@@ -546,7 +546,7 @@ public class AmbryRequestsTest {
       }
     };
 
-    private static final VerifiableProperties PROPS = new VerifiableProperties(new Properties());
+    private static final VerifiableProperties VPROPS = new VerifiableProperties(new Properties());
 
     /**
      * if {@code true}, a {@code null} {@link Store} is returned on a call to {@link #getStore(PartitionId)}. Otherwise
@@ -567,7 +567,7 @@ public class AmbryRequestsTest {
     PartitionId compactionScheduledPartitionId = null;
 
     MockStorageManager() throws StoreException {
-      super(new StoreConfig(PROPS), new DiskManagerConfig(PROPS), new MetricRegistry(), Collections.EMPTY_LIST, null,
+      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), new MetricRegistry(), Collections.EMPTY_LIST, null,
           null, null, new MockTime(), Utils.newScheduler(1, true));
     }
 

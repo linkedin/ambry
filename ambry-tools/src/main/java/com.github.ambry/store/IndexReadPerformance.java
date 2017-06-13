@@ -142,11 +142,13 @@ public class IndexReadPerformance {
       final BufferedReader br = new BufferedReader(new FileReader(logToRead));
       final HashMap<String, IndexPayload> hashes = new HashMap<String, IndexPayload>();
       String line;
-      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), new MetricRegistry());
+      MetricRegistry metricRegistry = new MetricRegistry();
+      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), metricRegistry);
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
       File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
       reserveFileDir.deleteOnExit();
-      DiskSpaceAllocator diskSpaceAllocator = new DiskSpaceAllocator(reserveFileDir, 1);
+      DiskSpaceAllocator diskSpaceAllocator =
+          new DiskSpaceAllocator(reserveFileDir, 1, new StorageManagerMetrics(metricRegistry));
       Log log = new Log(System.getProperty("user.dir"), 1000, 1000, diskSpaceAllocator, metrics);
 
       Properties props = new Properties();

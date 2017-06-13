@@ -180,6 +180,20 @@ class Log implements Write {
   }
 
   /**
+   * @return the number of unallocated segments for this log.
+   */
+  long getRemainingUnallocatedSegments() {
+    return remainingUnallocatedSegments.get();
+  }
+
+  /**
+   * @return {@code true} if the log is segmented.
+   */
+  boolean isLogSegmented() {
+    return isLogSegmented;
+  }
+
+  /**
    * @return the total capacity, in bytes, of this log.
    */
   long getCapacityInBytes() {
@@ -235,16 +249,6 @@ class Log implements Write {
   Offset getEndOffset() {
     LogSegment segment = activeSegment;
     return new Offset(segment.getName(), segment.getEndOffset());
-  }
-
-  /**
-   * @return the {@link DiskSpaceRequirements} for this log to provide to
-   * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this is a non-segmented log.
-   * This is because it does not require any additional/swap segments.
-   */
-  DiskSpaceRequirements getDiskSpaceRequirements() {
-    return isLogSegmented ? new DiskSpaceRequirements(getSegmentCapacity(), remainingUnallocatedSegments.get(), 0)
-        : null;
   }
 
   /**

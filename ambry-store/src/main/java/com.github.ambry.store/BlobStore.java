@@ -62,7 +62,7 @@ class BlobStore implements Store {
   private BlobStoreCompactor compactor;
   private PersistentIndex index;
   private BlobStoreStats blobStoreStats;
-  private volatile boolean started;
+  private boolean started;
   private FileLock fileLock;
 
   /**
@@ -441,15 +441,9 @@ class BlobStore implements Store {
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    synchronized (lock) {
-      checkStarted();
-      DiskSpaceRequirements requirements = log.getDiskSpaceRequirements();
-      if (requirements != null) {
-        requirements = new DiskSpaceRequirements(requirements.getSegmentSizeInBytes(), requirements.getSegmentsNeeded(),
-            requirements.getSwapSegmentsInUse() + compactor.getSwapSegmentsInUse());
-      }
-      return requirements;
-    }
+    checkStarted();
+    return log.isLogSegmented() ? new DiskSpaceRequirements(log.getSegmentCapacity(),
+        log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
   }
 
   /**
