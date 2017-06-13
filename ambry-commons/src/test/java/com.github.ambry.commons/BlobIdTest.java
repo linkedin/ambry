@@ -122,8 +122,8 @@ public class BlobIdTest {
         .setAccountId(referenceAccountId)
         .setContainerId(referenceContainerId);
     BlobId blobId = blobIdBuilderV2.build();
-    assertBlob(BLOB_ID_V2, blobId, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
-        referencePartitionId, true);
+    assertBlobIdFieldValues(BLOB_ID_V2, blobId, referenceFlag, referenceDatacenterId, referenceAccountId,
+        referenceContainerId, referencePartitionId, true);
     // setter will set the same BlobIdBuilder internal states to different values
     blobId = blobIdBuilderV2.setFlag(updatedFlag)
         .setDatacenterId(updatedDatacenterId)
@@ -131,7 +131,7 @@ public class BlobIdTest {
         .setContainerId(updatedContainerId)
         .setPartitionId(updatedPartitionId)
         .build();
-    assertBlob(BLOB_ID_V2, blobId, updatedFlag, updatedDatacenterId, updatedAccountId, updatedContainerId,
+    assertBlobIdFieldValues(BLOB_ID_V2, blobId, updatedFlag, updatedDatacenterId, updatedAccountId, updatedContainerId,
         updatedPartitionId, true);
   }
 
@@ -188,22 +188,10 @@ public class BlobIdTest {
   private void composedBlobIdAndDeserialize(short version) throws Exception {
     String srcUUID = UUID.randomUUID().toString();
     String srcBlobIdStr;
-    switch (version) {
-      case BLOB_ID_V1:
-        srcBlobIdStr =
-            buildBlobIdLike(version, null, null, null, null, referencePartitionId, srcUUID.length(), srcUUID);
-        break;
-
-      case BLOB_ID_V2:
-        srcBlobIdStr =
-            buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
-                referencePartitionId, srcUUID.length(), srcUUID);
-        break;
-
-      default:
-        throw new IllegalArgumentException("Invalid version number blob" + version);
-    }
-    deserializeBlobIdAndAssert(version, srcBlobIdStr, referencePartitionId);
+    srcBlobIdStr =
+        buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+            referencePartitionId, srcUUID.length(), srcUUID);
+    deserializeBlobIdAndAssert(version, srcBlobIdStr);
   }
 
   /**
@@ -230,7 +218,7 @@ public class BlobIdTest {
       default:
         throw new IllegalArgumentException("invalid version number blob" + version);
     }
-    deserializeBlobIdAndAssert(version, srcBlobIdStr, referencePartitionId);
+    deserializeBlobIdAndAssert(version, srcBlobIdStr);
   }
 
   /**
@@ -239,39 +227,40 @@ public class BlobIdTest {
    * @throws Exception Any unexpected exception.
    */
   private void generateAndAssertBadBlobId(Short version) throws Exception {
-    List<String> blobIdLikes = new ArrayList<>();
+    List<String> invalidBlobIdLikeList = new ArrayList<>();
     PartitionId badPartitionId = new MockPartitionId(200000, Collections.EMPTY_LIST, 0);
     String goodUUID = UUID.randomUUID().toString();
 
     // Partition ID not in cluster map
-    blobIdLikes.add(
+    invalidBlobIdLikeList.add(
         buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             badPartitionId, goodUUID.length(), goodUUID));
     // UUID length too long
-    blobIdLikes.add(
+    invalidBlobIdLikeList.add(
         buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId, goodUUID.length() + 1, goodUUID));
     // UUID length too short
-    blobIdLikes.add(
+    invalidBlobIdLikeList.add(
         buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId, goodUUID.length() - 1, goodUUID));
     // UUID length is negative
-    blobIdLikes.add(
+    invalidBlobIdLikeList.add(
         buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId, -1, goodUUID));
     // Extra characters after UUID
-    blobIdLikes.add(
+    invalidBlobIdLikeList.add(
         buildBlobIdLike(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId, goodUUID.length(), goodUUID + "EXTRA"));
     // Invalid version number
-    blobIdLikes.add(buildBlobIdLike((short) (BLOB_ID_V2 + 1), referenceFlag, referenceDatacenterId, referenceAccountId,
-        referenceContainerId, referencePartitionId, goodUUID.length(), goodUUID));
+    invalidBlobIdLikeList.add(
+        buildBlobIdLike((short) (BLOB_ID_V2 + 1), referenceFlag, referenceDatacenterId, referenceAccountId,
+            referenceContainerId, referencePartitionId, goodUUID.length(), goodUUID));
     // Empty blobId
-    blobIdLikes.add("");
+    invalidBlobIdLikeList.add("");
     // short Blob ID
-    blobIdLikes.add("AA");
+    invalidBlobIdLikeList.add("AA");
 
-    for (String blobIdLike : blobIdLikes) {
+    for (String blobIdLike : invalidBlobIdLikeList) {
       try {
         BlobId.fromStringId(blobIdLike, referenceClusterMap);
         fail("Expected blobId creation to fail with blobId string " + blobIdLike);
@@ -330,11 +319,9 @@ public class BlobIdTest {
    * Deserializes BlobId string and assert the resulted BlobId object.
    * @param version The version of BlobId.
    * @param srcBlobIdStr The string to deserialize.
-   * @param referencePartitionId The reference PartitionId.
    * @throws Exception Any unexpected exception.
    */
-  private void deserializeBlobIdAndAssert(short version, String srcBlobIdStr, PartitionId referencePartitionId)
-      throws Exception {
+  private void deserializeBlobIdAndAssert(short version, String srcBlobIdStr) throws Exception {
     List<BlobId> blobIds = new ArrayList<>();
     blobIds.add(BlobId.fromStringId(srcBlobIdStr, referenceClusterMap));
     blobIds.add(BlobId.fromDataInputStream(getStreamFromBase64(srcBlobIdStr), referenceClusterMap));
@@ -409,7 +396,7 @@ public class BlobIdTest {
     }
     BlobId blobId = blobIdBuilder.build();
     assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
-    assertBlob(version, blobId, flag, datacenterId, accountId, containerId, partitionId, useSetter);
+    assertBlobIdFieldValues(version, blobId, flag, datacenterId, accountId, containerId, partitionId, useSetter);
   }
 
   /**
@@ -433,7 +420,7 @@ public class BlobIdTest {
    *                              {@code false} otherwise.
    * @throws Exception Any unexpected exception.
    */
-  private void assertBlob(short version, BlobId blobId, Byte flag, Byte datacenterId, Short accountId,
+  private void assertBlobIdFieldValues(short version, BlobId blobId, Byte flag, Byte datacenterId, Short accountId,
       Short containerId, PartitionId partitionId, boolean useSetter) throws Exception {
     assertTrue("Used unrecognized version", version == BLOB_ID_V1 || version == BLOB_ID_V2);
     assertEquals("Wrong partition id in blobId: " + blobId, partitionId, blobId.getPartition());

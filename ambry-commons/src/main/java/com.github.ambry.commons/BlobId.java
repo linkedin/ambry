@@ -38,7 +38,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  *   returned back to a caller when posting a blob, and later will be required to fetch the blob.
  * </p>
  * <p>
- *   There are two versions of format for blob de/serialization. Version 1, which includes {@code partitionId}
+ *   There are two versions of format for BlobId de/serialization. Version 1, which includes {@code partitionId}
  *   of the blob. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this
  *   blob is assigned.
  * </p>
@@ -72,12 +72,12 @@ public class BlobId extends StoreKey {
   static final short BLOB_ID_V2 = 2;
   static final byte DEFAULT_FLAG = 0;
   private static final short CURRENT_VERSION = BLOB_ID_V1;
-  private static final short VERSION_FIELD_LENGTH_IN_BYTES = 2;
-  private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = 4;
-  private static final short FLAG_FIELD_LENGTH_IN_BYTES = 1;
-  private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = 1;
-  private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = 2;
-  private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = 2;
+  private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
+  private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
+  private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
+  private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
+  private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
+  private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   // the version to indicate the serialized format.
   private Short version;
   private Byte flag;
