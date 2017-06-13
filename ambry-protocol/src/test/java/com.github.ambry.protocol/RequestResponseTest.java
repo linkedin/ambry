@@ -299,14 +299,14 @@ public class RequestResponseTest {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
-    short[] versions = new short[]{DeleteRequest.Delete_Request_Version_V1, DeleteRequest.Delete_Request_Version_V2};
+    short[] versions = new short[]{DeleteRequest.Delete_Request_Version_1, DeleteRequest.Delete_Request_Version_2};
     for (short version : versions) {
       short accountId = Utils.getRandomShort(random);
       short containerId = Utils.getRandomShort(random);
       int deletionTimeSecs = (int) (SystemTime.getInstance().seconds() + random.nextInt(60 * 60 * 24 * 365));
       int correlationId = random.nextInt();
       DeleteRequest deleteRequest;
-      if (version == DeleteRequest.Delete_Request_Version_V1) {
+      if (version == DeleteRequest.Delete_Request_Version_1) {
         deleteRequest = new DeleteRequest(correlationId, "client", id1);
       } else {
         deleteRequest = new DeleteRequest(correlationId, "client", id1, accountId, containerId, deletionTimeSecs);
@@ -322,7 +322,7 @@ public class RequestResponseTest {
       DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
       Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
       Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
-      if (version == DeleteRequest.Delete_Request_Version_V2) {
+      if (version == DeleteRequest.Delete_Request_Version_2) {
         Assert.assertEquals("AccountId mismatch ", accountId, deserializedDeleteRequest.getAccountId());
         Assert.assertEquals("ContainerId mismatch ", containerId, deserializedDeleteRequest.getContainerId());
         Assert.assertEquals("DeletionTime mismatch ", deletionTimeSecs,

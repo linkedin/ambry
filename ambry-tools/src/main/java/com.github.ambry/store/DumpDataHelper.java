@@ -95,7 +95,7 @@ class DumpDataHelper {
           DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(streamlog);
           isDeleted = true;
           if (deleteRecord.getVersion() == MessageFormatRecord.Delete_Version_V1) {
-            deleteMsg = "delete change " + deleteRecord.isDeleted();
+            deleteMsg = "delete change : true";
           } else {
             deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
                 + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();

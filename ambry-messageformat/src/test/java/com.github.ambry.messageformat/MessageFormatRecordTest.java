@@ -253,7 +253,6 @@ public class MessageFormatRecordTest {
         MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
     Assert.assertEquals("Delete record version mismatch ", deserializeDeleteRecord.getVersion(),
         MessageFormatRecord.Delete_Version_V1);
-    Assert.assertEquals(deserializeDeleteRecord.isDeleted(), true);
 
     // corrupt delete V1 record
     deleteRecord.flip();

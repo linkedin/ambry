@@ -33,22 +33,22 @@ public class DeleteRequest extends RequestOrResponse {
   private final int deletionTimeInSecs;
   private int sizeSent;
   private final short version;
-  static final short Delete_Request_Version_V1 = 1;
-  static final short Delete_Request_Version_V2 = 2;
-  private static short currentVersion = Delete_Request_Version_V1;
+  static final short Delete_Request_Version_1 = 1;
+  static final short Delete_Request_Version_2 = 2;
+  private static short currentVersion = Delete_Request_Version_1;
 
   private static final int AccountId_ContainerId_Field_Size_InBytes = 2;
   private static final int DeletionTime_Field_Size_InBytes = 4;
 
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, DeleteRecord.ACCOUNTID_DEFAULT_VALUE, DeleteRecord.CONTAINERID_DEFAULT_VALUE,
-        (int) Utils.Infinite_Time, currentVersion);
+    this(correlationId, clientId, blobId, DeleteRecord.ACCOUNT_ID_DEFAULT_VALUE,
+        DeleteRecord.CONTAINER_ID_DEFAULT_VALUE, (int) Utils.Infinite_Time, currentVersion);
   }
 
   public DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
       int deletionTimeInSecs) {
-    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInSecs, Delete_Request_Version_V2);
+    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInSecs, Delete_Request_Version_2);
   }
 
   private DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
@@ -65,9 +65,9 @@ public class DeleteRequest extends RequestOrResponse {
   public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     Short version = stream.readShort();
     switch (version) {
-      case Delete_Request_Version_V1:
+      case Delete_Request_Version_1:
         return DeleteRequest_V1.readFrom(stream, map);
-      case Delete_Request_Version_V2:
+      case Delete_Request_Version_2:
         return DeleteRequest_V2.readFrom(stream, map);
       default:
         throw new IllegalStateException("Unknown Delete Request version " + version);
@@ -81,7 +81,7 @@ public class DeleteRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
-      if (version == Delete_Request_Version_V2) {
+      if (version == Delete_Request_Version_2) {
         bufferToSend.putShort(accountId);
         bufferToSend.putShort(containerId);
         bufferToSend.putInt(deletionTimeInSecs);
@@ -128,7 +128,7 @@ public class DeleteRequest extends RequestOrResponse {
   public long sizeInBytes() {
     // header + blobId
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
-    if (version == Delete_Request_Version_V2) {
+    if (version == Delete_Request_Version_2) {
       // accountId
       sizeInBytes += AccountId_ContainerId_Field_Size_InBytes;
       // containerId

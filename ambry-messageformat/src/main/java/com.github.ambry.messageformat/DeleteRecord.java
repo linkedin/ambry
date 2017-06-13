@@ -21,16 +21,16 @@ import com.github.ambry.utils.Utils;
  */
 public class DeleteRecord {
 
-  public static final short ACCOUNTID_DEFAULT_VALUE = -1;
-  public static final short CONTAINERID_DEFAULT_VALUE = -1;
+  public static final short ACCOUNT_ID_DEFAULT_VALUE = -1;
+  public static final short CONTAINER_ID_DEFAULT_VALUE = -1;
   private final short version;
   private final short accountId;
   private final short containerId;
   private final long deletionTimeInMs;
 
   DeleteRecord() {
-    accountId = ACCOUNTID_DEFAULT_VALUE;
-    containerId = CONTAINERID_DEFAULT_VALUE;
+    accountId = ACCOUNT_ID_DEFAULT_VALUE;
+    containerId = CONTAINER_ID_DEFAULT_VALUE;
     deletionTimeInMs = Utils.Infinite_Time;
     this.version = MessageFormatRecord.Delete_Version_V1;
   }
@@ -40,10 +40,6 @@ public class DeleteRecord {
     this.containerId = containerId;
     this.deletionTimeInMs = deletionTimeInMs;
     this.version = MessageFormatRecord.Delete_Version_V2;
-  }
-
-  public boolean isDeleted() {
-    return true;
   }
 
   public short getAccountId() {
