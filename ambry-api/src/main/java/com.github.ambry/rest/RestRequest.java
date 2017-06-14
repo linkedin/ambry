@@ -58,8 +58,8 @@ public interface RestRequest extends ReadableStreamChannel {
   /**
    * Gets all the arguments passed as a part of the request.
    * <p/>
-   * The implementation can decide what constitute as arguments. It can be specific parts of the URI, query parameters,
-   * header values etc. or a combination of any of these.
+   * The query parameters and headers (including cookies) should necessarily be a part of the args. In addition to
+   * these, the implementation can decide what constitute as arguments.
    * @return the arguments and their values (if any) as a map.
    */
   public Map<String, Object> getArgs();

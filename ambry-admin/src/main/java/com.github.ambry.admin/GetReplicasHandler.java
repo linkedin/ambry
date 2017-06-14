@@ -60,16 +60,16 @@ class GetReplicasHandler {
    * @return a {@link ReadableStreamChannel} that contains the getReplicas response.
    * @throws RestServiceException if there was any problem constructing the response.
    */
-  public ReadableStreamChannel getReplicas(String blobId, RestResponseChannel restResponseChannel)
+  ReadableStreamChannel getReplicas(String blobId, RestResponseChannel restResponseChannel)
       throws RestServiceException {
     logger.trace("Getting replicas of blob ID - {}", blobId);
     long startTime = System.currentTimeMillis();
     ReadableStreamChannel channel = null;
     try {
-      String replicaStr = getReplicas(blobId).toString();
+      byte[] replicasResponseBytes = getReplicas(blobId).toString().getBytes();
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, replicaStr.length());
-      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicaStr.getBytes()));
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, replicasResponseBytes.length);
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicasResponseBytes));
     } finally {
       adminMetrics.getReplicasProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
     }

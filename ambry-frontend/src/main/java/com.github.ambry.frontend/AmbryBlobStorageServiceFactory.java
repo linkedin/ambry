@@ -77,6 +77,6 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   @Override
   public BlobStorageService getBlobStorageService() {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
-        securityServiceFactory);
+        securityServiceFactory, clusterMap);
   }
 }

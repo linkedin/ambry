@@ -22,18 +22,23 @@ import java.util.Map;
 
 
 public class MockDataNodeId extends DataNodeId {
-  int portNum;
-  Map<PortType, Port> ports;
-  List<String> mountPaths;
-  String hostname = "localhost";
-  String datacenter;
-  List<String> sslEnabledDataCenters = new ArrayList<String>();
+  private final Map<PortType, Port> ports;
+  private final List<String> mountPaths;
+  private final String hostname;
+  private final String datacenter;
+  private List<String> sslEnabledDataCenters = new ArrayList<String>();
+  private int portNum;
 
-  public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
+  public MockDataNodeId(String hostname, List<Port> ports, List<String> mountPaths, String dataCenter) {
+    this.hostname = hostname;
     this.mountPaths = mountPaths;
     this.datacenter = dataCenter;
-    this.ports = new HashMap<PortType, Port>();
+    this.ports = new HashMap<>();
     populatePorts(ports);
+  }
+
+  public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
+    this("localhost", ports, mountPaths, dataCenter);
   }
 
   private void populatePorts(List<Port> ports) {

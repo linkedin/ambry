@@ -23,6 +23,7 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
@@ -68,7 +69,7 @@ public class GetReplicasHandlerTest {
       assertEquals("Unexpected Content-Type", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       String returnedReplicasStr =
-          AdminTestUtils.getJsonizedResponseBody(channel).getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
+          RestTestUtils.getJsonizedResponseBody(channel).getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
           originalReplicaStr, returnedReplicasStr);
     }

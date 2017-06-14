@@ -16,8 +16,6 @@ package com.github.ambry.admin;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
-import com.github.ambry.router.CopyingAsyncWritableChannel;
-import com.github.ambry.router.ReadableStreamChannel;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -29,7 +27,7 @@ import org.json.JSONObject;
 /**
  * Utility functions for Admin tests.
  */
-public class AdminTestUtils {
+class AdminTestUtils {
 
   /**
    * Method to easily create {@link RestRequest} objects containing a specific request.
@@ -51,17 +49,5 @@ public class AdminTestUtils {
       request.put(MockRestRequest.HEADERS_KEY, headers);
     }
     return new MockRestRequest(request, contents);
-  }
-
-  /**
-   * Reads the response received from the {@code channel} and decodes it into a {@link JSONObject}.
-   * @param channel the {@link ReadableStreamChannel} that contains the response
-   * @return the response decoded into a {@link JSONObject}.
-   * @throws Exception
-   */
-  static JSONObject getJsonizedResponseBody(ReadableStreamChannel channel) throws Exception {
-    CopyingAsyncWritableChannel asyncWritableChannel = new CopyingAsyncWritableChannel((int) channel.getSize());
-    channel.readInto(asyncWritableChannel, null).get();
-    return new JSONObject(new String(asyncWritableChannel.getData()));
   }
 }

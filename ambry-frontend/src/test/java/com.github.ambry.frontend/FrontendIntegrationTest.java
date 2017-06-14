@@ -367,8 +367,8 @@ public class FrontendIntegrationTest {
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    */
-  private void setAmbryHeadersForPut(HttpHeaders httpHeaders, long ttlInSecs, boolean isPrivate,
-      String serviceId, String contentType, String ownerId) {
+  private void setAmbryHeadersForPut(HttpHeaders httpHeaders, long ttlInSecs, boolean isPrivate, String serviceId,
+      String contentType, String ownerId) {
     if (httpHeaders != null && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       httpHeaders.add(RestUtils.Headers.TTL, ttlInSecs);
       httpHeaders.add(RestUtils.Headers.PRIVATE, isPrivate);
