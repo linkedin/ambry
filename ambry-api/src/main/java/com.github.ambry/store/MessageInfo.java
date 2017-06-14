@@ -21,8 +21,8 @@ import com.github.ambry.utils.Utils;
  */
 public class MessageInfo {
 
-  public static final short ACCOUNTID_DEFAULT_VALUE = -1;
-  public static final short CONTAINERID_DEFAULT_VALUE = -1;
+  public static final short ACCOUNT_ID_DEFAULT_VALUE = -1;
+  public static final short CONTAINER_ID_DEFAULT_VALUE = -1;
 
   private final StoreKey key;
   private final long size;
@@ -86,7 +86,7 @@ public class MessageInfo {
    * @param crc the crc associated with this message. If unavailable, pass in null.
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
-    this(key, size, deleted, expirationTimeInMs, crc, ACCOUNTID_DEFAULT_VALUE, CONTAINERID_DEFAULT_VALUE,
+    this(key, size, deleted, expirationTimeInMs, crc, ACCOUNT_ID_DEFAULT_VALUE, CONTAINER_ID_DEFAULT_VALUE,
         Utils.Infinite_Time);
   }
 
