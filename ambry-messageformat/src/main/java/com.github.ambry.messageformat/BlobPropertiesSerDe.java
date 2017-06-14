@@ -26,6 +26,7 @@ public class BlobPropertiesSerDe {
 
   static final short Version1 = 1;
   static final short Version2 = 2;
+  static final short currentVersion = Version1;
   private static final int Version_Field_Size_In_Bytes = 2;
   private static final int TTL_Field_Size_In_Bytes = 8;
   private static final int Private_Field_Size_In_Bytes = 1;
@@ -36,7 +37,7 @@ public class BlobPropertiesSerDe {
   private static final int ContainerId_Field_Size_In_Bytes = 2;
   private static final int IssuerAccountId_Field_Size_In_Bytes = 2;
 
-  // @TODO: remove this to add accountId and containerId once putBlobPropertiesToBuffer is changed to version2
+  // @TODO: remove this to add accountId and containerId once serializeBlobProperties is changed to version2
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
@@ -49,7 +50,7 @@ public class BlobPropertiesSerDe {
    * Returns the size of {@link BlobProperties} to serialize in Version 2
    * @param properties {@link BlobProperties} for which size is requested
    * @return the size of the {@link BlobProperties} to serialize in Version 2
-   * @TODO: will be used once putBlobPropertiesToBuffer is changed to version2
+   * @TODO: will be used once serializeBlobProperties is changed to version2
    */
   public static int getBlobPropertiesV2SerDeSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
@@ -64,7 +65,7 @@ public class BlobPropertiesSerDe {
     short version = stream.readShort();
     BlobProperties toReturn;
     long ttl = stream.readLong();
-    boolean isPrivate = stream.readByte() == 1 ? true : false;
+    boolean isPrivate = stream.readByte() == 1;
     long creationTime = stream.readLong();
     long blobSize = stream.readLong();
     String contentType = Utils.readIntString(stream);
@@ -88,24 +89,13 @@ public class BlobPropertiesSerDe {
     return toReturn;
   }
 
-  public static void putBlobPropertiesToBuffer(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(Version1);
-    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
-    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
-    outputBuffer.putLong(properties.getCreationTimeInMs());
-    outputBuffer.putLong(properties.getBlobSize());
-    Utils.serializeNullableString(outputBuffer, properties.getContentType());
-    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
-    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
-  }
-
   /**
-   * Serialized {@link BlobProperties} to buffer in version {@link #Version2}
-   * @param outputBuffer the {@link ByteBuffer} to write the {@link BlobProperties}
-   * @param properties the {@link BlobProperties} to be serialized
+   * Serialize {@link BlobProperties} to buffer in the {@link #currentVersion}
+   * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
+   * @param properties the {@link BlobProperties} that needs to be serialized
    */
-  public static void putBlobPropertiesToBufferV2(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(Version2);
+  public static void serializeBlobProperties(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(currentVersion);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
     outputBuffer.putLong(properties.getCreationTimeInMs());
@@ -113,8 +103,5 @@ public class BlobPropertiesSerDe {
     Utils.serializeNullableString(outputBuffer, properties.getContentType());
     Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
-    outputBuffer.putShort(properties.getAccountId());
-    outputBuffer.putShort(properties.getContainerId());
-    outputBuffer.putShort(properties.getCreatorAccountId());
   }
 }

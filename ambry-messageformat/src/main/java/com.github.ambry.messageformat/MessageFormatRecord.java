@@ -398,7 +398,7 @@ public class MessageFormatRecord {
     public static void serializeBlobPropertiesRecord(ByteBuffer outputBuffer, BlobProperties properties) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(BlobProperties_Version_V1);
-      BlobPropertiesSerDe.putBlobPropertiesToBuffer(outputBuffer, properties);
+      BlobPropertiesSerDe.serializeBlobProperties(outputBuffer, properties);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getBlobPropertiesRecordSize(properties) - Crc_Size);
       outputBuffer.putLong(crc.getValue());

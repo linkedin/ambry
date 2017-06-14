@@ -30,6 +30,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.messageformat.BlobPropertiesSerDe.*;
 import static com.github.ambry.messageformat.MessageFormatRecord.BlobProperties_Format_V1.*;
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
@@ -137,7 +138,7 @@ public class MessageFormatRecordTest {
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
     // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
-    short[] versions = new short[]{BlobPropertiesSerDe.Version1, BlobPropertiesSerDe.Version2};
+    short[] versions = new short[]{BlobPropertiesSerDe.Version1, Version2};
     for (short version : versions) {
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
@@ -186,10 +187,30 @@ public class MessageFormatRecordTest {
   private static void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
     int startOffset = outputBuffer.position();
     outputBuffer.putShort(BlobProperties_Version_V1);
-    BlobPropertiesSerDe.putBlobPropertiesToBufferV2(outputBuffer, properties);
+    serializeBlobPropertiesV2(outputBuffer, properties);
     Crc32 crc = new Crc32();
     crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV2RecordSize(properties) - Crc_Size);
     outputBuffer.putLong(crc.getValue());
+  }
+
+  /**
+   * Serialize {@link BlobProperties} to buffer in version {@link BlobPropertiesSerDe#Version2}
+   * @param outputBuffer the {@link ByteBuffer} to write the {@link BlobProperties}
+   * @param properties the {@link BlobProperties} to be serialized
+   * @todo: move this method to {@link BlobPropertiesSerDe} when enabling write path in V2
+   */
+  public static void serializeBlobPropertiesV2(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(Version2);
+    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
+    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(properties.getCreationTimeInMs());
+    outputBuffer.putLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
+    outputBuffer.putShort(properties.getCreatorAccountId());
   }
 
   //  TODO: remove this once BlobProperties V2 is enabled

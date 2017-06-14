@@ -119,7 +119,7 @@ public class PutRequest extends RequestOrResponse {
         writeHeader();
         int crcStart = bufferToSend.position();
         bufferToSend.put(blobId.toBytes());
-        BlobPropertiesSerDe.putBlobPropertiesToBuffer(bufferToSend, properties);
+        BlobPropertiesSerDe.serializeBlobProperties(bufferToSend, properties);
         bufferToSend.putInt(usermetadata.capacity());
         bufferToSend.put(usermetadata);
         bufferToSend.putShort((short) blobType.ordinal());
