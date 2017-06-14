@@ -35,22 +35,47 @@ public class DeleteRequest extends RequestOrResponse {
   private final short version;
   static final short Delete_Request_Version_1 = 1;
   static final short Delete_Request_Version_2 = 2;
-  private static short currentVersion = Delete_Request_Version_1;
+  private final static short currentVersion = Delete_Request_Version_1;
 
   private static final int AccountId_ContainerId_Field_Size_InBytes = 2;
   private static final int DeletionTime_Field_Size_InBytes = 4;
 
+  /**
+   * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_1}
+   * @param correlationId correlationId of the delete request
+   * @param clientId clientId of the delete request
+   * @param blobId blobId of the delete request
+   */
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
     this(correlationId, clientId, blobId, DeleteRecord.ACCOUNT_ID_DEFAULT_VALUE,
         DeleteRecord.CONTAINER_ID_DEFAULT_VALUE, (int) Utils.Infinite_Time, currentVersion);
   }
 
+  /**
+   * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
+   * @param correlationId correlationId of the delete request
+   * @param clientId clientId of the delete request
+   * @param blobId blobId of the delete request
+   * @param accountId accountId of the blobId being requested
+   * @param containerId containerId of the blobId being requested
+   * @param deletionTimeInSecs deletion time of the blob in ms
+   */
   public DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
       int deletionTimeInSecs) {
     this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInSecs, Delete_Request_Version_2);
   }
 
+  /**
+   * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
+   * @param correlationId correlationId of the delete request
+   * @param clientId clientId of the delete request
+   * @param blobId blobId of the delete request
+   * @param accountId accountId of the blobId being requested
+   * @param containerId containerId of the blobId being requested
+   * @param deletionTimeInSecs deletion time of the blob in ms
+   * @param version version of the {@link DeleteRequest}
+   */
   private DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
       int deletionTimeInSecs, short version) {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);

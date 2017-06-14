@@ -28,6 +28,9 @@ public class DeleteRecord {
   private final short containerId;
   private final long deletionTimeInMs;
 
+  /**
+   * Constructs Delete Record in {@link MessageFormatRecord#Delete_Version_V1}
+   */
   DeleteRecord() {
     accountId = ACCOUNT_ID_DEFAULT_VALUE;
     containerId = CONTAINER_ID_DEFAULT_VALUE;
@@ -35,6 +38,9 @@ public class DeleteRecord {
     this.version = MessageFormatRecord.Delete_Version_V1;
   }
 
+  /**
+   * Constructs Delete Record in {@link MessageFormatRecord#Delete_Version_V2}
+   */
   DeleteRecord(short accountId, short containerId, long deletionTimeInMs) {
     this.accountId = accountId;
     this.containerId = containerId;

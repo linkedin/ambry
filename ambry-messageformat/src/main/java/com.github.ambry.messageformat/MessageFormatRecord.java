@@ -446,7 +446,7 @@ public class MessageFormatRecord {
     public static DeleteRecord deserializeDeleteRecord(CrcInputStream crcStream)
         throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
-      boolean isDeleted = dataStream.readByte() == 1 ? true : false;
+      boolean isDeleted = dataStream.readByte() == 1;
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
