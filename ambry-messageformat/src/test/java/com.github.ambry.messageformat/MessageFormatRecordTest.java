@@ -138,12 +138,12 @@ public class MessageFormatRecordTest {
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
     // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
-    short[] versions = new short[]{BlobPropertiesSerDe.Version1, Version2};
+    short[] versions = new short[]{Version1, Version2};
     for (short version : versions) {
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
       long ttl = TestUtils.RANDOM.nextInt();
-      if (version == BlobPropertiesSerDe.Version1) {
+      if (version == Version1) {
         properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl);
       } else {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -153,7 +153,7 @@ public class MessageFormatRecordTest {
             new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, issuerAccountId);
       }
       ByteBuffer stream;
-      if (version == BlobPropertiesSerDe.Version1) {
+      if (version == Version1) {
         stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties));
         MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
       } else {
@@ -199,7 +199,7 @@ public class MessageFormatRecordTest {
    * @param properties the {@link BlobProperties} to be serialized
    * @todo: move this method to {@link BlobPropertiesSerDe} when enabling write path in V2
    */
-  public static void serializeBlobPropertiesV2(ByteBuffer outputBuffer, BlobProperties properties) {
+  private static void serializeBlobPropertiesV2(ByteBuffer outputBuffer, BlobProperties properties) {
     outputBuffer.putShort(Version2);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
@@ -215,7 +215,7 @@ public class MessageFormatRecordTest {
 
   //  TODO: remove this once BlobProperties V2 is enabled
   private static int getBlobPropertiesV2RecordSize(BlobProperties properties) {
-    int size = BlobPropertiesSerDe.getBlobPropertiesV2SerDeSize(properties);
+    int size = getBlobPropertiesV2SerDeSize(properties);
     return Version_Field_Size_In_Bytes + size + Crc_Size;
   }
 
