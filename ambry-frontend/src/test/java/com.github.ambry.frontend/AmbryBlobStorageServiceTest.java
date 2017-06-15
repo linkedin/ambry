@@ -530,7 +530,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests the handling of {@link AmbryBlobStorageService#OPERATION_GET_PEERS} requests.
+   * Tests the handling of {@link Operations#GET_PEERS} requests.
    * @throws Exception
    */
   @Test
@@ -545,7 +545,7 @@ public class AmbryBlobStorageServiceTest {
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
       String[] parts = datanode.split(":");
       String baseUri =
-          AmbryBlobStorageService.OPERATION_GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
+          Operations.GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
               + GetPeersHandler.PORT_QUERY_PARAM + "=" + parts[1];
       String[] uris = {baseUri, "/" + baseUri};
       for (String uri : uris) {
@@ -560,7 +560,7 @@ public class AmbryBlobStorageServiceTest {
     }
     // test one bad request
     RestRequest restRequest =
-        createRestRequest(RestMethod.GET, AmbryBlobStorageService.OPERATION_GET_PEERS, null, null);
+        createRestRequest(RestMethod.GET, Operations.GET_PEERS, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
       doOperation(restRequest, restResponseChannel);

@@ -163,7 +163,7 @@ public class GetPeersHandlerTest {
     JSONObject data = new JSONObject();
     data.put(MockRestRequest.REST_METHOD_KEY, RestMethod.GET);
     data.put(MockRestRequest.URI_KEY,
-        AmbryBlobStorageService.OPERATION_GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
+        Operations.GET_PEERS + "?" + GetPeersHandler.NAME_QUERY_PARAM + "=" + parts[0] + "&"
             + GetPeersHandler.PORT_QUERY_PARAM + "=" + parts[1]);
     return new MockRestRequest(data, null);
   }
@@ -220,7 +220,7 @@ public class GetPeersHandlerTest {
    * @throws Exception
    */
   private void doBadArgsTest(String name, String port, RestServiceErrorCode expectedErrorCode) throws Exception {
-    StringBuilder uri = new StringBuilder(AmbryBlobStorageService.OPERATION_GET_PEERS + "?");
+    StringBuilder uri = new StringBuilder(Operations.GET_PEERS + "?");
     if (name != null) {
       uri.append(GetPeersHandler.NAME_QUERY_PARAM).append("=").append(name);
     }
