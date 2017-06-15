@@ -286,8 +286,8 @@ public class ServerAdminTool implements Closeable {
    * @param verifiableProperties the {@link VerifiableProperties} to use for config.
    * @throws Exception
    */
-  ServerAdminTool(MetricRegistry metricRegistry, SSLFactory sslFactory, VerifiableProperties verifiableProperties)
-      throws Exception {
+  public ServerAdminTool(MetricRegistry metricRegistry, SSLFactory sslFactory,
+      VerifiableProperties verifiableProperties) throws Exception {
     NetworkMetrics metrics = new NetworkMetrics(metricRegistry);
     NetworkConfig config = new NetworkConfig(verifiableProperties);
     networkClient =
@@ -313,8 +313,8 @@ public class ServerAdminTool implements Closeable {
    * @return the {@link ServerErrorCode} and {@link BlobProperties} of {@code blobId}.
    * @throws Exception
    */
-  Pair<ServerErrorCode, BlobProperties> getBlobProperties(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
-      ClusterMap clusterMap) throws Exception {
+  public Pair<ServerErrorCode, BlobProperties> getBlobProperties(DataNodeId dataNodeId, BlobId blobId,
+      GetOption getOption, ClusterMap clusterMap) throws Exception {
     Pair<ServerErrorCode, InputStream> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.BlobProperties, getOption, clusterMap);
     InputStream stream = response.getSecond();
@@ -331,7 +331,7 @@ public class ServerAdminTool implements Closeable {
    * @return the {@link ServerErrorCode} and user metadata as a {@link ByteBuffer} for {@code blobId}
    * @throws Exception
    */
-  Pair<ServerErrorCode, ByteBuffer> getUserMetadata(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
+  public Pair<ServerErrorCode, ByteBuffer> getUserMetadata(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
       ClusterMap clusterMap) throws Exception {
     Pair<ServerErrorCode, InputStream> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.BlobUserMetadata, getOption, clusterMap);
@@ -349,7 +349,7 @@ public class ServerAdminTool implements Closeable {
    * @return the {@link ServerErrorCode} and {@link BlobData} for {@code blobId}
    * @throws Exception
    */
-  Pair<ServerErrorCode, BlobData> getBlob(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
+  public Pair<ServerErrorCode, BlobData> getBlob(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
       ClusterMap clusterMap) throws Exception {
     Pair<ServerErrorCode, InputStream> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.Blob, getOption, clusterMap);
@@ -368,7 +368,7 @@ public class ServerAdminTool implements Closeable {
    * @return the {@link ServerErrorCode} and {@link BlobAll} for {@code blobId}
    * @throws Exception
    */
-  Pair<ServerErrorCode, BlobAll> getAll(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
+  public Pair<ServerErrorCode, BlobAll> getAll(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
       ClusterMap clusterMap, StoreKeyFactory storeKeyFactory) throws Exception {
     Pair<ServerErrorCode, InputStream> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.All, getOption, clusterMap);
@@ -386,7 +386,7 @@ public class ServerAdminTool implements Closeable {
    * @throws IOException
    * @throws TimeoutException
    */
-  ServerErrorCode triggerCompaction(DataNodeId dataNodeId, String partitionIdStr, ClusterMap clusterMap)
+  public ServerErrorCode triggerCompaction(DataNodeId dataNodeId, String partitionIdStr, ClusterMap clusterMap)
       throws IOException, TimeoutException {
     PartitionId targetPartitionId = null;
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
