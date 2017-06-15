@@ -482,8 +482,6 @@ public class MessageFormatRecord {
     public static final int Container_Id_Field_Size_In_Bytes = 2;
     public static final int Deletion_Time_Field_Size_In_Bytes = 8;
 
-    private static Logger logger = LoggerFactory.getLogger(Delete_Format_V2.class);
-
     public static int getDeleteRecordSize() {
       return Version_Field_Size_In_Bytes + Account_Id_Field_Size_In_Bytes + Container_Id_Field_Size_In_Bytes
           + Deletion_Time_Field_Size_In_Bytes + Crc_Size;

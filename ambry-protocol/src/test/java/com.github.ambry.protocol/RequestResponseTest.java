@@ -42,6 +42,7 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -303,13 +304,14 @@ public class RequestResponseTest {
     for (short version : versions) {
       short accountId = Utils.getRandomShort(random);
       short containerId = Utils.getRandomShort(random);
-      int deletionTimeSecs = (int) (SystemTime.getInstance().seconds() + random.nextInt(60 * 60 * 24 * 365));
+      int deletionTimeMs =
+          (int) (SystemTime.getInstance().milliseconds() + random.nextInt((int) TimeUnit.DAYS.toMillis(100)));
       int correlationId = random.nextInt();
       DeleteRequest deleteRequest;
       if (version == DeleteRequest.Delete_Request_Version_1) {
         deleteRequest = new DeleteRequest(correlationId, "client", id1);
       } else {
-        deleteRequest = new DeleteRequest(correlationId, "client", id1, accountId, containerId, deletionTimeSecs);
+        deleteRequest = new DeleteRequest(correlationId, "client", id1, accountId, containerId, deletionTimeMs);
       }
       ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
       WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
@@ -325,8 +327,7 @@ public class RequestResponseTest {
       if (version == DeleteRequest.Delete_Request_Version_2) {
         Assert.assertEquals("AccountId mismatch ", accountId, deserializedDeleteRequest.getAccountId());
         Assert.assertEquals("ContainerId mismatch ", containerId, deserializedDeleteRequest.getContainerId());
-        Assert.assertEquals("DeletionTime mismatch ", deletionTimeSecs,
-            deserializedDeleteRequest.getDeletionTimeInSecs());
+        Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializedDeleteRequest.getDeletionTimeInMs());
       }
       DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
       outputStream.reset();

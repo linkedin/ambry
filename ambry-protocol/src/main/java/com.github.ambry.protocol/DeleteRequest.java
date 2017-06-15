@@ -30,7 +30,7 @@ public class DeleteRequest extends RequestOrResponse {
   private final BlobId blobId;
   private final short accountId;
   private final short containerId;
-  private final int deletionTimeInSecs;
+  private final long deletionTimeInMs;
   private int sizeSent;
   private final short version;
   static final short Delete_Request_Version_1 = 1;
@@ -38,7 +38,7 @@ public class DeleteRequest extends RequestOrResponse {
   private final static short currentVersion = Delete_Request_Version_1;
 
   private static final int AccountId_ContainerId_Field_Size_InBytes = 2;
-  private static final int DeletionTime_Field_Size_InBytes = 4;
+  private static final int DeletionTime_Field_Size_InBytes = 8;
 
   /**
    * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_1}
@@ -59,11 +59,11 @@ public class DeleteRequest extends RequestOrResponse {
    * @param blobId blobId of the delete request
    * @param accountId accountId of the blobId being requested
    * @param containerId containerId of the blobId being requested
-   * @param deletionTimeInSecs deletion time of the blob in ms
+   * @param deletionTimeInMs deletion time of the blob in ms
    */
   public DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
-      int deletionTimeInSecs) {
-    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInSecs, Delete_Request_Version_2);
+      long deletionTimeInMs) {
+    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs, Delete_Request_Version_2);
   }
 
   /**
@@ -73,17 +73,17 @@ public class DeleteRequest extends RequestOrResponse {
    * @param blobId blobId of the delete request
    * @param accountId accountId of the blobId being requested
    * @param containerId containerId of the blobId being requested
-   * @param deletionTimeInSecs deletion time of the blob in ms
+   * @param deletionTimeInMs deletion time of the blob in ms
    * @param version version of the {@link DeleteRequest}
    */
   private DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
-      int deletionTimeInSecs, short version) {
+      long deletionTimeInMs, short version) {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
     this.version = version;
     this.blobId = blobId;
     this.accountId = accountId;
     this.containerId = containerId;
-    this.deletionTimeInSecs = deletionTimeInSecs;
+    this.deletionTimeInMs = deletionTimeInMs;
     sizeSent = 0;
   }
 
@@ -109,7 +109,7 @@ public class DeleteRequest extends RequestOrResponse {
       if (version == Delete_Request_Version_2) {
         bufferToSend.putShort(accountId);
         bufferToSend.putShort(containerId);
-        bufferToSend.putInt(deletionTimeInSecs);
+        bufferToSend.putLong(deletionTimeInMs);
       }
       bufferToSend.flip();
     }
@@ -145,8 +145,8 @@ public class DeleteRequest extends RequestOrResponse {
     return containerId;
   }
 
-  public int getDeletionTimeInSecs() {
-    return deletionTimeInSecs;
+  public long getDeletionTimeInMs() {
+    return deletionTimeInMs;
   }
 
   @Override
@@ -173,7 +173,7 @@ public class DeleteRequest extends RequestOrResponse {
     sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append(", ").append("AccountId=").append(accountId);
     sb.append(", ").append("ContainerId=").append(containerId);
-    sb.append(", ").append("DeletionTimeInSecs=").append(deletionTimeInSecs);
+    sb.append(", ").append("DeletionTimeInMs=").append(deletionTimeInMs);
     sb.append("]");
     return sb.toString();
   }
@@ -200,8 +200,8 @@ public class DeleteRequest extends RequestOrResponse {
       BlobId id = new BlobId(stream, map);
       short accountId = stream.readShort();
       short containerId = stream.readShort();
-      int deletionTimeInSecs = stream.readInt();
-      return new DeleteRequest(correlationId, clientId, id, accountId, containerId, deletionTimeInSecs);
+      long deletionTimeInMs = stream.readLong();
+      return new DeleteRequest(correlationId, clientId, id, accountId, containerId, deletionTimeInMs);
     }
   }
 }
