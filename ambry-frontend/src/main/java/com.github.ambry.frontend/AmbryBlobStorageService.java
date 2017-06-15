@@ -57,7 +57,6 @@ import org.slf4j.LoggerFactory;
  */
 class AmbryBlobStorageService implements BlobStorageService {
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
-  static final String OPERATION_GET_PEERS = "peers";
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
   private static final String OPERATION_TYPE_OUTBOUND_ID_CONVERSION = "Outbound Id Conversion";
@@ -154,7 +153,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       if (operationOrBlobId.startsWith("/")) {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
-      if (operationOrBlobId.equalsIgnoreCase(OPERATION_GET_PEERS)) {
+      if (operationOrBlobId.equalsIgnoreCase(Operations.GET_PEERS)) {
         getPeersHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
