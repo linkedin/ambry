@@ -20,7 +20,7 @@ import java.util.Collection;
 /**
  * <p>
  *   An {@code AccountService} is a component that can respond to queries for {@link Account} by id or name, and
- *   add/update {@link Account} for future queries. The {@link Account}s under an {@code AccountService} cannot
+ *   add/update {@link Account}s for future queries. The {@link Account}s under an {@code AccountService} cannot
  *   have duplicate ids or names, and <em>MUST</em> have their ids and names one-to-one mapped.
  * </p>
  * <p>
@@ -73,7 +73,9 @@ public interface AccountService extends Closeable {
    * E      1           "b"           yes            fail update                  conflicts with existing name.
    * </pre>
    * @param accounts The collection of {@link Account}s to update. Cannot be {@code null}.
-   * @return {@code true} if the update operation is successful, {@code false} otherwise.
+   * @return {@code true} indicates that the accounts have been successfully updated, {@code false} indicates the
+   *                      operation has failed, and none of the account has been updated. This is an either succeed-all
+   *                      or fail-all operation.
    */
   public boolean updateAccounts(Collection<Account> accounts);
 

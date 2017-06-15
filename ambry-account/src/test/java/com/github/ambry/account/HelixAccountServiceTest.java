@@ -39,7 +39,6 @@ import static com.github.ambry.account.HelixAccountService.*;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
 
 
 /**
@@ -350,7 +349,7 @@ public class HelixAccountServiceTest {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     conflictAccounts.add(new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build());
-    updateConflictAccountsAndFail(conflictAccounts, IllegalArgumentException.class);
+    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -364,7 +363,7 @@ public class HelixAccountServiceTest {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build());
-    updateConflictAccountsAndFail(conflictAccounts, IllegalArgumentException.class);
+    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -377,7 +376,7 @@ public class HelixAccountServiceTest {
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
-    updateConflictAccountsAndFail(conflictAccounts, IllegalArgumentException.class);
+    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -439,7 +438,7 @@ public class HelixAccountServiceTest {
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
         Collections.singleton((new AccountBuilder((short) 3, "a", AccountStatus.INACTIVE, null).build()));
-    updateConflictAccountsAndFail(conflictAccounts, IllegalArgumentException.class);
+    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -455,7 +454,7 @@ public class HelixAccountServiceTest {
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
         Collections.singleton((new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build()));
-    updateConflictAccountsAndFail(conflictAccounts, IllegalArgumentException.class);
+    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -539,23 +538,6 @@ public class HelixAccountServiceTest {
     assertEquals("Wrong number of accounts in helixAccountService", 1, helixAccountService.getAllAccounts().size());
     assertAccountInHelixAccountService(account2);
     assertAccountNotExistInHelixAccountService(account1);
-  }
-
-  /**
-   * Asserts that updating conflicting {@link Account} will fail and throw an exception as expected.
-   * @param accounts A collection of {@link Account}s that either conflict among themselves or with the existing
-   *                 {@link Account}s.
-   * @param exceptionClass The class of expected exception.
-   */
-  private void updateConflictAccountsAndFail(Collection<Account> accounts, Class<?> exceptionClass) {
-    try {
-      helixAccountService.updateAccounts(accounts);
-      fail("should have thrown");
-    } catch (Exception e) {
-      // expected
-      System.out.println(e.getMessage());
-      assertEquals("Wrong exception", exceptionClass, e.getClass());
-    }
   }
 
   /**
