@@ -44,6 +44,13 @@ public class FrontendConfig {
   public final String frontendSecurityServiceFactory;
 
   /**
+   * The {@link com.github.ambry.rest.AuthorizationServiceFactory} that needs to be used by AmbryBlobStorageService to
+   * make authorization decisions.
+   */
+  @Config("frontend.authorization.service.factory")
+  @Default("com.github.ambry.frontend.NoOpAuthorizationServiceFactory")
+  public final String frontendAuthorizationServiceFactory;
+  /**
    * The comma separated list of prefixes to remove from paths.
    */
   @Config("frontend.path.prefixes.to.remove")
@@ -63,6 +70,8 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbryIdConverterFactory");
     frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
         "com.github.ambry.frontend.AmbrySecurityServiceFactory");
+    frontendAuthorizationServiceFactory = verifiableProperties.getString("frontend.authorization.service.factory",
+        "com.github.ambry.frontend.NoOpAuthorizationServiceFactory");
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =

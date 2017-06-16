@@ -66,7 +66,8 @@ public class AmbrySecurityServiceTest {
       new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time), null);
 
   private final SecurityService securityService =
-      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()));
+      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
+          new NoOpAuthorizationService());
 
   /**
    * Tests {@link AmbrySecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases

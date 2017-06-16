@@ -13,9 +13,12 @@
  */
 package com.github.ambry.frontend;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.rest.AuthorizationService;
+import com.github.ambry.rest.AuthorizationServiceFactory;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
 import com.github.ambry.rest.IdConverterFactory;
@@ -57,15 +60,19 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {
+      MetricRegistry metricRegistry = clusterMap.getMetricRegistry();
       frontendConfig = new FrontendConfig(verifiableProperties);
-      frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
+      frontendMetrics = new FrontendMetrics(metricRegistry);
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
       this.router = router;
+      AuthorizationServiceFactory authorizationServiceFactory =
+          Utils.getObj(frontendConfig.frontendAuthorizationServiceFactory, verifiableProperties, metricRegistry);
+      AuthorizationService authorizationService = authorizationServiceFactory.getAuthorizationService();
       idConverterFactory =
-          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
+          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, metricRegistry);
       securityServiceFactory = Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
-          clusterMap.getMetricRegistry());
+          clusterMap.getMetricRegistry(), authorizationService);
     }
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
   }

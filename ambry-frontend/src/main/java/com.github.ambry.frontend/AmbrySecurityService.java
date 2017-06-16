@@ -17,6 +17,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.AuthorizationService;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -45,10 +46,13 @@ class AmbrySecurityService implements SecurityService {
   private boolean isOpen;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
+  private final AuthorizationService authorizationService;
 
-  public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics) {
+  public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
+      AuthorizationService authorizationService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
+    this.authorizationService = authorizationService;
     isOpen = true;
   }
 
@@ -63,21 +67,26 @@ class AmbrySecurityService implements SecurityService {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
       }
-      RestMethod restMethod = restRequest.getRestMethod();
-      switch (restMethod) {
-        case GET:
-          RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-          if (subresource != null) {
-            switch (subresource) {
-              case BlobInfo:
-              case UserMetadata:
-                break;
-              default:
-                exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET",
-                    RestServiceErrorCode.BadRequest);
+      try {
+        authorizationService.hasAccess(restRequest);
+        RestMethod restMethod = restRequest.getRestMethod();
+        switch (restMethod) {
+          case GET:
+            RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
+            if (subresource != null) {
+              switch (subresource) {
+                case BlobInfo:
+                case UserMetadata:
+                  break;
+                default:
+                  exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET",
+                      RestServiceErrorCode.BadRequest);
+              }
             }
-          }
-          break;
+            break;
+        }
+      } catch (Exception e) {
+        exception = e;
       }
     }
     FutureResult<Void> futureResult = new FutureResult<Void>();
