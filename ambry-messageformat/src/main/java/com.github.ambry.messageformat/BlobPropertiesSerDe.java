@@ -26,39 +26,20 @@ public class BlobPropertiesSerDe {
 
   static final short Version1 = 1;
   static final short Version2 = 2;
-  static final short currentVersion = Version1;
+  private static final short currentVersion = Version1;
   private static final int Version_Field_Size_In_Bytes = 2;
   private static final int TTL_Field_Size_In_Bytes = 8;
   private static final int Private_Field_Size_In_Bytes = 1;
   private static final int CreationTime_Field_Size_In_Bytes = 8;
   private static final int Variable_Field_Size_In_Bytes = 4;
   private static final int BlobSize_Field_Size_In_Bytes = 8;
-  private static final int AccountId_Field_Size_In_Bytes = 2;
-  private static final int ContainerId_Field_Size_In_Bytes = 2;
-  private static final int IssuerAccountId_Field_Size_In_Bytes = 2;
 
-  // @TODO: remove this to add accountId and containerId once serializeBlobProperties is changed to version2
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getOwnerId()) + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getServiceId());
-  }
-
-  /**
-   * Returns the size of {@link BlobProperties} to serialize in Version 2
-   * @param properties {@link BlobProperties} for which size is requested
-   * @return the size of the {@link BlobProperties} to serialize in Version 2
-   * @TODO: will be used once serializeBlobProperties is changed to version2
-   */
-  public static int getBlobPropertiesV2SerDeSize(BlobProperties properties) {
-    return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
-        + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
-        + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
-        + Utils.getNullableStringLength(properties.getOwnerId()) + Variable_Field_Size_In_Bytes
-        + Utils.getNullableStringLength(properties.getServiceId()) + AccountId_Field_Size_In_Bytes
-        + ContainerId_Field_Size_In_Bytes + IssuerAccountId_Field_Size_In_Bytes;
   }
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {

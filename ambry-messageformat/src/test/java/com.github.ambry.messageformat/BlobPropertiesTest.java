@@ -55,9 +55,9 @@ public class BlobPropertiesTest {
     final String contentType = "ContentType";
     final int timeToLiveInSeconds = 144;
 
-    short accountId = BlobProperties.ACCOUNTID_DEFAULT_VALUE;
-    short containerId = BlobProperties.CONTAINERID_DEFAULT_VALUE;
-    short creatorAccountId = BlobProperties.ACCOUNTID_DEFAULT_VALUE;
+    short accountId = BlobProperties.LEGACY_ACCOUNT_ID;
+    short containerId = BlobProperties.LEGACY_CONTAINER_ID;
+    short creatorAccountId = BlobProperties.LEGACY_ACCOUNT_ID;
     if (version == BlobPropertiesSerDe.Version2) {
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);

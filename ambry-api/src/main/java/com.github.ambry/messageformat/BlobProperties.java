@@ -23,8 +23,8 @@ import com.github.ambry.utils.Utils;
  */
 public class BlobProperties {
 
-  public static final short ACCOUNTID_DEFAULT_VALUE = -1;
-  public static final short CONTAINERID_DEFAULT_VALUE = -1;
+  public static final short LEGACY_ACCOUNT_ID = -1;
+  public static final short LEGACY_CONTAINER_ID = -1;
 
   private final long blobSize;
   private final String serviceId;
@@ -102,8 +102,8 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs) {
-    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs,
-        ACCOUNTID_DEFAULT_VALUE, CONTAINERID_DEFAULT_VALUE, ACCOUNTID_DEFAULT_VALUE);
+    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs, LEGACY_ACCOUNT_ID,
+        LEGACY_CONTAINER_ID, LEGACY_ACCOUNT_ID);
   }
 
   /**
