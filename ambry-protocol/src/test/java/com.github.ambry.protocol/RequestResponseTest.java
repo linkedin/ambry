@@ -27,6 +27,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -40,6 +41,8 @@ import java.util.List;
 import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
+
+import static com.github.ambry.store.MessageInfo.*;
 
 
 class MockFindTokenFactory implements FindTokenFactory {
@@ -245,7 +248,10 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().size(), 1);
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().get(0), id1);
 
-    MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
     ArrayList<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
     PartitionResponseInfo partitionResponseInfo =
@@ -268,15 +274,19 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.No_Error);
     Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().size(), 1);
     Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().size(), 1);
-    Assert.assertEquals(
-        deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getSize(), 1000);
-    Assert.assertEquals(
-        deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getStoreKey(), id1);
-    Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList()
-        .get(0)
-        .getMessageInfoList()
-        .get(0)
-        .getExpirationTimeInMs(), 1000);
+    MessageInfo msgInfo = deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
+    Assert.assertEquals(msgInfo.getSize(), 1000);
+    Assert.assertEquals(msgInfo.getStoreKey(), id1);
+    Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
+    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+      Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
+      Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
+    } else {
+      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_DEFAULT_VALUE, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
+    }
   }
 
   @Test
@@ -347,7 +357,11 @@ public class RequestResponseTest {
     } catch (IllegalArgumentException e) {
       Assert.assertTrue(true);
     }
-    MessageInfo messageInfo = new MessageInfo(id1, 1000);
+
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    MessageInfo messageInfo = new MessageInfo(id1, 1000, accountId, containerId, operationTimeMs);
     List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
     ReplicaMetadataResponseInfo responseInfo =
@@ -365,10 +379,28 @@ public class RequestResponseTest {
     } while (!response.isSendComplete());
     DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
     requestStream.readLong(); // read size
-    ReplicaMetadataResponse deserializedDeleteResponse =
+    ReplicaMetadataResponse deserializedReplicaMetadataResponse =
         ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenFactory(), clusterMap);
-    Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals(deserializedReplicaMetadataResponse.getCorrelationId(), 1234);
+    Assert.assertEquals(deserializedReplicaMetadataResponse.getError(), ServerErrorCode.No_Error);
+    Assert.assertEquals("ReplicaMetadataResponse list size mismatch ", 1,
+        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().size());
+    Assert.assertEquals("MsgInfo list size in ReplicaMetadataResponse mismatch ", 1,
+        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList().size());
+    MessageInfo msgInfo =
+        deserializedReplicaMetadataResponse.getReplicaMetadataResponseInfoList().get(0).getMessageInfoList().get(0);
+    Assert.assertEquals("MsgInfo size mismatch ", 1000, msgInfo.getSize());
+    Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
+    Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
+    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+      Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
+      Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
+    } else {
+      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_DEFAULT_VALUE, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
+    }
   }
 
   /**

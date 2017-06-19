@@ -38,13 +38,13 @@ public class ReplicaMetadataResponse extends Response {
 
   static final short Replica_Metadata_Response_Version_V1 = 1;
   static final short Replica_Metadata_Response_Version_V2 = 2;
+  static final short Replica_Metadata_Response_Version_V3 = 3;
 
   private static final short currentVersion = Replica_Metadata_Response_Version_V2;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId,
-        error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId, error);
     this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
     this.replicaMetadataResponseInfoListSizeInBytes = 0;
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
@@ -53,8 +53,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId,
-        error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId, error);
     replicaMetadataResponseInfoList = null;
     replicaMetadataResponseInfoListSizeInBytes = 0;
   }
