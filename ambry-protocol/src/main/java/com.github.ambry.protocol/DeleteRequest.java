@@ -15,7 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.messageformat.DeleteRecord;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -48,8 +48,8 @@ public class DeleteRequest extends RequestOrResponse {
    */
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, DeleteRecord.ACCOUNT_ID_DEFAULT_VALUE,
-        DeleteRecord.CONTAINER_ID_DEFAULT_VALUE, (int) Utils.Infinite_Time, currentVersion);
+    this(correlationId, clientId, blobId, MessageInfo.ACCOUNT_ID_LEGACY_VALUE, MessageInfo.CONTAINER_ID_LEGACY_VALUE,
+        (int) Utils.Infinite_Time, currentVersion);
   }
 
   /**

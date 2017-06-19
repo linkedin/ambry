@@ -86,7 +86,8 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
             if (deleteRecord.getVersion() == MessageFormatRecord.Delete_Version_V1) {
               return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true);
             } else {
-              // TODO: construct new MessageInfo with accountId, containerId, operationTime
+              return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                  deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
             }
           }
         default:

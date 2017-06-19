@@ -462,7 +462,7 @@ public class MessageFormatRecord {
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |               |               |               |             |
    * | version |   AccountId   |  ContainerId  |  DeletionTime |     Crc     |
-   * |(2 bytes)|    (2 byte2)  |   (2 bytes)   |   (4 bytes)   |  (8 bytes)  |
+   * |(2 bytes)|    (2 byte2)  |   (2 bytes)   |   (8 bytes)   |  (8 bytes)  |
    * |         |               |               |               |             |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    *  version         - The version of the delete record
@@ -471,9 +471,9 @@ public class MessageFormatRecord {
    *
    *  ContainerId   - ContainerId that the blob belongs to
    *
-   *  Deletion Time - Time of deletion in secs
+   *  Deletion Time - Time of deletion in Ms
    *
-   *  Crc             - The crc of the delete record
+   *  Crc           - The crc of the delete record
    *
    */
   public static class Delete_Format_V2 {

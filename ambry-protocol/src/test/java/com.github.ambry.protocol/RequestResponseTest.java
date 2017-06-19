@@ -289,8 +289,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_DEFAULT_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_LEGACY_VALUE, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_LEGACY_VALUE, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -423,8 +423,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_DEFAULT_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_LEGACY_VALUE, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_LEGACY_VALUE, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }

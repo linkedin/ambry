@@ -88,7 +88,10 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
                     new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true);
                 messageRecovered.add(info);
               } else {
-                // TODO: construct new MessageInfo with accountId, containerId, operationTime
+                MessageInfo info =
+                    new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                        deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
+                messageRecovered.add(info);
               }
             }
             startOffset = stream.getCurrentPosition();
