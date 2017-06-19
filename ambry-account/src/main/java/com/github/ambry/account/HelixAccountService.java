@@ -21,7 +21,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -38,8 +37,8 @@ import org.slf4j.LoggerFactory;
  *   An implementation of {@link AccountService} that employs a {@link HelixPropertyStore} as its underlying storage.
  *   It is internally configured with the store-relative path be {@link #FULL_ACCOUNT_METADATA_PATH} to fetch a full
  *   set of {@link Account} metadata, and the same path to update {@link Account} metadata. The full {@link Account}
- *   metadata will be cached locally, so serving an {@link Account} query will not incur any I/O operation, and the
- *   calls to a {@code HelixAccountService} is not blocking.
+ *   metadata will be cached locally, so serving an {@link Account} query will not incur any calls to the remote
+ *   {@code ZooKeeper} server, and the calls to a {@code HelixAccountService} is not blocking.
  * </p>
  * <p>
  *   When a {@link HelixAccountService} starts up, it will automatically fetch a full set of {@link Account} metadata
@@ -60,8 +59,8 @@ import org.slf4j.LoggerFactory;
  * where {@code accountMap} is a {@link Map} from accountId String to {@link Account} JSON string.
  * </p>
  * <p>
- *   Limited by {@link HelixPropertyStore}, the total size of {@link Account} data stored on the {@link ZNRecord} cannot
- *   exceed 1MB.
+ *   Limited by {@link HelixPropertyStore}, the total size of {@link Account} data stored on a single {@link ZNRecord}
+ *   cannot exceed 1MB.
  * </p>
  */
 public class HelixAccountService implements AccountService, TopicListener<String> {
@@ -94,14 +93,12 @@ public class HelixAccountService implements AccountService, TopicListener<String
     readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH);
     isOpen = true;
     logger.info("HelixAccountService started. {} accounts have been loaded, took time={}ms",
-        cache.getAccountTwoKeyMap().getAccounts().size(), System.currentTimeMillis() - startTimeMs);
+        cache.getAccountInfoMap().getAccounts().size(), System.currentTimeMillis() - startTimeMs);
   }
 
   @Override
   public Account getAccountByName(String accountName) {
-    if (!isOpen) {
-      throw new IllegalStateException("AccountService is closed.");
-    }
+    checkOpen();
     if (accountName == null) {
       throw new IllegalArgumentException("accountName cannot be null.");
     }
@@ -110,17 +107,13 @@ public class HelixAccountService implements AccountService, TopicListener<String
 
   @Override
   public Account getAccountById(short id) {
-    if (!isOpen) {
-      throw new IllegalStateException("AccountService is closed.");
-    }
+    checkOpen();
     return cache.getAccountById(id);
   }
 
   @Override
   public Collection<Account> getAllAccounts() {
-    if (!isOpen) {
-      throw new IllegalStateException("AccountService is closed.");
-    }
+    checkOpen();
     return cache.getAllAccounts();
   }
 
@@ -130,16 +123,14 @@ public class HelixAccountService implements AccountService, TopicListener<String
    *   This call is blocking until it completes the operation of updating account metadata to {@link HelixPropertyStore}.
    * </p>
    * <p>
-   *   There is a slight chance that an {@link Account} could be updated successfully, even if its value was
+   *   There is a slight chance that an {@link Account} could be updated successfully, but its value was
    *   set based on an outdated {@link Account}. This can be fixed after {@code generationId} is introduced
    *   to {@link Account}.
    * </p>
    */
   @Override
   public boolean updateAccounts(Collection<Account> accounts) {
-    if (!isOpen) {
-      throw new IllegalStateException("AccountService is closed.");
-    }
+    checkOpen();
     if (accounts == null) {
       throw new IllegalArgumentException("accounts cannot be null");
     }
@@ -150,9 +141,9 @@ public class HelixAccountService implements AccountService, TopicListener<String
     }
     boolean hasSucceeded = false;
     // make a pre check for conflict between the accounts to update and the accounts in the local cache. Will fail this
-    // update operation if any conflict exists. There is a slight chance that the account to update conflicts with
-    // the accounts in the local cache, but does not conflict with those in the helixPropertyStore. This will happen
-    // if some accounts are updated but the local cache is not refreshed.
+    // update operation for all the accounts if any conflict exists. There is a slight chance that the account to update
+    // conflicts with the accounts in the local cache, but does not conflict with those in the helixPropertyStore. This
+    // will happen if some accounts are updated but the local cache is not refreshed.
     if (!hasConflictWithCache(accounts)) {
       hasSucceeded = helixStore.update(FULL_ACCOUNT_METADATA_PATH, currentData -> {
         ZNRecord newRecord;
@@ -169,33 +160,28 @@ public class HelixAccountService implements AccountService, TopicListener<String
           logger.debug("AccountMap does not exist in ZNRecord when updating accounts. Creating a new accountMap");
           accountMap = new HashMap<>();
         }
-        AccountTwoKeyMap remoteAccountTwoKeyMap = new AccountTwoKeyMap(accountMap);
+        AccountInfoMap remoteAccountInfoMap = new AccountInfoMap(accountMap);
 
         // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
         // be caught by Helix and eventually helixStore#update will return false.
-        if (hasConflictingAccount(accounts, remoteAccountTwoKeyMap)) {
+        if (hasConflictingAccount(accounts, remoteAccountInfoMap)) {
           String message =
               "Updating accounts failed because one or more accounts to update conflict with accounts in helix property store";
           // Do not depend on Helix to log, so log the error message here.
           logger.error(message);
           throw new IllegalArgumentException(message);
         } else {
-          Account account = null;
-          Iterator<Account> itr = accounts.iterator();
-          try {
-            while (itr.hasNext()) {
-              account = itr.next();
-              // @todo check if remoteAccount with the same id exists. If so, check
-              // @todo account.getGenerationId() == remoteAccount.getGenerationId()+1, or fail the update operation.
+          for (Account account : accounts) {
+            try {
               accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
+            } catch (Exception e) {
+              String message = new StringBuilder(
+                  "Updating accounts failed because unexpected exception occurred when updating accountId=").append(
+                  account.getId()).append(" accountName=").append(account.getName()).toString();
+              // Do not depend on Helix to log, so log the error message here.
+              logger.error(message, e);
+              throw new RuntimeException(message, e);
             }
-          } catch (Exception e) {
-            String message = new StringBuilder(
-                "Updating accounts failed because unexpected exception occurred when updating accountId=").append(
-                account.getId()).append(" accountName=").append(account.getName()).toString();
-            // Do not depend on Helix to log, so log the error message here.
-            logger.error(message, e);
-            throw new RuntimeException(message, e);
           }
           newRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
           return newRecord;
@@ -212,9 +198,7 @@ public class HelixAccountService implements AccountService, TopicListener<String
 
   @Override
   public void onMessage(String topic, String message) {
-    if (!isOpen) {
-      throw new IllegalStateException("AccountService is closed.");
-    }
+    checkOpen();
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start to process message={} for topic={}", message, topic);
     try {
@@ -235,12 +219,14 @@ public class HelixAccountService implements AccountService, TopicListener<String
 
   @Override
   public void close() {
-    try {
-      isOpen = false;
-      cache.close();
-      helixStore.stop();
-    } catch (Exception e) {
-      logger.error("Exception occurred when closing HelixAccountService.", e);
+    if (isOpen) {
+      try {
+        isOpen = false;
+        cache.close();
+        helixStore.stop();
+      } catch (Exception e) {
+        logger.error("Exception occurred when closing HelixAccountService.", e);
+      }
     }
   }
 
@@ -255,17 +241,17 @@ public class HelixAccountService implements AccountService, TopicListener<String
     ZNRecord zNRecord = helixStore.get(pathToFullAccountMetadata, null, AccessOption.PERSISTENT);
     if (zNRecord == null) {
       logger.debug("The ZNRecord to read does not exist on path={}, clearing local cache", pathToFullAccountMetadata);
-      cache.update(new AccountTwoKeyMap());
+      cache.update(new AccountInfoMap());
       return;
     }
     Map<String, String> accountMap = zNRecord.getMapField(ACCOUNT_METADATA_MAP_KEY);
     if (accountMap == null) {
       logger.debug("The ZNRecord={} to read on path={} does not have a simple map with key={}, clearing local cache",
           zNRecord, pathToFullAccountMetadata, ACCOUNT_METADATA_MAP_KEY);
-      cache.update(new AccountTwoKeyMap());
+      cache.update(new AccountInfoMap());
       return;
     }
-    cache.update(new AccountTwoKeyMap(accountMap));
+    cache.update(new AccountInfoMap(accountMap));
     logger.trace("Completed fetching full account metadata set from path={}, took time={}ms", pathToFullAccountMetadata,
         System.currentTimeMillis() - startTimeMs);
   }
@@ -297,44 +283,45 @@ public class HelixAccountService implements AccountService, TopicListener<String
    * Checks a collection of {@link Account}s if there is any conflict between the {@link Account}s to update and the
    * {@link Account}s in the local cache.
    *
-   * @param accounts The collection of {@link Account}s to check with the local cache.
+   * @param accountsToSet The collection of {@link Account}s to check with the local cache.
    * @return {@code true} if there is at least one {@link Account} in {@code accounts} conflicts with the {@link Account}s
    *                      in the cache, {@code false} otherwise.
    */
-  private boolean hasConflictWithCache(Collection<Account> accounts) {
-    return hasConflictingAccount(accounts, cache.getAccountTwoKeyMap());
+  private boolean hasConflictWithCache(Collection<Account> accountsToSet) {
+    return hasConflictingAccount(accountsToSet, cache.getAccountInfoMap());
   }
 
   /**
    * Checks if there is any {@link Account} in a given collection of {@link Account}s conflicts against any {@link Account}
-   * in a {@link AccountTwoKeyMap}, according to the Javadoc of {@link AccountService}.
+   * in a {@link AccountInfoMap}, according to the Javadoc of {@link AccountService}. Two {@link Account}s can be
+   * conflicting with each other if they have different account Ids but the same account name.
    *
-   * @param accounts The collection of {@link Account}s to check conflict.
-   * @param accountTwoKeyMap A {@link AccountTwoKeyMap} that represents a group of {@link Account}s to check conflict.
+   * @param accountsToSet The collection of {@link Account}s to check conflict.
+   * @param currentAccounts A {@link AccountInfoMap} that represents a group of {@link Account}s to check conflict.
    * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
-   *                      {@link Account}s in {@code accountTwoKeyMap}, {@code false} otherwise.
+   *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
    */
-  private boolean hasConflictingAccount(Collection<Account> accounts, AccountTwoKeyMap accountTwoKeyMap) {
-    for (Account account : accounts) {
-      Account remoteAccount = accountTwoKeyMap.getAccountById(account.getId());
+  private boolean hasConflictingAccount(Collection<Account> accountsToSet, AccountInfoMap currentAccounts) {
+    for (Account account : accountsToSet) {
+      Account remoteAccount = currentAccounts.getAccountById(account.getId());
 
       // @todo if remoteAccount is not null, make sure
-      // @todo account.generationId() = accountTwoKeyMap.getById(account.getId()).generationId()+1
+      // @todo account.generationId() = accountInfoMap.getById(account.getId()).generationId()+1
       // @todo the generationId will be added to Account class.
 
-      // check for case D in the javadoc of AccountService)
-      if (remoteAccount == null && accountTwoKeyMap.containsName(account.getName())) {
-        Account conflictingAccount = accountTwoKeyMap.getAccountByName(account.getName());
+      // check for case D in the javadoc of AccountService
+      if (remoteAccount == null && currentAccounts.containsName(account.getName())) {
+        Account conflictingAccount = currentAccounts.getAccountByName(account.getName());
         logger.info(
             "Account to update with accountId={} accountName={} conflicts with an existing record with accountId={} accountName={}",
             account.getId(), account.getName(), conflictingAccount.getId(), conflictingAccount.getName());
         return true;
       }
 
-      // check for case E in the javadoc of AccountService)
-      if (remoteAccount != null && !account.getName().equals(remoteAccount.getName()) && accountTwoKeyMap.containsName(
+      // check for case E in the javadoc of AccountService
+      if (remoteAccount != null && !account.getName().equals(remoteAccount.getName()) && currentAccounts.containsName(
           account.getName())) {
-        Account conflictingAccount = accountTwoKeyMap.getAccountByName(account.getName());
+        Account conflictingAccount = currentAccounts.getAccountByName(account.getName());
         logger.info(
             "Account to update with accountId={} accountName={} conflicts with an existing record with accountId={} accountName={}",
             account.getId(), account.getName(), conflictingAccount.getId(), conflictingAccount.getName());
@@ -345,9 +332,18 @@ public class HelixAccountService implements AccountService, TopicListener<String
   }
 
   /**
+   * Checks if the {@code HelixAccountService} is open.
+   */
+  private void checkOpen() {
+    if (!isOpen) {
+      throw new IllegalStateException("AccountService is closed.");
+    }
+  }
+
+  /**
    * <p>
    *   A cache to store {@link Account} information locally. It implements the {@link AccountService} interface,
-   *   and can respond to the queries for {@link Account}. Internally it maintains a {@link AccountTwoKeyMap} that
+   *   and can respond to the queries for {@link Account}. Internally it maintains a {@link AccountInfoMap} that
    *   represents a group of {@link Account}s that can be indexed by both account id and name.
    * </p>
    * <p>
@@ -355,95 +351,90 @@ public class HelixAccountService implements AccountService, TopicListener<String
    * </p>
    */
   private class Cache implements AccountService {
-    private final AtomicReference<AccountTwoKeyMap> accountTwoKeyMapRef = new AtomicReference<>();
-
-    /**
-     * Constructor that instantiates a cache with no data.
-     */
-    private Cache() {
-      accountTwoKeyMapRef.set(new AccountTwoKeyMap());
-    }
+    private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
 
     @Override
     public Account getAccountById(short accountId) {
-      return accountTwoKeyMapRef.get().getAccountById(accountId);
+      return getAccountInfoMap().getAccountById(accountId);
     }
 
     @Override
     public Account getAccountByName(String accountName) {
-      return accountTwoKeyMapRef.get().getAccountByName(accountName);
+      return getAccountInfoMap().getAccountByName(accountName);
     }
 
     @Override
     public Collection<Account> getAllAccounts() {
-      return accountTwoKeyMapRef.get().getAccounts();
+      return getAccountInfoMap().getAccounts();
     }
 
     @Override
     public boolean updateAccounts(Collection<Account> accounts) {
-      throw new IllegalStateException("This method is not implemented, and is not expected to be called.");
+      throw new UnsupportedOperationException("This method is not implemented, and is not expected to be called.");
     }
 
     @Override
     public void close() throws IOException {
-      accountTwoKeyMapRef.set(null);
+      accountInfoMapRef.set(null);
     }
 
     /**
      * Atomically updates the cache with new id-to-account and name-to-account map. It assumes the {@link Account}s
      * in the two maps have id and name one-to-one mapped.
-     * @param accountTwoKeyMap A {@link AccountTwoKeyMap} to replace the current one.
+     * @param accountInfoMap A {@link AccountInfoMap} to replace the current one.
      */
-    private void update(AccountTwoKeyMap accountTwoKeyMap) {
-      accountTwoKeyMapRef.set(accountTwoKeyMap);
+    private void update(AccountInfoMap accountInfoMap) {
+      accountInfoMapRef.set(accountInfoMap);
     }
 
     /**
-     * Gets the {@link AccountTwoKeyMap} in this cache.
-     * @return The {@link AccountTwoKeyMap} in this cache.
+     * Gets the {@link AccountInfoMap} in this cache.
+     * @return The {@link AccountInfoMap} in this cache.
      */
-    private AccountTwoKeyMap getAccountTwoKeyMap() {
-      return accountTwoKeyMapRef.get();
+    private AccountInfoMap getAccountInfoMap() {
+      return accountInfoMapRef.get();
     }
   }
 
   /**
    * <p>
-   *   A helper class as a representation of a collection of {@link Account}s, where the ids and names of the
-   *   {@link Account}s are one-to-one mapped. An AccountTwoKeyMap guarantees no duplicated account id or name,
-   *   nor conflict among the {@link Account}s within it.
+   *   A helper class that represents a collection of {@link Account}s, where the ids and names of the
+   *   {@link Account}s are one-to-one mapped. An {@code AccountInfoMap} guarantees no duplicated account
+   *   id or name, nor conflict among the {@link Account}s within it.
    * </p>
    * <p>
-   *   Based on the properties, a {@code AccountTwoKeyMap} has two keys (index) to {@link Account}s: the accountId,
-   *   and the accountName.
+   *   Based on the properties, a {@code AccountInfoMap} internally builds index for {@link Account}s using both
+   *   {@link Account}'s id and name as key.
    * </p>
    */
-  private class AccountTwoKeyMap {
+  private class AccountInfoMap {
     private final Map<String, Account> nameToAccountMap;
     private final Map<Short, Account> idToAccountMap;
 
     /**
      * Constructor.
      */
-    private AccountTwoKeyMap() {
+    private AccountInfoMap() {
       nameToAccountMap = new HashMap<>();
       idToAccountMap = new HashMap<>();
     }
 
     /**
      * <p>
-     *   A constructor. The group of {@link Account}s exists in the form of a string-to-string map, where
-     *   the key is the string form of an {@link Account}'s id, and the value is the string form of the
-     *   {@link Account}'s JSON string.
+     *   Constructs an {@code AccountInfoMap} from a group of {@link Account}s. The {@link Account}s exists
+     *   in the form of a string-to-string map, where the key is the string form of an {@link Account}'s id,
+     *   and the value is the string form of the {@link Account}'s JSON string.
      * </p>
      * <p>
-     *   The constructor makes a best effort to build based on the given {@code accountMap}. It resolves
-     *   any conflicts among the {@link Account}s in the {@code accountMap} by removing a previously
-     *   conflicting {@link Account}..
+     *   The source {@link Account}s in the {@code accountMap} may have duplicate account Ids or names. The
+     *   constructor makes the best effort to resolve the conflict. Based on the order when iterating on the
+     *   {@link Account}s, the constructor will: 1) override the previously-added {@link Account} if a latter
+     *   one has the same id; and 2) remove the previously-added {@link Account} if a latter one has the same
+     *   name. Once an {@code AccountInfoMap} is constructed, it is guaranteed there is no duplicate id or name.
      * </p>
      * @param accountMap A map of {@link Account}s in the form of (accountIdString, accountJSONString).
      */
-    private AccountTwoKeyMap(Map<String, String> accountMap) {
+    private AccountInfoMap(Map<String, String> accountMap) {
       nameToAccountMap = new HashMap<>();
       idToAccountMap = new HashMap<>();
       for (Map.Entry<String, String> entry : accountMap.entrySet()) {
@@ -452,7 +443,7 @@ public class HelixAccountService implements AccountService, TopicListener<String
         Account account;
         try {
           JSONObject accountJson = new JSONObject(valueString);
-          if (idKey == null || accountJson == null) {
+          if (idKey == null) {
             logger.error(
                 "Invalid account record when reading accountMap in ZNRecord because either idKey={} or accountJson={}"
                     + "is null", idKey, accountJson);
@@ -474,11 +465,9 @@ public class HelixAccountService implements AccountService, TopicListener<String
         // the previous one.
         Account conflictingAccount = nameToAccountMap.get(account.getName());
         if (conflictingAccount != null) {
-          logger.error(
-              "Duplicate account id or name exists. id={} name={} conflicts with a previously added id={} name={}."
-                  + "Removing account with id={} name={}", account.getId(), account.getName(),
-              conflictingAccount.getId(), conflictingAccount.getName(), conflictingAccount.getId(),
-              conflictingAccount.getName());
+          logger.error("Duplicate account name exists. id={} name={} conflicts with a previously added id={} name={}."
+                  + "Removing account with id={} name={}", account.getId(), account.getName(), conflictingAccount.getId(),
+              conflictingAccount.getName(), conflictingAccount.getId(), conflictingAccount.getName());
           idToAccountMap.remove(conflictingAccount.getId());
           nameToAccountMap.remove(conflictingAccount.getName());
         }
@@ -524,7 +513,7 @@ public class HelixAccountService implements AccountService, TopicListener<String
     }
 
     /**
-     * Gets all the {@link Account}s in this {@code AccountTwoKeyMap} in a {@link Collection}.
+     * Gets all the {@link Account}s in this {@code AccountInfoMap} in a {@link Collection}.
      * @return A {@link Collection} of all the {@link Account}s in this map.
      */
     private Collection<Account> getAccounts() {

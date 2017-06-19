@@ -55,8 +55,10 @@ public interface AccountService extends Closeable {
    * </p>
    * <p>
    *   When updating {@link Account}s, {@code AccountService} will check that there is no conflict between the
-   *   {@link Account}s to update and the existing {@link Account}s. If there is any conflict, the update operation
-   *   will not go through. Below lists the possible cases when there is conflict.
+   *   {@link Account}s to update and the existing {@link Account}s. Two {@link Account}s can be conflicting with
+   *   each other if they have different account Ids but the same account name. If there is any conflict, the
+   *   update operation will fail for <em>ALL</em> the {@link Account}s to udpate. Below lists the possible cases
+   *   when there is conflict.
    * </p>
    * <pre>
    * Existing account
