@@ -131,6 +131,11 @@ public class MessageFormatRecordTest {
     }
   }
 
+  /**
+   * Tests {@link MessageFormatRecord#BlobProperties_Version_V1} for different versions of {@link BlobPropertiesSerDe}
+   * @throws IOException
+   * @throws MessageFormatException
+   */
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
     // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
