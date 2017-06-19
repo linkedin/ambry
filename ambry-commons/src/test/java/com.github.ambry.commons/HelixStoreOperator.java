@@ -36,7 +36,7 @@ import static com.github.ambry.utils.TestUtils.*;
  * An agent to perform operations on a {@link HelixPropertyStore}.
  */
 class HelixStoreOperator {
-  private static final Logger classLogger = LoggerFactory.getLogger(HelixStoreOperator.class);
+  private static final Logger logger = LoggerFactory.getLogger(HelixStoreOperator.class);
   private static final long OPERATION_TIMEOUT_MS = 20000;
   private final HelixPropertyStore<ZNRecord> helixStore;
 
@@ -59,18 +59,18 @@ class HelixStoreOperator {
       throw new IllegalArgumentException("storeConfig cannot be null");
     }
     long startTimeMs = System.currentTimeMillis();
-    classLogger.info("Starting a HelixStoreOperator");
+    logger.info("Starting a HelixStoreOperator");
     ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
         storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
     HelixPropertyStore<ZNRecord> helixStore =
         new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
-    classLogger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
+    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
     HelixStoreOperator storeOperator = new HelixStoreOperator(helixStore);
-    classLogger.info("HelixStoreOperator started, took {}ms", System.currentTimeMillis() - startTimeMs);
+    logger.info("HelixStoreOperator started, took {}ms", System.currentTimeMillis() - startTimeMs);
     return storeOperator;
   }
 

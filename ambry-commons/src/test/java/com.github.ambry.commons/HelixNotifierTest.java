@@ -58,16 +58,14 @@ public class HelixNotifierTest {
           STORAGE_ROOT_PATH);
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
   private HelixNotifier helixNotifier;
-  private HelixNotifier helixNotifier2;
 
   @Before
   public void setup() throws Exception {
+    deleteStoreIfExists();
     storeKeyToMockStoreMap.clear();
     helixNotifier = new HelixNotifier(getMockHelixStore(storeConfig));
-    helixNotifier2 = new HelixNotifier(getMockHelixStore(storeConfig));
     resetReferenceTopicsAndMessages();
     resetListeners();
-    deleteStoreIfExists();
   }
 
   @After
@@ -231,6 +229,7 @@ public class HelixNotifierTest {
   public void testOneListenerTwoNotifiers() throws Exception {
     helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
+    HelixNotifier helixNotifier2 = new HelixNotifier(getMockHelixStore(storeConfig));
     helixNotifier2.publish(refTopics.get(0), refMessages.get(0));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals(1, receivedTopicsByListener0.size());

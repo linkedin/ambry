@@ -46,8 +46,7 @@ import org.slf4j.LoggerFactory;
 public class HelixNotifier implements Notifier<String> {
   private static final String TOPIC_PATH = "/topics";
   private static final String MESSAGE_KEY = "message";
-  private static final Logger classLogger = LoggerFactory.getLogger(HelixNotifier.class);
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(HelixNotifier.class);
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final ConcurrentHashMap<TopicListener, HelixPropertyListener> topicListenerToHelixListenerMap =
       new ConcurrentHashMap<>();
@@ -154,18 +153,18 @@ public class HelixNotifier implements Notifier<String> {
       throw new IllegalArgumentException("storeConfig cannot be null");
     }
     long startTimeMs = System.currentTimeMillis();
-    classLogger.info("Starting a HelixNotifier");
+    logger.info("Starting a HelixNotifier");
     ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
         storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + HelixNotifier.TOPIC_PATH);
     HelixPropertyStore<ZNRecord> helixStore =
         new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
-    classLogger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
+    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
     HelixNotifier helixNotifier = new HelixNotifier(helixStore);
-    classLogger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
+    logger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
     return helixNotifier;
   }
 
