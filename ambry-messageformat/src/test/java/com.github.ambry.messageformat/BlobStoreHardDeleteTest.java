@@ -22,6 +22,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -29,14 +30,11 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
 
 public class BlobStoreHardDeleteTest {
-
-  static Random random = new Random();
 
   public class ReadImp implements Read {
     MockReadSet readSet = new MockReadSet();
@@ -54,11 +52,11 @@ public class BlobStoreHardDeleteTest {
       final int BLOB_SIZE = 4000;
       byte[] usermetadata = new byte[USERMETADATA_SIZE];
       byte[] blob = new byte[BLOB_SIZE];
-      random.nextBytes(usermetadata);
-      random.nextBytes(blob);
-      short accountId = Utils.getRandomShort(random);
-      short containerId = Utils.getRandomShort(random);
-      long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+      TestUtils.RANDOM.nextBytes(usermetadata);
+      TestUtils.RANDOM.nextBytes(blob);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
       expectedExpirationTimeMs =

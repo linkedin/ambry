@@ -129,14 +129,6 @@ public class DeleteRequest extends RequestOrResponse {
     return blobId;
   }
 
-  public int getCorrelationId() {
-    return correlationId;
-  }
-
-  public String getClientId() {
-    return clientId;
-  }
-
   public short getAccountId() {
     return accountId;
   }

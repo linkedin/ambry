@@ -20,6 +20,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -33,8 +34,6 @@ import org.junit.Test;
 
 
 public class MessageSievingInputStreamTest {
-
-  static Random random = new Random();
 
   @Test
   public void testValidBlobsAgainstCorruption() throws IOException, MessageFormatException {
@@ -355,9 +354,9 @@ public class MessageSievingInputStreamTest {
 
       // create message stream for blob 2 and mark it as deleted
       StoreKey key2 = new MockId("id2");
-      short accountId = Utils.getRandomShort(random);
-      short containerId = Utils.getRandomShort(random);
-      long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
       MessageFormatInputStream messageFormatStream2 =
           new DeleteMessageFormatInputStream(key2, accountId, containerId, deletionTimeMs);
 

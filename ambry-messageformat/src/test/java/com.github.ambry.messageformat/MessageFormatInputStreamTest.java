@@ -18,6 +18,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -28,8 +29,6 @@ import org.junit.Test;
 
 
 public class MessageFormatInputStreamTest {
-
-  static Random random = new Random();
 
   @Test
   public void messageFormatBlobPropertiesTest() throws IOException, MessageFormatException {
@@ -143,9 +142,9 @@ public class MessageFormatInputStreamTest {
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
-    long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     MessageFormatInputStream messageFormatStream =
         new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();

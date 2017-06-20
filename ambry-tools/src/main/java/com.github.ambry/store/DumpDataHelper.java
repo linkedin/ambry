@@ -94,12 +94,8 @@ class DumpDataHelper {
         } else {
           DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(streamlog);
           isDeleted = true;
-          if (deleteRecord.getVersion() == MessageFormatRecord.Delete_Version_V1) {
-            deleteMsg = "delete change : true";
-          } else {
-            deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
-                + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();
-          }
+          deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
+              + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();
         }
       } else {
         throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);

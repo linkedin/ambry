@@ -20,12 +20,12 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -114,8 +114,6 @@ class MockIdFactory implements StoreKeyFactory {
 
 public class BlobStoreRecoveryTest {
 
-  static Random random = new Random();
-
   public class ReadImp implements Read {
 
     ByteBuffer buffer;
@@ -127,11 +125,11 @@ public class BlobStoreRecoveryTest {
       // message that is partial
       byte[] usermetadata = new byte[2000];
       byte[] blob = new byte[4000];
-      random.nextBytes(usermetadata);
-      random.nextBytes(blob);
-      short accountId = Utils.getRandomShort(random);
-      short containerId = Utils.getRandomShort(random);
-      long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+      TestUtils.RANDOM.nextBytes(usermetadata);
+      TestUtils.RANDOM.nextBytes(blob);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       // 1st message
       BlobProperties blobProperties = new BlobProperties(4000, "test", "mem1", "img", false, 9999);

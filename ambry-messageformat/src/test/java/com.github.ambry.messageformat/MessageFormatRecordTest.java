@@ -246,13 +246,22 @@ public class MessageFormatRecordTest {
   @Test
   public void testDeleteRecordV1() throws IOException, MessageFormatException {
     // Test delete V1 record
+    // irrespective of what values are set for acccountId, containerId and deletionTimeMs, legacy values will be returned
+    // with Delete_Format_V1
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
-    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, new DeleteRecord());
+    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord,
+        new DeleteRecord(accountId, containerId, deletionTimeMs));
     deleteRecord.flip();
     DeleteRecord deserializeDeleteRecord =
         MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-    Assert.assertEquals("Delete record version mismatch ", deserializeDeleteRecord.getVersion(),
-        MessageFormatRecord.Delete_Version_V1);
+    Assert.assertEquals("AccountId mismatch ", BlobProperties.LEGACY_ACCOUNT_ID,
+        deserializeDeleteRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", BlobProperties.LEGACY_CONTAINER_ID,
+        deserializeDeleteRecord.getContainerId());
+    Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time, deserializeDeleteRecord.getDeletionTimeInMs());
 
     // corrupt delete V1 record
     deleteRecord.flip();
@@ -277,12 +286,11 @@ public class MessageFormatRecordTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord, accountId, containerId, deletionTimeMs);
+    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord,
+        new DeleteRecord(accountId, containerId, deletionTimeMs));
     deleteRecord.flip();
     DeleteRecord deserializeDeleteRecord =
         MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-    Assert.assertEquals("Delete record version mismatch ", deserializeDeleteRecord.getVersion(),
-        MessageFormatRecord.Delete_Version_V2);
     Assert.assertEquals("AccountId mismatch ", accountId, deserializeDeleteRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch ", containerId, deserializeDeleteRecord.getContainerId());
     Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializeDeleteRecord.getDeletionTimeInMs());

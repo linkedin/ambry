@@ -13,10 +13,6 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.MessageInfo;
-import com.github.ambry.utils.Utils;
-
-
 /**
  * Contains the delete record info
  */
@@ -27,17 +23,7 @@ public class DeleteRecord {
   private final long deletionTimeInMs;
 
   /**
-   * Constructs Delete Record in {@link MessageFormatRecord#Delete_Version_V1}
-   */
-  DeleteRecord() {
-    accountId = MessageInfo.ACCOUNT_ID_LEGACY_VALUE;
-    containerId = MessageInfo.CONTAINER_ID_LEGACY_VALUE;
-    deletionTimeInMs = Utils.Infinite_Time;
-    this.version = MessageFormatRecord.Delete_Version_V1;
-  }
-
-  /**
-   * Constructs Delete Record in {@link MessageFormatRecord#Delete_Version_V2}
+   * Constructs Delete Record
    */
   DeleteRecord(short accountId, short containerId, long deletionTimeInMs) {
     this.accountId = accountId;

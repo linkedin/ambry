@@ -454,7 +454,8 @@ public class MessageFormatRecord {
             "corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new DeleteRecord();
+      return new DeleteRecord(BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID,
+          Utils.Infinite_Time);
     }
   }
 
@@ -478,22 +479,21 @@ public class MessageFormatRecord {
    */
   public static class Delete_Format_V2 {
 
-    public static final int Account_Id_Field_Size_In_Bytes = 2;
-    public static final int Container_Id_Field_Size_In_Bytes = 2;
-    public static final int Deletion_Time_Field_Size_In_Bytes = 8;
+    public static final int ACCOUNT_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    public static final int CONTAINER_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    public static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
     public static int getDeleteRecordSize() {
-      return Version_Field_Size_In_Bytes + Account_Id_Field_Size_In_Bytes + Container_Id_Field_Size_In_Bytes
-          + Deletion_Time_Field_Size_In_Bytes + Crc_Size;
+      return Version_Field_Size_In_Bytes + ACCOUNT_ID_FIELD_SIZE_IN_BYTES + CONTAINER_ID_FIELD_SIZE_IN_BYTES
+          + DELETION_TIME_FIELD_SIZE_IN_BYTES + Crc_Size;
     }
 
-    public static void serializeDeleteRecord(ByteBuffer outputBuffer, short accountId, short containerId,
-        long deletionTimeInMs) {
+    public static void serializeDeleteRecord(ByteBuffer outputBuffer, DeleteRecord deleteRecord) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Delete_Version_V2);
-      outputBuffer.putShort(accountId);
-      outputBuffer.putShort(containerId);
-      outputBuffer.putLong(deletionTimeInMs);
+      outputBuffer.putShort(deleteRecord.getAccountId());
+      outputBuffer.putShort(deleteRecord.getContainerId());
+      outputBuffer.putLong(deleteRecord.getDeletionTimeInMs());
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
