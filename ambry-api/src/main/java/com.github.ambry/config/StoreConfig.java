@@ -168,7 +168,7 @@ public class StoreConfig {
    * Specifies the number of index entries that can be read per second for stats collection.
    */
   @Config("store.stats.index.entries.per.second")
-  @Default("2400000")
+  @Default("240000")
   public final int storeStatsIndexEntriesPerSecond;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
@@ -206,7 +206,7 @@ public class StoreConfig {
     storeStatsWaitTimeoutInSecs =
         verifiableProperties.getLongInRange("store.stats.wait.timeout.in.secs", 2 * 60, 0, 30 * 60);
     storeStatsIndexEntriesPerSecond =
-        verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 2400000, 1, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
   }
 }
 

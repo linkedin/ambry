@@ -48,10 +48,12 @@ class DefaultCompactionPolicy implements CompactionPolicy {
       long segmentHeaderSize, List<String> logSegmentsNotInJournal, BlobStoreStats blobStoreStats)
       throws StoreException {
     CompactionDetails details = null;
+    logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
         Pair<Long, NavigableMap<String, Long>> validDataSizeByLogSegment = blobStoreStats.getValidDataSizeByLogSegment(
             new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
+        logger.info("Valid data size from BlobStoreStats {} ", validDataSizeByLogSegment);
         NavigableMap<String, Long> potentialLogSegmentValidSizeMap = validDataSizeByLogSegment.getSecond()
             .subMap(logSegmentsNotInJournal.get(0), true,
                 logSegmentsNotInJournal.get(logSegmentsNotInJournal.size() - 1), true);
@@ -62,6 +64,9 @@ class DefaultCompactionPolicy implements CompactionPolicy {
         if (bestCandidateToCompact != null) {
           details = new CompactionDetails(validDataSizeByLogSegment.getFirst(),
               bestCandidateToCompact.getSegmentsToCompact());
+          logger.info("Best candidate to compact {} ", bestCandidateToCompact);
+        } else {
+          logger.trace("No best candidate found ");
         }
       }
     }
