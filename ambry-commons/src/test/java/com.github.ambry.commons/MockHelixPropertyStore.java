@@ -48,6 +48,11 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
     this.shouldRemoveRecordBeforeNotify = shouldRemoveRecordBeforeNotify;
   }
 
+  public MockHelixPropertyStore() {
+    shouldFailSetOperation = false;
+    shouldRemoveRecordBeforeNotify = false;
+  }
+
   @Override
   public void start() {
     throw new IllegalStateException("Not implemented");
@@ -106,7 +111,7 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
   public boolean remove(String path, int options) {
     if (path.equals("/")) {
       pathToRecords.clear();
-      notifyListeners("/", HelixPropertyStoreUtils.StoreOperationType.DELETE);
+      notifyListeners("/", HelixStoreOperator.StoreOperationType.DELETE);
       return true;
     } else {
       throw new IllegalStateException("Not implemented");
@@ -206,7 +211,7 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
    * @param path The path for the {@link HelixPropertyListener}s to notify.
    * @param operationType The type of the operation that was conducted on the path.
    */
-  private void notifyListeners(String path, HelixPropertyStoreUtils.StoreOperationType operationType) {
+  private void notifyListeners(String path, HelixStoreOperator.StoreOperationType operationType) {
     Set<HelixPropertyListener> listeners = pathToListeners.get(path);
     if (listeners != null) {
       for (HelixPropertyListener listener : listeners) {
@@ -235,9 +240,9 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
    * @return {@code true}.
    */
   private boolean setAndNotify(String path, T record) {
-    HelixPropertyStoreUtils.StoreOperationType operationType =
-        pathToRecords.get(path) == null ? HelixPropertyStoreUtils.StoreOperationType.CREATE
-            : HelixPropertyStoreUtils.StoreOperationType.WRITE;
+    HelixStoreOperator.StoreOperationType operationType =
+        pathToRecords.get(path) == null ? HelixStoreOperator.StoreOperationType.CREATE
+            : HelixStoreOperator.StoreOperationType.WRITE;
     if (!shouldRemoveRecordBeforeNotify) {
       pathToRecords.put(path, record);
     }

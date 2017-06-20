@@ -19,18 +19,22 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
+import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  * <p>
- *    A {@link Notifier} implementation using {@link HelixPropertyStore} as the underlying communication mechanism.
- * Each topic is created as a {@link ZNRecord} under the {@code topicPath}. A message for that topic will
- * be written to the simple field of the {@link ZNRecord} in the form of {@code "message": "message content"}.
- * Each {@link ZNRecord} under the {@code topicPath} will be used for a single topic.
+ *   A {@link Notifier} implementation using {@link HelixPropertyStore<ZNRecord>} as the underlying communication
+ *   mechanism. Each topic is created as a {@link ZNRecord} under the {@link #TOPIC_PATH}. A message for that topic
+ *   will be written to the simple field of the {@link ZNRecord} in the form of {@code "message": "message content"}.
+ *   A {@link ZNRecord} under the {@link #TOPIC_PATH} will be used for a single topic.
  * </p>
  * <p>
  *   If multiple {@link HelixNotifier} running on different node are configured with the same
@@ -42,23 +46,43 @@ import org.slf4j.LoggerFactory;
 public class HelixNotifier implements Notifier<String> {
   private static final String TOPIC_PATH = "/topics";
   private static final String MESSAGE_KEY = "message";
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger logger = LoggerFactory.getLogger(HelixNotifier.class);
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final ConcurrentHashMap<TopicListener, HelixPropertyListener> topicListenerToHelixListenerMap =
       new ConcurrentHashMap<>();
 
   /**
    * Constructor.
-   * @param storeConfig The {@link HelixPropertyStoreConfig} that specifies necessary configs to start a HelixNotifier.
-   * @param storeFactory The factory to start a {@link HelixPropertyStore}.
+   * @param helixStore A {@link HelixPropertyStore} that will be used by this {@code HelixNotifier}.
    */
-  public HelixNotifier(HelixPropertyStoreConfig storeConfig, HelixPropertyStoreFactory<ZNRecord> storeFactory) {
-    if (storeFactory == null) {
-      throw new IllegalArgumentException("storeFactory cannot be null.");
+  HelixNotifier(HelixPropertyStore<ZNRecord> helixStore) {
+    if (helixStore == null) {
+      throw new IllegalArgumentException("helixStore cannot be null.");
     }
-    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + TOPIC_PATH);
-    helixStore = storeFactory.getHelixPropertyStore(storeConfig, subscribedPaths);
-    logger.info("HelixNotifier started, topicPath={}", storeConfig.rootPath + TOPIC_PATH);
+    this.helixStore = helixStore;
+  }
+
+  /**
+   * A constructor that gets a {@link HelixNotifier} based on {@link HelixPropertyStoreConfig}.
+   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}.
+   */
+  public HelixNotifier(HelixPropertyStoreConfig storeConfig) {
+    if (storeConfig == null) {
+      throw new IllegalArgumentException("storeConfig cannot be null");
+    }
+    long startTimeMs = System.currentTimeMillis();
+    logger.info("Starting a HelixNotifier");
+    ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
+        storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + HelixNotifier.TOPIC_PATH);
+    HelixPropertyStore<ZNRecord> helixStore =
+        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
+    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
+            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
+        storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
+        subscribedPaths);
+    this.helixStore = helixStore;
+    logger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
   }
 
   /**

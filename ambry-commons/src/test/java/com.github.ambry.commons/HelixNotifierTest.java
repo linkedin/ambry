@@ -14,14 +14,19 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,23 +54,23 @@ public class HelixNotifierTest {
   private static final List<String> refTopics = new ArrayList<>();
   private static final List<String> refMessages = new ArrayList<>();
   private static final HelixPropertyStoreConfig storeConfig =
-      HelixPropertyStoreUtils.getHelixStoreConfig(ZK_CLIENT_CONNECT_STRING, ZK_CLIENT_SESSION_TIMEOUT_MS,
-          ZK_CLIENT_CONNECT_TIMEOUT_MS, STORAGE_ROOT_PATH);
-  private HelixPropertyStoreFactory<ZNRecord> storeFactory;
-  private HelixNotifier notifier;
+      getHelixStoreConfig(ZK_CLIENT_CONNECT_STRING, ZK_CLIENT_SESSION_TIMEOUT_MS, ZK_CLIENT_CONNECT_TIMEOUT_MS,
+          STORAGE_ROOT_PATH);
+  private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
+  private HelixNotifier helixNotifier;
 
   @Before
   public void setup() throws Exception {
+    deleteStoreIfExists();
+    storeKeyToMockStoreMap.clear();
+    helixNotifier = new HelixNotifier(getMockHelixStore(storeConfig));
     resetReferenceTopicsAndMessages();
     resetListeners();
-    storeFactory = new MockHelixPropertyStoreFactory<>(false, false);
-    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
-    notifier = new HelixNotifier(storeConfig, storeFactory);
   }
 
   @After
   public void cleanStore() throws Exception {
-    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
+    deleteStoreIfExists();
   }
 
   /**
@@ -75,9 +80,9 @@ public class HelixNotifierTest {
   @Test
   public void testHelixNotifier() throws Exception {
     // Subscribe a topic and publish a message for the topic
-    notifier.subscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
@@ -85,16 +90,16 @@ public class HelixNotifierTest {
     // publish a different message for the topic
     resetListeners();
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(1));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(1));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(1), receivedMessagesByListener0.get(0));
 
     // Subscribe to a different topic and publish message for that topic
     resetListeners();
-    notifier.subscribe(refTopics.get(1), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(1), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(1), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(1), refMessages.get(0));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topic is different from expected", refTopics.get(1), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
@@ -106,11 +111,11 @@ public class HelixNotifierTest {
    */
   @Test
   public void testTwoListenersForTheSameTopic() throws Exception {
-    notifier.subscribe(refTopics.get(1), listeners.get(0));
-    notifier.subscribe(refTopics.get(1), listeners.get(1));
+    helixNotifier.subscribe(refTopics.get(1), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(1), listeners.get(1));
     latch0.set(new CountDownLatch(1));
     latch1.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(1), refMessages.get(1));
+    helixNotifier.publish(refTopics.get(1), refMessages.get(1));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     awaitLatchOrTimeout(latch1.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topic is different from expected", refTopics.get(1), receivedTopicsByListener0.get(0));
@@ -125,12 +130,12 @@ public class HelixNotifierTest {
    */
   @Test
   public void testTwoListenersForDifferentTopics() throws Exception {
-    notifier.subscribe(refTopics.get(0), listeners.get(0));
-    notifier.subscribe(refTopics.get(1), listeners.get(1));
+    helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(1), listeners.get(1));
     latch0.set(new CountDownLatch(1));
     latch1.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
-    notifier.publish(refTopics.get(1), refMessages.get(1));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(1), refMessages.get(1));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     awaitLatchOrTimeout(latch1.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
@@ -145,11 +150,11 @@ public class HelixNotifierTest {
    */
   @Test
   public void testOneListenerForTwoDifferentTopics() throws Exception {
-    notifier.subscribe(refTopics.get(0), listeners.get(0));
-    notifier.subscribe(refTopics.get(1), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(1), listeners.get(0));
     latch0.set(new CountDownLatch(2));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
-    notifier.publish(refTopics.get(1), refMessages.get(1));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(1), refMessages.get(1));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topics are different from expected", new HashSet<>(refTopics),
         new HashSet<>(receivedTopicsByListener0));
@@ -158,7 +163,7 @@ public class HelixNotifierTest {
   }
 
   /**
-   * Tests unsubscribing a topic. This test is meaningful when using {@link MockHelixPropertyStoreFactory}, where
+   * Tests unsubscribing a topic. This test is meaningful when using {@link MockHelixPropertyStore}, where
    * a single thread guarantees to know if {@link TopicListener#onMessage(String, Object)} has been
    * called or not.
    * @throws Exception Any unexpected exception.
@@ -166,17 +171,17 @@ public class HelixNotifierTest {
   @Test
   public void testUnsubscribeTopic() throws Exception {
     // Subscribe a topic and publish a message for the topic
-    notifier.subscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals("Received topic is different from expected", refTopics.get(0), receivedTopicsByListener0.get(0));
     assertEquals("Received message is different from expected", refMessages.get(0), receivedMessagesByListener0.get(0));
 
     // unsubscribe the listener
-    notifier.unsubscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.unsubscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     try {
       awaitLatchOrTimeout(latch0.get(), 1);
       fail("should have thrown");
@@ -185,7 +190,7 @@ public class HelixNotifierTest {
     }
 
     // unsubscribe the listener again should be silent
-    notifier.unsubscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.unsubscribe(refTopics.get(0), listeners.get(0));
   }
 
   /**
@@ -194,19 +199,19 @@ public class HelixNotifierTest {
   @Test
   public void testUnsubscribeNonExistentListeners() {
     // unsubscribe a non-existent listener should be silent
-    notifier.unsubscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.unsubscribe(refTopics.get(0), listeners.get(0));
   }
 
   /**
    * Tests publishing a message to a topic without any {@link TopicListener}. This test is meaningful
-   * when using {@link MockHelixPropertyStoreFactory}, where a single thread guarantees to know if
+   * when using {@link MockHelixPropertyStore}, where a single thread guarantees to know if
    * {@link TopicListener#onMessage(String, Object)} has been called or not.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void publishMessageToTopicWithNoListeners() throws Exception {
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     try {
       awaitLatchOrTimeout(latch0.get(), 1);
       fail("should have thrown");
@@ -222,10 +227,10 @@ public class HelixNotifierTest {
    */
   @Test
   public void testOneListenerTwoNotifiers() throws Exception {
-    Notifier notifier_2 = new HelixNotifier(storeConfig, storeFactory);
-    notifier.subscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    notifier_2.publish(refTopics.get(0), refMessages.get(0));
+    HelixNotifier helixNotifier2 = new HelixNotifier(getMockHelixStore(storeConfig));
+    helixNotifier2.publish(refTopics.get(0), refMessages.get(0));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals(1, receivedTopicsByListener0.size());
     assertEquals(refTopics.get(0), receivedTopicsByListener0.get(0));
@@ -240,16 +245,13 @@ public class HelixNotifierTest {
   @Test
   public void testPublishMessageToBadListener() throws Exception {
     CountDownLatch latch = new CountDownLatch(1);
-    TopicListener listener = new TopicListener() {
-      @Override
-      public void onMessage(String topic, Object message) {
-        latch.countDown();
-        throw new RuntimeException("Exception thrown from TopicListener");
-      }
+    TopicListener listener = (topic, message) -> {
+      latch.countDown();
+      throw new RuntimeException("Exception thrown from TopicListener");
     };
     String topic = "topic";
-    notifier.subscribe(topic, listener);
-    notifier.publish(topic, "message");
+    helixNotifier.subscribe(topic, listener);
+    helixNotifier.publish(topic, "message");
     awaitLatchOrTimeout(latch, LATCH_TIMEOUT_MS);
   }
 
@@ -261,7 +263,7 @@ public class HelixNotifierTest {
   public void testBadInputs() throws Exception {
     // subscribe to null topic
     try {
-      notifier.subscribe(null, listeners.get(0));
+      helixNotifier.subscribe(null, listeners.get(0));
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -269,7 +271,7 @@ public class HelixNotifierTest {
 
     // subscribe using null listener
     try {
-      notifier.subscribe(refTopics.get(0), null);
+      helixNotifier.subscribe(refTopics.get(0), null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -277,7 +279,7 @@ public class HelixNotifierTest {
 
     // publish message to a null topic
     try {
-      notifier.publish(null, refMessages.get(0));
+      helixNotifier.publish(null, refMessages.get(0));
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -285,7 +287,7 @@ public class HelixNotifierTest {
 
     // publish null message to a topic
     try {
-      notifier.publish(refTopics.get(0), null);
+      helixNotifier.publish(refTopics.get(0), null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -293,7 +295,7 @@ public class HelixNotifierTest {
 
     // unsubscribe a null listener from a topic
     try {
-      notifier.unsubscribe(refTopics.get(0), null);
+      helixNotifier.unsubscribe(refTopics.get(0), null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -301,15 +303,23 @@ public class HelixNotifierTest {
 
     // unsubscribe a listener from a null topic
     try {
-      notifier.unsubscribe(null, listeners.get(0));
+      helixNotifier.unsubscribe(null, listeners.get(0));
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
 
-    // pass null storeFactory to construct a HelixNotifier
+    // pass null storeConfig to construct a HelixNotifier
     try {
-      new HelixNotifier(storeConfig, null);
+      new HelixNotifier((HelixPropertyStoreConfig) null);
+      fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+
+    // pass null store to construct a HelixNotifier
+    try {
+      new HelixNotifier((HelixPropertyStore<ZNRecord>) null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -323,21 +333,17 @@ public class HelixNotifierTest {
    */
   @Test
   public void testFailToPublishMessage() throws Exception {
-    storeFactory = new MockHelixPropertyStoreFactory<>(true, false);
-    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
-    notifier = new HelixNotifier(storeConfig, storeFactory);
-    notifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(true, false));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
   }
 
   @Test
   public void testReadNullRecordWhenSendMessageToLocalListeners() throws Exception {
-    storeFactory = new MockHelixPropertyStoreFactory<>(false, true);
-    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
-    notifier = new HelixNotifier(storeConfig, storeFactory);
-    notifier.publish(refTopics.get(0), refMessages.get(0));
-    notifier.subscribe(refTopics.get(0), listeners.get(0));
+    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(false, true));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    notifier.publish(refTopics.get(0), refMessages.get(0));
+    helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     assertEquals("TopicListener incorrectly called when the record is null", 1, latch0.get().getCount());
   }
 
@@ -397,5 +403,55 @@ public class HelixNotifierTest {
     refTopics.add(UUID.randomUUID().toString());
     refMessages.add(UUID.randomUUID().toString());
     refMessages.add(UUID.randomUUID().toString());
+  }
+
+  /**
+   * Delete corresponding {@code ZooKeeper} nodes of a {@link HelixPropertyStore} if exist.
+   * @throws InterruptedException
+   */
+  private void deleteStoreIfExists() throws Exception {
+    HelixStoreOperator storeOperator = new HelixStoreOperator(getMockHelixStore(storeConfig));
+    // check if the store exists by checking if root path (e.g., "/") exists in the store.
+    if (storeOperator.exist("/")) {
+      storeOperator.delete("/");
+    }
+  }
+
+  /**
+   * Gets a {@link MockHelixPropertyStore} for the given {@link HelixPropertyStoreConfig}.
+   * @param storeConfig A {@link HelixPropertyStoreConfig}.
+   * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
+   */
+  private MockHelixPropertyStore<ZNRecord> getMockHelixStore(HelixPropertyStoreConfig storeConfig) {
+    String storeRootPath = storeConfig.zkClientConnectString + storeConfig.rootPath;
+    MockHelixPropertyStore<ZNRecord> helixStore = storeKeyToMockStoreMap.get(storeRootPath);
+    if (helixStore == null) {
+      helixStore = new MockHelixPropertyStore<>();
+      storeKeyToMockStoreMap.put(storeRootPath, helixStore);
+    }
+    return helixStore;
+  }
+
+  /**
+   * A util method that generates {@link HelixPropertyStoreConfig}.
+   * @param zkClientConnectString The connect string to connect to a {@code ZooKeeper}.
+   * @param zkClientSessionTimeoutMs Timeout for a zk session.
+   * @param zkClientConnectionTimeoutMs Timeout for a zk connection.
+   * @param storeRootPath The root path of a store in {@code ZooKeeper}.
+   * @return {@link HelixPropertyStoreConfig} defined by the arguments.
+   */
+  private static HelixPropertyStoreConfig getHelixStoreConfig(String zkClientConnectString,
+      int zkClientSessionTimeoutMs, int zkClientConnectionTimeoutMs, String storeRootPath) {
+    Properties helixConfigProps = new Properties();
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
+        String.valueOf(zkClientConnectionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
+        String.valueOf(zkClientSessionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
+        zkClientConnectString);
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storeRootPath);
+    VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    return new HelixPropertyStoreConfig(vHelixConfigProps);
   }
 }
