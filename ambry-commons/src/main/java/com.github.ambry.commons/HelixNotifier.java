@@ -63,6 +63,29 @@ public class HelixNotifier implements Notifier<String> {
   }
 
   /**
+   * A constructor that gets a {@link HelixNotifier} based on {@link HelixPropertyStoreConfig}.
+   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}.
+   */
+  public HelixNotifier(HelixPropertyStoreConfig storeConfig) {
+    if (storeConfig == null) {
+      throw new IllegalArgumentException("storeConfig cannot be null");
+    }
+    long startTimeMs = System.currentTimeMillis();
+    logger.info("Starting a HelixNotifier");
+    ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
+        storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + HelixNotifier.TOPIC_PATH);
+    HelixPropertyStore<ZNRecord> helixStore =
+        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
+    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
+            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
+        storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
+        subscribedPaths);
+    this.helixStore = helixStore;
+    logger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
+  }
+
+  /**
    * {@inheritDoc}
    *
    * Returns {@code true} does not guarantee all the {@link TopicListener} will receive the message. It just indicates
@@ -140,32 +163,6 @@ public class HelixNotifier implements Notifier<String> {
     HelixPropertyListener helixListener = topicListenerToHelixListenerMap.remove(topicListener);
     helixStore.unsubscribe(topicPath, helixListener);
     logger.trace("TopicListener={} has been unsubscribed from topic={}", topicListener, topic);
-  }
-
-  /**
-   * A helper method that gets a {@link HelixNotifier}. Each call of this method will generate a different
-   * {@link HelixNotifier} instance.
-   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}.
-   * @return A {@link HelixNotifier}.
-   */
-  public static HelixNotifier getHelixNotifier(HelixPropertyStoreConfig storeConfig) {
-    if (storeConfig == null) {
-      throw new IllegalArgumentException("storeConfig cannot be null");
-    }
-    long startTimeMs = System.currentTimeMillis();
-    logger.info("Starting a HelixNotifier");
-    ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
-        storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + HelixNotifier.TOPIC_PATH);
-    HelixPropertyStore<ZNRecord> helixStore =
-        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
-    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
-            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
-        storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
-        subscribedPaths);
-    HelixNotifier helixNotifier = new HelixNotifier(helixStore);
-    logger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
-    return helixNotifier;
   }
 
   /**

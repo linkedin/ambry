@@ -309,9 +309,17 @@ public class HelixNotifierTest {
       // expected
     }
 
+    // pass null storeConfig to construct a HelixNotifier
+    try {
+      new HelixNotifier((HelixPropertyStoreConfig) null);
+      fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+
     // pass null store to construct a HelixNotifier
     try {
-      new HelixNotifier(null);
+      new HelixNotifier((HelixPropertyStore<ZNRecord>) null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected

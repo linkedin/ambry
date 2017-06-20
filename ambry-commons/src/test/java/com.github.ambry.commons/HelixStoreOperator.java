@@ -49,12 +49,10 @@ class HelixStoreOperator {
   }
 
   /**
-   * A helper method that gets a {@link HelixStoreOperator}. Each call of this method will generate a different
-   * {@link HelixStoreOperator} instance.
+   * A constructor that gets a {@link HelixStoreOperator} based on the {@link HelixPropertyStoreConfig}.
    * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixStoreOperator}.
-   * @return A {@link HelixStoreOperator}.
    */
-  static HelixStoreOperator getStoreOperator(HelixPropertyStoreConfig storeConfig) {
+  HelixStoreOperator(HelixPropertyStoreConfig storeConfig) {
     if (storeConfig == null) {
       throw new IllegalArgumentException("storeConfig cannot be null");
     }
@@ -69,9 +67,8 @@ class HelixStoreOperator {
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
-    HelixStoreOperator storeOperator = new HelixStoreOperator(helixStore);
+    this.helixStore = helixStore;
     logger.info("HelixStoreOperator started, took {}ms", System.currentTimeMillis() - startTimeMs);
-    return storeOperator;
   }
 
   /**
