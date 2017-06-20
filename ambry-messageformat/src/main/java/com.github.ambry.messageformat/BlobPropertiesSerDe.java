@@ -19,22 +19,14 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 
-// A class that derives from blob properties. It is mainly used to set
-// properties in BlobProperties that are not user editable
-class SystemMetadata extends BlobProperties {
-  public SystemMetadata(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTime) {
-    super(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds);
-    this.creationTimeInMs = creationTime;
-  }
-}
-
 /**
  * Serializes and deserializes BlobProperties
  */
 public class BlobPropertiesSerDe {
 
-  private static final short Version1 = 1;
+  static final short Version1 = 1;
+  static final short Version2 = 2;
+  private static final short currentVersion = Version1;
   private static final int Version_Field_Size_In_Bytes = 2;
   private static final int TTL_Field_Size_In_Bytes = 8;
   private static final int Private_Field_Size_In_Bytes = 1;
@@ -42,7 +34,7 @@ public class BlobPropertiesSerDe {
   private static final int Variable_Field_Size_In_Bytes = 4;
   private static final int BlobSize_Field_Size_In_Bytes = 8;
 
-  public static int getBlobPropertiesSize(BlobProperties properties) {
+  public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
@@ -51,23 +43,40 @@ public class BlobPropertiesSerDe {
   }
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
-    long version = stream.readShort();
-    if (version == Version1) {
-      long ttl = stream.readLong();
-      boolean isPrivate = stream.readByte() == 1 ? true : false;
-      long creationTime = stream.readLong();
-      long blobSize = stream.readLong();
-      String contentType = Utils.readIntString(stream);
-      String ownerId = Utils.readIntString(stream);
-      String serviceId = Utils.readIntString(stream);
-      return new SystemMetadata(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
-    } else {
-      throw new IllegalArgumentException("stream has unknown blob property version " + version);
+    short version = stream.readShort();
+    BlobProperties toReturn;
+    long ttl = stream.readLong();
+    boolean isPrivate = stream.readByte() == 1;
+    long creationTime = stream.readLong();
+    long blobSize = stream.readLong();
+    String contentType = Utils.readIntString(stream);
+    String ownerId = Utils.readIntString(stream);
+    String serviceId = Utils.readIntString(stream);
+    switch (version) {
+      case Version1:
+        toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
+        break;
+      case Version2:
+        short accountId = stream.readShort();
+        short containerId = stream.readShort();
+        short issuerAccountId = stream.readShort();
+        toReturn =
+            new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
+                containerId, issuerAccountId);
+        break;
+      default:
+        throw new IllegalArgumentException("stream has unknown blob property version " + version);
     }
+    return toReturn;
   }
 
-  public static void putBlobPropertiesToBuffer(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(Version1);
+  /**
+   * Serialize {@link BlobProperties} to buffer in the {@link #currentVersion}
+   * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
+   * @param properties the {@link BlobProperties} that needs to be serialized
+   */
+  public static void serializeBlobProperties(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(currentVersion);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
     outputBuffer.putLong(properties.getCreationTimeInMs());

@@ -17,6 +17,8 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -28,35 +30,17 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.messageformat.BlobPropertiesSerDe.*;
+import static com.github.ambry.messageformat.MessageFormatRecord.BlobProperties_Format_V1.*;
+import static com.github.ambry.messageformat.MessageFormatRecord.*;
+import static org.junit.Assert.*;
+
 
 public class MessageFormatRecordTest {
 
   @Test
   public void deserializeTest() {
     try {
-      // Test Blob property V1 Record
-      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
-      ByteBuffer stream =
-          ByteBuffer.allocate(MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties));
-      MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
-      stream.flip();
-      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
-      Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
-      Assert.assertEquals(properties.getContentType(), result.getContentType());
-      Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
-      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
-      Assert.assertEquals(properties.getServiceId(), result.getServiceId());
-
-      // corrupt blob property V1 record
-      stream.flip();
-      stream.put(10, (byte) 10);
-      try {
-        BlobProperties resultCorrupt = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
-        Assert.assertEquals(true, false);
-      } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
-      }
-
       // Test delete V1 record
       ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
       MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, true);
@@ -147,6 +131,105 @@ public class MessageFormatRecordTest {
     }
   }
 
+  /**
+   * Tests {@link MessageFormatRecord#BlobProperties_Version_V1} for different versions of {@link BlobPropertiesSerDe}
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testBlobPropertyV1() throws IOException, MessageFormatException {
+    // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
+    short[] versions = new short[]{Version1, Version2};
+    for (short version : versions) {
+      BlobProperties properties;
+      long blobSize = TestUtils.RANDOM.nextLong();
+      long ttl = TestUtils.RANDOM.nextInt();
+      if (version == Version1) {
+        properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl);
+      } else {
+        short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+        short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+        short issuerAccountId = Utils.getRandomShort(TestUtils.RANDOM);
+        properties =
+            new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, issuerAccountId);
+      }
+      ByteBuffer stream;
+      if (version == Version1) {
+        stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties));
+        MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
+      } else {
+        stream = ByteBuffer.allocate(getBlobPropertiesV2RecordSize(properties));
+        serializeBlobPropertiesV2Record(stream, properties);
+      }
+      stream.flip();
+      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+      Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
+      Assert.assertEquals(properties.getContentType(), result.getContentType());
+      Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
+      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
+      Assert.assertEquals(properties.getServiceId(), result.getServiceId());
+      Assert.assertEquals(properties.getAccountId(), result.getAccountId());
+      Assert.assertEquals(properties.getContainerId(), result.getContainerId());
+      Assert.assertEquals(properties.getCreatorAccountId(), result.getCreatorAccountId());
+
+      // corrupt blob property V1 record
+      stream.flip();
+      stream.put(10, (byte) 10);
+      try {
+        MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
+        fail("Deserialization of BlobProperties should have failed ");
+      } catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      }
+    }
+  }
+
+  /**
+   * Serialize {@link BlobProperties} in version {@link BlobPropertiesSerDe#Version2}
+   * @param outputBuffer {@link ByteBuffer} to serialize the {@link BlobProperties}
+   * @param properties {@link BlobProperties} to be serialized
+   */
+  private void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
+    int startOffset = outputBuffer.position();
+    outputBuffer.putShort(BlobProperties_Version_V1);
+    putBlobPropertiesToBufferV2(outputBuffer, properties);
+    Crc32 crc = new Crc32();
+    crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV2RecordSize(properties) - Crc_Size);
+    outputBuffer.putLong(crc.getValue());
+  }
+
+  /**
+   * Returns {@link BlobProperties} record size in version2
+   * @param properties {@link BlobProperties} for which size is requested
+   * @return
+   */
+  private int getBlobPropertiesV2RecordSize(BlobProperties properties) {
+    int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
+        + Utils.getNullableStringLength(properties.getContentType()) + Integer.BYTES + Utils.getNullableStringLength(
+        properties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(properties.getServiceId())
+        + Short.BYTES + Short.BYTES + Short.BYTES;
+    return Version_Field_Size_In_Bytes + size + Crc_Size;
+  }
+
+  /**
+   * Serialize {@link BlobProperties} to buffer in version {@link BlobPropertiesSerDe#Version2}
+   * @param outputBuffer the {@link ByteBuffer} to write the {@link BlobProperties}
+   * @param properties the {@link BlobProperties} to be serialized
+   */
+  private void putBlobPropertiesToBufferV2(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(Version2);
+    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
+    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(properties.getCreationTimeInMs());
+    outputBuffer.putLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
+    outputBuffer.putShort(properties.getCreatorAccountId());
+  }
+
   @Test
   public void testMetadataContentRecordV2() throws IOException, MessageFormatException {
     // Test Metadata Blob V2
@@ -171,7 +254,7 @@ public class MessageFormatRecordTest {
     for (int n = 0; n < chunkSizes.length; n++) {
       try {
         MetadataContentSerDe.serializeMetadataContent(chunkSizes[n], totalSizes[n], keys);
-        Assert.fail("Should have failed to serialize");
+        fail("Should have failed to serialize");
       } catch (IllegalArgumentException ignored) {
       }
     }
@@ -244,7 +327,7 @@ public class MessageFormatRecordTest {
     entireBlob.put(blobSize / 2, (byte) (savedByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob));
-      Assert.fail("Failed to detect corruption of blob record");
+      fail("Failed to detect corruption of blob record");
     } catch (MessageFormatException e) {
       Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }
@@ -311,7 +394,7 @@ public class MessageFormatRecordTest {
     blob.put(1, (byte) (savedByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
-      Assert.fail("Failed to detect corruption of Blob record version ");
+      fail("Failed to detect corruption of Blob record version ");
     } catch (MessageFormatException e) {
       Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Unknown_Format_Version, e.getErrorCode());
     }
@@ -324,7 +407,7 @@ public class MessageFormatRecordTest {
     blob.put(2, (byte) (savedByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
-      Assert.fail("Failed to detect corruption of blob type");
+      fail("Failed to detect corruption of blob type");
     } catch (MessageFormatException e) {
       Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }
@@ -338,7 +421,7 @@ public class MessageFormatRecordTest {
     blob.put((int) blobSize - metadataContentSize + 10, (byte) (savedByte + 1));
     try {
       MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(blob));
-      Assert.fail("Failed to detect corruption of metadata content");
+      fail("Failed to detect corruption of metadata content");
     } catch (MessageFormatException e) {
       Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }

@@ -78,15 +78,6 @@ public class MessageFormatRecord {
     }
   }
 
-  static boolean isValidBlobPropertiesVersion(short blobPropertiesVersion) {
-    switch (blobPropertiesVersion) {
-      case BlobProperties_Version_V1:
-        return true;
-      default:
-        return false;
-    }
-  }
-
   public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
@@ -97,15 +88,6 @@ public class MessageFormatRecord {
       default:
         throw new MessageFormatException("delete record version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
-    }
-  }
-
-  static boolean isValidDeleteRecordVersion(short deleteRecordVersion) {
-    switch (deleteRecordVersion) {
-      case Delete_Version_V1:
-        return true;
-      default:
-        return false;
     }
   }
 
@@ -392,13 +374,13 @@ public class MessageFormatRecord {
     private static Logger logger = LoggerFactory.getLogger(BlobProperties_Format_V1.class);
 
     public static int getBlobPropertiesRecordSize(BlobProperties properties) {
-      return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSize(properties) + Crc_Size;
+      return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties) + Crc_Size;
     }
 
     public static void serializeBlobPropertiesRecord(ByteBuffer outputBuffer, BlobProperties properties) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(BlobProperties_Version_V1);
-      BlobPropertiesSerDe.putBlobPropertiesToBuffer(outputBuffer, properties);
+      BlobPropertiesSerDe.serializeBlobProperties(outputBuffer, properties);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getBlobPropertiesRecordSize(properties) - Crc_Size);
       outputBuffer.putLong(crc.getValue());
