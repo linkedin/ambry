@@ -434,10 +434,10 @@ public class MessageFormatRecord {
       return Version_Field_Size_In_Bytes + Delete_Field_Size_In_Bytes + Crc_Size;
     }
 
-    public static void serializeDeleteRecord(ByteBuffer outputBuffer, boolean deleteFlag) {
+    public static void serializeDeleteRecord(ByteBuffer outputBuffer, DeleteRecord deleteRecord) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Delete_Version_V1);
-      outputBuffer.put(deleteFlag ? (byte) 1 : (byte) 0);
+      outputBuffer.put((byte) 1);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());

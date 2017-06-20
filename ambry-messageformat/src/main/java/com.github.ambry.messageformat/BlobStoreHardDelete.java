@@ -83,12 +83,8 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
                 Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
           } else {
             DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);
-            if (deleteRecord.getVersion() == MessageFormatRecord.Delete_Version_V1) {
-              return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true);
-            } else {
-              return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                  deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
-            }
+            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+                deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
           }
         default:
           throw new MessageFormatException("Version not known while reading message - " + version,

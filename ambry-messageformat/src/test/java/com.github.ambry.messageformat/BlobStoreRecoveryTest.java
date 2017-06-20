@@ -19,6 +19,7 @@ import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -113,6 +114,8 @@ class MockIdFactory implements StoreKeyFactory {
 
 public class BlobStoreRecoveryTest {
 
+  static Random random = new Random();
+
   public class ReadImp implements Read {
 
     ByteBuffer buffer;
@@ -124,8 +127,11 @@ public class BlobStoreRecoveryTest {
       // message that is partial
       byte[] usermetadata = new byte[2000];
       byte[] blob = new byte[4000];
-      new Random().nextBytes(usermetadata);
-      new Random().nextBytes(blob);
+      random.nextBytes(usermetadata);
+      random.nextBytes(blob);
+      short accountId = Utils.getRandomShort(random);
+      short containerId = Utils.getRandomShort(random);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
 
       // 1st message
       BlobProperties blobProperties = new BlobProperties(4000, "test", "mem1", "img", false, 9999);
@@ -146,7 +152,8 @@ public class BlobStoreRecoveryTest {
               new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
-      DeleteMessageFormatInputStream msg4 = new DeleteMessageFormatInputStream(keys[1]);
+      DeleteMessageFormatInputStream msg4 =
+          new DeleteMessageFormatInputStream(keys[1], accountId, containerId, deletionTimeMs);
 
       // 5th message
       PutMessageFormatInputStream msg5 =

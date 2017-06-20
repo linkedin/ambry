@@ -83,16 +83,10 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               messageRecovered.add(info);
             } else {
               DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);
-              if (deleteRecord.getVersion() == MessageFormatRecord.Delete_Version_V1) {
-                MessageInfo info =
-                    new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true);
-                messageRecovered.add(info);
-              } else {
-                MessageInfo info =
-                    new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                        deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
-                messageRecovered.add(info);
-              }
+              MessageInfo info =
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+                      deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
+              messageRecovered.add(info);
             }
             startOffset = stream.getCurrentPosition();
             break;

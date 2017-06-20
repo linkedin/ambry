@@ -21,6 +21,7 @@ import com.github.ambry.store.Read;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -35,8 +36,9 @@ import org.junit.Test;
 
 public class BlobStoreHardDeleteTest {
 
-  public class ReadImp implements Read {
+  static Random random = new Random();
 
+  public class ReadImp implements Read {
     MockReadSet readSet = new MockReadSet();
     List<byte[]> recoveryInfoList = new ArrayList<byte[]>();
     ByteBuffer buffer;
@@ -52,8 +54,11 @@ public class BlobStoreHardDeleteTest {
       final int BLOB_SIZE = 4000;
       byte[] usermetadata = new byte[USERMETADATA_SIZE];
       byte[] blob = new byte[BLOB_SIZE];
-      new Random().nextBytes(usermetadata);
-      new Random().nextBytes(blob);
+      random.nextBytes(usermetadata);
+      random.nextBytes(blob);
+      short accountId = Utils.getRandomShort(random);
+      short containerId = Utils.getRandomShort(random);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
 
       BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
       expectedExpirationTimeMs =
@@ -68,7 +73,8 @@ public class BlobStoreHardDeleteTest {
       MessageFormatInputStream msg2 =
           getPutMessage(keys[2], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[2], blobTypes[2]);
 
-      DeleteMessageFormatInputStream msg3d = new DeleteMessageFormatInputStream(keys[1]);
+      DeleteMessageFormatInputStream msg3d =
+          new DeleteMessageFormatInputStream(keys[1], accountId, containerId, deletionTimeMs);
 
       MessageFormatInputStream msg4 =
           getPutMessage(keys[3], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[3], blobTypes[3]);

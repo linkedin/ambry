@@ -357,7 +357,9 @@ public class AmbryRequests implements RequestAPI {
         logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
-        MessageFormatInputStream stream = new DeleteMessageFormatInputStream(deleteRequest.getBlobId());
+        MessageFormatInputStream stream =
+            new DeleteMessageFormatInputStream(deleteRequest.getBlobId(), deleteRequest.getAccountId(),
+                deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
         MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);

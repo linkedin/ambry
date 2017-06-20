@@ -247,7 +247,7 @@ public class MessageFormatRecordTest {
   public void testDeleteRecordV1() throws IOException, MessageFormatException {
     // Test delete V1 record
     ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
-    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, true);
+    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, new DeleteRecord());
     deleteRecord.flip();
     DeleteRecord deserializeDeleteRecord =
         MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));

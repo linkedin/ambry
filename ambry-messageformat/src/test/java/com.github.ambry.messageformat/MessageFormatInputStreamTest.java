@@ -17,6 +17,8 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -26,6 +28,8 @@ import org.junit.Test;
 
 
 public class MessageFormatInputStreamTest {
+
+  static Random random = new Random();
 
   @Test
   public void messageFormatBlobPropertiesTest() throws IOException, MessageFormatException {
@@ -139,11 +143,16 @@ public class MessageFormatInputStreamTest {
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
-    MessageFormatInputStream messageFormatStream = new DeleteMessageFormatInputStream(key);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
+    long deletionTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    MessageFormatInputStream messageFormatStream =
+        new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int deleteRecordSize = MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize();
     Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
+    // @TODO: fix verifier once we start to serialize in DeleteMsgFormat V2
     // check header
     byte[] headerOutput = new byte[headerSize];
     messageFormatStream.read(headerOutput);
