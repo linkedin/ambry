@@ -78,15 +78,6 @@ public class MessageFormatRecord {
     }
   }
 
-  static boolean isValidBlobPropertiesVersion(short blobPropertiesVersion) {
-    switch (blobPropertiesVersion) {
-      case BlobProperties_Version_V1:
-        return true;
-      default:
-        return false;
-    }
-  }
-
   public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
@@ -97,15 +88,6 @@ public class MessageFormatRecord {
       default:
         throw new MessageFormatException("delete record version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
-    }
-  }
-
-  static boolean isValidDeleteRecordVersion(short deleteRecordVersion) {
-    switch (deleteRecordVersion) {
-      case Delete_Version_V1:
-        return true;
-      default:
-        return false;
     }
   }
 
