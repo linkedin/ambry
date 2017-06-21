@@ -467,15 +467,9 @@ public class RequestResponseTest {
   }
 
   /**
-   * Class representing {@link DeleteRequest} in verison {@link DeleteRequest#Delete_Request_Version_2}
+   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#Delete_Request_Version_2}
    */
-  class DeleteRequestV2 extends DeleteRequest {
-    BlobId blobId;
-    short accountId;
-    short containerId;
-    long deletionTimeInMs;
-    int sizeSent = 0;
-
+  private class DeleteRequestV2 extends DeleteRequest {
     /**
      * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
      * @param correlationId correlationId of the delete request
@@ -485,63 +479,10 @@ public class RequestResponseTest {
      * @param containerId containerId of the blobId being requested
      * @param deletionTimeInMs deletion time of the blob in ms
      */
-    public DeleteRequestV2(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
+    private DeleteRequestV2(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
         long deletionTimeInMs) {
-      super(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs);
-      this.blobId = blobId;
-      this.accountId = accountId;
-      this.containerId = containerId;
-      this.deletionTimeInMs = deletionTimeInMs;
-    }
-
-    @Override
-    public long sizeInBytes() {
-      // header + blobId
-      long sizeInBytes = super.sizeInBytes();
-      // accountId
-      sizeInBytes += ACCOUNT_ID_FIELD_SIZE_IN_BYTES;
-      // containerId
-      sizeInBytes += CONTAINER_ID_FIELD_SIZE_IN_BYTES;
-      // deletion time
-      sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
-      return sizeInBytes;
-    }
-
-    @Override
-    public long writeTo(WritableByteChannel channel) throws IOException {
-      long written = 0;
-      if (bufferToSend == null) {
-        bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
-        writeHeader();
-        bufferToSend.put(blobId.toBytes());
-        bufferToSend.putShort(accountId);
-        bufferToSend.putShort(containerId);
-        bufferToSend.putLong(deletionTimeInMs);
-        bufferToSend.flip();
-      }
-      if (bufferToSend.remaining() > 0) {
-        written = channel.write(bufferToSend);
-        sizeSent += written;
-      }
-      return written;
-    }
-
-    @Override
-    protected void writeHeader() {
-      if (bufferToSend == null) {
-        throw new IllegalStateException("Buffer to send should not be null");
-      }
-      bufferToSend.putLong(sizeInBytes());
-      bufferToSend.putShort((short) type.ordinal());
-      bufferToSend.putShort(DeleteRequest.Delete_Request_Version_2);
-      bufferToSend.putInt(correlationId);
-      bufferToSend.putInt(clientId.length());
-      bufferToSend.put(clientId.getBytes());
-    }
-
-    @Override
-    public boolean isSendComplete() {
-      return sizeSent == sizeInBytes();
+      super(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs,
+          DeleteRequest.Delete_Request_Version_2);
     }
   }
 }

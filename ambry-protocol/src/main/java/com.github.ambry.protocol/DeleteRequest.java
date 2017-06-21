@@ -77,7 +77,7 @@ public class DeleteRequest extends RequestOrResponse {
    * @param deletionTimeInMs deletion time of the blob in ms
    * @param version version of the {@link DeleteRequest}
    */
-  private DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
+  protected DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
       long deletionTimeInMs, short version) {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
     this.version = version;
