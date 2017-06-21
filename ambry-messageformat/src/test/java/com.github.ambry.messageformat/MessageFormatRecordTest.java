@@ -139,7 +139,6 @@ public class MessageFormatRecordTest {
   }
 
   /**
-   <<<<<<< HEAD
    * Tests {@link MessageFormatRecord#BlobProperties_Version_V1} for different versions of {@link BlobPropertiesSerDe}
    * @throws IOException
    * @throws MessageFormatException

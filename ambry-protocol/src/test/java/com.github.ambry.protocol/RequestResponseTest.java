@@ -46,8 +46,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static com.github.ambry.store.MessageInfo.*;
-
 
 class MockFindTokenFactory implements FindTokenFactory {
 
@@ -289,8 +287,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_LEGACY_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_LEGACY_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", BlobProperties.LEGACY_ACCOUNT_ID, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", BlobProperties.LEGACY_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -311,7 +309,7 @@ public class RequestResponseTest {
       if (version == DeleteRequest.Delete_Request_Version_1) {
         deleteRequest = new DeleteRequest(correlationId, "client", id1);
       } else {
-        deleteRequest = new DeleteRequest(correlationId, "client", id1, accountId, containerId, deletionTimeMs);
+        deleteRequest = new DeleteRequestV2(correlationId, "client", id1, accountId, containerId, deletionTimeMs);
       }
       ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
       WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
@@ -423,8 +421,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_LEGACY_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_LEGACY_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", BlobProperties.LEGACY_ACCOUNT_ID, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", BlobProperties.LEGACY_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -465,6 +463,85 @@ public class RequestResponseTest {
       AdminResponse deserializedAdminResponse = AdminResponse.readFrom(requestStream);
       Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), 1234);
       Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    }
+  }
+
+  /**
+   * Class representing {@link DeleteRequest} in verison {@link DeleteRequest#Delete_Request_Version_2}
+   */
+  class DeleteRequestV2 extends DeleteRequest {
+    BlobId blobId;
+    short accountId;
+    short containerId;
+    long deletionTimeInMs;
+    int sizeSent = 0;
+
+    /**
+     * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
+     * @param correlationId correlationId of the delete request
+     * @param clientId clientId of the delete request
+     * @param blobId blobId of the delete request
+     * @param accountId accountId of the blobId being requested
+     * @param containerId containerId of the blobId being requested
+     * @param deletionTimeInMs deletion time of the blob in ms
+     */
+    public DeleteRequestV2(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
+        long deletionTimeInMs) {
+      super(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs);
+      this.blobId = blobId;
+      this.accountId = accountId;
+      this.containerId = containerId;
+      this.deletionTimeInMs = deletionTimeInMs;
+    }
+
+    @Override
+    public long sizeInBytes() {
+      // header + blobId
+      long sizeInBytes = super.sizeInBytes();
+      // accountId
+      sizeInBytes += ACCOUNT_ID_FIELD_SIZE_IN_BYTES;
+      // containerId
+      sizeInBytes += CONTAINER_ID_FIELD_SIZE_IN_BYTES;
+      // deletion time
+      sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
+      return sizeInBytes;
+    }
+
+    @Override
+    public long writeTo(WritableByteChannel channel) throws IOException {
+      long written = 0;
+      if (bufferToSend == null) {
+        bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
+        writeHeader();
+        bufferToSend.put(blobId.toBytes());
+        bufferToSend.putShort(accountId);
+        bufferToSend.putShort(containerId);
+        bufferToSend.putLong(deletionTimeInMs);
+        bufferToSend.flip();
+      }
+      if (bufferToSend.remaining() > 0) {
+        written = channel.write(bufferToSend);
+        sizeSent += written;
+      }
+      return written;
+    }
+
+    @Override
+    protected void writeHeader() {
+      if (bufferToSend == null) {
+        throw new IllegalStateException("Buffer to send should not be null");
+      }
+      bufferToSend.putLong(sizeInBytes());
+      bufferToSend.putShort((short) type.ordinal());
+      bufferToSend.putShort(DeleteRequest.Delete_Request_Version_2);
+      bufferToSend.putInt(correlationId);
+      bufferToSend.putInt(clientId.length());
+      bufferToSend.put(clientId.getBytes());
+    }
+
+    @Override
+    public boolean isSendComplete() {
+      return sizeSent == sizeInBytes();
     }
   }
 }

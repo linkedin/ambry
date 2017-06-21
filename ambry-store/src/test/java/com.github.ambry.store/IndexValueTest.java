@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -99,7 +100,7 @@ public class IndexValueTest {
       switch (version) {
         case PersistentIndex.VERSION_0:
           verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, Utils.Infinite_Time,
-              IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+              BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID);
           break;
         case PersistentIndex.VERSION_1:
           verifyIndexValue(value, logSegmentName, size, offset, false, expirationTime.getValue(), offset,
@@ -139,8 +140,7 @@ public class IndexValueTest {
     switch (version) {
       case PersistentIndex.VERSION_0:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset,
-            Utils.Infinite_Time, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+            Utils.Infinite_Time, BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, oldOffset,
@@ -153,7 +153,7 @@ public class IndexValueTest {
     switch (version) {
       case PersistentIndex.VERSION_0:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+            BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, -1,
@@ -171,7 +171,7 @@ public class IndexValueTest {
     switch (version) {
       case PersistentIndex.VERSION_0:
         verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+            BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
         verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, -1,

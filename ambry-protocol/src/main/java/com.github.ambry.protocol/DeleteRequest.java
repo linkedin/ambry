@@ -15,7 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.store.MessageInfo;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -37,8 +37,9 @@ public class DeleteRequest extends RequestOrResponse {
   static final short Delete_Request_Version_2 = 2;
   private final static short currentVersion = Delete_Request_Version_1;
 
-  private static final int AccountId_ContainerId_Field_Size_InBytes = 2;
-  private static final int DeletionTime_Field_Size_InBytes = 8;
+  protected static final int ACCOUNT_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+  protected static final int CONTAINER_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+  protected static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
   /**
    * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_1}
@@ -48,7 +49,7 @@ public class DeleteRequest extends RequestOrResponse {
    */
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, MessageInfo.ACCOUNT_ID_LEGACY_VALUE, MessageInfo.CONTAINER_ID_LEGACY_VALUE,
+    this(correlationId, clientId, blobId, BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID,
         (int) Utils.Infinite_Time, currentVersion);
   }
 
@@ -63,7 +64,7 @@ public class DeleteRequest extends RequestOrResponse {
    */
   public DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
       long deletionTimeInMs) {
-    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs, Delete_Request_Version_2);
+    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs, currentVersion);
   }
 
   /**
@@ -147,11 +148,11 @@ public class DeleteRequest extends RequestOrResponse {
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
     if (version == Delete_Request_Version_2) {
       // accountId
-      sizeInBytes += AccountId_ContainerId_Field_Size_InBytes;
+      sizeInBytes += ACCOUNT_ID_FIELD_SIZE_IN_BYTES;
       // containerId
-      sizeInBytes += AccountId_ContainerId_Field_Size_InBytes;
+      sizeInBytes += CONTAINER_ID_FIELD_SIZE_IN_BYTES;
       // deletion time
-      sizeInBytes += DeletionTime_Field_Size_InBytes;
+      sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
     }
     return sizeInBytes;
   }

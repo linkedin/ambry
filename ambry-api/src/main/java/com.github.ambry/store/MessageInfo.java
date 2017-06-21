@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 
 
@@ -20,9 +21,6 @@ import com.github.ambry.utils.Utils;
  * A message info class that contains basic info about a message
  */
 public class MessageInfo {
-
-  public static final short ACCOUNT_ID_LEGACY_VALUE = -1;
-  public static final short CONTAINER_ID_LEGACY_VALUE = -1;
 
   private final StoreKey key;
   private final long size;
@@ -86,7 +84,7 @@ public class MessageInfo {
    * @param crc the crc associated with this message. If unavailable, pass in null.
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
-    this(key, size, deleted, expirationTimeInMs, crc, ACCOUNT_ID_LEGACY_VALUE, CONTAINER_ID_LEGACY_VALUE,
+    this(key, size, deleted, expirationTimeInMs, crc, BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID,
         Utils.Infinite_Time);
   }
 
