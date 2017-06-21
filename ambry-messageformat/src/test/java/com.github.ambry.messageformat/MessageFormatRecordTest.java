@@ -42,29 +42,6 @@ public class MessageFormatRecordTest {
   @Test
   public void deserializeTest() {
     try {
-      // Test Blob property V1 Record
-      BlobProperties properties = new BlobProperties(1234, "id", "member", "test", true, 1234);
-      ByteBuffer stream =
-          ByteBuffer.allocate(MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties));
-      MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
-      stream.flip();
-      BlobProperties result = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
-      Assert.assertEquals(properties.getBlobSize(), result.getBlobSize());
-      Assert.assertEquals(properties.getContentType(), result.getContentType());
-      Assert.assertEquals(properties.getCreationTimeInMs(), result.getCreationTimeInMs());
-      Assert.assertEquals(properties.getOwnerId(), result.getOwnerId());
-      Assert.assertEquals(properties.getServiceId(), result.getServiceId());
-
-      // corrupt blob property V1 record
-      stream.flip();
-      stream.put(10, (byte) 10);
-      try {
-        BlobProperties resultCorrupt = MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
-        Assert.assertEquals(true, false);
-      } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
-      }
-
       // Test message header V1
       ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
       MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(header, 1000, 10, -1, 20, 30);
