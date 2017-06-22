@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -87,6 +86,7 @@ class PutOperation {
   private final RouterCallback routerCallback;
   private final Time time;
   private BlobProperties finalBlobProperties;
+  private byte blobIdFlag = BlobId.DEFAULT_FLAG;
 
   // Parameters associated with the state.
 
@@ -788,7 +788,9 @@ class PutOperation {
           attemptedPartitionIds.add(partitionId);
         }
         partitionId = getPartitionForPut(attemptedPartitionIds);
-        chunkBlobId = new BlobIdBuilder(partitionId).build();
+        chunkBlobId =
+            new BlobId(blobIdFlag, clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+                passedInBlobProperties.getContainerId(), partitionId);
         chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),

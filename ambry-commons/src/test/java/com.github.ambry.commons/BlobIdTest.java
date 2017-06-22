@@ -39,22 +39,16 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link BlobId} and {@link BlobIdBuilder}. Using {@link BlobIdBuilderV2} builds a {@link BlobId}
+ * Unit tests for {@link BlobId}. Using {@link BlobIdV2} builds a {@link BlobId}
  * in v2 equivalent to setting {@link BlobId#CURRENT_VERSION} to be {@link BlobId#BLOB_ID_V2}.
  */
 public class BlobIdTest {
   private static final Random random = new Random();
   private static final List<Short> versions = Arrays.asList(new Short[]{BLOB_ID_V1, BLOB_ID_V2});
-  private static final List<Boolean> setterChoice = Arrays.asList(new Boolean[]{true, false});
   private byte referenceFlag;
   private byte referenceDatacenterId;
   private short referenceAccountId;
   private short referenceContainerId;
-  private byte updatedFlag;
-  private byte updatedDatacenterId;
-  private short updatedAccountId;
-  private short updatedContainerId;
-  private PartitionId updatedPartitionId;
   private ClusterMap referenceClusterMap;
   private PartitionId referencePartitionId;
 
@@ -71,68 +65,26 @@ public class BlobIdTest {
     referenceDatacenterId = bytes[0];
     referenceAccountId = getRandomShort(random);
     referenceContainerId = getRandomShort(random);
-    updatedFlag = referenceFlag == Byte.MAX_VALUE ? 0 : (byte) (referenceFlag + 1);
-    updatedDatacenterId = referenceDatacenterId == Byte.MAX_VALUE ? 0 : (byte) (referenceDatacenterId + 1);
-    updatedAccountId = referenceAccountId == Short.MAX_VALUE ? 0 : (byte) (referenceAccountId + 1);
-    updatedContainerId = referenceContainerId == Short.MAX_VALUE ? 0 : (byte) (referenceContainerId + 1);
     referencePartitionId = referenceClusterMap.getWritablePartitionIds().get(0);
-    updatedPartitionId = referenceClusterMap.getWritablePartitionIds().get(1);
   }
 
   /**
-   * Tests building blobId in both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2} using and without using
-   * setters of {@link BlobIdBuilder}. The expected values for {@code flag}, {@code datacenterId}, {@code accountId},
-   * {@code containerId}, and {@code partitionId} are listed below:
+   * Tests building blobId in both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2}. The expected values
+   * for {@code flag}, {@code datacenterId}, {@code accountId}, {@code containerId}, and {@code partitionId} are
+   * listed below:
    * <pre>
-   *                                          IfUseSetter
-   * Version            true                                              false
-   * 1            always default values except partitionId      always default values except partitionId
-   * 2            values set by setters                         always default values except partitionId
+   * Version
+   * 1            always default values except partitionId
+   * 2            values passed in as arguments
    * </pre>
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testBuildBlobId() throws Exception {
     for (Short version : versions) {
-      for (Boolean shouldUseSetter : setterChoice) {
-        buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, shouldUseSetter);
-        buildBlobIdAndAssert(version, null, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, shouldUseSetter);
-        buildBlobIdAndAssert(version, referenceFlag, null, referenceAccountId, referenceContainerId,
-            referencePartitionId, shouldUseSetter);
-        buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, null, referenceContainerId,
-            referencePartitionId, shouldUseSetter);
-        buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, referenceAccountId, null,
-            referencePartitionId, shouldUseSetter);
-        buildBlobIdAndAssert(version, null, null, null, null, referencePartitionId, shouldUseSetter);
-      }
+      buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+          referencePartitionId);
     }
-  }
-
-  /**
-   * Tests when building blobId in {@link BlobId#BLOB_ID_V2}, the internal states of a {@link BlobIdBuilder} can
-   * be re-set to other values after they were set to some values previously.
-   * @throws Exception Any unexpected exception.
-   */
-  @Test
-  public void testSetAndBuildV2() throws Exception {
-    BlobIdBuilder blobIdBuilderV2 = new BlobIdBuilderV2(referencePartitionId).setFlag(referenceFlag)
-        .setDatacenterId(referenceDatacenterId)
-        .setAccountId(referenceAccountId)
-        .setContainerId(referenceContainerId);
-    BlobId blobId = blobIdBuilderV2.build();
-    assertBlobIdFieldValues(BLOB_ID_V2, blobId, referenceFlag, referenceDatacenterId, referenceAccountId,
-        referenceContainerId, referencePartitionId, true);
-    // setter will set the same BlobIdBuilder internal states to different values
-    blobId = blobIdBuilderV2.setFlag(updatedFlag)
-        .setDatacenterId(updatedDatacenterId)
-        .setAccountId(updatedAccountId)
-        .setContainerId(updatedContainerId)
-        .setPartitionId(updatedPartitionId)
-        .build();
-    assertBlobIdFieldValues(BLOB_ID_V2, blobId, updatedFlag, updatedDatacenterId, updatedAccountId, updatedContainerId,
-        updatedPartitionId, true);
   }
 
   /**
@@ -175,8 +127,9 @@ public class BlobIdTest {
    */
   @Test
   public void testBlobIdLongForm() {
-    assertBlobIdLongForm(BLOB_ID_V1);
-    assertBlobIdLongForm(BLOB_ID_V2);
+    for (Short version : versions) {
+      assertBlobIdLongForm(version);
+    }
   }
 
   /**
@@ -203,16 +156,13 @@ public class BlobIdTest {
     String srcBlobIdStr;
     switch (version) {
       case BLOB_ID_V1:
-        srcBlobIdStr = new BlobIdBuilder(referencePartitionId).build().getID();
+        srcBlobIdStr = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+            referencePartitionId).getID();
         break;
 
       case BLOB_ID_V2:
-        srcBlobIdStr = new BlobIdBuilderV2(referencePartitionId).setFlag(referenceFlag)
-            .setDatacenterId(referenceDatacenterId)
-            .setAccountId(referenceAccountId)
-            .setContainerId(referenceContainerId)
-            .build()
-            .getID();
+        srcBlobIdStr = new BlobIdV2(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+            referencePartitionId).getID();
         break;
 
       default:
@@ -373,30 +323,25 @@ public class BlobIdTest {
    * @param containerId The expected {@code containerId}. If {@code null}, the assertion will be run against
    * {@link Container#LEGACY_CONTAINER_ID}.
    * @param partitionId The expected partitionId.
-   * @param useSetter {@code true} indicates using setter; {@code false} otherwise.
    * @throws Exception Any unexpected exception.
    */
-  private void buildBlobIdAndAssert(short version, Byte flag, Byte datacenterId, Short accountId, Short containerId,
-      PartitionId partitionId, boolean useSetter) throws Exception {
-    BlobIdBuilder blobIdBuilder;
+  private void buildBlobIdAndAssert(short version, byte flag, byte datacenterId, short accountId, short containerId,
+      PartitionId partitionId) throws Exception {
+    BlobId blobId;
     switch (version) {
       case BLOB_ID_V1:
-        blobIdBuilder = new BlobIdBuilder(partitionId);
+        blobId = new BlobId(flag, datacenterId, accountId, containerId, partitionId);
         break;
 
       case BLOB_ID_V2:
-        blobIdBuilder = new BlobIdBuilderV2(partitionId);
+        blobId = new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
         break;
 
       default:
         throw new IllegalArgumentException("Invalid version number blob" + version);
     }
-    if (useSetter) {
-      blobIdBuilder.setFlag(flag).setDatacenterId(datacenterId).setAccountId(accountId).setContainerId(containerId);
-    }
-    BlobId blobId = blobIdBuilder.build();
     assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
-    assertBlobIdFieldValues(version, blobId, flag, datacenterId, accountId, containerId, partitionId, useSetter);
+    assertBlobIdFieldValues(version, blobId, flag, datacenterId, accountId, containerId, partitionId);
   }
 
   /**
@@ -416,16 +361,14 @@ public class BlobIdTest {
    *                    expected value will become {@link Container#LEGACY_CONTAINER_ID}. For v2, {@code null} will make
    *                    the assertion against {@link Container#LEGACY_CONTAINER_ID}.
    * @param partitionId The expected partitionId.
-   * @param useSetter {@code true} indicates that setters of {@link BlobIdBuilder} were used the blobId was built,
-   *                              {@code false} otherwise.
    * @throws Exception Any unexpected exception.
    */
   private void assertBlobIdFieldValues(short version, BlobId blobId, Byte flag, Byte datacenterId, Short accountId,
-      Short containerId, PartitionId partitionId, boolean useSetter) throws Exception {
+      Short containerId, PartitionId partitionId) throws Exception {
     assertTrue("Used unrecognized version", version == BLOB_ID_V1 || version == BLOB_ID_V2);
     assertEquals("Wrong partition id in blobId: " + blobId, partitionId, blobId.getPartition());
     assertEquals("Wrong version in blobId.", version, blobId.getCurrentVersion());
-    if (!useSetter || version == BLOB_ID_V1) {
+    if (version == BLOB_ID_V1) {
       assertEquals("Wrong flag in blobId: " + blobId, BlobId.DEFAULT_FLAG, blobId.getFlag());
       assertEquals("Wrong datacenter id in blobId: " + blobId, LEGACY_DATACENTER_ID, blobId.getDatacenterId());
       assertEquals("Wrong account id in blobId: " + blobId, Account.LEGACY_ACCOUNT_ID, blobId.getAccountId());
@@ -467,15 +410,13 @@ public class BlobIdTest {
     BlobId blobId;
     switch (version) {
       case BLOB_ID_V1:
-        blobId = new BlobIdBuilder(referencePartitionId).build();
+        blobId = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+            referencePartitionId);
         break;
 
       case BLOB_ID_V2:
-        blobId = new BlobIdBuilderV2(referencePartitionId).setFlag(referenceFlag)
-            .setDatacenterId(referenceDatacenterId)
-            .setAccountId(referenceAccountId)
-            .setContainerId(referenceContainerId)
-            .build();
+        blobId = new BlobIdV2(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+            referencePartitionId);
         break;
 
       default:
@@ -506,32 +447,13 @@ public class BlobIdTest {
    * A class that is used to test when {@link BlobId#CURRENT_VERSION} is set to {@link BlobId#BLOB_ID_V2}.
    */
   private class BlobIdV2 extends BlobId {
-    BlobIdV2(Byte flag, Byte datacenterId, Short accountId, Short containerId, PartitionId partitionId) {
+    BlobIdV2(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
       super(flag, datacenterId, accountId, containerId, partitionId);
     }
 
     @Override
     short getCurrentVersion() {
       return BLOB_ID_V2;
-    }
-  }
-
-  /**
-   * A BlobIdBuilder that builds a blobId as if its current version is set to {@link BlobId#BLOB_ID_V2}.
-   */
-  private class BlobIdBuilderV2 extends BlobIdBuilder {
-
-    /**
-     * Constructor
-     * @param partitionId The partitionId to build a blobId.
-     */
-    BlobIdBuilderV2(PartitionId partitionId) {
-      super(partitionId);
-    }
-
-    @Override
-    public BlobId build() {
-      return new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
     }
   }
 }

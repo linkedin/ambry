@@ -14,13 +14,15 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
@@ -505,7 +507,8 @@ public class ReplicationTest {
       List<ArrayList<MessageInfo>> messageInfoListofLists, List<ArrayList<ByteBuffer>> messageBufferListofLists,
       int count) throws Exception {
     for (int i = 0; i < count; i++) {
-      BlobId id = new BlobIdBuilder(partitionId).build();
+      BlobId id = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+          Container.LEGACY_CONTAINER_ID, partitionId);
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
       long streamSize = byteBuffer.limit();
       for (ArrayList<MessageInfo> messageInfoList : messageInfoListofLists) {
@@ -551,7 +554,9 @@ public class ReplicationTest {
           Collections.singletonList(remoteBufferList), (i % 2 == 0 ? 5 : 6));
 
       // add an expired message to replica 2
-      BlobId idExpired = new BlobIdBuilder(partitionIds.get(i)).build();
+      BlobId idExpired =
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
@@ -808,7 +813,9 @@ public class ReplicationTest {
           Arrays.asList(localBufferList, remoteBufferList), 10);
 
       // add an expired message to replica 2
-      BlobId idExpired = new BlobIdBuilder(partitionIds.get(i)).build();
+      BlobId idExpired =
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
@@ -1013,7 +1020,9 @@ public class ReplicationTest {
           Arrays.asList(localBufferList, remoteBufferList), 10);
 
       // add a corrupt message to replica 2
-      BlobId corruptMessageId = new BlobIdBuilder(partitionIds.get(i)).build();
+      BlobId corruptMessageId =
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer corruptByteBuffer = constructTestBlobInMessageFormat(corruptMessageId, 1000, random);
       byte[] data = corruptByteBuffer.array();
       // flip every bit in the array
@@ -1030,7 +1039,9 @@ public class ReplicationTest {
           Collections.singletonList(remoteBufferList), 5);
 
       // add an expired message to replica 2
-      BlobId idExpired = new BlobIdBuilder(partitionIds.get(i)).build();
+      BlobId idExpired =
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));

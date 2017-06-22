@@ -54,7 +54,7 @@ public interface ClusterMap extends AutoCloseable {
    * Gets the id of the local datacenter.
    * @return The id of the local datacenter.
    */
-  short getLocalDatacenterId();
+  byte getLocalDatacenterId();
 
   /**
    * Gets a specific DataNodeId by its hostname and port.

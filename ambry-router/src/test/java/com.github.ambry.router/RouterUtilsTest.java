@@ -13,11 +13,12 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdBuilder;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -37,7 +38,8 @@ public class RouterUtilsTest {
       fail("Should not get any exception.");
     }
     partition = clusterMap.getWritablePartitionIds().get(0);
-    originalBlobId = new BlobIdBuilder(partition).build();
+    originalBlobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Account.LEGACY_ACCOUNT_ID,
+        Container.LEGACY_CONTAINER_ID, partition);
     blobIdStr = originalBlobId.getID();
   }
 

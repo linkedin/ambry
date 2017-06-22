@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -129,7 +128,7 @@ public class DirectoryUploader {
   }
 
   public void walkDirectoryToCreateBlobs(String path, FileWriter writer, String datacenter,
-      boolean enableVerboseLogging) throws InterruptedException {
+      boolean enableVerboseLogging, ClusterMap map) throws InterruptedException {
 
     File root = new File(path);
     File[] list = root.listFiles();
@@ -152,9 +151,11 @@ public class DirectoryUploader {
         FileInputStream stream = null;
         try {
           int replicaCount = 0;
-          BlobId blobId = new BlobIdBuilder(partitionId).build();
-          List<ReplicaId> successList = new ArrayList<ReplicaId>();
-          List<ReplicaId> failureList = new ArrayList<ReplicaId>();
+          BlobId blobId =
+              new BlobId(BlobId.DEFAULT_FLAG, map.getLocalDatacenterId(), props.getAccountId(), props.getContainerId(),
+                  partitionId);
+          List<ReplicaId> successList = new ArrayList<>();
+          List<ReplicaId> failureList = new ArrayList<>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
             if (replicaId.getDataNodeId().getDatacenterName().equalsIgnoreCase(datacenter)) {
               // If a node was specified, only write to that node instead of all nodes of a partition
@@ -402,7 +403,7 @@ public class DirectoryUploader {
       if (nodeHostname != null && nodePort != null) {
         directoryUploader.setDataNodeId(map, nodeHostname, nodePort, enableVerboseLogging);
       }
-      directoryUploader.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging);
+      directoryUploader.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging, map);
     } catch (Exception e) {
       System.err.println("Error on exit " + e);
     } finally {

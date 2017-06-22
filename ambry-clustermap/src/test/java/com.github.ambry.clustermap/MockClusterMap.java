@@ -188,7 +188,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public short getLocalDatacenterId() {
+  public byte getLocalDatacenterId() {
     return LEGACY_DATACENTER_ID;
   }
 

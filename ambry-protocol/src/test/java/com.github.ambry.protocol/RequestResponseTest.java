@@ -13,11 +13,13 @@
  */
 package com.github.ambry.protocol;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdBuilder;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
@@ -175,7 +177,8 @@ public class RequestResponseTest {
 
     int correlationId = 5;
     String clientId = "client";
-    BlobId blobId = new BlobIdBuilder(clusterMap.getWritablePartitionIds().get(0)).build();
+    BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+        Container.LEGACY_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
     byte[] userMetadata = new byte[50];
     rnd.nextBytes(userMetadata);
     ByteBuffer.wrap(userMetadata);
@@ -227,7 +230,8 @@ public class RequestResponseTest {
   @Test
   public void getRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    BlobId id1 = new BlobIdBuilder(clusterMap.getWritablePartitionIds().get(0)).build();
+    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+        Container.LEGACY_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
     blobIdList.add(id1);
     PartitionRequestInfo partitionRequestInfo1 = new PartitionRequestInfo(new MockPartitionId(), blobIdList);
@@ -293,7 +297,8 @@ public class RequestResponseTest {
   @Test
   public void deleteRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    BlobId id1 = new BlobIdBuilder(clusterMap.getWritablePartitionIds().get(0)).build();
+    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+        Container.LEGACY_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
     DeleteRequest deleteRequest = new DeleteRequest(1234, "client", id1);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
@@ -321,7 +326,8 @@ public class RequestResponseTest {
   @Test
   public void replicaMetadataRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    BlobId id1 = new BlobIdBuilder(clusterMap.getWritablePartitionIds().get(0)).build();
+    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+        Container.LEGACY_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");

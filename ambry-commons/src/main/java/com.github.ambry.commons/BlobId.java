@@ -66,11 +66,11 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * </pre>
  */
 public class BlobId extends StoreKey {
+  public static final byte DEFAULT_FLAG = 0;
   // version 1 of the serialized format
   static final short BLOB_ID_V1 = 1;
   // version 2 of the serialized format
   static final short BLOB_ID_V2 = 2;
-  static final byte DEFAULT_FLAG = 0;
   private static final short CURRENT_VERSION = BLOB_ID_V1;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
@@ -102,7 +102,10 @@ public class BlobId extends StoreKey {
    *             {@link Container#LEGACY_CONTAINER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    */
-  BlobId(Byte flag, Byte datacenterId, Short accountId, Short containerId, PartitionId partitionId) {
+  public BlobId(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
+    if (partitionId == null) {
+      throw new IllegalArgumentException("partitionId cannot be null");
+    }
     version = getCurrentVersion();
     switch (version) {
       case BLOB_ID_V1:
@@ -124,7 +127,6 @@ public class BlobId extends StoreKey {
     }
     this.partitionId = partitionId;
     uuid = UUID.randomUUID().toString();
-    populateMissingFields();
   }
 
   /**
@@ -373,28 +375,6 @@ public class BlobId extends StoreKey {
   @Override
   public int hashCode() {
     return Utils.hashcode(new Object[]{version, partitionId, uuid});
-  }
-
-  /**
-   * Populate the missing fields with legacy values.
-   * @throws IllegalStateException if partitionId is null, because there is no default value for this field.
-   */
-  private void populateMissingFields() {
-    if (partitionId == null) {
-      throw new IllegalStateException("partitionId is null");
-    }
-    if (flag == null) {
-      flag = DEFAULT_FLAG;
-    }
-    if (datacenterId == null) {
-      datacenterId = LEGACY_DATACENTER_ID;
-    }
-    if (accountId == null) {
-      accountId = LEGACY_ACCOUNT_ID;
-    }
-    if (containerId == null) {
-      containerId = LEGACY_CONTAINER_ID;
-    }
   }
 
   /**

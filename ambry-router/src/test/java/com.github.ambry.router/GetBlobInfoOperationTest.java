@@ -13,8 +13,11 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.commons.BlobIdBuilder;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
@@ -149,12 +152,10 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testInstantiation() throws Exception {
-    String blobIdStr = (new BlobIdBuilder(mockClusterMap.getWritablePartitionIds().get(0))).build().getID();
-    Callback<GetBlobResultInternal> getOperationCallback = new Callback<GetBlobResultInternal>() {
-      @Override
-      public void onCompletion(GetBlobResultInternal result, Exception exception) {
-        // no op.
-      }
+    String blobIdStr = (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
+        Container.LEGACY_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0))).getID();
+    Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
+      // no op.
     };
 
     // test a bad case
