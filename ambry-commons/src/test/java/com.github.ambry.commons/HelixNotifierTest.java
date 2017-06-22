@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
@@ -63,7 +64,7 @@ public class HelixNotifierTest {
   public void setup() throws Exception {
     deleteStoreIfExists();
     storeKeyToMockStoreMap.clear();
-    helixNotifier = new HelixNotifier(getMockHelixStore(storeConfig));
+    helixNotifier = new HelixNotifier(getMockHelixStore(storeConfig), new MetricRegistry());
     resetReferenceTopicsAndMessages();
     resetListeners();
   }
@@ -229,7 +230,7 @@ public class HelixNotifierTest {
   public void testOneListenerTwoNotifiers() throws Exception {
     helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
-    HelixNotifier helixNotifier2 = new HelixNotifier(getMockHelixStore(storeConfig));
+    HelixNotifier helixNotifier2 = new HelixNotifier(getMockHelixStore(storeConfig), new MetricRegistry());
     helixNotifier2.publish(refTopics.get(0), refMessages.get(0));
     awaitLatchOrTimeout(latch0.get(), LATCH_TIMEOUT_MS);
     assertEquals(1, receivedTopicsByListener0.size());
@@ -311,7 +312,7 @@ public class HelixNotifierTest {
 
     // pass null storeConfig to construct a HelixNotifier
     try {
-      new HelixNotifier((HelixPropertyStoreConfig) null);
+      new HelixNotifier((HelixPropertyStoreConfig) null, new MetricRegistry());
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -319,7 +320,15 @@ public class HelixNotifierTest {
 
     // pass null store to construct a HelixNotifier
     try {
-      new HelixNotifier((HelixPropertyStore<ZNRecord>) null);
+      new HelixNotifier((HelixPropertyStore<ZNRecord>) null, new MetricRegistry());
+      fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+
+    // pass null metricRegistry to construct a HelixNotifier
+    try {
+      new HelixNotifier(storeConfig, null);
       fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
@@ -333,7 +342,7 @@ public class HelixNotifierTest {
    */
   @Test
   public void testFailToPublishMessage() throws Exception {
-    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(true, false));
+    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(true, false), new MetricRegistry());
     helixNotifier.publish(refTopics.get(0), refMessages.get(0));
   }
 
@@ -345,7 +354,7 @@ public class HelixNotifierTest {
    */
   @Test
   public void testReadNullRecordWhenSendMessageToLocalListeners() throws Exception {
-    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(false, true));
+    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(false, true), new MetricRegistry());
     helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));
@@ -446,8 +455,8 @@ public class HelixNotifierTest {
    * @param storeRootPath The root path of a store in {@code ZooKeeper}.
    * @return {@link HelixPropertyStoreConfig} defined by the arguments.
    */
-  private static HelixPropertyStoreConfig getHelixStoreConfig(String zkClientConnectString,
-      int zkClientSessionTimeoutMs, int zkClientConnectionTimeoutMs, String storeRootPath) {
+  public static HelixPropertyStoreConfig getHelixStoreConfig(String zkClientConnectString, int zkClientSessionTimeoutMs,
+      int zkClientConnectionTimeoutMs, String storeRootPath) {
     Properties helixConfigProps = new Properties();
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",

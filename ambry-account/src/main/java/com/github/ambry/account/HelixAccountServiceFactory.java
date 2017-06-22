@@ -13,28 +13,67 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.commons.HelixPropertyStoreFactory;
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.SecurityServiceFactory;
+import java.util.Collections;
+import java.util.List;
+import org.apache.helix.ZNRecord;
+import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
+import org.apache.helix.manager.zk.ZkClient;
+import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
- * Default implementation of {@link SecurityServiceFactory} for Ambry
+ * {@code Helix}-based implementation of {@link HelixAccountServiceFactory}.
  * <p/>
  * Returns a new instance of {@link HelixAccountService} on {@link #getAccountService()} call.
  */
 public class HelixAccountServiceFactory implements AccountServiceFactory {
-
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   private final HelixPropertyStoreConfig storeConfig;
+  private final AccountServiceMetrics accountServiceMetrics;
+  private final Notifier<String> notifier;
 
-  public HelixAccountServiceFactory(VerifiableProperties verifiableProperties) {
+  /**
+   * Constructor
+   * @param verifiableProperties The properties to get a {@link HelixAccountService} instance. Cannot be {@code null}.
+   * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
+   * @param notifier The {@link Notifier} used to get a {@link HelixAccountService}. Cannot be {@code null}.
+   */
+  public HelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      Notifier<String> notifier) {
+    if (verifiableProperties == null || metricRegistry == null || notifier == null) {
+      throw new IllegalArgumentException("verifiableProperties or metricRegistry or notifier cannot be null");
+    }
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
+    accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
+    this.notifier = notifier;
   }
 
   @Override
-  public AccountService getAccountService() throws InstantiationException {
-    return new HelixAccountService(storeConfig, new HelixPropertyStoreFactory<>());
+  public AccountService getAccountService() {
+    long startTimeMs = System.currentTimeMillis();
+    logger.info("Starting a HelixAccountService");
+    ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
+        storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
+    HelixPropertyStore<ZNRecord> helixStore =
+        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
+    logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
+            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
+        storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
+        subscribedPaths);
+    HelixAccountService helixAccountService = new HelixAccountService(helixStore, accountServiceMetrics, notifier);
+    long spentTimeMs = System.currentTimeMillis() - startTimeMs;
+    logger.info("HelixAccountService started, took {}ms", spentTimeMs);
+    this.accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
+    return helixAccountService;
   }
 }
 

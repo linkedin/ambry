@@ -13,10 +13,12 @@
  */
 package com.github.ambry.account;
 
-import com.github.ambry.commons.HelixPropertyStoreFactory;
-import com.github.ambry.commons.HelixPropertyStoreUtils;
-import com.github.ambry.commons.MockHelixPropertyStoreFactory;
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.HelixStoreOperator;
+import com.github.ambry.commons.MockHelixPropertyStore;
+import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,10 +27,12 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import org.apache.helix.ZNRecord;
+import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -39,6 +43,8 @@ import static com.github.ambry.account.HelixAccountService.*;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
 
 /**
@@ -49,18 +55,16 @@ public class HelixAccountServiceTest {
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
   private static final String ZK_CONNECT_STRING = "dummyHost:dummyPort";
   private static final String STORE_ROOT_PATH = "/ambry_test/helix_account_service";
-  private static Random random = new Random();
+  private static final Random random = new Random();
   private static final String BAD_ACCOUNT_METADATA_STRING = "badAccountMetadataString";
   private static final int NUM_REF_ACCOUNT = 10;
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
-  private static final HelixPropertyStoreConfig storeConfig =
-      HelixPropertyStoreUtils.getHelixStoreConfig(ZK_CONNECT_STRING, ZK_CLIENT_SESSION_TIMEOUT_MS,
-          ZK_CLIENT_CONNECTION_TIMEOUT_MS, STORE_ROOT_PATH);
-  private static final HelixPropertyStoreFactory<ZNRecord> storeFactory =
-      new MockHelixPropertyStoreFactory(false, false);
+  private static final Properties helixConfigProps = new Properties();
   private static final Map<Short, Account> idToRefAccountMap = new HashMap<>();
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
-
+  private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
+  private static VerifiableProperties vHelixConfigProps;
+  private static HelixPropertyStoreConfig storeConfig;
   private Account refAccount;
   private short refAccountId;
   private String refAccountName;
@@ -72,7 +76,21 @@ public class HelixAccountServiceTest {
   private String refContainerDescription;
   private boolean refContainerPrivacy;
   private short refParentAccountId;
-  private HelixAccountService helixAccountService;
+  private AccountService accountService;
+  private Notifier<String> notifier;
+
+  static {
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
+        String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
+        String.valueOf(ZK_CLIENT_SESSION_TIMEOUT_MS));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
+        ZK_CONNECT_STRING);
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+  }
 
   /**
    * Resets variables and settings, and cleans up if the store already exists.
@@ -80,8 +98,9 @@ public class HelixAccountServiceTest {
    */
   @Before
   public void init() throws Exception {
+    deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
-    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
+    notifier = new MockNotifier();
   }
 
   /**
@@ -90,23 +109,24 @@ public class HelixAccountServiceTest {
    */
   @After
   public void cleanUp() throws Exception {
-    if (helixAccountService != null) {
-      helixAccountService.close();
+    if (accountService != null) {
+      accountService.close();
     }
-    HelixPropertyStoreUtils.deleteStoreIfExists(storeConfig, storeFactory);
+    deleteStoreIfExists();
   }
 
   /**
    * Tests a clean startup of {@link HelixAccountService}, when the corresponding {@code ZooKeeper} does not
-   * have any record for it.
+   * have any {@link ZNRecord} on it.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testStartUpWithoutMetadataExists() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     // At time zero, no account metadata exists.
-    assertEquals("The number of account in HelixAccountService is not zero", 0,
-        helixAccountService.getAllAccounts().size());
+    assertEquals("The number of account in HelixAccountService is incorrect after clean startup", 0,
+        accountService.getAllAccounts().size());
   }
 
   /**
@@ -117,29 +137,31 @@ public class HelixAccountServiceTest {
   @Test
   public void testStartUpWithMetadataExists() throws Exception {
     // pre-populate account metadata in ZK.
-    writeAccountHelixPropertyStore(idToRefAccountMap.values());
+    writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
     // When start, the helixAccountService should get the account metadata.
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     assertAccountsInHelixAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT);
   }
 
   /**
-   * Tests updating account metadata through {@link HelixAccountService}.
+   * Tests creating a number of new {@link Account} through {@link HelixAccountService}, where there is no {@link ZNRecord}
+   * exists on the {@code ZooKeeper}.
    */
   @Test
-  public void testCreateAccount() {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals("The number of account in HelixAccountService is different from expected", 0,
-        helixAccountService.getAllAccounts().size());
-    boolean res = helixAccountService.updateAccounts(new ArrayList<>(idToRefAccountMap.values()));
+  public void testCreateAccount() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    assertEquals("The number of account in HelixAccountService is incorrect", 0,
+        accountService.getAllAccounts().size());
+    boolean res = accountService.updateAccounts(new ArrayList<>(idToRefAccountMap.values()));
     assertTrue("Failed to update accounts", res);
-    helixAccountService.onMessage(HelixAccountService.ACCOUNT_METADATA_CHANGE_TOPIC,
-        HelixAccountService.FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
     assertAccountsInHelixAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT);
   }
 
   /**
-   * Tests updating accounts through {@link HelixAccountService} in various situations:
+   * Tests creating and updating accounts through {@link HelixAccountService} in various situations:
+   * 0. {@link Account}s already exists on ZooKeeper.
    * 1. add a new {@link Account};
    * 2. update existing {@link Account};
    * 3. add a new {@link Container} to an existing {@link Account};
@@ -149,14 +171,16 @@ public class HelixAccountServiceTest {
   @Test
   public void testUpdateAccount() throws Exception {
     // pre-populate account metadata in ZK.
-    writeAccountHelixPropertyStore(idToRefAccountMap.values());
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+    writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    assertAccountsInHelixAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT);
 
     // add a new account
     Account newAccountWithoutContainer =
         new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
     List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
-    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT);
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
 
     // update all existing reference accounts (not the new account)
     accountsToUpdate = new ArrayList<>();
@@ -167,12 +191,12 @@ public class HelixAccountServiceTest {
           account.getStatus().equals(AccountStatus.ACTIVE) ? AccountStatus.INACTIVE : AccountStatus.ACTIVE);
       accountsToUpdate.add(accountBuilder.build());
     }
-    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT);
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
 
     // add one container to the new account
     AccountBuilder accountBuilder = new AccountBuilder(newAccountWithoutContainer);
     accountsToUpdate = Collections.singletonList(accountBuilder.addOrUpdateContainer(refContainer).build());
-    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT);
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
 
     // update existing containers for all the reference accounts (not for the new account)
     accountsToUpdate = new ArrayList<>();
@@ -190,89 +214,83 @@ public class HelixAccountServiceTest {
       }
       accountsToUpdate.add(accountBuilder.build());
     }
-    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT);
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link org.apache.helix.store.HelixPropertyStore}, where the {@link ZNRecord}
-   * is empty.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} is empty. This is a
+   * good {@link ZNRecord} format that should NOT fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase1() throws Exception {
-    writeZNRecordToHelixPropertyStore(makeZNRecordWithSimpleField(null, null, null));
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals(0, helixAccountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 1);
+    ZNRecord zNRecord = makeZNRecordWithSimpleField(null, null, null);
+    updateAndWriteZNRecord(zNRecord, true);
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link org.apache.helix.store.HelixPropertyStore}, where the {@link ZNRecord}
-   * contains a simple field of irrelevant data.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has an irrelevant
+   * simple field ("key": "value"), but ("accountMetadata": someValidMap) is missing. This is a good {@link ZNRecord}
+   * format that should NOT fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase2() throws Exception {
-    writeZNRecordToHelixPropertyStore(makeZNRecordWithSimpleField(null, "key", "value"));
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals(0, helixAccountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 1);
+    ZNRecord zNRecord = makeZNRecordWithSimpleField(null, "key", "value");
+    updateAndWriteZNRecord(zNRecord, true);
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link org.apache.helix.store.HelixPropertyStore}, where the {@link ZNRecord}
-   * has a valid value for the map field, but the key field is not {@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a map field
+   * ("key": someValidAccountMap), but ({@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}: someValidMap)
+   * is missing. This is a good {@link ZNRecord} format that should NOT fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase3() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
-    writeZNRecordToHelixPropertyStore(makeZNRecordWithMapField(null, "key", mapValue));
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals(0, helixAccountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 1);
+    ZNRecord zNRecord = makeZNRecordWithMapField(null, "key", mapValue);
+    updateAndWriteZNRecord(zNRecord, true);
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link org.apache.helix.store.HelixPropertyStore}, where the {@link ZNRecord}
-   * has a valid key and value for the map field, but the record does not match the key.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a map field
+   * ({@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}: accountMap), and accountMap contains
+   * ("accountId": accountJsonStr) that does not match. This is a NOT good {@link ZNRecord} format that should
+   * fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase4() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put("-1", refAccount.toJson().toString());
-    writeZNRecordToHelixPropertyStore(makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue));
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals(0, helixAccountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 1);
+    ZNRecord zNRecord = makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue);
+    updateAndWriteZNRecord(zNRecord, false);
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link org.apache.helix.store.HelixPropertyStore}, where the {@link ZNRecord}
-   * has a valid key for the map field, the record string is not a json string.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a map field
+   * ({@link HelixAccountService#ACCOUNT_METADATA_MAP_KEY}: accountMap), and accountMap contains
+   * ("accountId": badAccountJsonString). This is a NOT good {@link ZNRecord} format that should fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase5() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put(String.valueOf(refAccount.getId()), BAD_ACCOUNT_METADATA_STRING);
-    writeZNRecordToHelixPropertyStore(makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue));
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals(0, helixAccountService.getAllAccounts().size());
-    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 1);
+    ZNRecord zNRecord = makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue);
+    updateAndWriteZNRecord(zNRecord, false);
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link org.apache.helix.store.HelixPropertyStore}, where the {@link ZNRecord}
-   * has a random number of invalid records. The {@link HelixAccountService} should still be able to get the valid
-   * {@link Account}s without taking the invalid ones.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a random number
+   * of invalid records. This is a NOT good {@link ZNRecord} format that should fail fetch or update, and none of the
+   * record should be read.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase6() throws Exception {
-    int badRecordCount = 0;
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
     List<Account> goodAccounts = new ArrayList<>();
     List<Account> badAccounts = new ArrayList<>();
@@ -280,7 +298,6 @@ public class HelixAccountServiceTest {
     for (Account account : idToRefAccountMap.values()) {
       if (random.nextDouble() < 0.3) {
         accountMap.put(String.valueOf(account.getId()), BAD_ACCOUNT_METADATA_STRING);
-        badRecordCount++;
         badAccounts.add(account);
       } else {
         accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
@@ -288,13 +305,7 @@ public class HelixAccountServiceTest {
       }
     }
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
-    writeZNRecordToHelixPropertyStore(zNRecord);
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertAccountsInHelixAccountService(goodAccounts, NUM_REF_ACCOUNT - badRecordCount);
-    // asserts the bad accounts do not exist in the helixAccountService
-    for (Account account : badAccounts) {
-      assertAccountNotExistInHelixAccountService(account);
-    }
+    updateAndWriteZNRecord(zNRecord, false);
   }
 
   /**
@@ -304,13 +315,27 @@ public class HelixAccountServiceTest {
    */
   @Test
   public void receiveBadMessage() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals("The number of account in HelixAccountService is different from expected", 0,
-        helixAccountService.getAllAccounts().size());
-    writeAccountHelixPropertyStore(idToRefAccountMap.values());
-    helixAccountService.onMessage(ACCOUNT_METADATA_CHANGE_TOPIC, "badMessage");
-    assertEquals("The number of account in HelixAccountService is different from expected", 0,
-        helixAccountService.getAllAccounts().size());
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
+    notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, "badMessage");
+    assertEquals("The number of account in HelixAccountService is different from expected", NUM_REF_ACCOUNT,
+        accountService.getAllAccounts().size());
+  }
+
+  /**
+   * Tests receiving a bad topic, it will not be recognized by {@link HelixAccountService}, but will also not
+   * crash the service.
+   * @throws Exception Any unexpected exception.
+   */
+  @Test
+  public void receiveBadTopic() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
+    notifier.publish("badTopic", FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
+    assertEquals("The number of account in HelixAccountService is different from expected", NUM_REF_ACCOUNT,
+        accountService.getAllAccounts().size());
   }
 
   /**
@@ -319,20 +344,37 @@ public class HelixAccountServiceTest {
   @Test
   public void testNullInputs() {
     try {
-      new HelixAccountService(null, storeFactory);
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier).getAccountService();
+      fail("should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
 
     try {
-      new HelixAccountService(storeConfig, null);
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier).getAccountService();
+      fail("should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
 
-    HelixAccountService helixAccountService = new HelixAccountService(storeConfig, storeFactory);
     try {
-      helixAccountService.updateAccounts(null);
+      new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null).getAccountService();
+      fail("should have thrown");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    try {
+      accountService.updateAccounts(null);
+      fail("should have thrown");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+    try {
+      accountService.getAccountByName(null);
+      fail("should have thrown");
     } catch (IllegalArgumentException e) {
       // expected
     }
@@ -344,12 +386,13 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateIdConflictingAccounts() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testUpdateNameConflictingAccounts() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     conflictAccounts.add(new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build());
-    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
+    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -358,12 +401,13 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateNameConflictingAccounts() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testUpdateIdConflictingAccounts() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build());
-    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
+    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -372,11 +416,12 @@ public class HelixAccountServiceTest {
    */
   @Test
   public void testUpdateDuplicateAccounts() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
-    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
+    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
   }
 
   /**
@@ -385,13 +430,14 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateNonConflictAccountCaseA() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testNonConflictingUpdateCaseA() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> nonConflictAccounts =
         Collections.singleton((new AccountBuilder((short) 1, "a", AccountStatus.ACTIVE, null).build()));
-    updateAccountsAndAssertAccountExistence(nonConflictAccounts, 2);
+    updateAccountsAndAssertAccountExistence(nonConflictAccounts, 2, true);
   }
 
   /**
@@ -401,13 +447,14 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateNonConflictAccountCaseB() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testNonConflictingUpdateCaseB() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> nonConflictAccounts =
         Collections.singleton((new AccountBuilder((short) 1, "c", AccountStatus.ACTIVE, null).build()));
-    updateAccountsAndAssertAccountExistence(nonConflictAccounts, 2);
+    updateAccountsAndAssertAccountExistence(nonConflictAccounts, 2, true);
   }
 
   /**
@@ -417,13 +464,14 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateNonConflictAccountCaseC() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testNonConflictingUpdateCaseC() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> nonConflictAccounts =
         Collections.singleton((new AccountBuilder((short) 3, "c", AccountStatus.ACTIVE, null).build()));
-    updateAccountsAndAssertAccountExistence(nonConflictAccounts, 3);
+    updateAccountsAndAssertAccountExistence(nonConflictAccounts, 3, true);
   }
 
   /**
@@ -432,13 +480,16 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateWithAccountConflictCaseD() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testConflictingUpdateCaseD() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
         Collections.singleton((new AccountBuilder((short) 3, "a", AccountStatus.INACTIVE, null).build()));
-    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
+    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
+    assertNull("Wrong account got from HelixAccountService", accountService.getAccountById((short) 3));
   }
 
   /**
@@ -448,51 +499,33 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testUpdateWithAccountConflictCaseE() throws Exception {
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
+  public void testConflictingUpdateCaseE() throws Exception {
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
         Collections.singleton((new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build()));
-    assertFalse("Wrong return value from update operation.", helixAccountService.updateAccounts(conflictAccounts));
+    assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+    assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
+    assertEquals("Wrong account name got from HelixAccountService", "a",
+        accountService.getAccountById((short) 1).getName());
   }
 
   /**
-   * Tests reading conflicting {@link Account} metadata from {@link org.apache.helix.store.HelixPropertyStore}. Duplicate
-   * record was written to the store.
+   * Tests reading conflicting {@link Account} metadata from {@link HelixPropertyStore}. Two {@link Account}s have
+   * different accountIds but the same accountNames. This is a BAD record that should impact fetching or updating
+   * {@link Account}s.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase1() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
-    Account account = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
-    conflictAccounts.add(account);
-    conflictAccounts.add(account);
-
-    writeAccountHelixPropertyStore(conflictAccounts);
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals("Wrong number of accounts in helixAccountService", 1, helixAccountService.getAllAccounts().size());
-    assertAccountInHelixAccountService(account);
-  }
-
-  /**
-   * Tests reading conflicting {@link Account} metadata from {@link org.apache.helix.store.HelixPropertyStore}. Two
-   * records have different accountIds but the same accountNames.
-   * @throws Exception Any unexpected exception.
-   */
-  @Test
-  public void testReadConflictAccountDataFromHelixPropertyStoreCase2() throws Exception {
-    List<Account> conflictAccounts = new ArrayList<>();
     Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
     Account account2 = new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build();
     conflictAccounts.add(account1);
     conflictAccounts.add(account2);
-
-    writeAccountHelixPropertyStore(conflictAccounts);
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals("Wrong number of accounts in helixAccountService", 1, helixAccountService.getAllAccounts().size());
-    assertAccountInHelixAccountService(account2);
-    assertAccountNotExistInHelixAccountService(account1);
+    readAndUpdateBadRecord(conflictAccounts);
   }
 
   /**
@@ -500,7 +533,7 @@ public class HelixAccountServiceTest {
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testReadConflictAccountDataFromHelixPropertyStoreCase3() throws Exception {
+  public void testReadConflictAccountDataFromHelixPropertyStoreCase2() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
     Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
     Account account2 = new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build();
@@ -510,34 +543,36 @@ public class HelixAccountServiceTest {
     conflictAccounts.add(account2);
     conflictAccounts.add(account3);
     conflictAccounts.add(account4);
-
-    writeAccountHelixPropertyStore(conflictAccounts);
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals("Wrong number of accounts in helixAccountService", 2, helixAccountService.getAllAccounts().size());
-    assertAccountInHelixAccountService(account1);
-    assertAccountInHelixAccountService(account4);
-    assertAccountNotExistInHelixAccountService(account2);
-    assertAccountNotExistInHelixAccountService(account3);
+    readAndUpdateBadRecord(conflictAccounts);
   }
 
   /**
-   * Tests reading conflicting {@link Account} metadata from {@link org.apache.helix.store.HelixPropertyStore}. Two
-   * records with the same accountIds but different accountNames were written into the store.
+   * Tests a series of operations.
+   * 1. PrePopulates account (1, "a");
+   * 2. Starts up a {@link HelixAccountService};
+   * 3. Remote copy adds a new account (2, "b"), and the update has not been propagated to the {@link HelixAccountService};
+   * 4. The {@link HelixAccountService} attempts to update an account (3, "b"), which should fail because it will eventually
+   *    conflict with the remote copy;
    * @throws Exception Any unexpected exception.
    */
   @Test
-  public void testReadConflictAccountDataFromHelixPropertyStoreCase4() throws Exception {
-    List<Account> conflictAccounts = new ArrayList<>();
+  public void testReadConflictAccountDataFromHelixPropertyStoreCase3() throws Exception {
     Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
-    Account account2 = new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build();
-    conflictAccounts.add(account1);
-    conflictAccounts.add(account2);
+    List<Account> accounts = Collections.singletonList(account1);
+    writeAccountsToHelixPropertyStore(accounts, false);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    assertAccountInHelixAccountService(account1);
 
-    writeAccountHelixPropertyStore(conflictAccounts);
-    helixAccountService = new HelixAccountService(storeConfig, storeFactory);
-    assertEquals("Wrong number of accounts in helixAccountService", 1, helixAccountService.getAllAccounts().size());
-    assertAccountInHelixAccountService(account2);
-    assertAccountNotExistInHelixAccountService(account1);
+    Account account2 = new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE, null).build();
+    accounts = Collections.singletonList(account2);
+    writeAccountsToHelixPropertyStore(accounts, false);
+
+    Account conflictingAccount = new AccountBuilder((short) 3, "b", AccountStatus.INACTIVE, null).build();
+    accounts = Collections.singletonList(conflictingAccount);
+    assertFalse(accountService.updateAccounts(accounts));
+    assertEquals("Number of account is wrong.", 1, accountService.getAllAccounts().size());
+    assertAccountInHelixAccountService(account1);
   }
 
   /**
@@ -549,7 +584,22 @@ public class HelixAccountServiceTest {
     List<Account> existingAccounts = new ArrayList<>();
     existingAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
     existingAccounts.add(new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE, null).build());
-    updateAccountsAndAssertAccountExistence(existingAccounts, 2);
+    updateAccountsAndAssertAccountExistence(existingAccounts, 2, true);
+  }
+
+  /**
+   * PrePopulates a collection of self-conflicting {@link Account}s, which will impact {@link HelixAccountService}
+   * startup and udpate.
+   * @param accounts The self-conflicting {@link Account}s.
+   */
+  private void readAndUpdateBadRecord(Collection<Account> accounts) throws Exception {
+    writeAccountsToHelixPropertyStore(accounts, false);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    assertEquals("Wrong number of accounts in helixAccountService", 0, accountService.getAllAccounts().size());
+    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), 0, false);
+    writeAccountsToHelixPropertyStore(accounts, true);
+    assertEquals("Number of account is wrong.", 0, accountService.getAllAccounts().size());
   }
 
   /**
@@ -557,12 +607,16 @@ public class HelixAccountServiceTest {
    * {@link Account}s have been successfully updated, so they can be queried through {@link HelixAccountService}.
    * @param accounts A collection of {@link Account}s to update through {@link HelixAccountService}.
    */
-  private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount) {
-    boolean hasUpdateAccountSucceed = helixAccountService.updateAccounts(accounts);
-    assertTrue("Updating account failed.", hasUpdateAccountSucceed);
-    helixAccountService.onMessage(HelixAccountService.ACCOUNT_METADATA_CHANGE_TOPIC,
-        HelixAccountService.FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
-    assertAccountsInHelixAccountService(accounts, expectedAccountCount);
+  private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
+      boolean shouldUpdateSucceed) {
+    boolean hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
+    assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
+    if (shouldUpdateSucceed) {
+      assertAccountsInHelixAccountService(accounts, expectedAccountCount);
+    } else {
+      assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
+          accountService.getAllAccounts().size());
+    }
   }
 
   /**
@@ -572,20 +626,9 @@ public class HelixAccountServiceTest {
    */
   private void assertAccountsInHelixAccountService(Collection<Account> accounts, int expectedAccountCount) {
     assertEquals("Wrong number of accounts in HelixAccountService", expectedAccountCount,
-        helixAccountService.getAllAccounts().size());
+        accountService.getAllAccounts().size());
     for (Account account : accounts) {
       assertAccountInHelixAccountService(account);
-    }
-  }
-
-  /**
-   * Asserts that an {@link Account} does not exist in the {@link HelixAccountService}.
-   * @param account The {@link Account} to assert.
-   */
-  private void assertAccountNotExistInHelixAccountService(Account account) {
-    Account found = helixAccountService.getAccountById(account.getId());
-    if (found != null) {
-      assertFalse("Account incorrectly exists in HelixAccountService.", account.equals(found));
     }
   }
 
@@ -594,8 +637,8 @@ public class HelixAccountServiceTest {
    * @param accountToAssert The {@link Account} to assert existence.
    */
   private void assertAccountInHelixAccountService(Account accountToAssert) {
-    Account accountFoundById = helixAccountService.getAccountById(accountToAssert.getId());
-    Account accountFoundByName = helixAccountService.getAccountByName(accountToAssert.getName());
+    Account accountFoundById = accountService.getAccountById(accountToAssert.getId());
+    Account accountFoundByName = accountService.getAccountByName(accountToAssert.getName());
     assertEquals("Account got by id from helixAccountService does not match account got by name.", accountFoundById,
         accountFoundByName);
     assertEquals("Account got by id from helixAccountService does not match the assert to assert", accountFoundById,
@@ -612,9 +655,9 @@ public class HelixAccountServiceTest {
    * @param containerToAssert The {@link Container} to assert.
    */
   private void assertContainerInHelixAccountService(Container containerToAssert) {
-    Container containerFoundById = helixAccountService.getAccountById(containerToAssert.getParentAccountId())
+    Container containerFoundById = accountService.getAccountById(containerToAssert.getParentAccountId())
         .getContainerById(containerToAssert.getId());
-    Container containerFoundByName = helixAccountService.getAccountById(containerToAssert.getParentAccountId())
+    Container containerFoundByName = accountService.getAccountById(containerToAssert.getParentAccountId())
         .getContainerByName(containerToAssert.getName());
     assertEquals("Container got by id from helixAccountService/account does not match container got by name.",
         containerFoundById, containerFoundByName);
@@ -624,13 +667,12 @@ public class HelixAccountServiceTest {
 
   /**
    * Pre-populates a collection of {@link Account}s to the underlying {@link org.apache.helix.store.HelixPropertyStore}
-   * using {@link com.github.ambry.commons.HelixPropertyStoreUtils.HelixStoreOperator} (not through the
-   * {@link HelixAccountService}). This method does not check any conflict among the {@link Account}s to write.
+   * using {@link com.github.ambry.commons.HelixStoreOperator} (not through the {@link HelixAccountService}). This method
+   * does not check any conflict among the {@link Account}s to write.
    * @throws Exception Any unexpected exception.
    */
-  private void writeAccountHelixPropertyStore(Collection<Account> accounts) throws Exception {
-    HelixPropertyStoreUtils.HelixStoreOperator storeOperator =
-        HelixPropertyStoreUtils.getStoreOperator(storeConfig, storeFactory);
+  private void writeAccountsToHelixPropertyStore(Collection<Account> accounts, boolean shouldNotify) throws Exception {
+    HelixStoreOperator storeOperator = new HelixStoreOperator(getMockHelixStore(storeConfig));
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
     Map<String, String> accountMap = new HashMap<>();
     for (Account account : accounts) {
@@ -639,6 +681,9 @@ public class HelixAccountServiceTest {
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
     // Write account metadata into HelixPropertyStore.
     storeOperator.write(HelixAccountService.FULL_ACCOUNT_METADATA_PATH, zNRecord);
+    if (shouldNotify) {
+      notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
+    }
   }
 
   /**
@@ -646,10 +691,12 @@ public class HelixAccountServiceTest {
    * @param zNRecord The {@link ZNRecord} to write.
    * @throws Exception Any unexpected exception.
    */
-  private void writeZNRecordToHelixPropertyStore(ZNRecord zNRecord) throws Exception {
-    HelixPropertyStoreUtils.HelixStoreOperator storeOperator =
-        HelixPropertyStoreUtils.getStoreOperator(storeConfig, storeFactory);
+  private void writeZNRecordToHelixPropertyStore(ZNRecord zNRecord, boolean shouldNotify) throws Exception {
+    HelixStoreOperator storeOperator = new HelixStoreOperator(getMockHelixStore(storeConfig));
     storeOperator.write(HelixAccountService.FULL_ACCOUNT_METADATA_PATH, zNRecord);
+    if (shouldNotify) {
+      notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
+    }
   }
 
   /**
@@ -684,6 +731,61 @@ public class HelixAccountServiceTest {
       zNRecord.setSimpleField(key, value);
     }
     return zNRecord;
+  }
+
+  /**
+   * Delete corresponding {@code ZooKeeper} nodes of a {@link HelixPropertyStore} if exist.
+   * @throws Exception Any unexpected exception.
+   */
+  private void deleteStoreIfExists() throws Exception {
+    HelixStoreOperator storeOperator = new HelixStoreOperator(getMockHelixStore(storeConfig));
+    // check if the store exists by checking if root path (e.g., "/") exists in the store.
+    if (storeOperator.exist("/")) {
+      storeOperator.delete("/");
+    }
+  }
+
+  /**
+   * Gets a {@link MockHelixPropertyStore} for the given {@link HelixPropertyStoreConfig}.
+   * @param storeConfig A {@link HelixPropertyStoreConfig}.
+   * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
+   */
+  private MockHelixPropertyStore<ZNRecord> getMockHelixStore(HelixPropertyStoreConfig storeConfig) {
+    String storeRootPath = storeConfig.zkClientConnectString + storeConfig.rootPath;
+    MockHelixPropertyStore<ZNRecord> helixStore = storeKeyToMockStoreMap.get(storeRootPath);
+    if (helixStore == null) {
+      helixStore = new MockHelixPropertyStore<>();
+      storeKeyToMockStoreMap.put(storeRootPath, helixStore);
+    }
+    return helixStore;
+  }
+
+  /**
+   * Does several operations:
+   * 1. Writes a {@link ZNRecord} to {@link HelixPropertyStore} without notifying listeners;
+   * 2. Starts up a {@link HelixAccountService} that should fetch the {@link ZNRecord};
+   * 3. Updates (creates) one more {@link Account} through the {@link HelixAccountService};
+   * 4. Writes the same {@link ZNRecord} to {@link HelixPropertyStore} and publishes a message for {@link Account} update;
+   *
+   * If the {@link ZNRecord} is good, it should not affect updating operation.
+   * @param zNRecord A {@link ZNRecord} to write to {@link HelixPropertyStore}.
+   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} should not affect updating operation; {@code false}
+   *                       otherwise.
+   * @throws Exception Any unexpected exception.
+   */
+  private void updateAndWriteZNRecord(ZNRecord zNRecord, boolean isGoodZNRecord) throws Exception {
+    writeZNRecordToHelixPropertyStore(zNRecord, false);
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    assertEquals("Number of account is wrong", 0, accountService.getAllAccounts().size());
+    updateAccountsAndAssertAccountExistence(Collections.singletonList(refAccount), isGoodZNRecord ? 1 : 0,
+        isGoodZNRecord);
+    writeZNRecordToHelixPropertyStore(zNRecord, true);
+    if (isGoodZNRecord) {
+      assertAccountInHelixAccountService(refAccount);
+    } else {
+      assertEquals("Number of accounts is wrong.", 0, accountService.getAllAccounts().size());
+    }
   }
 
   /**
@@ -748,5 +850,32 @@ public class HelixAccountServiceTest {
       idToRefContainerMap.put(accountId, idToContainers);
     }
     assertEquals("Wrong number of generated accounts", NUM_REF_ACCOUNT, idToRefAccountMap.size());
+  }
+
+  /**
+   * A mock implemtation of {@link AccountServiceFactory}, which will generate a {@link HelixAccountService} using
+   * a {@link MockHelixPropertyStore}.
+   */
+  private class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
+    private final HelixPropertyStoreConfig storeConfig;
+    private final AccountServiceMetrics accountServiceMetrics;
+
+    /**
+     * Constructor.
+     * @param verifiableProperties The properties to start a {@link HelixAccountService}.
+     * @param metricRegistry The {@link MetricRegistry} to start a {@link HelixAccountService}.
+     * @param notifier The {@link Notifier} to start a {@link HelixAccountService}.
+     */
+    MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+        Notifier<String> notifier) {
+      super(verifiableProperties, metricRegistry, notifier);
+      storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
+      accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
+    }
+
+    @Override
+    public AccountService getAccountService() {
+      return new HelixAccountService(getMockHelixStore(storeConfig), accountServiceMetrics, notifier);
+    }
   }
 }

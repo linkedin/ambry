@@ -13,6 +13,7 @@
  */
 package com.github.ambry.commons;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.Collections;
 import java.util.List;
@@ -48,27 +49,31 @@ public class HelixNotifier implements Notifier<String> {
   private static final String MESSAGE_KEY = "message";
   private static final Logger logger = LoggerFactory.getLogger(HelixNotifier.class);
   private final HelixPropertyStore<ZNRecord> helixStore;
+  private final HelixNotifierMetrics helixNotifierMetrics;
   private final ConcurrentHashMap<TopicListener, HelixPropertyListener> topicListenerToHelixListenerMap =
       new ConcurrentHashMap<>();
 
   /**
    * Constructor.
    * @param helixStore A {@link HelixPropertyStore} that will be used by this {@code HelixNotifier}.
+   * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
    */
-  HelixNotifier(HelixPropertyStore<ZNRecord> helixStore) {
-    if (helixStore == null) {
-      throw new IllegalArgumentException("helixStore cannot be null.");
+  HelixNotifier(HelixPropertyStore<ZNRecord> helixStore, MetricRegistry metricRegistry) {
+    if (helixStore == null || metricRegistry == null) {
+      throw new IllegalArgumentException("helixStore and metricRegistry cannot be null.");
     }
     this.helixStore = helixStore;
+    this.helixNotifierMetrics = new HelixNotifierMetrics(metricRegistry);
   }
 
   /**
    * A constructor that gets a {@link HelixNotifier} based on {@link HelixPropertyStoreConfig}.
-   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}.
+   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}. Cannot be {@code null}.
+   * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
    */
-  public HelixNotifier(HelixPropertyStoreConfig storeConfig) {
-    if (storeConfig == null) {
-      throw new IllegalArgumentException("storeConfig cannot be null");
+  public HelixNotifier(HelixPropertyStoreConfig storeConfig, MetricRegistry metricRegistry) {
+    if (storeConfig == null || metricRegistry == null) {
+      throw new IllegalArgumentException("storeConfig and metricRegistry cannot be null");
     }
     long startTimeMs = System.currentTimeMillis();
     logger.info("Starting a HelixNotifier");
@@ -82,7 +87,10 @@ public class HelixNotifier implements Notifier<String> {
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
     this.helixStore = helixStore;
-    logger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
+    this.helixNotifierMetrics = new HelixNotifierMetrics(metricRegistry);
+    long startUpTimeInMs = System.currentTimeMillis() - startTimeMs;
+    logger.info("HelixNotifier started, took {}ms", startUpTimeInMs);
+    helixNotifierMetrics.startupTimeInMs.update(startUpTimeInMs);
   }
 
   /**
@@ -107,6 +115,7 @@ public class HelixNotifier implements Notifier<String> {
       logger.trace("message={} has been published for topic={}", message, topic);
     } else {
       logger.error("failed to publish message={} for topic={}", message, topic);
+      helixNotifierMetrics.publishMessageErrorCount.inc();
     }
     return res;
   }
@@ -141,6 +150,7 @@ public class HelixNotifier implements Notifier<String> {
         // for now, this is a no-op when a ZNRecord for a topic is deleted, since no
         // topic deletion is currently supported.
         logger.debug("Message is deleted for topic {} at path {}", topic, path);
+        helixNotifierMetrics.unexpectedDeleteEventErrorCount.inc();
       }
     };
     topicListenerToHelixListenerMap.put(topicListener, helixListener);
@@ -188,6 +198,7 @@ public class HelixNotifier implements Notifier<String> {
     } catch (Exception e) {
       logger.error("Failed to send message to TopicListener={} for topic={} with message={}", topicListener, topic,
           message, e);
+      helixNotifierMetrics.sendMessageToLocalListenerErrorCount.inc();
     }
   }
 
