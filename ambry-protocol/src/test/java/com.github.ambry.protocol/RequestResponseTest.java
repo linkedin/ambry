@@ -302,8 +302,8 @@ public class RequestResponseTest {
     for (short version : versions) {
       short accountId = Utils.getRandomShort(random);
       short containerId = Utils.getRandomShort(random);
-      int deletionTimeMs =
-          (int) (SystemTime.getInstance().milliseconds() + random.nextInt((int) TimeUnit.DAYS.toMillis(100)));
+      long deletionTimeMs =
+          (SystemTime.getInstance().milliseconds() + random.nextInt((int) TimeUnit.DAYS.toMillis(100)));
       int correlationId = random.nextInt();
       DeleteRequest deleteRequest;
       if (version == DeleteRequest.Delete_Request_Version_1) {

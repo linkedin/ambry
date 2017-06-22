@@ -50,7 +50,7 @@ public class DeleteRequest extends RequestOrResponse {
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
     this(correlationId, clientId, blobId, BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID,
-        (int) Utils.Infinite_Time, currentVersion);
+        Utils.Infinite_Time, currentVersion);
   }
 
   /**
