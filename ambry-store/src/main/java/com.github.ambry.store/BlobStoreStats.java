@@ -334,7 +334,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
   private Map<String, Map<String, Long>> collectValidDataSizeByContainer(long referenceTimeInMs) throws StoreException {
-    logger.trace("On demand index scanning to collect container valid data sizes wrt ref time " + referenceTimeInMs);
+    logger.trace("On demand index scanning to collect container valid data sizes wrt ref time {}", referenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, Long> deletedKeys = new HashMap<>();
     Map<String, Map<String, Long>> validDataSizePerContainer = new HashMap<>();
@@ -358,11 +358,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
-      if (indexSegmentCount == 1) {
-        logger.info("Completed scanning of 1st index segment by on-demand scanning {} " + indexSegment);
-      }
-      if (indexSegmentCount % 10 == 0) {
-        logger.info("Completed scanning batch of 10 index segments by on-demand scanning {} " + indexSegment);
+      if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
+        logger.info("Index segment processing(on-demand scanning) for container stats complete for {} " + indexSegment);
       }
     }
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
@@ -375,7 +372,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
   private NavigableMap<String, Long> collectValidDataSizeByLogSegment(long referenceTimeInMs) throws StoreException {
-    logger.trace("On demand index scanning to collect compaction data stats wrt ref time " + referenceTimeInMs);
+    logger.trace("On demand index scanning to collect compaction data stats wrt ref time {} ", referenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, Long> deletedKeys = new HashMap<>();
     NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>();
@@ -394,11 +391,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       metrics.statsOnDemandScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTimeMs,
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
-      if (indexSegmentCount == 1) {
-        logger.info("Completed scanning of 1st index segment by on-demand scanning {} " + indexSegment);
-      }
-      if (indexSegmentCount % 10 == 0) {
-        logger.info("Completed scanning batch of 10 index segments by on-demand scanning {} " + indexSegment);
+      if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
+        logger.info("Index segment processing(on-demand scanning) for compaction stats complete for {}" + indexSegment);
       }
     }
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
@@ -775,7 +769,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (!cancelled && indexSegments.size() > 0) {
           Map.Entry<Offset, IndexSegment> activeIndexSegmentEntry = indexSegments.floorEntry(firstCheckpoint);
           long indexSegmentStartProcessTime = time.milliseconds();
-          logger.trace("Fetching active index entries {} in active segments before first checkpoint ",
+          logger.trace("Processing index entries {} in active segments before first checkpoint {}",
               activeIndexSegmentEntry);
           List<IndexEntry> activeIndexEntries =
               getIndexEntriesBeforeOffset(activeIndexSegmentEntry.getValue(), firstCheckpoint);
@@ -797,14 +791,9 @@ class BlobStoreStats implements StoreStats, Closeable {
               metrics.statsBucketingScanTimePerIndexSegmentMs.update(time.milliseconds() - indexSegmentStartProcessTime,
                   TimeUnit.MILLISECONDS);
               segmentCount++;
-              if (segmentCount == 1) {
+              if (segmentCount == 1 || segmentCount % 10 == 0) {
                 logger.info(
-                    "Completed scanning 1st sealed segment from last by IndexScanner {} " + indexSegment.getFile()
-                        .getName());
-              }
-              if (segmentCount % 10 == 0) {
-                logger.info("Completed scanning batch of 10 index segments by IndexScanner {} " + indexSegment.getFile()
-                    .getName());
+                    "Completed scanning of sealed segment {} by IndexScanner {} " + indexSegment.getFile().getName());
               }
             }
           }
@@ -904,7 +893,7 @@ class BlobStoreStats implements StoreStats, Closeable {
      */
     private void processIndexSegmentEntriesBackward(IndexSegment indexSegment, List<IndexEntry> indexEntries,
         Map<StoreKey, Long> deletedKeys) throws StoreException {
-      logger.trace("Processing index entries backward by IndexScanner for segment " + indexSegment);
+      logger.trace("Processing index entries backward by IndexScanner for segment {}", indexSegment);
       // valid index entries wrt container reference time
       List<IndexEntry> validIndexEntries =
           getValidIndexEntries(indexSegment, indexEntries, newScanResults.containerForecastStartTimeMs, deletedKeys);
