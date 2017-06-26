@@ -86,7 +86,7 @@ class GetReplicasHandler {
    */
   private JSONObject getReplicas(String blobId) throws RestServiceException {
     try {
-      PartitionId partitionId = BlobId.fromStringId(blobId, clusterMap).getPartition();
+      PartitionId partitionId = new BlobId(blobId, clusterMap).getPartition();
       if (partitionId == null) {
         adminMetrics.invalidBlobIdError.inc();
         logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobId);

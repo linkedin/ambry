@@ -209,7 +209,7 @@ public class ServerAdminTool implements Closeable {
     }
     switch (config.typeOfOperation) {
       case GetBlobProperties:
-        BlobId blobId = BlobId.fromStringId(config.blobId, clusterMap);
+        BlobId blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, BlobProperties> bpResponse =
             serverAdminTool.getBlobProperties(dataNodeId, blobId, config.getOption, clusterMap);
         if (bpResponse.getFirst() == ServerErrorCode.No_Error) {
@@ -220,7 +220,7 @@ public class ServerAdminTool implements Closeable {
         }
         break;
       case GetUserMetadata:
-        blobId = BlobId.fromStringId(config.blobId, clusterMap);
+        blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, ByteBuffer> umResponse =
             serverAdminTool.getUserMetadata(dataNodeId, blobId, config.getOption, clusterMap);
         if (umResponse.getFirst() == ServerErrorCode.No_Error) {
@@ -232,7 +232,7 @@ public class ServerAdminTool implements Closeable {
         }
         break;
       case GetBlob:
-        blobId = BlobId.fromStringId(config.blobId, clusterMap);
+        blobId = new BlobId(config.blobId, clusterMap);
         Pair<ServerErrorCode, BlobData> bResponse =
             serverAdminTool.getBlob(dataNodeId, blobId, config.getOption, clusterMap);
         if (bResponse.getFirst() == ServerErrorCode.No_Error) {

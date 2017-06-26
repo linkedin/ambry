@@ -238,7 +238,7 @@ public class ServerReadPerformance {
       while ((line = br.readLine()) != null) {
         String[] id = line.split("-");
         BlobData blobData = null;
-        BlobId blobId = BlobId.fromStringId(id[1], map);
+        BlobId blobId = new BlobId(id[1], map);
         ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
         blobIds.add(blobId);
         for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {

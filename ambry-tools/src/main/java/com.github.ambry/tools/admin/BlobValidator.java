@@ -260,7 +260,7 @@ public class BlobValidator implements Closeable {
     }
     List<BlobId> blobIds = new ArrayList<>();
     for (String id : ids) {
-      blobIds.add(BlobId.fromStringId(id, clusterMap));
+      blobIds.add(new BlobId(id, clusterMap));
     }
     return blobIds;
   }

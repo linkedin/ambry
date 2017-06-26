@@ -127,8 +127,8 @@ public class DirectoryUploader {
     }
   }
 
-  public void walkDirectoryToCreateBlobs(String path, FileWriter writer, String datacenter,
-      boolean enableVerboseLogging, ClusterMap map) throws InterruptedException {
+  public void walkDirectoryToCreateBlobs(String path, FileWriter writer, String datacenter, byte datacenterId,
+      boolean enableVerboseLogging) throws InterruptedException {
 
     File root = new File(path);
     File[] list = root.listFiles();
@@ -152,8 +152,7 @@ public class DirectoryUploader {
         try {
           int replicaCount = 0;
           BlobId blobId =
-              new BlobId(BlobId.DEFAULT_FLAG, map.getLocalDatacenterId(), props.getAccountId(), props.getContainerId(),
-                  partitionId);
+              new BlobId(BlobId.DEFAULT_FLAG, datacenterId, props.getAccountId(), props.getContainerId(), partitionId);
           List<ReplicaId> successList = new ArrayList<>();
           List<ReplicaId> failureList = new ArrayList<>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {
@@ -403,7 +402,8 @@ public class DirectoryUploader {
       if (nodeHostname != null && nodePort != null) {
         directoryUploader.setDataNodeId(map, nodeHostname, nodePort, enableVerboseLogging);
       }
-      directoryUploader.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, enableVerboseLogging, map);
+      directoryUploader.walkDirectoryToCreateBlobs(rootDirectory, writer, datacenter, map.getLocalDatacenterId(),
+          enableVerboseLogging);
     } catch (Exception e) {
       System.err.println("Error on exit " + e);
     } finally {

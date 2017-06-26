@@ -31,6 +31,8 @@ import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.commons.BlobId.*;
@@ -42,15 +44,33 @@ import static org.junit.Assert.*;
  * Unit tests for {@link BlobId}. Using {@link BlobIdV2} builds a {@link BlobId}
  * in v2 equivalent to setting {@link BlobId#CURRENT_VERSION} to be {@link BlobId#BLOB_ID_V2}.
  */
+@RunWith(Parameterized.class)
 public class BlobIdTest {
   private static final Random random = new Random();
-  private static final List<Short> versions = Arrays.asList(new Short[]{BLOB_ID_V1, BLOB_ID_V2});
+  private final short version;
   private byte referenceFlag;
   private byte referenceDatacenterId;
   private short referenceAccountId;
   private short referenceContainerId;
   private ClusterMap referenceClusterMap;
   private PartitionId referencePartitionId;
+
+  /**
+   * Running for both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2}
+   * @return an array with both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2}
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{BLOB_ID_V1}, {BLOB_ID_V2}});
+  }
+
+  /**
+   * Constructor with parameter to be set.
+   * @param version The version for BlobId to test.
+   */
+  public BlobIdTest(short version) {
+    this.version = version;
+  }
 
   /**
    * Initialization before each unit test.
@@ -62,6 +82,7 @@ public class BlobIdTest {
     referenceClusterMap = new MockClusterMap();
     random.nextBytes(bytes);
     referenceFlag = bytes[0];
+    random.nextBytes(bytes);
     referenceDatacenterId = bytes[0];
     referenceAccountId = getRandomShort(random);
     referenceContainerId = getRandomShort(random);
@@ -81,10 +102,8 @@ public class BlobIdTest {
    */
   @Test
   public void testBuildBlobId() throws Exception {
-    for (Short version : versions) {
-      buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
-          referencePartitionId);
-    }
+    buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+        referencePartitionId);
   }
 
   /**
@@ -94,9 +113,7 @@ public class BlobIdTest {
    */
   @Test
   public void testDeserialization() throws Exception {
-    for (Short version : versions) {
-      composedBlobIdAndDeserialize(version);
-    }
+    composedBlobIdAndDeserialize(version);
   }
 
   /**
@@ -106,9 +123,7 @@ public class BlobIdTest {
    */
   @Test
   public void testSerDes() throws Exception {
-    for (Short version : versions) {
-      serDesBlobId(version);
-    }
+    serDesBlobId(version);
   }
 
   /**
@@ -117,9 +132,7 @@ public class BlobIdTest {
    */
   @Test
   public void badIdTest() throws Exception {
-    for (Short version : versions) {
-      generateAndAssertBadBlobId(version);
-    }
+    generateAndAssertBadBlobId(version);
   }
 
   /**
@@ -127,9 +140,7 @@ public class BlobIdTest {
    */
   @Test
   public void testBlobIdLongForm() {
-    for (Short version : versions) {
-      assertBlobIdLongForm(version);
-    }
+    assertBlobIdLongForm(version);
   }
 
   /**
@@ -212,7 +223,7 @@ public class BlobIdTest {
 
     for (String blobIdLike : invalidBlobIdLikeList) {
       try {
-        BlobId.fromStringId(blobIdLike, referenceClusterMap);
+        new BlobId(blobIdLike, referenceClusterMap);
         fail("Expected blobId creation to fail with blobId string " + blobIdLike);
       } catch (Exception e) {
         // expected
@@ -273,32 +284,14 @@ public class BlobIdTest {
    */
   private void deserializeBlobIdAndAssert(short version, String srcBlobIdStr) throws Exception {
     List<BlobId> blobIds = new ArrayList<>();
-    blobIds.add(BlobId.fromStringId(srcBlobIdStr, referenceClusterMap));
-    blobIds.add(BlobId.fromDataInputStream(getStreamFromBase64(srcBlobIdStr), referenceClusterMap));
-    blobIds.add(BlobId.fromDataInputStream(getStreamFromBase64(srcBlobIdStr + "EXTRA"), referenceClusterMap));
+    blobIds.add(new BlobId(srcBlobIdStr, referenceClusterMap));
+    blobIds.add(new BlobId(getStreamFromBase64(srcBlobIdStr), referenceClusterMap));
+    blobIds.add(new BlobId(getStreamFromBase64(srcBlobIdStr + "EXTRA"), referenceClusterMap));
     for (BlobId blobId : blobIds) {
-      assertEquals("Wrong partition ID in blobId: " + blobId, referencePartitionId, blobId.getPartition());
       assertEquals("Wrong base-64 ID in blobId: " + blobId, srcBlobIdStr, blobId.getID());
       assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
-      switch (version) {
-        case BLOB_ID_V1:
-          assertEquals("Wrong flag in blobId: " + blobId, BlobId.DEFAULT_FLAG, blobId.getFlag());
-          assertEquals("Wrong datacenter ID in blobId: " + blobId, LEGACY_DATACENTER_ID, blobId.getDatacenterId());
-          assertEquals("Wrong account ID in blobId: " + blobId, Account.LEGACY_ACCOUNT_ID, blobId.getAccountId());
-          assertEquals("Wrong container ID in blobId: " + blobId, Container.LEGACY_CONTAINER_ID,
-              blobId.getContainerId());
-          break;
-
-        case BLOB_ID_V2:
-          assertEquals("Wrong flag in blobId: " + blobId, referenceFlag, blobId.getFlag());
-          assertEquals("Wrong datacenter ID in blobId: " + blobId, referenceDatacenterId, blobId.getDatacenterId());
-          assertEquals("Wrong account ID in blobId: " + blobId, referenceAccountId, blobId.getAccountId());
-          assertEquals("Wrong container ID in blobId: " + blobId, referenceContainerId, blobId.getContainerId());
-          break;
-
-        default:
-          throw new IllegalArgumentException("invalid version number blob" + version);
-      }
+      assertBlobIdFieldValues(version, blobId, referenceFlag, referenceDatacenterId, referenceAccountId,
+          referenceContainerId, referencePartitionId);
     }
   }
 
@@ -363,24 +356,24 @@ public class BlobIdTest {
    * @param partitionId The expected partitionId.
    * @throws Exception Any unexpected exception.
    */
-  private void assertBlobIdFieldValues(short version, BlobId blobId, Byte flag, Byte datacenterId, Short accountId,
-      Short containerId, PartitionId partitionId) throws Exception {
+  private void assertBlobIdFieldValues(short version, BlobId blobId, byte flag, byte datacenterId, short accountId,
+      short containerId, PartitionId partitionId) throws Exception {
     assertTrue("Used unrecognized version", version == BLOB_ID_V1 || version == BLOB_ID_V2);
     assertEquals("Wrong partition id in blobId: " + blobId, partitionId, blobId.getPartition());
-    assertEquals("Wrong version in blobId.", version, blobId.getCurrentVersion());
-    if (version == BLOB_ID_V1) {
-      assertEquals("Wrong flag in blobId: " + blobId, BlobId.DEFAULT_FLAG, blobId.getFlag());
-      assertEquals("Wrong datacenter id in blobId: " + blobId, LEGACY_DATACENTER_ID, blobId.getDatacenterId());
-      assertEquals("Wrong account id in blobId: " + blobId, Account.LEGACY_ACCOUNT_ID, blobId.getAccountId());
-      assertEquals("Wrong container id in blobId: " + blobId, Container.LEGACY_CONTAINER_ID, blobId.getContainerId());
-    } else {
-      assertEquals("Wrong flag in blobId: " + blobId, flag == null ? BlobId.DEFAULT_FLAG : flag, blobId.getFlag());
-      assertEquals("Wrong datacenter id in blobId: " + blobId,
-          datacenterId == null ? LEGACY_DATACENTER_ID : datacenterId, blobId.getDatacenterId());
-      assertEquals("Wrong account id in blobId: " + blobId, accountId == null ? Account.LEGACY_ACCOUNT_ID : accountId,
-          blobId.getAccountId());
-      assertEquals("Wrong container id in blobId: " + blobId,
-          containerId == null ? Container.LEGACY_CONTAINER_ID : containerId, blobId.getContainerId());
+    switch (version) {
+      case BLOB_ID_V1:
+        assertEquals("Wrong flag in blobId: " + blobId, BlobId.DEFAULT_FLAG, blobId.getFlag());
+        assertEquals("Wrong datacenter id in blobId: " + blobId, LEGACY_DATACENTER_ID, blobId.getDatacenterId());
+        assertEquals("Wrong account id in blobId: " + blobId, Account.LEGACY_ACCOUNT_ID, blobId.getAccountId());
+        assertEquals("Wrong container id in blobId: " + blobId, Container.LEGACY_CONTAINER_ID, blobId.getContainerId());
+        break;
+
+      case BLOB_ID_V2:
+        assertEquals("Wrong flag in blobId: " + blobId, flag, blobId.getFlag());
+        assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
+        assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
+        assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
+        break;
     }
     System.out.println("BlobId=" + blobId + ", flag=" + blobId.getFlag() + ", datacenterId=" + blobId.getDatacenterId()
         + ", accountId=" + blobId.getAccountId() + ", containerId=" + blobId.getContainerId() + ", idSizeInBytes="
@@ -452,7 +445,7 @@ public class BlobIdTest {
     }
 
     @Override
-    short getCurrentVersion() {
+    protected short getCurrentVersion() {
       return BLOB_ID_V2;
     }
   }

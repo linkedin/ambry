@@ -120,7 +120,7 @@ class RouterServerTestFramework {
       }
       if (opChain.blobId != null) {
         blobsPut++;
-        PartitionId partitionId = BlobId.fromStringId(opChain.blobId, clusterMap).getPartition();
+        PartitionId partitionId = new BlobId(opChain.blobId, clusterMap).getPartition();
         int count = partitionCount.containsKey(partitionId) ? partitionCount.get(partitionId) : 0;
         partitionCount.put(partitionId, count + 1);
       }

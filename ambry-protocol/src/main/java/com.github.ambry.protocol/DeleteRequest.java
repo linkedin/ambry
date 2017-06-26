@@ -41,7 +41,7 @@ public class DeleteRequest extends RequestOrResponse {
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
-    BlobId blobId = BlobId.fromDataInputStream(stream, map);
+    BlobId blobId = new BlobId(stream, map);
     // ignore version for now
     return new DeleteRequest(correlationId, clientId, blobId);
   }

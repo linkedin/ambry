@@ -86,7 +86,6 @@ class PutOperation {
   private final RouterCallback routerCallback;
   private final Time time;
   private BlobProperties finalBlobProperties;
-  private byte blobIdFlag = BlobId.DEFAULT_FLAG;
 
   // Parameters associated with the state.
 
@@ -789,7 +788,7 @@ class PutOperation {
         }
         partitionId = getPartitionForPut(attemptedPartitionIds);
         chunkBlobId =
-            new BlobId(blobIdFlag, clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+            new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
                 passedInBlobProperties.getContainerId(), partitionId);
         chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),

@@ -134,7 +134,7 @@ class MessageInfoListSerde {
     int messageInfoListCount = stream.readInt();
     ArrayList<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(messageInfoListCount);
     for (int i = 0; i < messageInfoListCount; i++) {
-      BlobId id = BlobId.fromDataInputStream(stream, map);
+      BlobId id = new BlobId(stream, map);
       long size = stream.readLong();
       long ttl = stream.readLong();
       boolean isDeleted = stream.readByte() == DELETED;

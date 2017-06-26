@@ -79,13 +79,13 @@ public class BlobId extends StoreKey {
   private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   // the version to indicate the serialized format.
-  private Short version;
-  private Byte flag;
-  private Byte datacenterId;
-  private Short accountId;
-  private Short containerId;
-  private PartitionId partitionId;
-  private String uuid;
+  private final Short version;
+  private final Byte flag;
+  private final Byte datacenterId;
+  private final Short accountId;
+  private final Short containerId;
+  private final PartitionId partitionId;
+  private final String uuid;
 
   /**
    * Constructs a new BlobId by taking arguments for the required fields. The constructed BlobId will be serialized
@@ -176,9 +176,8 @@ public class BlobId extends StoreKey {
    * @param clusterMap of the cluster that the blobId belongs to.
    * @throws IOException
    */
-  public static BlobId fromStringId(String id, ClusterMap clusterMap) throws IOException {
-    return new BlobId(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))),
-        clusterMap, true);
+  public BlobId(String id, ClusterMap clusterMap) throws IOException {
+    this(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(id)))), clusterMap, true);
   }
 
   /**
@@ -188,8 +187,8 @@ public class BlobId extends StoreKey {
    * @param clusterMap of the cluster that the blobId belongs to.
    * @throws IOException
    */
-  public static BlobId fromDataInputStream(DataInputStream stream, ClusterMap clusterMap) throws IOException {
-    return new BlobId(stream, clusterMap, false);
+  public BlobId(DataInputStream stream, ClusterMap clusterMap) throws IOException {
+    this(stream, clusterMap, false);
   }
 
   /**
@@ -197,15 +196,16 @@ public class BlobId extends StoreKey {
    * @return The byte count of the serialized blobId.
    */
   public short sizeInBytes() {
+    short sizeForBlobIdV1 =
+        (short) (VERSION_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_FIELD_LENGTH_IN_BYTES
+            + uuid.length());
     switch (version) {
       case BLOB_ID_V1:
-        return (short) (VERSION_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_FIELD_LENGTH_IN_BYTES
-            + uuid.length());
+        return sizeForBlobIdV1;
 
       case BLOB_ID_V2:
-        return (short) (VERSION_FIELD_LENGTH_IN_BYTES + FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
-            + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length
-            + UUID_SIZE_FIELD_LENGTH_IN_BYTES + uuid.length());
+        return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
+            + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
 
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
@@ -381,7 +381,7 @@ public class BlobId extends StoreKey {
    * Gets the value of {@link #CURRENT_VERSION}.
    * @return The value of {@link #CURRENT_VERSION}.
    */
-  short getCurrentVersion() {
+  protected short getCurrentVersion() {
     return CURRENT_VERSION;
   }
 }

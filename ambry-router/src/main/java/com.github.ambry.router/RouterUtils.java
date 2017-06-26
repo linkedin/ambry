@@ -38,7 +38,7 @@ class RouterUtils {
   static BlobId getBlobIdFromString(String blobIdString, ClusterMap clusterMap) throws RouterException {
     BlobId blobId;
     try {
-      blobId = BlobId.fromStringId(blobIdString, clusterMap);
+      blobId = new BlobId(blobIdString, clusterMap);
       logger.trace("BlobId {} created with partitionId {}", blobId, blobId.getPartition());
     } catch (Exception e) {
       logger.trace("Caller passed in invalid BlobId {}", blobIdString);

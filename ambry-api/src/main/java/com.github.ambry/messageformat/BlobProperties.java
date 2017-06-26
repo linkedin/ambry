@@ -16,16 +16,15 @@ package com.github.ambry.messageformat;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
+
 
 /**
  * The properties of a blob that the client can set at time of put. The blob size and serviceId are mandatory fields and
  * must be set. The creation time is determined when this object is constructed.
  */
 public class BlobProperties {
-
-  public static final short LEGACY_ACCOUNT_ID = -1;
-  public static final short LEGACY_CONTAINER_ID = -1;
-
   private final long blobSize;
   private final String serviceId;
   private final String ownerId;
