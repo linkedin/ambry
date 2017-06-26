@@ -392,7 +392,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
       if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
-        logger.info("Index segment processing(on-demand scanning) for compaction stats complete for {}" + indexSegment);
+        logger.info("Index segment processing(on-demand scanning) for compaction stats complete for {}", indexSegment);
       }
     }
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
@@ -769,7 +769,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (!cancelled && indexSegments.size() > 0) {
           Map.Entry<Offset, IndexSegment> activeIndexSegmentEntry = indexSegments.floorEntry(firstCheckpoint);
           long indexSegmentStartProcessTime = time.milliseconds();
-          logger.trace("Processing index entries {} in active segments before first checkpoint {}",
+          logger.trace("Processing index entries in active segment {} before first checkpoint",
               activeIndexSegmentEntry);
           List<IndexEntry> activeIndexEntries =
               getIndexEntriesBeforeOffset(activeIndexSegmentEntry.getValue(), firstCheckpoint);
@@ -792,8 +792,8 @@ class BlobStoreStats implements StoreStats, Closeable {
                   TimeUnit.MILLISECONDS);
               segmentCount++;
               if (segmentCount == 1 || segmentCount % 10 == 0) {
-                logger.info(
-                    "Completed scanning of sealed segment {} by IndexScanner {} " + indexSegment.getFile().getName());
+                logger.info("Completed scanning of sealed segment {} by IndexScanner",
+                    indexSegment.getFile().getName());
               }
             }
           }
