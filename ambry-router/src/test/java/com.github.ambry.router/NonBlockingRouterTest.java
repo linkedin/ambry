@@ -323,10 +323,14 @@ public class NonBlockingRouterTest {
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
     future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
 
-    Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
-    // If the thread is still running, wait until it dies
-    if (requestResponseHandlerThread != null) {
-      requestResponseHandlerThread.join();
+    Thread requestResponseHandlerThreadRegular = TestUtils.getThreadByThisName("RequestResponseHandlerThread-0");
+    Thread requestResponseHandlerThreadBackground =
+        TestUtils.getThreadByThisName("RequestResponseHandlerThread-backgroundDeleter");
+    if (requestResponseHandlerThreadRegular != null) {
+      requestResponseHandlerThreadRegular.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
+    }
+    if (requestResponseHandlerThreadBackground != null) {
+      requestResponseHandlerThreadBackground.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
     }
 
     try {
