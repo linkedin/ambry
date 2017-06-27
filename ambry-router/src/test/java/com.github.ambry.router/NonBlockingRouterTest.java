@@ -57,6 +57,7 @@ import org.junit.Test;
  * Class to test the {@link NonBlockingRouter}
  */
 public class NonBlockingRouterTest {
+
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
@@ -323,24 +324,15 @@ public class NonBlockingRouterTest {
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
     future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
 
-    int maxExpected = 2;
-    long startTime = SystemTime.getInstance().milliseconds();
-    do {
-      Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
-      if (requestResponseHandlerThread == null) {
-        break;
-      } else {
-        if (maxExpected == 0) {
-          Assert.fail("Unexpected number of RequestResponseHandler threads");
-        }
-        maxExpected--;
-        requestResponseHandlerThread.join();
-      }
-      if (SystemTime.getInstance().milliseconds() - startTime >
-          TimeUnit.SECONDS.toMillis(NonBlockingRouter.SHUTDOWN_WAIT_MS)) {
-        Assert.fail("RequestResponseHandler threads taking too long to shut down");
-      }
-    } while (true);
+    Thread requestResponseHandlerThreadRegular = TestUtils.getThreadByThisName("RequestResponseHandlerThread-0");
+    Thread requestResponseHandlerThreadBackground =
+        TestUtils.getThreadByThisName("RequestResponseHandlerThread-backgroundDeleter");
+    if (requestResponseHandlerThreadRegular != null) {
+      requestResponseHandlerThreadRegular.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
+    }
+    if (requestResponseHandlerThreadBackground != null) {
+      requestResponseHandlerThreadBackground.join(NonBlockingRouter.SHUTDOWN_WAIT_MS);
+    }
 
     try {
       future.get();
