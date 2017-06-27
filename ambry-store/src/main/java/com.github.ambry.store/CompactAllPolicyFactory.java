@@ -64,7 +64,7 @@ class CompactAllPolicy implements CompactionPolicy {
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
         details = new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentsNotInJournal);
-        logger.info("Generating CompactionDetails {} using CompactAllPolicy ", details);
+        logger.info("Generating CompactionDetails {} using CompactAllPolicy", details);
       }
     }
     return details;

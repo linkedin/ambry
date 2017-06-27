@@ -64,9 +64,9 @@ class DefaultCompactionPolicy implements CompactionPolicy {
         if (bestCandidateToCompact != null) {
           details = new CompactionDetails(validDataSizeByLogSegment.getFirst(),
               bestCandidateToCompact.getSegmentsToCompact());
-          logger.info("Best candidate to compact {} ", bestCandidateToCompact);
+          logger.info("Best candidate to compact {}", bestCandidateToCompact);
         } else {
-          logger.trace("No best candidate found ");
+          logger.trace("No best candidate found");
         }
       }
     }

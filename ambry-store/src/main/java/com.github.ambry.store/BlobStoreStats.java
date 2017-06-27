@@ -359,7 +359,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
       if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
-        logger.info("Index segment processing(on-demand scanning) for container stats complete for {} " + indexSegment);
+        logger.info("Index segment processing (on-demand scanning) for container stats complete for {}", indexSegment);
       }
     }
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
@@ -372,7 +372,7 @@ class BlobStoreStats implements StoreStats, Closeable {
    * @return a {@link NavigableMap} of log segment name to valid data size
    */
   private NavigableMap<String, Long> collectValidDataSizeByLogSegment(long referenceTimeInMs) throws StoreException {
-    logger.trace("On demand index scanning to collect compaction data stats wrt ref time {} ", referenceTimeInMs);
+    logger.trace("On demand index scanning to collect compaction data stats wrt ref time {}", referenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, Long> deletedKeys = new HashMap<>();
     NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>();
@@ -392,7 +392,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
       if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
-        logger.info("Index segment processing(on-demand scanning) for compaction stats complete for {}", indexSegment);
+        logger.info("Index segment processing (on-demand scanning) for compaction stats complete for {}", indexSegment);
       }
     }
     metrics.statsOnDemandScanTotalTimeMs.update(time.milliseconds() - startTimeMs, TimeUnit.MILLISECONDS);
@@ -750,7 +750,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         if (cancelled) {
           return;
         }
-        logger.trace("IndexScanner triggered ");
+        logger.trace("IndexScanner triggered");
         recentEntryQueueEnabled = false;
         startTimeInMs = time.milliseconds();
         newScanResults = new ScanResults(startTimeInMs, logSegmentForecastOffsetMs, bucketCount, bucketSpanTimeInMs);
@@ -761,7 +761,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           scanLock.unlock();
         }
         Offset firstCheckpoint = index.getCurrentEndOffset();
-        logger.trace("First checkpoint by IndexScanner {} ", firstCheckpoint);
+        logger.trace("First checkpoint by IndexScanner {}", firstCheckpoint);
         ConcurrentNavigableMap<Offset, IndexSegment> indexSegments = index.getIndexSegments();
         Map<StoreKey, Long> deletedKeys = new HashMap<>();
         // process the active index segment based on the firstCheckpoint in case index segment rolled over after the
@@ -779,7 +779,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           if (!cancelled && indexSegments.size() > 1) {
             ConcurrentNavigableMap<Offset, IndexSegment> sealedIndexSegments =
                 indexSegments.subMap(index.getStartOffset(), activeIndexSegmentEntry.getKey());
-            logger.trace("Sealed index segments count {} ", sealedIndexSegments.size());
+            logger.trace("Sealed index segments count {}", sealedIndexSegments.size());
             int segmentCount = 0;
             for (IndexSegment indexSegment : sealedIndexSegments.descendingMap().values()) {
               if (cancelled) {
@@ -832,7 +832,7 @@ class BlobStoreStats implements StoreStats, Closeable {
      * @throws StoreException
      */
     private void forwardScan(Offset startOffset, Offset endOffset) throws StoreException {
-      logger.trace("Forward scanning from {} to {} by IndexScanner ", startOffset, endOffset);
+      logger.trace("Forward scanning from {} to {} by IndexScanner", startOffset, endOffset);
       SortedMap<Offset, IndexSegment> tailIndexSegments =
           index.getIndexSegments().subMap(index.getIndexSegments().floorKey(startOffset), endOffset);
       int forwardScanEntryCount = 0;
