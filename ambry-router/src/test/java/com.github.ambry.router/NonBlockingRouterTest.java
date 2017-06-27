@@ -57,7 +57,6 @@ import org.junit.Test;
  * Class to test the {@link NonBlockingRouter}
  */
 public class NonBlockingRouterTest {
-
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
