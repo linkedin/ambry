@@ -323,11 +323,24 @@ public class NonBlockingRouterTest {
     mockSelectorState.set(MockSelectorState.ThrowThrowableOnSend);
     future = router.putBlob(putBlobProperties, putUserMetadata, putChannel);
 
-    Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
-    // If the thread is still running, wait until it dies
-    if (requestResponseHandlerThread != null) {
-      requestResponseHandlerThread.join();
-    }
+    int maxExpected = 2;
+    long startTime = SystemTime.getInstance().milliseconds();
+    do {
+      Thread requestResponseHandlerThread = TestUtils.getThreadByThisName("RequestResponseHandlerThread");
+      if (requestResponseHandlerThread == null) {
+        break;
+      } else {
+        if (maxExpected == 0) {
+          Assert.fail("Unexpected number of RequestResponseHandler threads");
+        }
+        maxExpected--;
+        requestResponseHandlerThread.join();
+      }
+      if (SystemTime.getInstance().milliseconds() - startTime >
+          TimeUnit.SECONDS.toMillis(NonBlockingRouter.SHUTDOWN_WAIT_MS)) {
+        Assert.fail("RequestResponseHandler threads taking too long to shut down");
+      }
+    } while (true);
 
     try {
       future.get();
