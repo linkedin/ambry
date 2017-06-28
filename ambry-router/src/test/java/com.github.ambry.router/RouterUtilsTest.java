@@ -38,8 +38,8 @@ public class RouterUtilsTest {
       fail("Should not get any exception.");
     }
     partition = clusterMap.getWritablePartitionIds().get(0);
-    originalBlobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Account.LEGACY_ACCOUNT_ID,
-        Container.LEGACY_CONTAINER_ID, partition);
+    originalBlobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
+        Container.UNKNOWN_CONTAINER_ID, partition);
     blobIdStr = originalBlobId.getID();
   }
 

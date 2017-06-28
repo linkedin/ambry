@@ -95,11 +95,11 @@ public class BlobId extends StoreKey {
    * @param flag A byte to embed additional information of this blobId. Will be reset to {@link #DEFAULT_FLAG} if
    *             {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
    * @param datacenterId The id of the datacenter to be embedded into the blob. Will be reset to
-   *             {@link ClusterMapUtils#LEGACY_DATACENTER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
+   *             {@link ClusterMapUtils#UNKNOWN_DATACENTER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
    * @param accountId The id of the {@link Account} to be embedded into the blob. Will be reset to
-   *             {@link Account#LEGACY_ACCOUNT_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
+   *             {@link Account#UNKNOWN_ACCOUNT_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
    * @param containerId The id of the {@link Container} to be embedded into the blob. Will be reset to
-   *             {@link Container#LEGACY_CONTAINER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
+   *             {@link Container#UNKNOWN_CONTAINER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    */
   public BlobId(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
@@ -110,9 +110,9 @@ public class BlobId extends StoreKey {
     switch (version) {
       case BLOB_ID_V1:
         this.flag = DEFAULT_FLAG;
-        this.datacenterId = LEGACY_DATACENTER_ID;
-        this.accountId = LEGACY_ACCOUNT_ID;
-        this.containerId = LEGACY_CONTAINER_ID;
+        this.datacenterId = UNKNOWN_DATACENTER_ID;
+        this.accountId = UNKNOWN_ACCOUNT_ID;
+        this.containerId = UNKNOWN_CONTAINER_ID;
         break;
 
       case BLOB_ID_V2:
@@ -140,13 +140,13 @@ public class BlobId extends StoreKey {
    * @throws IOException
    */
   private BlobId(DataInputStream stream, ClusterMap clusterMap, boolean ensureFullyRead) throws IOException {
-    this.version = stream.readShort();
+    version = stream.readShort();
     switch (version) {
       case BLOB_ID_V1:
         flag = DEFAULT_FLAG;
-        datacenterId = LEGACY_DATACENTER_ID;
-        accountId = LEGACY_ACCOUNT_ID;
-        containerId = LEGACY_CONTAINER_ID;
+        datacenterId = UNKNOWN_DATACENTER_ID;
+        accountId = UNKNOWN_ACCOUNT_ID;
+        containerId = UNKNOWN_CONTAINER_ID;
         break;
 
       case BLOB_ID_V2:
@@ -198,7 +198,7 @@ public class BlobId extends StoreKey {
   public short sizeInBytes() {
     short sizeForBlobIdV1 =
         (short) (VERSION_FIELD_LENGTH_IN_BYTES + partitionId.getBytes().length + UUID_SIZE_FIELD_LENGTH_IN_BYTES
-            + uuid.length());
+            + uuid.getBytes().length);
     switch (version) {
       case BLOB_ID_V1:
         return sizeForBlobIdV1;
@@ -222,7 +222,7 @@ public class BlobId extends StoreKey {
 
   /**
    * Gets the id of the {@link Account} who created this blob. If this information was not available when the
-   * blobId was formed, it will return -1.
+   * blobId was formed, it will return {@link Account#UNKNOWN_ACCOUNT_ID}.
    * @return The id of the {@link Account} who created this blob.
    */
   public short getAccountId() {
@@ -231,7 +231,7 @@ public class BlobId extends StoreKey {
 
   /**
    * Gets the id of the {@link Container} where this blob belongs to. If this information was not available when
-   * the blobId was formed, it will return -1.
+   * the blobId was formed, it will return {@link Container#UNKNOWN_CONTAINER_ID}.
    * @return The id of the {@link Container} where this blob belongs to.
    */
   public short getContainerId() {
@@ -240,7 +240,7 @@ public class BlobId extends StoreKey {
 
   /**
    * Gets the id of the datacenter where this blob was originally posted. If this information was not available
-   * when the blobId was formed, it will return -1.
+   * when the blobId was formed, it will return {@link ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
    * @return The id of the datacenter where this blob was originally posted.
    */
   public short getDatacenterId() {
@@ -249,7 +249,7 @@ public class BlobId extends StoreKey {
 
   /**
    * Gets the flag metadata of this blobId. If this information was not available when the blobId was formed, it
-   * will return 0.
+   * will return {@link #DEFAULT_FLAG}.
    * @return The flag of the blobId.
    */
   public short getFlag() {

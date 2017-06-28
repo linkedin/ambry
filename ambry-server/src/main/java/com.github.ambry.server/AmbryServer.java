@@ -169,7 +169,8 @@ public class AmbryServer {
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
       if (serverConfig.serverStatsHealthReportEnabled) {
-        ambryHealthReports.add(new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
+        ambryHealthReports.add(
+            new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
       }
 
       clusterParticipant.initialize(networkConfig.hostName, networkConfig.port, ambryHealthReports);

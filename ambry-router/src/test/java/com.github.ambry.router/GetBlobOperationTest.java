@@ -221,8 +221,8 @@ public class GetBlobOperationTest {
           e.getErrorCode());
     }
 
-    blobIdStr = new BlobId(BlobId.DEFAULT_FLAG, mockClusterMap.getLocalDatacenterId(), Account.LEGACY_ACCOUNT_ID,
-        Container.LEGACY_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0)).getID();
+    blobIdStr = new BlobId(BlobId.DEFAULT_FLAG, mockClusterMap.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
+        Container.UNKNOWN_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0)).getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,

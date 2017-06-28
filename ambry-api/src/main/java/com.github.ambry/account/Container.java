@@ -50,8 +50,8 @@ import org.json.JSONObject;
  *  </p>
  */
 public class Container {
-  // containerId == LEGACY_CONTAINER_ID indicate containerId is not available at the time when this blobId is formed.
-  public static final short LEGACY_CONTAINER_ID = -1;
+  // containerId == UNKNOWN_CONTAINER_ID indicate containerId is not available at the time when this blobId is formed.
+  public static final short UNKNOWN_CONTAINER_ID = -1;
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String CONTAINER_NAME_KEY = "containerName";

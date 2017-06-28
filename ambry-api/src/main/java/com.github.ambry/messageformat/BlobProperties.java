@@ -101,8 +101,8 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs) {
-    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs, LEGACY_ACCOUNT_ID,
-        LEGACY_CONTAINER_ID, LEGACY_ACCOUNT_ID);
+    this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs,
+        UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, UNKNOWN_ACCOUNT_ID);
   }
 
   /**

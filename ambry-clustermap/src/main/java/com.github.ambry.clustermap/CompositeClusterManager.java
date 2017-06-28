@@ -115,7 +115,7 @@ class CompositeClusterManager implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return LEGACY_DATACENTER_ID;
+    return UNKNOWN_DATACENTER_ID;
   }
 
   /**

@@ -392,8 +392,8 @@ public class AdminBlobStorageServiceTest {
     List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
-      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-          Container.LEGACY_CONTAINER_ID, partitionId);
+      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, partitionId);
       RestRequest restRequest =
           AdminTestUtils.createRestRequest(RestMethod.GET, blobId.getID() + "/" + RestUtils.SubResource.Replicas, null,
               null);

@@ -343,7 +343,7 @@ class TailoredPeersClusterMap implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return ClusterMapUtils.LEGACY_DATACENTER_ID;
+    return ClusterMapUtils.UNKNOWN_DATACENTER_ID;
   }
 
   @Override

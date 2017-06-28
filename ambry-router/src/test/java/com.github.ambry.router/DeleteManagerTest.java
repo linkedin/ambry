@@ -102,8 +102,8 @@ public class DeleteManagerTest {
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, mockTime);
     List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds();
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Account.LEGACY_ACCOUNT_ID,
-        Container.LEGACY_CONTAINER_ID, partition);
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
+        Container.UNKNOWN_CONTAINER_ID, partition);
     blobIdString = blobId.getID();
   }
 

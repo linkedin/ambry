@@ -218,8 +218,8 @@ public class IndexWritePerformance {
           PartitionId partition = map.getWritablePartitionIds().get(0);
           indexesWithMetrics.get(indexToUse)
               .addToIndexRandomData(
-                  new BlobId(BlobId.DEFAULT_FLAG, map.getLocalDatacenterId(), Account.LEGACY_ACCOUNT_ID,
-                      Container.LEGACY_CONTAINER_ID, partition));
+                  new BlobId(BlobId.DEFAULT_FLAG, map.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
+                      Container.UNKNOWN_CONTAINER_ID, partition));
           throttler.maybeThrottle(1);
         }
       } catch (Exception e) {

@@ -507,8 +507,8 @@ public class ReplicationTest {
       List<ArrayList<MessageInfo>> messageInfoListofLists, List<ArrayList<ByteBuffer>> messageBufferListofLists,
       int count) throws Exception {
     for (int i = 0; i < count; i++) {
-      BlobId id = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-          Container.LEGACY_CONTAINER_ID, partitionId);
+      BlobId id = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, partitionId);
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(id, 1000, random);
       long streamSize = byteBuffer.limit();
       for (ArrayList<MessageInfo> messageInfoList : messageInfoListofLists) {
@@ -555,8 +555,8 @@ public class ReplicationTest {
 
       // add an expired message to replica 2
       BlobId idExpired =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              Container.UNKNOWN_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
@@ -814,8 +814,8 @@ public class ReplicationTest {
 
       // add an expired message to replica 2
       BlobId idExpired =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              Container.UNKNOWN_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));
@@ -1021,8 +1021,8 @@ public class ReplicationTest {
 
       // add a corrupt message to replica 2
       BlobId corruptMessageId =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              Container.UNKNOWN_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer corruptByteBuffer = constructTestBlobInMessageFormat(corruptMessageId, 1000, random);
       byte[] data = corruptByteBuffer.array();
       // flip every bit in the array
@@ -1040,8 +1040,8 @@ public class ReplicationTest {
 
       // add an expired message to replica 2
       BlobId idExpired =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-              Container.LEGACY_CONTAINER_ID, partitionIds.get(i));
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+              Container.UNKNOWN_CONTAINER_ID, partitionIds.get(i));
       ByteBuffer byteBuffer = constructTestBlobInMessageFormat(idExpired, 1000, random);
       long streamSize = byteBuffer.limit();
       remoteInfoList.add(new MessageInfo(idExpired, streamSize, 1));

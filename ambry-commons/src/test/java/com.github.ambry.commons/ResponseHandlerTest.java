@@ -75,7 +75,7 @@ public class ResponseHandlerTest {
 
     @Override
     public byte getLocalDatacenterId() {
-      return LEGACY_DATACENTER_ID;
+      return UNKNOWN_DATACENTER_ID;
     }
 
     @Override

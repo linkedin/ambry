@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -48,12 +47,12 @@ import static org.junit.Assert.*;
 public class BlobIdTest {
   private static final Random random = new Random();
   private final short version;
-  private byte referenceFlag;
-  private byte referenceDatacenterId;
-  private short referenceAccountId;
-  private short referenceContainerId;
-  private ClusterMap referenceClusterMap;
-  private PartitionId referencePartitionId;
+  private final byte referenceFlag;
+  private final byte referenceDatacenterId;
+  private final short referenceAccountId;
+  private final short referenceContainerId;
+  private final ClusterMap referenceClusterMap;
+  private final PartitionId referencePartitionId;
 
   /**
    * Running for both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2}
@@ -68,16 +67,8 @@ public class BlobIdTest {
    * Constructor with parameter to be set.
    * @param version The version for BlobId to test.
    */
-  public BlobIdTest(short version) {
+  public BlobIdTest(short version) throws Exception {
     this.version = version;
-  }
-
-  /**
-   * Initialization before each unit test.
-   * @throws Exception Any unexpected exception.
-   */
-  @Before
-  public void init() throws Exception {
     byte[] bytes = new byte[2];
     referenceClusterMap = new MockClusterMap();
     random.nextBytes(bytes);
@@ -310,11 +301,11 @@ public class BlobIdTest {
    * @param flag The expected {@code flag}. If {@code null}, the assertion will be run against
    * {@link BlobId#DEFAULT_FLAG}.
    * @param datacenterId The expected {@code datacenterId}. If {@code null}, the assertion will be run against
-   * {@link com.github.ambry.clustermap.ClusterMapUtils#LEGACY_DATACENTER_ID}.
+   * {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
    * @param accountId The expected {@code accountId}. If {@code null}, the assertion will be run against
-   * {@link Account#LEGACY_ACCOUNT_ID}.
+   * {@link Account#UNKNOWN_ACCOUNT_ID}.
    * @param containerId The expected {@code containerId}. If {@code null}, the assertion will be run against
-   * {@link Container#LEGACY_CONTAINER_ID}.
+   * {@link Container#UNKNOWN_CONTAINER_ID}.
    * @param partitionId The expected partitionId.
    * @throws Exception Any unexpected exception.
    */
@@ -344,15 +335,15 @@ public class BlobIdTest {
    * @param flag The expected {@code flag}. This will be of no effect if version is set to v1, and the expected value will
    *             become {@link BlobId#DEFAULT_FLAG}. For v2, {@code null} will make the assertion against {@link BlobId#DEFAULT_FLAG}.
    * @param datacenterId The expected {@code datacenterId}. This will be of no effect if version is set to v1, and the
-   *                     expected value will become {@link com.github.ambry.clustermap.ClusterMapUtils#LEGACY_DATACENTER_ID}.
+   *                     expected value will become {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
    *                     For v2, {@code null} will make the assertion against
-   *                     {@link com.github.ambry.clustermap.ClusterMapUtils#LEGACY_DATACENTER_ID}.
+   *                     {@link com.github.ambry.clustermap.ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
    * @param accountId The expected {@code accountId}. This will be of no effect if version is set to v1, and the expected
-   *                  value will become {@link Account#LEGACY_ACCOUNT_ID}. For v2, {@code null} will make the assertion
-   *                  against {@link Account#LEGACY_ACCOUNT_ID}.
+   *                  value will become {@link Account#UNKNOWN_ACCOUNT_ID}. For v2, {@code null} will make the assertion
+   *                  against {@link Account#UNKNOWN_ACCOUNT_ID}.
    * @param containerId The expected {@code containerId}. This will be of no effect if version is set to v1, and the
-   *                    expected value will become {@link Container#LEGACY_CONTAINER_ID}. For v2, {@code null} will make
-   *                    the assertion against {@link Container#LEGACY_CONTAINER_ID}.
+   *                    expected value will become {@link Container#UNKNOWN_CONTAINER_ID}. For v2, {@code null} will make
+   *                    the assertion against {@link Container#UNKNOWN_CONTAINER_ID}.
    * @param partitionId The expected partitionId.
    * @throws Exception Any unexpected exception.
    */
@@ -363,9 +354,10 @@ public class BlobIdTest {
     switch (version) {
       case BLOB_ID_V1:
         assertEquals("Wrong flag in blobId: " + blobId, BlobId.DEFAULT_FLAG, blobId.getFlag());
-        assertEquals("Wrong datacenter id in blobId: " + blobId, LEGACY_DATACENTER_ID, blobId.getDatacenterId());
-        assertEquals("Wrong account id in blobId: " + blobId, Account.LEGACY_ACCOUNT_ID, blobId.getAccountId());
-        assertEquals("Wrong container id in blobId: " + blobId, Container.LEGACY_CONTAINER_ID, blobId.getContainerId());
+        assertEquals("Wrong datacenter id in blobId: " + blobId, UNKNOWN_DATACENTER_ID, blobId.getDatacenterId());
+        assertEquals("Wrong account id in blobId: " + blobId, Account.UNKNOWN_ACCOUNT_ID, blobId.getAccountId());
+        assertEquals("Wrong container id in blobId: " + blobId, Container.UNKNOWN_CONTAINER_ID,
+            blobId.getContainerId());
         break;
 
       case BLOB_ID_V2:
@@ -375,9 +367,6 @@ public class BlobIdTest {
         assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
         break;
     }
-    System.out.println("BlobId=" + blobId + ", flag=" + blobId.getFlag() + ", datacenterId=" + blobId.getDatacenterId()
-        + ", accountId=" + blobId.getAccountId() + ", containerId=" + blobId.getContainerId() + ", idSizeInBytes="
-        + blobId.toString().length());
   }
 
   /**

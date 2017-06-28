@@ -152,8 +152,9 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testInstantiation() throws Exception {
-    String blobIdStr = (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.LEGACY_DATACENTER_ID, Account.LEGACY_ACCOUNT_ID,
-        Container.LEGACY_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0))).getID();
+    String blobIdStr =
+        (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+            Container.UNKNOWN_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0))).getID();
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
       // no op.
     };
