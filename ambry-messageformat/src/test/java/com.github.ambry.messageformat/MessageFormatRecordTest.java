@@ -174,7 +174,7 @@ public class MessageFormatRecordTest {
 
       // corrupt blob property V1 record
       stream.flip();
-      stream.put(10, (byte) 10);
+      stream.put(10, (byte)(stream.get(10) + 1));
       try {
         MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         fail("Deserialization of BlobProperties should have failed ");
