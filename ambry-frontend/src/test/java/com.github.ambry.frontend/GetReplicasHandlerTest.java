@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.admin;
+package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
@@ -46,7 +46,7 @@ public class GetReplicasHandlerTest {
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
-      getReplicasHandler = new GetReplicasHandler(new AdminMetrics(new MetricRegistry()), CLUSTER_MAP);
+      getReplicasHandler = new GetReplicasHandler(new FrontendMetrics(new MetricRegistry()), CLUSTER_MAP);
     } catch (IOException e) {
       throw new IllegalStateException(e);
     }
