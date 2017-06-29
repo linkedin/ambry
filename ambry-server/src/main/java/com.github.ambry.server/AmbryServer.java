@@ -163,7 +163,7 @@ public class AmbryServer {
         partitionIds.add(replicaId.getPartitionId());
       }
       statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
-      if (serverConfig.serverStatsPublishEnabled) {
+      if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }
 

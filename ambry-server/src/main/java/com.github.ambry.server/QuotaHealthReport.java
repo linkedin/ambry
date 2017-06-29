@@ -50,7 +50,7 @@ class QuotaHealthReport extends HealthReportProvider implements AmbryHealthRepor
   }
 
   @Override
-  public String getFieldName() {
+  public String getQuotaStatsFieldName() {
     return QUOTA_FIELD_NAME;
   }
 

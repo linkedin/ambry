@@ -45,6 +45,10 @@ public class StatsHeader {
     // empty constructor for Jackson deserialization
   }
 
+  /**
+   * Returns the reference timestamp at which the the stats are collected
+   * @return the reference timestamp at which the the stats are collected
+   */
   public long getTimestamp() {
     return timestamp;
   }

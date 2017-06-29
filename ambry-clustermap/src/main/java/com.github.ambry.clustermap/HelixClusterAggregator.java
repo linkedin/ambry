@@ -19,17 +19,19 @@ import com.github.ambry.server.StatsWrapper;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Responsible for performing cluster wide stats aggregation.
  */
 public class HelixClusterAggregator {
+  private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ObjectMapper mapper = new ObjectMapper();
   private final long relevantTimePeriodInMs;
 
@@ -39,26 +41,29 @@ public class HelixClusterAggregator {
   }
 
   /**
-   * Take a {@link List} of JSON string representation of {@link StatsWrapper} objects and perform cluster wide
+   * Take a {@link Map} of instance name to JSON string representation of {@link StatsWrapper} objects and perform cluster wide
    * aggregation with them.
-   * @param statsWrappersJSON a {@link List} of JSON string representation of {@link StatsWrapper} objects from the
+   * @param statsWrappersJSON a {@link Map} of instance name to JSON string representation of {@link StatsWrapper} objects from the
    *                          node level
-   * @return a {@link Pair} of Strings whose first element is the raw (sum) aggregated stats and whose second element is
-   * the aggregated stats based on timestamp and value from each partition.
+   * @return a {@link Pair} of Strings whose values represents valid quota stats across all partitions.
+   * First element is the raw (sum) aggregated stats and second element is average(aggregated) stats for all replicas
+   * for each partition.
    * @throws IOException
    */
-  Pair<String, String> doWork(List<String> statsWrappersJSON) throws IOException {
+  Pair<String, String> doWork(Map<String, String> statsWrappersJSON) throws IOException {
     StatsSnapshot partitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
     Map<String, Long> partitionTimestampMap = new HashMap<>();
     StatsSnapshot rawPartitionSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
-    for (String statsWrapperJSON : statsWrappersJSON) {
+    for (Map.Entry<String, String> statsWrapperJSON : statsWrappersJSON.entrySet()) {
       if (statsWrapperJSON != null) {
-        StatsWrapper snapshotWrapper = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
-        StatsWrapper snapshotWrapperCopy = mapper.readValue(statsWrapperJSON, StatsWrapper.class);
+        StatsWrapper snapshotWrapper = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
+        StatsWrapper snapshotWrapperCopy = mapper.readValue(statsWrapperJSON.getValue(), StatsWrapper.class);
         combineRaw(rawPartitionSnapshot, snapshotWrapper);
-        combine(partitionSnapshot, snapshotWrapperCopy, partitionTimestampMap);
+        combine(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(), partitionTimestampMap);
       }
     }
+    logger.info("Reduced raw snapshot {}", mapper.writeValueAsString(rawPartitionSnapshot));
+    logger.info("Reduced snapshot {}", mapper.writeValueAsString(partitionSnapshot));
     StatsSnapshot reducedRawSnapshot = reduce(rawPartitionSnapshot);
     StatsSnapshot reducedSnapshot = reduce(partitionSnapshot);
     return new Pair<>(mapper.writeValueAsString(reducedRawSnapshot), mapper.writeValueAsString(reducedSnapshot));
@@ -95,11 +100,12 @@ public class HelixClusterAggregator {
    *       base entry.
    * @param baseSnapshot the base {@link StatsSnapshot} which will contain the aggregated result
    * @param snapshotWrapper the {@link StatsSnapshot} to be aggregated to the base {@link StatsSnapshot}
+   * @param instance new instance from which snapshot is being combined
    * @param partitionTimestampMap a {@link Map} of partition to timestamp to keep track the current timestamp of each
    *                              partition entry in the base {@link StatsSnapshot}
    */
-  private void combine(StatsSnapshot baseSnapshot, StatsWrapper snapshotWrapper,
-      Map<String, Long> partitionTimestampMap) {
+  private void combine(StatsSnapshot baseSnapshot, StatsWrapper snapshotWrapper, String instance,
+      Map<String, Long> partitionTimestampMap) throws IOException {
     long totalValue = baseSnapshot.getValue();
     long snapshotTimestamp = snapshotWrapper.getHeader().getTimestamp();
     Map<String, StatsSnapshot> partitionSnapshotMap = snapshotWrapper.getSnapshot().getSubMap();
@@ -111,15 +117,22 @@ public class HelixClusterAggregator {
             partitionSnapshot.getValue().getValue() - basePartitionSnapshotMap.get(partitionId).getValue();
         long deltaInTimeMs = snapshotTimestamp - partitionTimestampMap.get(partitionId);
         if (Math.abs(deltaInTimeMs) < relevantTimePeriodInMs && deltaInValue > 0) {
+          logger.trace("Updating partition {} snapshot from instance {} as last updated time is within"
+              + "relevant time period and delta value has increased ", partitionId, instance);
           basePartitionSnapshotMap.put(partitionId, partitionSnapshot.getValue());
           partitionTimestampMap.put(partitionId, snapshotTimestamp);
           totalValue += deltaInValue;
         } else if (deltaInTimeMs > relevantTimePeriodInMs) {
+          logger.trace("Updating partition {} snapshot from instance {} as new value is updated "
+              + "within relevant time period compared to already existing one", partitionId, instance);
           basePartitionSnapshotMap.put(partitionId, partitionSnapshot.getValue());
           partitionTimestampMap.put(partitionId, snapshotTimestamp);
           totalValue += deltaInValue;
+        } else {
+          logger.trace("Ignoring snapshot from {} for partition {}", instance, partitionId);
         }
       } else {
+        logger.trace("First entry for partition {} is from {}", partitionId, instance);
         basePartitionSnapshotMap.put(partitionId, partitionSnapshot.getValue());
         partitionTimestampMap.put(partitionId, snapshotTimestamp);
         totalValue += partitionSnapshot.getValue().getValue();
