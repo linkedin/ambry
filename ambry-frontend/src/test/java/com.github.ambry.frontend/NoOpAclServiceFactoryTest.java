@@ -14,23 +14,23 @@
 
 package com.github.ambry.frontend;
 
-import com.github.ambry.rest.AuthorizationService;
-import com.github.ambry.rest.AuthorizationServiceFactory;
+import com.github.ambry.account.AclService;
+import com.github.ambry.account.AclServiceFactory;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
 
-public class NoOpAuthorizationServiceFactoryTest {
+public class NoOpAclServiceFactoryTest {
   @Test
   public void instantiationTest() throws Exception {
-    AuthorizationServiceFactory factory = new NoOpAuthorizationServiceFactory(null, null);
-    AuthorizationService authorizationService = factory.getAuthorizationService();
-    assertTrue("Wrong type of AuthorizationService from factory",
-        authorizationService instanceof NoOpAuthorizationService);
+    AclServiceFactory factory = new NoOpAclServiceFactory(null, null);
+    AclService aclService = factory.getAclService();
+    assertTrue("Wrong type of AclService from factory", aclService instanceof NoOpAclService);
+    assertEquals("access should always be granted", AclService.AccessDecision.GRANT,
+        aclService.hasAccess(null, null, null));
     // ensure that none of these methods throw exceptions.
-    authorizationService.hasAccess(null);
-    authorizationService.onContainerCreation(null);
-    authorizationService.onContainerRemoval(null);
+    aclService.allowAccess(null, null, null);
+    aclService.revokeAccess(null, null, null);
   }
 }

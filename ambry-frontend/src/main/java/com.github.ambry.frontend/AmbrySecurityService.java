@@ -13,11 +13,11 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AclService;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.rest.AuthorizationService;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -46,13 +46,13 @@ class AmbrySecurityService implements SecurityService {
   private boolean isOpen;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
-  private final AuthorizationService authorizationService;
+  private final AclService<?> aclService;
 
   public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      AuthorizationService authorizationService) {
+      AclService<?> aclService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
-    this.authorizationService = authorizationService;
+    this.aclService = aclService;
     isOpen = true;
   }
 
@@ -67,8 +67,11 @@ class AmbrySecurityService implements SecurityService {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
       }
-      try {
-        authorizationService.hasAccess(restRequest);
+      AclService.AccessDecision accessDecision = aclService.hasAccess(null, null, null);
+      if (accessDecision != AclService.AccessDecision.GRANT) {
+        exception = new RestServiceException("Access denied by ACL service. access decision: " + accessDecision,
+            RestServiceErrorCode.Unauthorized);
+      } else {
         RestMethod restMethod = restRequest.getRestMethod();
         switch (restMethod) {
           case GET:
@@ -85,8 +88,6 @@ class AmbrySecurityService implements SecurityService {
             }
             break;
         }
-      } catch (Exception e) {
-        exception = e;
       }
     }
     FutureResult<Void> futureResult = new FutureResult<Void>();

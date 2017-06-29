@@ -1,0 +1,119 @@
+/*
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
+
+package com.github.ambry.account;
+
+import com.github.ambry.rest.SecurityService;
+
+
+/**
+ * A service that handles authorization of requests. This will be provided to the {@link SecurityService} for making
+ * access decisions that might require the help of an external service. The call to
+ * {@link #hasAccess(Object, Resource, Operation)} should not require expensive network calls, since it will potentially
+ * be used on the critical path. Instead, the {@link AclService} should maintain a cache of ACLs for the resources it
+ * manages permissions on.
+ * @param <P> the type for the principal. This is generic to allow for different requester authentication schemes.
+ */
+public interface AclService<P> {
+
+  /**
+   * Makes a resource access decision.
+   * @param principal the requester principal (identity).
+   * @param targetResource the {@link Resource} to check for access to.
+   * @param operation the {@link Operation} to perform on the resource.
+   * @return an {@link AccessDecision} for the principal performing the specified operation on the target resource.
+   */
+  AccessDecision hasAccess(P principal, Resource resource, Operation operation);
+
+  /**
+   * Allow the provided principal to perform an {@link Operation} on a {@link Resource}.
+   * @param principal the principal to add a rule for.
+   * @param resource the {@link Resource} to add the rule for.
+   * @param operation the {@link Operation} to allow the principal to perform on the {@link Resource}.
+   */
+  void allowAccess(P principal, Resource resource, Operation operation);
+
+  /**
+   * Prevent the provided principal from performing an {@link Operation} on a {@link Resource}.
+   * @param principal the principal to add a rule for.
+   * @param resource the {@link Resource} to add the rule for.
+   * @param operation the {@link Operation} to allow the principal to perform on the {@link Resource}.
+   */
+  void revokeAccess(P principal, Resource resource, Operation operation);
+
+  /**
+   * Represents an access decision.
+   */
+  enum AccessDecision {
+    /**
+     * Access to a resource should be granted.
+     */
+    GRANT,
+
+    /**
+     * Access to a resource should be denied.
+     */
+    DENY
+  }
+
+  /**
+   * The type of operation to perform on a {@link Resource}.
+   */
+  enum Operation {
+    /**
+     * Read content from a resource. For example, get a blob in a container.
+     */
+    READ_DATA,
+
+    /**
+     * Create new content within a resource. For example, put a new blob in a container.
+     */
+    CREATE_DATA,
+
+    /**
+     * Delete existing content from a resource. For example, delete a blob from a container.
+     */
+    DELETE_DATA,
+
+    /**
+     * Read the metadata associated with the resource itself. For example, one might want to read container properties
+     * such as container description.
+     */
+    READ_METADATA,
+
+    /**
+     * Modify the metadata associated with the resource itself. For example, one might want to modify container
+     * properties such as container description.
+     */
+    UPDATE_METADATA
+  }
+
+  /**
+   * An interface that represents an ACLed resource. The resource must provide a resource type and a unique ID for the
+   * specific resource that the {@link AclService} can use.
+   */
+  interface Resource {
+    /**
+     * @return the type of resource this is. This should be the same for all resources of a given type
+     * (i.e. a container).
+     */
+    String getResourceType();
+
+    /**
+     * @return a unique identifier for this specific resource. This should ideally be URL safe for flexibility when
+     * implementing {@link AclService}.
+     */
+    String getResourceId();
+  }
+}

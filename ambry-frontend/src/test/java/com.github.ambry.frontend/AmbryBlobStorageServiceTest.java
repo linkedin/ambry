@@ -112,7 +112,7 @@ public class AmbryBlobStorageServiceTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory =
-        new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, new NoOpAuthorizationService());
+        new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, new NoOpAclService());
     router = new InMemoryRouter(verifiableProperties);
     responseHandler = new FrontendTestResponseHandler();
     clusterMap = new MockClusterMap();

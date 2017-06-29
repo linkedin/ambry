@@ -14,11 +14,11 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AclServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.AuthorizationService;
-import com.github.ambry.rest.AuthorizationServiceFactory;
+import com.github.ambry.account.AclService;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
 import com.github.ambry.rest.IdConverterFactory;
@@ -66,13 +66,13 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
       this.router = router;
-      AuthorizationServiceFactory authorizationServiceFactory =
-          Utils.getObj(frontendConfig.frontendAuthorizationServiceFactory, verifiableProperties, metricRegistry);
-      AuthorizationService authorizationService = authorizationServiceFactory.getAuthorizationService();
+      AclServiceFactory aclServiceFactory =
+          Utils.getObj(frontendConfig.frontendAclServiceFactory, verifiableProperties, metricRegistry);
+      AclService aclService = aclServiceFactory.getAclService();
       idConverterFactory =
           Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, metricRegistry);
       securityServiceFactory = Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
-          clusterMap.getMetricRegistry(), authorizationService);
+          clusterMap.getMetricRegistry(), aclService);
     }
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
   }

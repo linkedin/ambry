@@ -15,26 +15,26 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AclServiceFactory;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.AuthorizationService;
-import com.github.ambry.rest.AuthorizationServiceFactory;
+import com.github.ambry.account.AclService;
 
 
 /**
- * A factory for creating an {@link AuthorizationService} that never denies access.
+ * A factory for creating an {@link AclService} that never denies access.
  */
-public class NoOpAuthorizationServiceFactory implements AuthorizationServiceFactory {
+public class NoOpAclServiceFactory implements AclServiceFactory<Object> {
 
   /**
-   * Construct a {@link NoOpAuthorizationServiceFactory}
+   * Construct a {@link NoOpAclServiceFactory}
    * @param verifiableProperties the {@link VerifiableProperties} to use.
    * @param metricRegistry the {@link MetricRegistry} to use.
    */
-  public NoOpAuthorizationServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public NoOpAclServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
   }
 
   @Override
-  public AuthorizationService getAuthorizationService() {
-    return new NoOpAuthorizationService();
+  public AclService<Object> getAclService() {
+    return new NoOpAclService();
   }
 }

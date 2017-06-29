@@ -16,7 +16,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.AuthorizationService;
+import com.github.ambry.account.AclService;
 import com.github.ambry.rest.SecurityService;
 import com.github.ambry.rest.SecurityServiceFactory;
 
@@ -30,17 +30,17 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
 
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
-  private final AuthorizationService authorizationService;
+  private final AclService<?> aclService;
 
   public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      AuthorizationService authorizationService) {
+      AclService<? super Object> aclService) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(metricRegistry);
-    this.authorizationService = authorizationService;
+    this.aclService = aclService;
   }
 
   @Override
   public SecurityService getSecurityService() throws InstantiationException {
-    return new AmbrySecurityService(frontendConfig, frontendMetrics, authorizationService);
+    return new AmbrySecurityService(frontendConfig, frontendMetrics, aclService);
   }
 }

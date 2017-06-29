@@ -67,7 +67,7 @@ public class AmbrySecurityServiceTest {
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
-          new NoOpAuthorizationService());
+          new NoOpAclService());
 
   /**
    * Tests {@link AmbrySecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases
