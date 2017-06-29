@@ -19,10 +19,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -137,58 +135,15 @@ public class BlobIdTest {
   }
 
   /**
-   * Tests {@link BlobId#compareTo(StoreKey)} method. Especially, it tests if the method will perform the same for
-   * blobId v1. This will ensure no changed behavior when sorting existing blobIds in v1.
-   * @throws IOException
+   * Tests blobIds in v1 and v2 are comparable, and the comparison should expect blobIdV1 is always smaller than
+   * blobIdV2, because this is determined by the version field.
+   * @throws Exception Any unexpected exception.
    */
-  @Test
-  public void testComparision() throws Exception {
-    List<BlobId> blobIds = new ArrayList<>();
-    for (int i = 0; i < 100; i++) {
-      blobIds.add(getRandomBlobId(version));
-    }
-    Collections.sort(blobIds);
-    List<BlobId> blobIdsCopy = new ArrayList<>(blobIds);
-    Collections.sort(blobIdsCopy, (o1, o2) -> {
-      int result;
-      switch (version) {
-        case BLOB_ID_V1:
-          result = o1.getPartition().compareTo(o2.getPartition());
-          if (result == 0) {
-            result = ((BlobIdV1) o1).getUuid().compareTo(((BlobIdV1) o2).getUuid());
-          }
-          break;
-        case BLOB_ID_V2:
-          result = ((Byte) o1.getFlag()).compareTo(o2.getFlag());
-          if (result == 0) {
-            result = ((Byte) o1.getDatacenterId()).compareTo(o2.getDatacenterId());
-            if (result == 0) {
-              result = ((Short) o1.getAccountId()).compareTo(o2.getAccountId());
-              if (result == 0) {
-                result = ((Short) o1.getContainerId()).compareTo(o2.getContainerId());
-                if (result == 0) {
-                  result = o1.getPartition().compareTo(o2.getPartition());
-                  if (result == 0) {
-                    result = ((BlobIdV2) o1).getUuid().compareTo(((BlobIdV2) o2).getUuid());
-                  }
-                }
-              }
-            }
-          }
-          break;
-        default:
-          throw new IllegalArgumentException("Unrecognized blobId version " + version);
-      }
-      return result;
-    });
-    assertEquals("Two sorted lists are not equal.", blobIds, blobIdsCopy);
-  }
-
   @Test
   public void testComparisonBetweenV1AndV2() throws Exception {
     for (int i = 0; i < 100; i++) {
-      BlobIdV1 blobIdV1 = (BlobIdV1) getRandomBlobId(BLOB_ID_V1);
-      BlobIdV2 blobIdV2 = (BlobIdV2) getRandomBlobId(BLOB_ID_V2);
+      BlobId blobIdV1 = getRandomBlobId(BLOB_ID_V1);
+      BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
       assertTrue("BlobIdV1 should be less than blobIdv2", blobIdV1.compareTo(blobIdV2) < 0);
     }
   }
@@ -494,28 +449,11 @@ public class BlobIdTest {
     PartitionId partitionId = referenceClusterMap.getWritablePartitionIds().get(random.nextInt(3));
     switch (version) {
       case BLOB_ID_V1:
-        return new BlobIdV1(flag, datacenterId, accountId, containerId, partitionId);
+        return new BlobId(flag, datacenterId, accountId, containerId, partitionId);
       case BLOB_ID_V2:
         return new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
       default:
         throw new Exception("Unrecognized blobId version " + version);
-    }
-  }
-
-  /**
-   * A class that allows getting {@link BlobId#uuid}.
-   */
-  private class BlobIdV1 extends BlobId {
-    BlobIdV1(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
-      super(flag, datacenterId, accountId, containerId, partitionId);
-    }
-
-    /**
-     * Gets the uuid of the blob.
-     * @return The uuid of the blob.
-     */
-    String getUuid() {
-      return uuid;
     }
   }
 
@@ -531,14 +469,6 @@ public class BlobIdTest {
     @Override
     protected short getCurrentVersion() {
       return BLOB_ID_V2;
-    }
-
-    /**
-     * Gets the uuid of the blob.
-     * @return The uuid of the blob.
-     */
-    String getUuid() {
-      return uuid;
     }
   }
 }
