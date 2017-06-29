@@ -38,7 +38,7 @@ public interface AccountService extends Closeable {
 
   /**
    * Gets an {@link Account} by its name.
-   * @param accountName The name of an {@link Account} to get.
+   * @param accountName The name of an {@link Account} to get. Cannot be {@code null}.
    * @return The {@link Account} with the specified name. {@code null} if such an {@link Account} does not exist.
    */
   public Account getAccountByName(String accountName);

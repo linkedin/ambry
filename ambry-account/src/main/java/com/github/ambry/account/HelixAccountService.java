@@ -22,9 +22,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,9 +42,9 @@ import org.slf4j.LoggerFactory;
  * </p>
  * <p>
  *   When a {@link HelixAccountService} starts up, it will automatically fetch a full set of {@link Account} metadata
- *   and store them in the local cache. It also takes a {@link Notifier}, and subscribes to a {@link #ACCOUNT_METADATA_CHANGE_TOPIC}.
+ *   and store them in its local cache. It also takes a {@link Notifier}, and subscribes to a {@link #ACCOUNT_METADATA_CHANGE_TOPIC}.
  *   Each time when receiving a {@link #FULL_ACCOUNT_METADATA_CHANGE_MESSAGE}, it will fetch the updated full
- *   {@link Account} metadata and refresh its local cache. Each time when it successfully updates a collection of
+ *   {@link Account} metadata, and refresh its local cache. After every successful operation for updating a collection of
  *   {@link Account}s, it publishes a {@link #FULL_ACCOUNT_METADATA_CHANGE_MESSAGE} for {@link #ACCOUNT_METADATA_CHANGE_TOPIC}
  *   through the {@link Notifier}.
  * </p>
@@ -63,7 +65,7 @@ import org.slf4j.LoggerFactory;
  *   cannot exceed 1MB.
  * </p>
  */
-public class HelixAccountService implements AccountService {
+class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
   static final String ACCOUNT_METADATA_MAP_KEY = "accountMetadata";
@@ -76,6 +78,7 @@ public class HelixAccountService implements AccountService {
   private final Notifier<String> notifier;
   private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
   private volatile boolean isOpen = false;
+  private final ReentrantLock lock = new ReentrantLock();
 
   /**
    * Constructor. It fetches the full account metadata set and caches locally.
@@ -96,28 +99,30 @@ public class HelixAccountService implements AccountService {
     listener = (topic, message) -> {
       checkOpen();
       logger.trace("Start to process message={} for topic={}", message, topic);
-      boolean noException = true;
       try {
         switch (message) {
           case FULL_ACCOUNT_METADATA_CHANGE_MESSAGE:
-            readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH, false);
+            logger.trace("Start processing message={} for topic={}", message, topic);
+            readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH);
+            logger.trace("Completed processing message={} for topic={}", message, topic);
             break;
-
           default:
-            logger.error("Could not understand message={} for topic={}", message, topic);
             accountServiceMetrics.unRecognizedMessageErrorCount.inc();
+            throw new RuntimeException("Could not understand message=" + message + " for topic=" + topic);
         }
       } catch (Exception e) {
-        noException = false;
         logger.error("Exception occurred when processing message={} for topic={}.", message, topic, e);
-        accountServiceMetrics.processFullAccountMessageErrorCount.inc();
-      }
-      if (noException) {
-        logger.trace("Completed processing message={} for topic={}", message, topic);
+        accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
       }
     };
     notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, listener);
-    readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH, true);
+    try {
+      readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH);
+    } catch (Exception e) {
+      logger.error("Exception occurred when fetching remote account data", e);
+      accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+    }
     isOpen = true;
   }
 
@@ -160,6 +165,8 @@ public class HelixAccountService implements AccountService {
       throw new IllegalArgumentException("accounts cannot be null");
     }
     if (hasDuplicateAccountIdOrName(accounts)) {
+      logger.debug("Duplicate account id or name exist in the accounts to update");
+      accountServiceMetrics.updateAccountErrorCount.inc();
       return false;
     }
     long startTimeMs = System.currentTimeMillis();
@@ -169,14 +176,16 @@ public class HelixAccountService implements AccountService {
     // update operation for all the accounts if any conflict exists. There is a slight chance that the account to update
     // conflicts with the accounts in the local cache, but does not conflict with those in the helixPropertyStore. This
     // will happen if some accounts are updated but the local cache is not refreshed.
-    if (!hasConflictWithCache(accounts)) {
+    if (hasConflictWithCache(accounts)) {
+      logger.debug("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
+      accountServiceMetrics.updateAccountErrorCount.inc();
+    } else {
       hasSucceeded = helixStore.update(FULL_ACCOUNT_METADATA_PATH, currentData -> {
         ZNRecord newRecord;
         if (currentData == null) {
           logger.debug(
               "ZNRecord does not exist on path={} in HelixPropertyStore when updating accounts. Creating a new ZNRecord.",
               FULL_ACCOUNT_METADATA_PATH);
-          accountServiceMetrics.nullZNRecordCount.inc();
           newRecord = new ZNRecord(String.valueOf(ZN_RECORD_ID));
         } else {
           newRecord = currentData;
@@ -184,25 +193,23 @@ public class HelixAccountService implements AccountService {
         Map<String, String> accountMap = newRecord.getMapField(ACCOUNT_METADATA_MAP_KEY);
         if (accountMap == null) {
           logger.debug("AccountMap does not exist in ZNRecord when updating accounts. Creating a new accountMap");
-          accountServiceMetrics.nullAccountMapInZNRecordCount.inc();
           accountMap = new HashMap<>();
         }
         AccountInfoMap remoteAccountInfoMap;
         try {
           remoteAccountInfoMap = new AccountInfoMap(accountMap);
-        } catch (Exception e) {
+        } catch (JSONException e) {
+          // Do not depend on Helix to log, so log the error message here.
           logger.error("Exception occurred when building AccountInfoMap from accountMap={}", accountMap, e);
-          accountServiceMetrics.buildAccountInfoMapFromRemoteRecordErrorCount.inc();
-          throw e;
+          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+          throw new IllegalStateException("Exception occurred when building AccountInfoMap from accountMap", e);
         }
         // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
-        // be caught by Helix and eventually helixStore#update will return false.
+        // be caught by Helix and helixStore#update will return false.
         if (hasConflictingAccount(accounts, remoteAccountInfoMap)) {
-          String message =
-              "Updating accounts failed because one or more accounts to update conflict with accounts in helix property store";
+          String message = "Updating accounts failed because one account to update conflicts with existing accounts";
           // Do not depend on Helix to log, so log the error message here.
           logger.error(message);
-          accountServiceMetrics.conflictWithRemoteRecordErrorCount.inc();
           throw new IllegalArgumentException(message);
         } else {
           for (Account account : accounts) {
@@ -213,7 +220,6 @@ public class HelixAccountService implements AccountService {
                   + account.getId() + " accountName=" + account.getName();
               // Do not depend on Helix to log, so log the error message here.
               logger.error(message, e);
-              accountServiceMetrics.putAccountInAccountMapErrorCount.inc();
               throw new IllegalStateException(message, e);
             }
           }
@@ -224,16 +230,17 @@ public class HelixAccountService implements AccountService {
     }
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     if (hasSucceeded) {
-      logger.trace("Completed updating accounts, took time={}ms", timeForUpdate);
-      accountServiceMetrics.accountUpdateTimeInMs.update(timeForUpdate);
+      logger.trace("Completed updating accounts, took time={} ms", timeForUpdate);
+      accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
+      // notify account changes after successfully update.
       if (notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE)) {
         logger.trace("Successfully published message for account metadata change");
       } else {
-        logger.error("Failed to publish message for account metadata change");
-        accountServiceMetrics.publishMessageErrorCount.inc();
+        logger.error("Failed to send notification for account metadata change");
+        accountServiceMetrics.notifyAccountDataChangeErrorCount.inc();
       }
     } else {
-      logger.error("Failed updating accounts, took time={}ms", timeForUpdate);
+      logger.error("Failed updating accounts={}", accounts);
       accountServiceMetrics.updateAccountErrorCount.inc();
     }
     return hasSucceeded;
@@ -244,7 +251,6 @@ public class HelixAccountService implements AccountService {
     if (isOpen) {
       try {
         isOpen = false;
-        accountInfoMapRef.set(null);
         helixStore.stop();
       } catch (Exception e) {
         logger.error("Exception occurred when closing HelixAccountService.", e);
@@ -257,46 +263,31 @@ public class HelixAccountService implements AccountService {
    *
    * @param pathToFullAccountMetadata The path to read the full set of {@link Account} metadata.
    */
-  private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata, boolean shouldAllowZeroAccount) {
-    long startTimeMs = System.currentTimeMillis();
-    logger.trace("Start reading full account metadata set from path={}", pathToFullAccountMetadata);
-    ZNRecord zNRecord = helixStore.get(pathToFullAccountMetadata, null, AccessOption.PERSISTENT);
-    if (zNRecord == null) {
-      accountServiceMetrics.nullZNRecordCount.inc();
-      if (shouldAllowZeroAccount) {
-        logger.trace("The ZNRecord to read does not exist on path={}, clearing local cache", pathToFullAccountMetadata);
+  private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata) throws JSONException {
+    lock.lock();
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      logger.trace("Start reading full account metadata set from path={}", pathToFullAccountMetadata);
+      ZNRecord zNRecord = helixStore.get(pathToFullAccountMetadata, null, AccessOption.PERSISTENT);
+      logger.trace("Fetched ZNRecord from path={}, took time={} ms", pathToFullAccountMetadata,
+          System.currentTimeMillis() - startTimeMs);
+      if (zNRecord == null) {
+        logger.debug("The ZNRecord to read does not exist on path={}", pathToFullAccountMetadata);
       } else {
-        logger.error("Zero account on ZNRecord is not allowed, but ZNRecord to read does not exist on path={}",
-            pathToFullAccountMetadata);
-        accountServiceMetrics.unExpectedNullZNRecordErrorCount.inc();
-      }
-    } else {
-      Map<String, String> remoteAccountMap = zNRecord.getMapField(ACCOUNT_METADATA_MAP_KEY);
-      if (remoteAccountMap == null) {
-        accountServiceMetrics.nullAccountMapInZNRecordCount.inc();
-        if (shouldAllowZeroAccount) {
+        Map<String, String> remoteAccountMap = zNRecord.getMapField(ACCOUNT_METADATA_MAP_KEY);
+        if (remoteAccountMap == null) {
           logger.debug("ZNRecord={} to read on path={} does not have a simple map with key={}", zNRecord,
               pathToFullAccountMetadata, ACCOUNT_METADATA_MAP_KEY);
         } else {
-          logger.error(
-              "Zero account on ZNRecord is not allowed, but ZNRecord={} to read on path={} does not have a simple map with key={}",
-              zNRecord, pathToFullAccountMetadata, ACCOUNT_METADATA_MAP_KEY);
-          accountServiceMetrics.unExpectedNullAccountMapInZNRecordErrorCount.inc();
-        }
-      } else {
-        AccountInfoMap newAccountInfoMap = null;
-        try {
-          newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
-        } catch (Exception e) {
-          logger.error("Exception occurred when building AccountInfoMap from accountMap={}", remoteAccountMap, e);
-          accountServiceMetrics.buildAccountInfoMapFromRemoteRecordErrorCount.inc();
-        }
-        if (newAccountInfoMap != null) {
+          logger.trace("Start parsing remote account data.");
+          AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
           accountInfoMapRef.set(newAccountInfoMap);
-          logger.trace("Completed fetching full account metadata set from path={}, took time={}ms",
-              pathToFullAccountMetadata, System.currentTimeMillis() - startTimeMs);
+          logger.trace("Completed updating local cache with number={} accounts",
+              newAccountInfoMap.getAccounts().size());
         }
       }
+    } finally {
+      lock.unlock();
     }
   }
 
@@ -356,25 +347,23 @@ public class HelixAccountService implements AccountService {
       // @todo account.generationId() = accountInfoMap.getById(account.getId()).generationId()+1
       // @todo the generationId will be added to Account class.
 
-      // check for case D in the javadoc of AccountService
+      // check for case D described in the javadoc of AccountService
       if (remoteAccount == null && currentAccounts.containsName(account.getName())) {
         Account conflictingAccount = currentAccounts.getAccountByName(account.getName());
         logger.error(
             "Account to update with accountId={} accountName={} conflicts with an existing record with accountId={} accountName={}",
             account.getId(), account.getName(), conflictingAccount.getId(), conflictingAccount.getName());
-        accountServiceMetrics.caseDConflictErrorCount.inc();
         res = true;
         break;
       }
 
-      // check for case E in the javadoc of AccountService
+      // check for case E described in the javadoc of AccountService
       if (remoteAccount != null && !account.getName().equals(remoteAccount.getName()) && currentAccounts.containsName(
           account.getName())) {
         Account conflictingAccount = currentAccounts.getAccountByName(account.getName());
         logger.error(
             "Account to update with accountId={} accountName={} conflicts with an existing record with accountId={} accountName={}",
             account.getId(), account.getName(), conflictingAccount.getId(), conflictingAccount.getName());
-        accountServiceMetrics.caseEConflictErrorCount.inc();
         res = true;
         break;
       }
@@ -407,7 +396,7 @@ public class HelixAccountService implements AccountService {
     private final Map<Short, Account> idToAccountMap;
 
     /**
-     * Constructor.
+     * Constructor for an empty {@code AccountInfoMap}.
      */
     private AccountInfoMap() {
       nameToAccountMap = new HashMap<>();
@@ -428,53 +417,40 @@ public class HelixAccountService implements AccountService {
      *   name. Once an {@code AccountInfoMap} is constructed, it is guaranteed there is no duplicate id or name.
      * </p>
      * @param accountMap A map of {@link Account}s in the form of (accountIdString, accountJSONString).
+     * @throws JSONException If parsing account data in json fails.
      */
-    private AccountInfoMap(Map<String, String> accountMap) {
+    private AccountInfoMap(Map<String, String> accountMap) throws JSONException {
       nameToAccountMap = new HashMap<>();
       idToAccountMap = new HashMap<>();
-      String errorMessage = null;
       for (Map.Entry<String, String> entry : accountMap.entrySet()) {
         String idKey = entry.getKey();
         String valueString = entry.getValue();
         Account account;
-        try {
-          JSONObject accountJson = new JSONObject(valueString);
-          if (idKey == null) {
-            errorMessage = "Invalid account record when reading accountMap in ZNRecord because idKey=null";
-            accountServiceMetrics.invalidRecordErrorCount.inc();
-            accountServiceMetrics.nullIdKeyErrorCount.inc();
-            break;
-          }
-          account = Account.fromJson(accountJson);
-          if (account.getId() != Short.valueOf(idKey)) {
-            errorMessage =
-                "Invalid account record when reading accountMap in ZNRecord because idKey and accountId do not match. idKey="
-                    + idKey + " accountId=" + account.getId();
-            accountServiceMetrics.invalidRecordErrorCount.inc();
-            accountServiceMetrics.unMatchedIdKeyAndAccountErrorCount.inc();
-            break;
-          }
-        } catch (Exception e) {
-          String message = "Invalid account record when reading accountMap in ZNRecord. key=" + idKey + " valueString="
-              + valueString;
-          accountServiceMetrics.invalidRecordErrorCount.inc();
-          throw new IllegalStateException(message, e);
+        JSONObject accountJson = new JSONObject(valueString);
+        if (idKey == null) {
+          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+          throw new IllegalStateException(
+              "Invalid account record when reading accountMap in ZNRecord because idKey=null");
+        }
+        account = Account.fromJson(accountJson);
+        if (account.getId() != Short.valueOf(idKey)) {
+          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+          throw new IllegalStateException(
+              "Invalid account record when reading accountMap in ZNRecord because idKey and accountId do not match. idKey="
+                  + idKey + " accountId=" + account.getId());
         }
         // only checks name conflict. For accounts with the same id, it will simply have the latter one to override
         // the previous one.
         Account conflictingAccount = nameToAccountMap.get(account.getName());
         if (conflictingAccount != null) {
-          errorMessage = "Duplicate account name exists. id=" + account.getId() + " name=" + account.getName()
-              + " conflicts with a previously added id=" + conflictingAccount.getId() + " name="
-              + conflictingAccount.getName();
-          accountServiceMetrics.conflictInAccountInfoMapErrorCount.inc();
-          break;
+          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+          throw new IllegalStateException(
+              "Duplicate account name exists. id=" + account.getId() + " name=" + account.getName()
+                  + " conflicts with a previously added id=" + conflictingAccount.getId() + " name="
+                  + conflictingAccount.getName());
         }
         idToAccountMap.put(account.getId(), account);
         nameToAccountMap.put(account.getName(), account);
-      }
-      if (errorMessage != null) {
-        throw new IllegalStateException(errorMessage);
       }
     }
 

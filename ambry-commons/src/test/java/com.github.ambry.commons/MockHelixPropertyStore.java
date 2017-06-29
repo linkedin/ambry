@@ -112,7 +112,6 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
     if (exceptionDuringUpdater) {
       return false;
     } else {
-      System.out.println("Updating to store path: " + path + ", record: " + newRecord.toString());
       return setAndNotify(path, newRecord);
     }
   }

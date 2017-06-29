@@ -100,7 +100,7 @@ public class HelixAccountServiceTest {
   public void init() throws Exception {
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
-    notifier = new MockNotifier();
+    notifier = new MockNotifier<>();
   }
 
   /**

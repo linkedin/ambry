@@ -22,18 +22,20 @@ import java.util.Set;
 
 
 /**
- * A mock implementation of {@link Notifier}.
+ * A mock implementation of {@link Notifier}. The methods in this class are synchronous, and this class is
+ * not thread-safe and supposed to be called from a single thread.
+ * @param <T> The type of message.
  */
-public class MockNotifier implements Notifier<String> {
+public class MockNotifier<T> implements Notifier<T> {
 
-  private final Map<String, Set<TopicListener<String>>> topicToListenersMap = new HashMap<>();
+  private final Map<String, Set<TopicListener<T>>> topicToListenersMap = new HashMap<>();
 
   @Override
-  public boolean publish(String topic, String message) {
+  public boolean publish(String topic, T message) {
     if (topic == null || message == null) {
       throw new IllegalArgumentException("topic or message cannot be null.");
     }
-    Set<TopicListener<String>> listeners = topicToListenersMap.get(topic);
+    Set<TopicListener<T>> listeners = topicToListenersMap.get(topic);
     if (listeners != null) {
       for (TopicListener listener : listeners) {
         listener.onMessage(topic, message);
@@ -43,12 +45,12 @@ public class MockNotifier implements Notifier<String> {
   }
 
   @Override
-  public void subscribe(String topic, TopicListener<String> listener) {
+  public void subscribe(String topic, TopicListener<T> listener) {
     if (topic == null || listener == null) {
       throw new IllegalArgumentException("topic or listener cannot be null.");
     }
 
-    Set<TopicListener<String>> listeners = topicToListenersMap.get(topic);
+    Set<TopicListener<T>> listeners = topicToListenersMap.get(topic);
     if (listeners == null) {
       listeners = new HashSet<>();
     }
@@ -57,11 +59,11 @@ public class MockNotifier implements Notifier<String> {
   }
 
   @Override
-  public void unsubscribe(String topic, TopicListener<String> listener) {
+  public void unsubscribe(String topic, TopicListener<T> listener) {
     if (topic == null || listener == null) {
       throw new IllegalArgumentException("topic or listener cannot be null.");
     }
-    Set<TopicListener<String>> listeners = topicToListenersMap.get(topic);
+    Set<TopicListener<T>> listeners = topicToListenersMap.get(topic);
     if (listeners != null) {
       listeners.remove(listener);
     }

@@ -41,7 +41,7 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
   private final Notifier<String> notifier;
 
   /**
-   * Constructor
+   * Constructor.
    * @param verifiableProperties The properties to get a {@link HelixAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
    * @param notifier The {@link Notifier} used to get a {@link HelixAccountService}. Cannot be {@code null}.
@@ -71,8 +71,8 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
         subscribedPaths);
     HelixAccountService helixAccountService = new HelixAccountService(helixStore, accountServiceMetrics, notifier);
     long spentTimeMs = System.currentTimeMillis() - startTimeMs;
-    logger.info("HelixAccountService started, took {}ms", spentTimeMs);
-    this.accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
+    logger.info("HelixAccountService started, took {} ms", spentTimeMs);
+    accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
     return helixAccountService;
   }
 }
