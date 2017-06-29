@@ -85,7 +85,7 @@ public class BlobId extends StoreKey {
   private final Short accountId;
   private final Short containerId;
   private final PartitionId partitionId;
-  private final String uuid;
+  protected final String uuid;
 
   /**
    * Constructs a new BlobId by taking arguments for the required fields. The constructed BlobId will be serialized
@@ -114,14 +114,12 @@ public class BlobId extends StoreKey {
         this.accountId = UNKNOWN_ACCOUNT_ID;
         this.containerId = UNKNOWN_CONTAINER_ID;
         break;
-
       case BLOB_ID_V2:
         this.flag = flag;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
         break;
-
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -148,14 +146,12 @@ public class BlobId extends StoreKey {
         accountId = UNKNOWN_ACCOUNT_ID;
         containerId = UNKNOWN_CONTAINER_ID;
         break;
-
       case BLOB_ID_V2:
         flag = stream.readByte();
         datacenterId = stream.readByte();
         accountId = stream.readShort();
         containerId = stream.readShort();
         break;
-
       default:
         throw new IllegalArgumentException("blobId version " + version + " not supported.");
     }
@@ -202,11 +198,9 @@ public class BlobId extends StoreKey {
     switch (version) {
       case BLOB_ID_V1:
         return sizeForBlobIdV1;
-
       case BLOB_ID_V2:
         return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
-
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -243,7 +237,7 @@ public class BlobId extends StoreKey {
    * when the blobId was formed, it will return {@link ClusterMapUtils#UNKNOWN_DATACENTER_ID}.
    * @return The id of the datacenter where this blob was originally posted.
    */
-  public short getDatacenterId() {
+  public byte getDatacenterId() {
     return datacenterId;
   }
 
@@ -252,7 +246,7 @@ public class BlobId extends StoreKey {
    * will return {@link #DEFAULT_FLAG}.
    * @return The flag of the blobId.
    */
-  public short getFlag() {
+  public byte getFlag() {
     return flag;
   }
 
@@ -263,14 +257,12 @@ public class BlobId extends StoreKey {
     switch (version) {
       case BLOB_ID_V1:
         break;
-
       case BLOB_ID_V2:
         idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);
         break;
-
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -293,14 +285,12 @@ public class BlobId extends StoreKey {
     switch (version) {
       case BLOB_ID_V1:
         break;
-
       case BLOB_ID_V2:
         sb.append(":").append(flag);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
         sb.append(":").append(containerId);
         break;
-
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -317,24 +307,35 @@ public class BlobId extends StoreKey {
   @Override
   public int compareTo(StoreKey o) {
     BlobId other = (BlobId) o;
-
     int result = version.compareTo(other.version);
     if (result == 0) {
-      result = flag.compareTo(other.flag);
-      if (result == 0) {
-        result = datacenterId.compareTo(other.datacenterId);
-        if (result == 0) {
-          result = accountId.compareTo(other.accountId);
+      switch (version) {
+        case BLOB_ID_V1:
+          result = partitionId.compareTo(other.partitionId);
           if (result == 0) {
-            result = containerId.compareTo(other.containerId);
+            result = uuid.compareTo(other.uuid);
+          }
+          break;
+        case BLOB_ID_V2:
+          result = flag.compareTo(other.flag);
+          if (result == 0) {
+            result = datacenterId.compareTo(other.datacenterId);
             if (result == 0) {
-              result = partitionId.compareTo(other.partitionId);
+              result = accountId.compareTo(other.accountId);
               if (result == 0) {
-                result = uuid.compareTo(other.uuid);
+                result = containerId.compareTo(other.containerId);
+                if (result == 0) {
+                  result = partitionId.compareTo(other.partitionId);
+                  if (result == 0) {
+                    result = uuid.compareTo(other.uuid);
+                  }
+                }
               }
             }
           }
-        }
+          break;
+        default:
+          throw new IllegalArgumentException("Unrecognized blobId version " + version);
       }
     }
     return result;
@@ -348,28 +349,8 @@ public class BlobId extends StoreKey {
     if (!(o instanceof BlobId)) {
       return false;
     }
-
     BlobId blobId = (BlobId) o;
-
-    if (!version.equals(blobId.version)) {
-      return false;
-    }
-    if (!flag.equals(blobId.flag)) {
-      return false;
-    }
-    if (!datacenterId.equals(blobId.datacenterId)) {
-      return false;
-    }
-    if (!accountId.equals(blobId.accountId)) {
-      return false;
-    }
-    if (!containerId.equals(blobId.containerId)) {
-      return false;
-    }
-    if (!partitionId.equals(blobId.partitionId)) {
-      return false;
-    }
-    return uuid.equals(blobId.uuid);
+    return compareTo(blobId) == 0;
   }
 
   @Override

@@ -19,8 +19,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -135,6 +137,63 @@ public class BlobIdTest {
   }
 
   /**
+   * Tests {@link BlobId#compareTo(StoreKey)} method. Especially, it tests if the method will perform the same for
+   * blobId v1. This will ensure no changed behavior when sorting existing blobIds in v1.
+   * @throws IOException
+   */
+  @Test
+  public void testComparision() throws Exception {
+    List<BlobId> blobIds = new ArrayList<>();
+    for (int i = 0; i < 100; i++) {
+      blobIds.add(getRandomBlobId(version));
+    }
+    Collections.sort(blobIds);
+    List<BlobId> blobIdsCopy = new ArrayList<>(blobIds);
+    Collections.sort(blobIdsCopy, (o1, o2) -> {
+      int result;
+      switch (version) {
+        case BLOB_ID_V1:
+          result = o1.getPartition().compareTo(o2.getPartition());
+          if (result == 0) {
+            result = ((BlobIdV1) o1).getUuid().compareTo(((BlobIdV1) o2).getUuid());
+          }
+          break;
+        case BLOB_ID_V2:
+          result = ((Byte) o1.getFlag()).compareTo(o2.getFlag());
+          if (result == 0) {
+            result = ((Byte) o1.getDatacenterId()).compareTo(o2.getDatacenterId());
+            if (result == 0) {
+              result = ((Short) o1.getAccountId()).compareTo(o2.getAccountId());
+              if (result == 0) {
+                result = ((Short) o1.getContainerId()).compareTo(o2.getContainerId());
+                if (result == 0) {
+                  result = o1.getPartition().compareTo(o2.getPartition());
+                  if (result == 0) {
+                    result = ((BlobIdV2) o1).getUuid().compareTo(((BlobIdV2) o2).getUuid());
+                  }
+                }
+              }
+            }
+          }
+          break;
+        default:
+          throw new IllegalArgumentException("Unrecognized blobId version " + version);
+      }
+      return result;
+    });
+    assertEquals("Two sorted lists are not equal.", blobIds, blobIdsCopy);
+  }
+
+  @Test
+  public void testComparisonBetweenV1AndV2() throws Exception {
+    for (int i = 0; i < 100; i++) {
+      BlobIdV1 blobIdV1 = (BlobIdV1) getRandomBlobId(BLOB_ID_V1);
+      BlobIdV2 blobIdV2 = (BlobIdV2) getRandomBlobId(BLOB_ID_V2);
+      assertTrue("BlobIdV1 should be less than blobIdv2", blobIdV1.compareTo(blobIdV2) < 0);
+    }
+  }
+
+  /**
    * Makes a blobId-like string in the same way as used in blobId serialization, and then deserialize from the
    * string to construct blobId object.
    * @param version The version of BlobId.
@@ -161,12 +220,10 @@ public class BlobIdTest {
         srcBlobIdStr = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId).getID();
         break;
-
       case BLOB_ID_V2:
         srcBlobIdStr = new BlobIdV2(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId).getID();
         break;
-
       default:
         throw new IllegalArgumentException("invalid version number blob" + version);
     }
@@ -244,7 +301,6 @@ public class BlobIdTest {
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
         break;
-
       case BLOB_ID_V2:
         idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuidLike.length();
         idBuf = ByteBuffer.allocate(idLength);
@@ -254,7 +310,6 @@ public class BlobIdTest {
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);
         break;
-
       default:
         idLength = 2 + partitionId.getBytes().length + 4 + uuidLike.length();
         idBuf = ByteBuffer.allocate(idLength);
@@ -316,13 +371,11 @@ public class BlobIdTest {
       case BLOB_ID_V1:
         blobId = new BlobId(flag, datacenterId, accountId, containerId, partitionId);
         break;
-
       case BLOB_ID_V2:
         blobId = new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
         break;
-
       default:
-        throw new IllegalArgumentException("Invalid version number blob" + version);
+        throw new Exception("Invalid version number blob" + version);
     }
     assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
     assertBlobIdFieldValues(version, blobId, flag, datacenterId, accountId, containerId, partitionId);
@@ -359,13 +412,14 @@ public class BlobIdTest {
         assertEquals("Wrong container id in blobId: " + blobId, Container.UNKNOWN_CONTAINER_ID,
             blobId.getContainerId());
         break;
-
       case BLOB_ID_V2:
         assertEquals("Wrong flag in blobId: " + blobId, flag, blobId.getFlag());
         assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
         assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
         break;
+      default:
+        fail("Unrecognized version");
     }
   }
 
@@ -395,12 +449,10 @@ public class BlobIdTest {
         blobId = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId);
         break;
-
       case BLOB_ID_V2:
         blobId = new BlobIdV2(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId);
         break;
-
       default:
         fail("Unrecognized blob version number");
         return;
@@ -426,7 +478,50 @@ public class BlobIdTest {
   }
 
   /**
-   * A class that is used to test when {@link BlobId#CURRENT_VERSION} is set to {@link BlobId#BLOB_ID_V2}.
+   * Constructs a {@link BlobId} with random fields and the given version.
+   * @param version The version of {@link BlobId} to build
+   * @return A {@link BlobId} with random fields and the given version.
+   * @throws Exception
+   */
+  private BlobId getRandomBlobId(short version) throws Exception {
+    byte[] bytes = new byte[2];
+    random.nextBytes(bytes);
+    byte flag = bytes[0];
+    random.nextBytes(bytes);
+    byte datacenterId = bytes[0];
+    short accountId = getRandomShort(random);
+    short containerId = getRandomShort(random);
+    PartitionId partitionId = referenceClusterMap.getWritablePartitionIds().get(random.nextInt(3));
+    switch (version) {
+      case BLOB_ID_V1:
+        return new BlobIdV1(flag, datacenterId, accountId, containerId, partitionId);
+      case BLOB_ID_V2:
+        return new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
+      default:
+        throw new Exception("Unrecognized blobId version " + version);
+    }
+  }
+
+  /**
+   * A class that allows getting {@link BlobId#uuid}.
+   */
+  private class BlobIdV1 extends BlobId {
+    BlobIdV1(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
+      super(flag, datacenterId, accountId, containerId, partitionId);
+    }
+
+    /**
+     * Gets the uuid of the blob.
+     * @return The uuid of the blob.
+     */
+    String getUuid() {
+      return uuid;
+    }
+  }
+
+  /**
+   *  A class that allows getting {@link BlobId#uuid}, and makes {@link BlobId#getCurrentVersion()} to return
+   *  {@link BlobId#BLOB_ID_V2}, which will serialize a blobId to {@link BlobIdV2}.
    */
   private class BlobIdV2 extends BlobId {
     BlobIdV2(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
@@ -436,6 +531,14 @@ public class BlobIdTest {
     @Override
     protected short getCurrentVersion() {
       return BLOB_ID_V2;
+    }
+
+    /**
+     * Gets the uuid of the blob.
+     * @return The uuid of the blob.
+     */
+    String getUuid() {
+      return uuid;
     }
   }
 }
