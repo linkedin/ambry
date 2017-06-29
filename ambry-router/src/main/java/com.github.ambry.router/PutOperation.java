@@ -787,7 +787,9 @@ class PutOperation {
           attemptedPartitionIds.add(partitionId);
         }
         partitionId = getPartitionForPut(attemptedPartitionIds);
-        chunkBlobId = new BlobId(partitionId);
+        chunkBlobId =
+            new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
+                passedInBlobProperties.getContainerId(), partitionId);
         chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),

@@ -28,6 +28,7 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -91,6 +92,11 @@ class StaticClusterManager implements ClusterMap {
   @Override
   public boolean hasDatacenter(String datacenterName) {
     return hardwareLayout.findDatacenter(datacenterName) != null;
+  }
+
+  @Override
+  public byte getLocalDatacenterId() {
+    return UNKNOWN_DATACENTER_ID;
   }
 
   @Override

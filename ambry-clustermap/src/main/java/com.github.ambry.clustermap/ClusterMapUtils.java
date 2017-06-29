@@ -29,6 +29,8 @@ import org.json.JSONObject;
  * A class with clustermap related utility methods for use by other classes.
  */
 public class ClusterMapUtils {
+  // datacenterId == UNKNOWN_DATACENTER_ID indicate datacenterId is not available at the time when this blobId is formed.
+  public static final byte UNKNOWN_DATACENTER_ID = -1;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String REPLICAS_STR = "Replicas";

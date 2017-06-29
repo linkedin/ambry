@@ -167,8 +167,8 @@ public class CompactionPolicyTest {
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);
       }
       verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - TimeUnit.DAYS.toMillis(messageRetentionDays),
-              bestCandidates), blobStore, compactionPolicy);
+          new CompactionDetails(time.milliseconds() - TimeUnit.DAYS.toMillis(messageRetentionDays), bestCandidates),
+          blobStore, compactionPolicy);
     }
   }
 

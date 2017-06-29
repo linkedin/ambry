@@ -102,10 +102,14 @@ public final class ServerTestUtil {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
-      BlobId blobId1 = new BlobId(partitionIds.get(0));
-      BlobId blobId2 = new BlobId(partitionIds.get(0));
-      BlobId blobId3 = new BlobId(partitionIds.get(0));
-      BlobId blobId4 = new BlobId(partitionIds.get(0));
+      BlobId blobId1 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partitionIds.get(0));
+      BlobId blobId2 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partitionIds.get(0));
+      BlobId blobId3 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partitionIds.get(0));
+      BlobId blobId4 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partitionIds.get(0));
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
@@ -170,7 +174,7 @@ public final class ServerTestUtil {
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       ids.add(blobId1);
-      partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+      partitionRequestInfoList = new ArrayList<>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
@@ -188,10 +192,10 @@ public final class ServerTestUtil {
 
       // get blob properties for expired blob
       // 1. With no flag
-      ArrayList<BlobId> idsExpired = new ArrayList<BlobId>();
+      ArrayList<BlobId> idsExpired = new ArrayList<>();
       MockPartitionId partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       idsExpired.add(blobId4);
-      ArrayList<PartitionRequestInfo> partitionRequestInfoListExpired = new ArrayList<PartitionRequestInfo>();
+      ArrayList<PartitionRequestInfo> partitionRequestInfoListExpired = new ArrayList<>();
       PartitionRequestInfo partitionRequestInfoExpired = new PartitionRequestInfo(partitionExpired, idsExpired);
       partitionRequestInfoListExpired.add(partitionRequestInfoExpired);
       GetRequest getRequestExpired =
@@ -203,10 +207,10 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.Blob_Expired, respExpired.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // 2. With Include_Expired flag
-      idsExpired = new ArrayList<BlobId>();
+      idsExpired = new ArrayList<>();
       partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       idsExpired.add(blobId4);
-      partitionRequestInfoListExpired = new ArrayList<PartitionRequestInfo>();
+      partitionRequestInfoListExpired = new ArrayList<>();
       partitionRequestInfoExpired = new PartitionRequestInfo(partitionExpired, idsExpired);
       partitionRequestInfoListExpired.add(partitionRequestInfoExpired);
       getRequestExpired =
@@ -266,7 +270,8 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(partition));
+      ids.add(new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -854,18 +859,28 @@ public final class ServerTestUtil {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       PartitionId partition = clusterMap.getWritablePartitionIds().get(0);
-      BlobId blobId1 = new BlobId(partition);
-      BlobId blobId2 = new BlobId(partition);
-      BlobId blobId3 = new BlobId(partition);
-      BlobId blobId4 = new BlobId(partition);
-      BlobId blobId5 = new BlobId(partition);
-      BlobId blobId6 = new BlobId(partition);
-      BlobId blobId7 = new BlobId(partition);
-      BlobId blobId8 = new BlobId(partition);
-      BlobId blobId9 = new BlobId(partition);
-      BlobId blobId10 = new BlobId(partition);
-      BlobId blobId11 = new BlobId(partition);
-
+      BlobId blobId1 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId2 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId3 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId4 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId5 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId6 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId7 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId8 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId9 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId10 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
+      BlobId blobId11 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), partition);
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
@@ -1014,7 +1029,8 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(mockPartitionId));
+      ids.add(new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
+          properties.getContainerId(), mockPartitionId));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);

@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -214,7 +216,10 @@ public class IndexWritePerformance {
           int indexToUse = new Random().nextInt(indexesWithMetrics.size());
           // Does not matter what partition we use
           PartitionId partition = map.getWritablePartitionIds().get(0);
-          indexesWithMetrics.get(indexToUse).addToIndexRandomData(new BlobId(partition));
+          indexesWithMetrics.get(indexToUse)
+              .addToIndexRandomData(
+                  new BlobId(BlobId.DEFAULT_FLAG, map.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
+                      Container.UNKNOWN_CONTAINER_ID, partition));
           throttler.maybeThrottle(1);
         }
       } catch (Exception e) {

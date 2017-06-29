@@ -227,9 +227,8 @@ public class ReplicationMetrics {
       Counter interColoMetadataExchangeCountPerDC =
           registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-MetadataExchangeCount"));
       interColoMetadataExchangeCount.put(datacenter, interColoMetadataExchangeCountPerDC);
-      Counter interColoReplicationGetRequestCountPerDC =
-          registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter +
-              "-ReplicationGetRequestCount"));
+      Counter interColoReplicationGetRequestCountPerDC = registry.counter(
+          MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationGetRequestCount"));
       interColoReplicationGetRequestCount.put(datacenter, interColoReplicationGetRequestCountPerDC);
       Counter interColoBlobsReplicatedCountPerDC =
           registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationBlobsCount"));

@@ -23,6 +23,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 import static org.junit.Assert.*;
 
 
@@ -55,9 +57,9 @@ public class BlobPropertiesTest {
     final String contentType = "ContentType";
     final int timeToLiveInSeconds = 144;
 
-    short accountId = BlobProperties.LEGACY_ACCOUNT_ID;
-    short containerId = BlobProperties.LEGACY_CONTAINER_ID;
-    short creatorAccountId = BlobProperties.LEGACY_ACCOUNT_ID;
+    short accountId = UNKNOWN_ACCOUNT_ID;
+    short containerId = UNKNOWN_CONTAINER_ID;
+    short creatorAccountId = UNKNOWN_ACCOUNT_ID;
     if (version == BlobPropertiesSerDe.Version2) {
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);

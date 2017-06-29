@@ -336,12 +336,12 @@ public class ServerWritePerformance {
           byte[] usermetadata = new byte[new Random().nextInt(1024)];
           BlobProperties props = new BlobProperties(randomNum, "test");
           ConnectedChannel channel = null;
-
           try {
             List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
-            BlobId blobId = new BlobId(partitionId);
+            BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), props.getAccountId(),
+                props.getContainerId(), partitionId);
             PutRequest putRequest =
                 new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
                     props.getBlobSize(), BlobType.DataBlob);

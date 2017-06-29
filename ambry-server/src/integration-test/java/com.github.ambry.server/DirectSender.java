@@ -48,11 +48,12 @@ class DirectSender implements Runnable {
       byte[] usermetadata, BlobProperties blobProperties, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
     this.channel = channel;
-    blobIds = new ArrayList<BlobId>(totalBlobsToPut);
+    blobIds = new ArrayList<>(totalBlobsToPut);
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
     for (int i = 0; i < totalBlobsToPut; i++) {
       int partitionIndex = new Random().nextInt(partitionIds.size());
-      BlobId blobId = new BlobId(partitionIds.get(partitionIndex));
+      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), blobProperties.getAccountId(),
+          blobProperties.getContainerId(), partitionIds.get(partitionIndex));
       blobIds.add(blobId);
     }
     this.data = data;

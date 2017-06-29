@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-
 import org.junit.Test;
 
 import static com.github.ambry.store.CompactionPolicyTest.*;
@@ -50,8 +49,7 @@ public class DefaultCompactionPolicyTest {
     config = initState.getSecond();
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
-    messageRetentionTimeInMs =
-            TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
+    messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
     compactionPolicy = new DefaultCompactionPolicy(config, time);
   }
 

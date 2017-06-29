@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -338,6 +339,11 @@ class TailoredPeersClusterMap implements ClusterMap {
   @Override
   public boolean hasDatacenter(String datacenterName) {
     throw new IllegalStateException();
+  }
+
+  @Override
+  public byte getLocalDatacenterId() {
+    return ClusterMapUtils.UNKNOWN_DATACENTER_ID;
   }
 
   @Override

@@ -167,6 +167,11 @@ class HelixClusterManager implements ClusterMap {
   }
 
   @Override
+  public byte getLocalDatacenterId() {
+    return UNKNOWN_DATACENTER_ID;
+  }
+
+  @Override
   public AmbryDataNode getDataNodeId(String hostname, int port) {
     return instanceNameToAmbryDataNode.get(getInstanceName(hostname, port));
   }

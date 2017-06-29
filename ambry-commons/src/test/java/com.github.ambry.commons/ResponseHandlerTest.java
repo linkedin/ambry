@@ -36,6 +36,8 @@ import java.util.Set;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.ClusterMapUtils.*;
+
 
 /**
  * Test handler code
@@ -47,7 +49,7 @@ public class ResponseHandlerTest {
     Set<ReplicaEventType> lastReplicaEvents;
 
     public DummyMap() {
-      lastReplicaEvents = new HashSet<ReplicaEventType>();
+      lastReplicaEvents = new HashSet<>();
       lastReplicaID = null;
     }
 
@@ -69,6 +71,11 @@ public class ResponseHandlerTest {
     @Override
     public boolean hasDatacenter(String datacenterName) {
       return false;
+    }
+
+    @Override
+    public byte getLocalDatacenterId() {
+      return UNKNOWN_DATACENTER_ID;
     }
 
     @Override

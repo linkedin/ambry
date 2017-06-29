@@ -218,8 +218,8 @@ public class ServerHardDeleteTest {
   @Test
   public void endToEndTestHardDeletes() throws Exception {
     DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
-    usermetadata = new ArrayList<byte[]>(9);
-    data = new ArrayList<byte[]>(9);
+    usermetadata = new ArrayList<>(9);
+    data = new ArrayList<>(9);
     Random random = new Random();
     for (int i = 0; i < 9; i++) {
       usermetadata.add(new byte[1000 + i]);
@@ -228,7 +228,7 @@ public class ServerHardDeleteTest {
       random.nextBytes(data.get(i));
     }
 
-    properties = new ArrayList<BlobProperties>(9);
+    properties = new ArrayList<>(9);
     properties.add(new BlobProperties(31870, "serviceid1"));
     properties.add(new BlobProperties(31871, "serviceid1"));
     properties.add(new BlobProperties(31872, "serviceid1"));
@@ -241,9 +241,11 @@ public class ServerHardDeleteTest {
 
     List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds();
     PartitionId chosenPartition = partitionIds.get(0);
-    blobIdList = new ArrayList<BlobId>(9);
+    blobIdList = new ArrayList<>(9);
     for (int i = 0; i < 9; i++) {
-      blobIdList.add(new BlobId(chosenPartition));
+      blobIdList.add(
+          new BlobId(BlobId.DEFAULT_FLAG, mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(),
+              properties.get(i).getContainerId(), chosenPartition));
     }
 
     BlockingChannel channel =
@@ -358,8 +360,8 @@ public class ServerHardDeleteTest {
    * @throws Exception
    */
   void getAndVerify(BlockingChannel channel, int blobsCount) throws Exception {
-    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-    ArrayList<BlobId> ids = new ArrayList<BlobId>();
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+    ArrayList<BlobId> ids = new ArrayList<>();
     for (int i = 0; i < blobsCount; i++) {
       ids.add(blobIdList.get(i));
     }
