@@ -21,17 +21,12 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
-import static com.github.ambry.account.Account.*;
-import static com.github.ambry.account.Container.*;
-
 
 /**
  * Delete request to delete blob
  */
 public class DeleteRequest extends RequestOrResponse {
   private final BlobId blobId;
-  private final short accountId;
-  private final short containerId;
   private final long deletionTimeInMs;
   private int sizeSent;
   private final short version;
@@ -39,8 +34,6 @@ public class DeleteRequest extends RequestOrResponse {
   static final short Delete_Request_Version_2 = 2;
   private final static short currentVersion = Delete_Request_Version_1;
 
-  protected static final int ACCOUNT_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
-  protected static final int CONTAINER_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
   protected static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
   /**
@@ -51,8 +44,7 @@ public class DeleteRequest extends RequestOrResponse {
    */
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time,
-        currentVersion);
+    this(correlationId, clientId, blobId, Utils.Infinite_Time, currentVersion);
   }
 
   /**
@@ -60,13 +52,10 @@ public class DeleteRequest extends RequestOrResponse {
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
-   * @param accountId accountId of the blobId being requested
-   * @param containerId containerId of the blobId being requested
    * @param deletionTimeInMs deletion time of the blob in ms
    */
-  public DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
-      long deletionTimeInMs) {
-    this(correlationId, clientId, blobId, accountId, containerId, deletionTimeInMs, currentVersion);
+  public DeleteRequest(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs) {
+    this(correlationId, clientId, blobId, deletionTimeInMs, currentVersion);
   }
 
   /**
@@ -74,18 +63,13 @@ public class DeleteRequest extends RequestOrResponse {
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
-   * @param accountId accountId of the blobId being requested
-   * @param containerId containerId of the blobId being requested
    * @param deletionTimeInMs deletion time of the blob in ms
    * @param version version of the {@link DeleteRequest}
    */
-  protected DeleteRequest(int correlationId, String clientId, BlobId blobId, short accountId, short containerId,
-      long deletionTimeInMs, short version) {
+  protected DeleteRequest(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs, short version) {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
     this.version = version;
     this.blobId = blobId;
-    this.accountId = accountId;
-    this.containerId = containerId;
     this.deletionTimeInMs = deletionTimeInMs;
     sizeSent = 0;
   }
@@ -110,8 +94,6 @@ public class DeleteRequest extends RequestOrResponse {
       writeHeader();
       bufferToSend.put(blobId.toBytes());
       if (version == Delete_Request_Version_2) {
-        bufferToSend.putShort(accountId);
-        bufferToSend.putShort(containerId);
         bufferToSend.putLong(deletionTimeInMs);
       }
       bufferToSend.flip();
@@ -133,11 +115,11 @@ public class DeleteRequest extends RequestOrResponse {
   }
 
   public short getAccountId() {
-    return accountId;
+    return blobId.getAccountId();
   }
 
   public short getContainerId() {
-    return containerId;
+    return blobId.getContainerId();
   }
 
   public long getDeletionTimeInMs() {
@@ -149,10 +131,6 @@ public class DeleteRequest extends RequestOrResponse {
     // header + blobId
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
     if (version == Delete_Request_Version_2) {
-      // accountId
-      sizeInBytes += ACCOUNT_ID_FIELD_SIZE_IN_BYTES;
-      // containerId
-      sizeInBytes += CONTAINER_ID_FIELD_SIZE_IN_BYTES;
       // deletion time
       sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
     }
@@ -166,8 +144,8 @@ public class DeleteRequest extends RequestOrResponse {
     sb.append("BlobID=").append(blobId);
     sb.append(", ").append("ClientId=").append(clientId);
     sb.append(", ").append("CorrelationId=").append(correlationId);
-    sb.append(", ").append("AccountId=").append(accountId);
-    sb.append(", ").append("ContainerId=").append(containerId);
+    sb.append(", ").append("AccountId=").append(blobId.getAccountId());
+    sb.append(", ").append("ContainerId=").append(blobId.getContainerId());
     sb.append(", ").append("DeletionTimeInMs=").append(deletionTimeInMs);
     sb.append("]");
     return sb.toString();
@@ -193,10 +171,8 @@ public class DeleteRequest extends RequestOrResponse {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       BlobId id = new BlobId(stream, map);
-      short accountId = stream.readShort();
-      short containerId = stream.readShort();
       long deletionTimeInMs = stream.readLong();
-      return new DeleteRequest(correlationId, clientId, id, accountId, containerId, deletionTimeInMs);
+      return new DeleteRequest(correlationId, clientId, id, deletionTimeInMs);
     }
   }
 }
