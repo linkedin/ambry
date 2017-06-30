@@ -67,11 +67,7 @@ class AmbrySecurityService implements SecurityService {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
       }
-      AclService.AccessDecision accessDecision = aclService.hasAccess(null, null, null);
-      if (accessDecision != AclService.AccessDecision.GRANT) {
-        exception = new RestServiceException("Access denied by ACL service. access decision: " + accessDecision,
-            RestServiceErrorCode.Unauthorized);
-      } else {
+      if (aclService.hasAccess(null, null, null)) {
         RestMethod restMethod = restRequest.getRestMethod();
         switch (restMethod) {
           case GET:
@@ -88,6 +84,8 @@ class AmbrySecurityService implements SecurityService {
             }
             break;
         }
+      } else {
+        exception = new RestServiceException("Access denied by ACL service.", RestServiceErrorCode.Unauthorized);
       }
     }
     FutureResult<Void> futureResult = new FutureResult<Void>();

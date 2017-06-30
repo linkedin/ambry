@@ -28,11 +28,11 @@ class NoOpAclService implements AclService<Object> {
    * @param principal the requester principal (identity).
    * @param resource
    * @param operation the {@link Operation} to perform on the resource.
-   * @return {@link AccessDecision#GRANT}
+   * @return {@code true}
    */
   @Override
-  public AccessDecision hasAccess(Object principal, Resource resource, Operation operation) {
-    return AccessDecision.GRANT;
+  public boolean hasAccess(Object principal, Resource resource, Operation operation) {
+    return true;
   }
 
   @Override

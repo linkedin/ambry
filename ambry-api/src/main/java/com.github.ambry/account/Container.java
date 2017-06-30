@@ -49,7 +49,7 @@ import org.json.JSONObject;
  *  {@link AccountBuilder}.
  *  </p>
  */
-public class Container implements AclService.Resource {
+public class Container {
   // containerId == UNKNOWN_CONTAINER_ID indicate containerId is not available at the time when this blobId is formed.
   public static final short UNKNOWN_CONTAINER_ID = -1;
   // static variables
@@ -62,7 +62,6 @@ public class Container implements AclService.Resource {
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
-  private static final String ACL_RESOURCE_TYPE = "Container";
   // container field variables
   private final Short id;
   private final String name;
@@ -180,20 +179,6 @@ public class Container implements AclService.Resource {
     metadata.put(IS_PRIVATE_KEY, isPrivate);
     metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
     return metadata;
-  }
-
-  @Override
-  public String getResourceType() {
-    return ACL_RESOURCE_TYPE;
-  }
-
-  /**
-   * {@inheritDoc}
-   * @return a unique identifier for this container: {@code {parent-account-id}_{container-id}}
-   */
-  @Override
-  public String getResourceId() {
-    return getParentAccountId() + "_" + getId();
   }
 
   /**

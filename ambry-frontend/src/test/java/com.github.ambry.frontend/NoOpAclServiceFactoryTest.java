@@ -24,11 +24,10 @@ import static org.junit.Assert.*;
 public class NoOpAclServiceFactoryTest {
   @Test
   public void instantiationTest() throws Exception {
-    AclServiceFactory factory = new NoOpAclServiceFactory(null, null);
-    AclService aclService = factory.getAclService();
+    AclServiceFactory<Object> factory = new NoOpAclServiceFactory(null, null);
+    AclService<Object> aclService = factory.getAclService();
     assertTrue("Wrong type of AclService from factory", aclService instanceof NoOpAclService);
-    assertEquals("access should always be granted", AclService.AccessDecision.GRANT,
-        aclService.hasAccess(null, null, null));
+    assertTrue("access should always be granted", aclService.hasAccess(null, null, null));
     // ensure that none of these methods throw exceptions.
     aclService.allowAccess(null, null, null);
     aclService.revokeAccess(null, null, null);

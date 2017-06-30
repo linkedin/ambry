@@ -34,7 +34,7 @@ public interface AclService<P> {
    * @param operation the {@link Operation} to perform on the resource.
    * @return an {@link AccessDecision} for the principal performing the specified operation on the target resource.
    */
-  AccessDecision hasAccess(P principal, Resource resource, Operation operation);
+  boolean hasAccess(P principal, Resource resource, Operation operation);
 
   /**
    * Allow the provided principal to perform an {@link Operation} on a {@link Resource}.
@@ -53,50 +53,30 @@ public interface AclService<P> {
   void revokeAccess(P principal, Resource resource, Operation operation);
 
   /**
-   * Represents an access decision.
-   */
-  enum AccessDecision {
-    /**
-     * Access to a resource should be granted.
-     */
-    GRANT,
-
-    /**
-     * Access to a resource should be denied.
-     */
-    DENY
-  }
-
-  /**
    * The type of operation to perform on a {@link Resource}.
    */
   enum Operation {
     /**
-     * Read content from a resource. For example, get a blob in a container.
-     */
-    READ_DATA,
-
-    /**
      * Create new content within a resource. For example, put a new blob in a container.
      */
-    CREATE_DATA,
+    CREATE,
+
+    /**
+     * Read content from a resource. For example, get a blob in a container.
+     */
+    READ,
+
+    /**
+     * Update existing content within a resource.
+     * For example, mutate a blob in a container (note: this is not something currently supported by Ambry).
+     */
+    UPDATE,
 
     /**
      * Delete existing content from a resource. For example, delete a blob from a container.
      */
-    DELETE_DATA,
+    DELETE,
 
-    /**
-     * Read the metadata associated with the resource itself. For example, one might want to read container properties
-     * such as container description.
-     */
-    READ_METADATA,
-
-    /**
-     * Modify the metadata associated with the resource itself. For example, one might want to modify container
-     * properties such as container description.
-     */
-    UPDATE_METADATA
   }
 
   /**
