@@ -395,7 +395,7 @@ class BlobStoreStats implements StoreStats, Closeable {
           TimeUnit.MILLISECONDS);
       indexSegmentCount++;
       if (indexSegmentCount == 1 || indexSegmentCount % 10 == 0) {
-        logger.info("CompactionStats: Index segment {} processing complete (on-demand scanning) for store {}",
+        logger.info("Compaction Stats: Index segment {} processing complete (on-demand scanning) for store {}",
             indexSegment.getFile().getName(), storeId);
       }
     }
@@ -897,8 +897,8 @@ class BlobStoreStats implements StoreStats, Closeable {
      */
     private void processIndexSegmentEntriesBackward(IndexSegment indexSegment, List<IndexEntry> indexEntries,
         Map<StoreKey, Long> deletedKeys) throws StoreException {
-      logger.trace("Processing index entries backward by IndexScanner for segment {} for store {}", indexSegment,
-          storeId);
+      logger.trace("Processing index entries backward by IndexScanner for segment {} for store {}",
+          indexSegment.getFile().getName(), storeId);
       // valid index entries wrt container reference time
       List<IndexEntry> validIndexEntries =
           getValidIndexEntries(indexSegment, indexEntries, newScanResults.containerForecastStartTimeMs, deletedKeys);
