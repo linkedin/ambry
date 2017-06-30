@@ -15,12 +15,14 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 
 
 /**
@@ -49,8 +51,8 @@ public class DeleteRequest extends RequestOrResponse {
    */
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID,
-        Utils.Infinite_Time, currentVersion);
+    this(correlationId, clientId, blobId, UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time,
+        currentVersion);
   }
 
   /**

@@ -31,6 +31,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 import static com.github.ambry.messageformat.BlobPropertiesSerDe.*;
 import static com.github.ambry.messageformat.MessageFormatRecord.BlobProperties_Format_V1.*;
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
@@ -158,7 +160,7 @@ public class MessageFormatRecordTest {
 
       // corrupt blob property V1 record
       stream.flip();
-      stream.put(10, (byte)(stream.get(10) + 1));
+      stream.put(10, (byte) (stream.get(10) + 1));
       try {
         MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         fail("Deserialization of BlobProperties should have failed ");
@@ -233,10 +235,8 @@ public class MessageFormatRecordTest {
     deleteRecord.flip();
     DeleteRecord deserializeDeleteRecord =
         MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-    Assert.assertEquals("AccountId mismatch ", BlobProperties.LEGACY_ACCOUNT_ID,
-        deserializeDeleteRecord.getAccountId());
-    Assert.assertEquals("ContainerId mismatch ", BlobProperties.LEGACY_CONTAINER_ID,
-        deserializeDeleteRecord.getContainerId());
+    Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, deserializeDeleteRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, deserializeDeleteRecord.getContainerId());
     Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time, deserializeDeleteRecord.getDeletionTimeInMs());
 
     // corrupt delete V1 record

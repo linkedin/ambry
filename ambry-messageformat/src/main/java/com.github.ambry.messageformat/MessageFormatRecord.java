@@ -28,6 +28,9 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
+
 
 /**
  * Represents the message format of the individual records that are used to write a message to the store.
@@ -454,8 +457,7 @@ public class MessageFormatRecord {
             "corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new DeleteRecord(BlobProperties.LEGACY_ACCOUNT_ID, BlobProperties.LEGACY_CONTAINER_ID,
-          Utils.Infinite_Time);
+      return new DeleteRecord(UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
     }
   }
 

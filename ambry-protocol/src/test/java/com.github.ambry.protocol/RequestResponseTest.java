@@ -46,6 +46,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
+
 
 class MockFindTokenFactory implements FindTokenFactory {
 
@@ -287,8 +290,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", BlobProperties.LEGACY_ACCOUNT_ID, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", BlobProperties.LEGACY_CONTAINER_ID, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -421,8 +424,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", BlobProperties.LEGACY_ACCOUNT_ID, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", BlobProperties.LEGACY_CONTAINER_ID, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
