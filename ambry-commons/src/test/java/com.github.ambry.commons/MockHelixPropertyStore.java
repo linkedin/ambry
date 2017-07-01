@@ -91,7 +91,6 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
     if (shouldFailSetOperation) {
       return false;
     }
-    System.out.println("Setting to store path: " + path + ", record: " + record.toString());
     return setAndNotify(path, record);
   }
 

@@ -57,7 +57,7 @@ public class HelixNotifier implements Notifier<String> {
    */
   HelixNotifier(HelixPropertyStore<ZNRecord> helixStore) {
     if (helixStore == null) {
-      throw new IllegalArgumentException("helixStore and metricRegistry cannot be null.");
+      throw new IllegalArgumentException("helixStore cannot be null.");
     }
     this.helixStore = helixStore;
   }
@@ -68,7 +68,7 @@ public class HelixNotifier implements Notifier<String> {
    */
   public HelixNotifier(HelixPropertyStoreConfig storeConfig) {
     if (storeConfig == null) {
-      throw new IllegalArgumentException("storeConfig and metricRegistry cannot be null");
+      throw new IllegalArgumentException("storeConfig cannot be null");
     }
     long startTimeMs = System.currentTimeMillis();
     logger.info("Starting a HelixNotifier");

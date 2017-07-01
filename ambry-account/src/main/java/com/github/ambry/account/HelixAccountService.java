@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -46,7 +47,8 @@ import org.slf4j.LoggerFactory;
  *   Each time when receiving a {@link #FULL_ACCOUNT_METADATA_CHANGE_MESSAGE}, it will fetch the updated full
  *   {@link Account} metadata, and refresh its local cache. After every successful operation for updating a collection of
  *   {@link Account}s, it publishes a {@link #FULL_ACCOUNT_METADATA_CHANGE_MESSAGE} for {@link #ACCOUNT_METADATA_CHANGE_TOPIC}
- *   through the {@link Notifier}.
+ *   through the {@link Notifier}. If the remote {@link Account} metadata is corrupted or has conflict, {@link HelixAccountService}
+ *   will not update its local cache.
  * </p>
  * <p>
  *   The full set of the {@link Account} metadata are stored in a single {@link ZNRecord}. The {@link ZNRecord}
@@ -90,12 +92,9 @@ class HelixAccountService implements AccountService {
    */
   HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
       Notifier<String> notifier) {
-    if (helixStore == null || accountServiceMetrics == null || notifier == null) {
-      throw new IllegalArgumentException("helixStore or accountServiceMetrics or notifier cannot be null");
-    }
-    this.helixStore = helixStore;
-    this.accountServiceMetrics = accountServiceMetrics;
-    this.notifier = notifier;
+    this.helixStore = Objects.requireNonNull(helixStore, "helixStore cannot be null");
+    this.accountServiceMetrics = Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null");
+    this.notifier = Objects.requireNonNull(notifier, "notifier cannot be null");
     listener = (topic, message) -> {
       checkOpen();
       logger.trace("Start to process message={} for topic={}", message, topic);
@@ -334,22 +333,22 @@ class HelixAccountService implements AccountService {
    * conflicting with each other if they have different account Ids but the same account name.
    *
    * @param accountsToSet The collection of {@link Account}s to check conflict.
-   * @param currentAccounts A {@link AccountInfoMap} that represents a group of {@link Account}s to check conflict.
+   * @param accountInfoMap A {@link AccountInfoMap} that represents a group of {@link Account}s to check conflict.
    * @return {@code true} if there is at least one {@link Account} in {@code accountPairs} conflicts with the existing
    *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
    */
-  private boolean hasConflictingAccount(Collection<Account> accountsToSet, AccountInfoMap currentAccounts) {
+  private boolean hasConflictingAccount(Collection<Account> accountsToSet, AccountInfoMap accountInfoMap) {
     boolean res = false;
     for (Account account : accountsToSet) {
-      Account remoteAccount = currentAccounts.getAccountById(account.getId());
+      Account accountInMap = accountInfoMap.getAccountById(account.getId());
 
-      // @todo if remoteAccount is not null, make sure
+      // @todo if accountInMap is not null, make sure
       // @todo account.generationId() = accountInfoMap.getById(account.getId()).generationId()+1
       // @todo the generationId will be added to Account class.
 
       // check for case D described in the javadoc of AccountService
-      if (remoteAccount == null && currentAccounts.containsName(account.getName())) {
-        Account conflictingAccount = currentAccounts.getAccountByName(account.getName());
+      if (accountInMap == null && accountInfoMap.containsName(account.getName())) {
+        Account conflictingAccount = accountInfoMap.getAccountByName(account.getName());
         logger.error(
             "Account to update with accountId={} accountName={} conflicts with an existing record with accountId={} accountName={}",
             account.getId(), account.getName(), conflictingAccount.getId(), conflictingAccount.getName());
@@ -358,9 +357,9 @@ class HelixAccountService implements AccountService {
       }
 
       // check for case E described in the javadoc of AccountService
-      if (remoteAccount != null && !account.getName().equals(remoteAccount.getName()) && currentAccounts.containsName(
+      if (accountInMap != null && !account.getName().equals(accountInMap.getName()) && accountInfoMap.containsName(
           account.getName())) {
-        Account conflictingAccount = currentAccounts.getAccountByName(account.getName());
+        Account conflictingAccount = accountInfoMap.getAccountByName(account.getName());
         logger.error(
             "Account to update with accountId={} accountName={} conflicts with an existing record with accountId={} accountName={}",
             account.getId(), account.getName(), conflictingAccount.getId(), conflictingAccount.getName());
@@ -410,11 +409,9 @@ class HelixAccountService implements AccountService {
      *   and the value is the string form of the {@link Account}'s JSON string.
      * </p>
      * <p>
-     *   The source {@link Account}s in the {@code accountMap} may have duplicate account Ids or names. The
-     *   constructor makes the best effort to resolve the conflict. Based on the order when iterating on the
-     *   {@link Account}s, the constructor will: 1) override the previously-added {@link Account} if a latter
-     *   one has the same id; and 2) remove the previously-added {@link Account} if a latter one has the same
-     *   name. Once an {@code AccountInfoMap} is constructed, it is guaranteed there is no duplicate id or name.
+     *   The source {@link Account}s in the {@code accountMap} may duplicate account ids or names, or corrupted
+     *   JSON strings that cannot be parsed as valid {@link JSONObject}. In such cases, construction of
+     *   {@code AccountInfoMap} will fail.
      * </p>
      * @param accountMap A map of {@link Account}s in the form of (accountIdString, accountJSONString).
      * @throws JSONException If parsing account data in json fails.
@@ -439,15 +436,9 @@ class HelixAccountService implements AccountService {
               "Invalid account record when reading accountMap in ZNRecord because idKey and accountId do not match. idKey="
                   + idKey + " accountId=" + account.getId());
         }
-        // only checks name conflict. For accounts with the same id, it will simply have the latter one to override
-        // the previous one.
-        Account conflictingAccount = nameToAccountMap.get(account.getName());
-        if (conflictingAccount != null) {
-          accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
+        if (idToAccountMap.containsKey(account.getId()) || nameToAccountMap.containsKey(account.getName())) {
           throw new IllegalStateException(
-              "Duplicate account name exists. id=" + account.getId() + " name=" + account.getName()
-                  + " conflicts with a previously added id=" + conflictingAccount.getId() + " name="
-                  + conflictingAccount.getName());
+              "Duplicate account id or name exists. id=" + account.getId() + " name=" + account.getName());
         }
         idToAccountMap.put(account.getId(), account);
         nameToAccountMap.put(account.getName(), account);
