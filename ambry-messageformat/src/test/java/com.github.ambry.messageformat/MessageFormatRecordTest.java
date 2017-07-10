@@ -241,7 +241,8 @@ public class MessageFormatRecordTest {
 
     // corrupt delete V1 record
     deleteRecord.flip();
-    deleteRecord.put(10, (byte) 4);
+    byte toCorrupt = deleteRecord.get(10);
+    deleteRecord.put(10, (byte) (toCorrupt + 1));
     try {
       MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
       fail("Deserialization of a corrupt delete record V1 should have failed ");
@@ -273,7 +274,8 @@ public class MessageFormatRecordTest {
 
     // corrupt delete V2 record
     deleteRecord.flip();
-    deleteRecord.put(10, (byte) 4);
+    byte toCorrupt = deleteRecord.get(10);
+    deleteRecord.put(10, (byte) (toCorrupt + 1));
     try {
       MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
       fail("Deserialization of a corrupt delete record V2 should have failed ");

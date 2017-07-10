@@ -42,7 +42,6 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -303,12 +302,12 @@ public class RequestResponseTest {
     short containerId = Utils.getRandomShort(random);
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds().get(0));
-    short[] versions = new short[]{DeleteRequest.Delete_Request_Version_1, DeleteRequest.Delete_Request_Version_2};
+    short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
     for (short version : versions) {
       long deletionTimeMs = Utils.getRandomLong(random, Long.MAX_VALUE);
       int correlationId = random.nextInt();
       DeleteRequest deleteRequest;
-      if (version == DeleteRequest.Delete_Request_Version_1) {
+      if (version == DeleteRequest.DELETE_REQUEST_VERSION_1) {
         deleteRequest = new DeleteRequest(correlationId, "client", id1);
       } else {
         deleteRequest = new DeleteRequestV2(correlationId, "client", id1, deletionTimeMs);
@@ -324,10 +323,17 @@ public class RequestResponseTest {
       DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
       Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
       Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
-      if (version == DeleteRequest.Delete_Request_Version_2) {
+      if (version == DeleteRequest.DELETE_REQUEST_VERSION_2) {
         Assert.assertEquals("AccountId mismatch ", id1.getAccountId(), deserializedDeleteRequest.getAccountId());
         Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedDeleteRequest.getContainerId());
         Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializedDeleteRequest.getDeletionTimeInMs());
+      } else {
+        Assert.assertEquals("AccountId mismatch ", Account.UNKNOWN_ACCOUNT_ID,
+            deserializedDeleteRequest.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", Container.UNKNOWN_CONTAINER_ID,
+            deserializedDeleteRequest.getContainerId());
+        Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time,
+            deserializedDeleteRequest.getDeletionTimeInMs());
       }
       DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
       outputStream.reset();
@@ -469,18 +475,18 @@ public class RequestResponseTest {
   }
 
   /**
-   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#Delete_Request_Version_2}
+   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#DELETE_REQUEST_VERSION_2}
    */
   private class DeleteRequestV2 extends DeleteRequest {
     /**
-     * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
+     * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
      * @param correlationId correlationId of the delete request
      * @param clientId clientId of the delete request
      * @param blobId blobId of the delete request
      * @param deletionTimeInMs deletion time of the blob in ms
      */
     private DeleteRequestV2(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs) {
-      super(correlationId, clientId, blobId, deletionTimeInMs, DeleteRequest.Delete_Request_Version_2);
+      super(correlationId, clientId, blobId, deletionTimeInMs, DeleteRequest.DELETE_REQUEST_VERSION_2);
     }
   }
 }

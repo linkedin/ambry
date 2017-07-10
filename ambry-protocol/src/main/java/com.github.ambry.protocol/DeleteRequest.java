@@ -28,38 +28,38 @@ import java.nio.channels.WritableByteChannel;
 public class DeleteRequest extends RequestOrResponse {
   private final BlobId blobId;
   private final long deletionTimeInMs;
-  private int sizeSent;
   private final short version;
-  static final short Delete_Request_Version_1 = 1;
-  static final short Delete_Request_Version_2 = 2;
-  private final static short currentVersion = Delete_Request_Version_1;
-
+  static final short DELETE_REQUEST_VERSION_1 = 1;
+  static final short DELETE_REQUEST_VERSION_2 = 2;
+  private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_1;
   protected static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
+  private int sizeSent;
+
   /**
-   * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_1}
+   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_1}
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
    */
   // @TODO: remove this constructor once DeleteRequest V2 is enabled
   public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, Utils.Infinite_Time, currentVersion);
+    this(correlationId, clientId, blobId, Utils.Infinite_Time, CURRENT_VERSION);
   }
 
   /**
-   * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
+   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
    * @param deletionTimeInMs deletion time of the blob in ms
    */
   public DeleteRequest(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs) {
-    this(correlationId, clientId, blobId, deletionTimeInMs, currentVersion);
+    this(correlationId, clientId, blobId, deletionTimeInMs, CURRENT_VERSION);
   }
 
   /**
-   * Constructs {@link DeleteRequest} in {@link #Delete_Request_Version_2}
+   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
    * @param correlationId correlationId of the delete request
    * @param clientId clientId of the delete request
    * @param blobId blobId of the delete request
@@ -77,9 +77,9 @@ public class DeleteRequest extends RequestOrResponse {
   public static DeleteRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     Short version = stream.readShort();
     switch (version) {
-      case Delete_Request_Version_1:
+      case DELETE_REQUEST_VERSION_1:
         return DeleteRequest_V1.readFrom(stream, map);
-      case Delete_Request_Version_2:
+      case DELETE_REQUEST_VERSION_2:
         return DeleteRequest_V2.readFrom(stream, map);
       default:
         throw new IllegalStateException("Unknown Delete Request version " + version);
@@ -93,7 +93,7 @@ public class DeleteRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
-      if (version == Delete_Request_Version_2) {
+      if (version == DELETE_REQUEST_VERSION_2) {
         bufferToSend.putLong(deletionTimeInMs);
       }
       bufferToSend.flip();
@@ -130,7 +130,7 @@ public class DeleteRequest extends RequestOrResponse {
   public long sizeInBytes() {
     // header + blobId
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
-    if (version == Delete_Request_Version_2) {
+    if (version == DELETE_REQUEST_VERSION_2) {
       // deletion time
       sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
     }
