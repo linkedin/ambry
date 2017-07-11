@@ -38,6 +38,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -52,6 +54,7 @@ public class Utils {
    * time).
    */
   public static final long Infinite_Time = -1;
+  private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
   // The read*String methods assume that the underlying stream is blocking
 
@@ -180,10 +183,8 @@ public class Utils {
   public static Thread newThread(Runnable runnable, boolean daemon) {
     Thread thread = new Thread(runnable);
     thread.setDaemon(daemon);
-    thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-      public void uncaughtException(Thread t, Throwable e) {
-        //error("Uncaught exception in thread '" + t.getName + "':", e)
-      }
+    thread.setUncaughtExceptionHandler((t, e) -> {
+      logger.error("Encountered throwable in {}", t, e);
     });
     return thread;
   }
