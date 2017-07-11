@@ -19,6 +19,9 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -351,9 +354,14 @@ public class MessageSievingInputStreamTest {
 
       // create message stream for blob 2 and mark it as deleted
       StoreKey key2 = new MockId("id2");
-      MessageFormatInputStream messageFormatStream2 = new DeleteMessageFormatInputStream(key2);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+      MessageFormatInputStream messageFormatStream2 =
+          new DeleteMessageFormatInputStream(key2, accountId, containerId, deletionTimeMs);
 
-      MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize(), true);
+      MessageInfo msgInfo2 =
+          new MessageInfo(key2, messageFormatStream2.getSize(), accountId, containerId, deletionTimeMs);
 
       // create message stream for blob 3
       StoreKey key3 = new MockId("id3");

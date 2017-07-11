@@ -82,10 +82,10 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
                           properties.getTimeToLiveInSeconds()));
               messageRecovered.add(info);
             } else {
-              boolean deleteFlag = MessageFormatRecord.deserializeDeleteRecord(stream);
+              DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);
               MessageInfo info =
-                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                      deleteFlag);
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+                      deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
               messageRecovered.add(info);
             }
             startOffset = stream.getCurrentPosition();
@@ -98,7 +98,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message. we stop recovery at that point and return the
       // messages that have been recovered so far.
-      logger.error("Message format exception while recovering messages");
+      logger.error("Message format exception while recovering messages", e);
     } catch (IndexOutOfBoundsException e) {
       // log in case where were not able to read a complete message. we stop recovery at that point and return
       // the message that have been recovered so far.

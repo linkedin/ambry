@@ -476,7 +476,9 @@ class ReplicaThread implements Runnable {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
         // deleted yet locally
         if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(messageInfo.getStoreKey())) {
-          MessageFormatInputStream deleteStream = new DeleteMessageFormatInputStream(messageInfo.getStoreKey());
+          MessageFormatInputStream deleteStream =
+              new DeleteMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
+                  messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
           MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);

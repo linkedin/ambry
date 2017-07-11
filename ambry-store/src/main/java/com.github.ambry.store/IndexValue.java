@@ -18,6 +18,9 @@ import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
+
 
 /**
  * Represents the blob value stored in the index for a key.
@@ -43,7 +46,6 @@ class IndexValue {
   }
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
-  final static short SERVICE_CONTAINER_ID_DEFAULT_VALUE = -1;
   final static long UNKNOWN_ORIGINAL_MESSAGE_OFFSET = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
@@ -95,8 +97,8 @@ class IndexValue {
         expiresAtMs = value.getLong();
         originalMessageOffset = value.getLong();
         operationTimeInMs = (int) Utils.Infinite_Time;
-        serviceId = SERVICE_CONTAINER_ID_DEFAULT_VALUE;
-        containerId = SERVICE_CONTAINER_ID_DEFAULT_VALUE;
+        serviceId = UNKNOWN_ACCOUNT_ID;
+        containerId = UNKNOWN_CONTAINER_ID;
         break;
       case PersistentIndex.VERSION_1:
         if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V1) {
@@ -127,7 +129,7 @@ class IndexValue {
    */
   IndexValue(long size, Offset offset, long expiresAtMs) {
     this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), (int) Utils.Infinite_Time,
-        SERVICE_CONTAINER_ID_DEFAULT_VALUE, SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+        UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
   }
 
   /**
@@ -139,8 +141,8 @@ class IndexValue {
    * @param operationTimeInMs operation time ins ms of the entry in secs
    */
   IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, SERVICE_CONTAINER_ID_DEFAULT_VALUE,
-        SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, UNKNOWN_ACCOUNT_ID,
+        UNKNOWN_CONTAINER_ID);
   }
 
   /**

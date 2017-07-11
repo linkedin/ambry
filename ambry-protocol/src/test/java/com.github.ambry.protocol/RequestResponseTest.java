@@ -45,7 +45,8 @@ import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static com.github.ambry.store.MessageInfo.*;
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 
 
 class MockFindTokenFactory implements FindTokenFactory {
@@ -288,8 +289,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_DEFAULT_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -297,30 +298,54 @@ public class RequestResponseTest {
   @Test
   public void deleteRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
-    DeleteRequest deleteRequest = new DeleteRequest(1234, "client", id1);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    do {
-      deleteRequest.writeTo(writableByteChannel);
-    } while (!deleteRequest.isSendComplete());
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read length
-    requestStream.readShort(); // read short
-    DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
-    Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
-    Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
-    DeleteResponse response = new DeleteResponse(1234, "client", ServerErrorCode.No_Error);
-    outputStream.reset();
-    do {
-      response.writeTo(writableByteChannel);
-    } while (!response.isSendComplete());
-    requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read size
-    DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
-    Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), 1234);
-    Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
+    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        clusterMap.getWritablePartitionIds().get(0));
+    short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
+    for (short version : versions) {
+      long deletionTimeMs = Utils.getRandomLong(random, Long.MAX_VALUE);
+      int correlationId = random.nextInt();
+      DeleteRequest deleteRequest;
+      if (version == DeleteRequest.DELETE_REQUEST_VERSION_1) {
+        deleteRequest = new DeleteRequest(correlationId, "client", id1);
+      } else {
+        deleteRequest = new DeleteRequestV2(correlationId, "client", id1, deletionTimeMs);
+      }
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
+      do {
+        deleteRequest.writeTo(writableByteChannel);
+      } while (!deleteRequest.isSendComplete());
+      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      requestStream.readLong(); // read length
+      requestStream.readShort(); // read short
+      DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
+      Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
+      Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
+      if (version == DeleteRequest.DELETE_REQUEST_VERSION_2) {
+        Assert.assertEquals("AccountId mismatch ", id1.getAccountId(), deserializedDeleteRequest.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedDeleteRequest.getContainerId());
+        Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializedDeleteRequest.getDeletionTimeInMs());
+      } else {
+        Assert.assertEquals("AccountId mismatch ", Account.UNKNOWN_ACCOUNT_ID,
+            deserializedDeleteRequest.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", Container.UNKNOWN_CONTAINER_ID,
+            deserializedDeleteRequest.getContainerId());
+        Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time,
+            deserializedDeleteRequest.getDeletionTimeInMs());
+      }
+      DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
+      outputStream.reset();
+      do {
+        response.writeTo(writableByteChannel);
+      } while (!response.isSendComplete());
+      requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+      requestStream.readLong(); // read size
+      DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
+      Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), correlationId);
+      Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
+    }
   }
 
   @Test
@@ -404,8 +429,8 @@ public class RequestResponseTest {
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
-      Assert.assertEquals("AccountId mismatch ", ACCOUNT_ID_DEFAULT_VALUE, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", CONTAINER_ID_DEFAULT_VALUE, msgInfo.getContainerId());
+      Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
+      Assert.assertEquals("ConatinerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -446,6 +471,22 @@ public class RequestResponseTest {
       AdminResponse deserializedAdminResponse = AdminResponse.readFrom(requestStream);
       Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), 1234);
       Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+    }
+  }
+
+  /**
+   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#DELETE_REQUEST_VERSION_2}
+   */
+  private class DeleteRequestV2 extends DeleteRequest {
+    /**
+     * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
+     * @param correlationId correlationId of the delete request
+     * @param clientId clientId of the delete request
+     * @param blobId blobId of the delete request
+     * @param deletionTimeInMs deletion time of the blob in ms
+     */
+    private DeleteRequestV2(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs) {
+      super(correlationId, clientId, blobId, deletionTimeInMs, DeleteRequest.DELETE_REQUEST_VERSION_2);
     }
   }
 }

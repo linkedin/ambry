@@ -50,6 +50,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 import static com.github.ambry.store.CuratedLogIndexState.*;
 import static org.junit.Assert.*;
 
@@ -2265,8 +2267,7 @@ public class IndexTest {
       if (indexSegment != null) {
         entry = new IndexEntry(state.getUniqueId(),
             IndexValueTest.getIndexValue(size, prevEntryEndOffset, expiresAtMs, state.time.milliseconds(),
-                IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE,
-                indexSegment.getVersion()));
+                UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, indexSegment.getVersion()));
         indexSegment.addEntry(entry, fileSpan.getEndOffset());
       } else {
         entry = new IndexEntry(state.getUniqueId(),

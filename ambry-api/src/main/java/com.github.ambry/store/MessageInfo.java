@@ -15,14 +15,14 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Utils;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
+
 
 /**
  * A message info class that contains basic info about a message
  */
 public class MessageInfo {
-
-  public static final short ACCOUNT_ID_DEFAULT_VALUE = -1;
-  public static final short CONTAINER_ID_DEFAULT_VALUE = -1;
 
   private final StoreKey key;
   private final long size;
@@ -86,8 +86,7 @@ public class MessageInfo {
    * @param crc the crc associated with this message. If unavailable, pass in null.
    */
   public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
-    this(key, size, deleted, expirationTimeInMs, crc, ACCOUNT_ID_DEFAULT_VALUE, CONTAINER_ID_DEFAULT_VALUE,
-        Utils.Infinite_Time);
+    this(key, size, deleted, expirationTimeInMs, crc, UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
   }
 
   /**

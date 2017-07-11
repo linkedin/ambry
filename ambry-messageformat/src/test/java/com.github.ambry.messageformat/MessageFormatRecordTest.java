@@ -17,6 +17,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -30,6 +31,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 import static com.github.ambry.messageformat.BlobPropertiesSerDe.*;
 import static com.github.ambry.messageformat.MessageFormatRecord.BlobProperties_Format_V1.*;
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
@@ -41,23 +44,6 @@ public class MessageFormatRecordTest {
   @Test
   public void deserializeTest() {
     try {
-      // Test delete V1 record
-      ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
-      MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord, true);
-      deleteRecord.flip();
-      boolean deleted = MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-      Assert.assertEquals(deleted, true);
-
-      // corrupt delete V1 record
-      deleteRecord.flip();
-      deleteRecord.put(10, (byte) 4);
-      try {
-        boolean corruptDeleted = MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-        Assert.assertEquals(true, false);
-      } catch (MessageFormatException e) {
-        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
-      }
-
       // Test message header V1
       ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
       MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(header, 1000, 10, -1, 20, 30);
@@ -174,7 +160,7 @@ public class MessageFormatRecordTest {
 
       // corrupt blob property V1 record
       stream.flip();
-      stream.put(10, (byte)(stream.get(10) + 1));
+      stream.put(10, (byte) (stream.get(10) + 1));
       try {
         MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(stream));
         fail("Deserialization of BlobProperties should have failed ");
@@ -228,6 +214,74 @@ public class MessageFormatRecordTest {
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
     outputBuffer.putShort(properties.getCreatorAccountId());
+  }
+
+  /**
+   * Tests DeleteRecord V1 for serialization and deserialization
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testDeleteRecordV1() throws IOException, MessageFormatException {
+    // Test delete V1 record
+    // irrespective of what values are set for acccountId, containerId and deletionTimeMs, legacy values will be returned
+    // with Delete_Format_V1
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
+    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord,
+        new DeleteRecord(accountId, containerId, deletionTimeMs));
+    deleteRecord.flip();
+    DeleteRecord deserializeDeleteRecord =
+        MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+    Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, deserializeDeleteRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, deserializeDeleteRecord.getContainerId());
+    Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time, deserializeDeleteRecord.getDeletionTimeInMs());
+
+    // corrupt delete V1 record
+    deleteRecord.flip();
+    byte toCorrupt = deleteRecord.get(10);
+    deleteRecord.put(10, (byte) (toCorrupt + 1));
+    try {
+      MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+      fail("Deserialization of a corrupt delete record V1 should have failed ");
+    } catch (MessageFormatException e) {
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+    }
+  }
+
+  /**
+   * Tests DeleteRecord V2 for serialization and deserialization
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testDeleteRecordV2() throws IOException, MessageFormatException {
+    // Test delete V2 record
+    ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize());
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord,
+        new DeleteRecord(accountId, containerId, deletionTimeMs));
+    deleteRecord.flip();
+    DeleteRecord deserializeDeleteRecord =
+        MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+    Assert.assertEquals("AccountId mismatch ", accountId, deserializeDeleteRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", containerId, deserializeDeleteRecord.getContainerId());
+    Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializeDeleteRecord.getDeletionTimeInMs());
+
+    // corrupt delete V2 record
+    deleteRecord.flip();
+    byte toCorrupt = deleteRecord.get(10);
+    deleteRecord.put(10, (byte) (toCorrupt + 1));
+    try {
+      MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
+      fail("Deserialization of a corrupt delete record V2 should have failed ");
+    } catch (MessageFormatException e) {
+      Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+    }
   }
 
   @Test

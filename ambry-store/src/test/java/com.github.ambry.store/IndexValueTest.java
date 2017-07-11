@@ -27,6 +27,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.account.Account.*;
+import static com.github.ambry.account.Container.*;
 import static org.junit.Assert.*;
 
 
@@ -99,7 +101,7 @@ public class IndexValueTest {
       switch (version) {
         case PersistentIndex.VERSION_0:
           verifyIndexValue(value, logSegmentName, size, offset, false, expiresAtMs, offset, Utils.Infinite_Time,
-              IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+              UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
           break;
         case PersistentIndex.VERSION_1:
           verifyIndexValue(value, logSegmentName, size, offset, false, expirationTime.getValue(), offset,
@@ -139,8 +141,7 @@ public class IndexValueTest {
     switch (version) {
       case PersistentIndex.VERSION_0:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, oldOffset,
-            Utils.Infinite_Time, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+            Utils.Infinite_Time, UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, oldOffset,
@@ -153,7 +154,7 @@ public class IndexValueTest {
     switch (version) {
       case PersistentIndex.VERSION_0:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+            UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, -1,
@@ -171,7 +172,7 @@ public class IndexValueTest {
     switch (version) {
       case PersistentIndex.VERSION_0:
         verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expiresAtMs, -1, Utils.Infinite_Time,
-            IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE, IndexValue.SERVICE_CONTAINER_ID_DEFAULT_VALUE);
+            UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
         verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, -1,
