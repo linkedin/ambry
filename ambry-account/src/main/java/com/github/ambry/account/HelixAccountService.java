@@ -128,9 +128,7 @@ class HelixAccountService implements AccountService {
   @Override
   public Account getAccountByName(String accountName) {
     checkOpen();
-    if (accountName == null) {
-      throw new IllegalArgumentException("accountName cannot be null.");
-    }
+    Objects.requireNonNull(accountName, "accountName cannot be null.");
     return accountInfoMapRef.get().getAccountByName(accountName);
   }
 
@@ -160,9 +158,7 @@ class HelixAccountService implements AccountService {
   @Override
   public boolean updateAccounts(Collection<Account> accounts) {
     checkOpen();
-    if (accounts == null) {
-      throw new IllegalArgumentException("accounts cannot be null");
-    }
+    Objects.requireNonNull(accounts, "accounts cannot be null");
     if (hasDuplicateAccountIdOrName(accounts)) {
       logger.debug("Duplicate account id or name exist in the accounts to update");
       accountServiceMetrics.updateAccountErrorCount.inc();
@@ -185,7 +181,7 @@ class HelixAccountService implements AccountService {
           logger.debug(
               "ZNRecord does not exist on path={} in HelixPropertyStore when updating accounts. Creating a new ZNRecord.",
               FULL_ACCOUNT_METADATA_PATH);
-          newRecord = new ZNRecord(String.valueOf(ZN_RECORD_ID));
+          newRecord = new ZNRecord(ZN_RECORD_ID);
         } else {
           newRecord = currentData;
         }
@@ -206,10 +202,8 @@ class HelixAccountService implements AccountService {
         // if there is any conflict with the existing record, fail the update. Exception thrown in this updater will
         // be caught by Helix and helixStore#update will return false.
         if (hasConflictingAccount(accounts, remoteAccountInfoMap)) {
-          String message = "Updating accounts failed because one account to update conflicts with existing accounts";
-          // Do not depend on Helix to log, so log the error message here.
-          logger.error(message);
-          throw new IllegalArgumentException(message);
+          // Throw exception, so that helixStore can capture and terminate the update operation
+          throw new IllegalArgumentException("Updating accounts failed because one account to update conflicts with existing accounts");
         } else {
           for (Account account : accounts) {
             try {

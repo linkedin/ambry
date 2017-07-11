@@ -67,8 +67,8 @@ public class HelixAccountServiceTest {
   private static final Map<Short, Account> idToRefAccountMap = new HashMap<>();
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
-  private final static VerifiableProperties vHelixConfigProps;
-  private final static HelixPropertyStoreConfig storeConfig;
+  private static final VerifiableProperties vHelixConfigProps;
+  private static final HelixPropertyStoreConfig storeConfig;
   // This is a switch to choose using between a mock and a real HelixPropertyStore. For now it is always set to
   // true. Later when we introduce test against real ZK server, this can be changed to false.
   private final boolean shouldUseMockHelixStore = true;
@@ -376,13 +376,13 @@ public class HelixAccountServiceTest {
     try {
       accountService.updateAccounts(null);
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
     try {
       accountService.getAccountByName(null);
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
   }

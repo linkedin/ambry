@@ -38,22 +38,22 @@ public class AccountServiceMetrics {
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
-    startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "startupTimeInMs"));
+    startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "StartupTimeInMs"));
     updateAccountTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "updateAccountTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "UpdateAccountTimeInMs"));
     fetchRemoteAccountTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "fetchRemoteAccountTimeInMs"));
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
 
     // Counter
     unRecognizedMessageErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "unRecognizedMessageErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UnRecognizedMessageErrorCount"));
     notifyAccountDataChangeErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "notifyAccountDataChangeErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NotifyAccountDataChangeErrorCount"));
     updateAccountErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "updateAccountErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UpdateAccountErrorCount"));
     fetchRemoteAccountErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "fetchRemoteAccountErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
     remoteDataCorruptionErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "remoteDataCorruptionErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "RemoteDataCorruptionErrorCount"));
   }
 }
