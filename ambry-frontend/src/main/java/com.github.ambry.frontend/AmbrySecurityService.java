@@ -46,13 +46,11 @@ class AmbrySecurityService implements SecurityService {
   private boolean isOpen;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
-  private final AclService<?> aclService;
+  private final AclService<?> aclService = new NoOpAclService();
 
-  public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      AclService<?> aclService) {
+  public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
-    this.aclService = aclService;
     isOpen = true;
   }
 

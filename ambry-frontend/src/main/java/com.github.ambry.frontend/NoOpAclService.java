@@ -15,6 +15,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.AclService;
+import com.github.ambry.router.Callback;
 
 
 /**
@@ -26,7 +27,7 @@ class NoOpAclService implements AclService<Object> {
    * {@inheritDoc}
    * Always allow access.
    * @param principal the requester principal (identity).
-   * @param resource
+   * @param resource the {@link Resource} to check for access to.
    * @param operation the {@link Operation} to perform on the resource.
    * @return {@code true}
    */
@@ -36,10 +37,12 @@ class NoOpAclService implements AclService<Object> {
   }
 
   @Override
-  public void allowAccess(Object principal, Resource resource, Operation operation) {
+  public void allowAccess(Object principal, Resource resource, Operation operation, Callback<Void> callback) {
+    callback.onCompletion(null, new UnsupportedOperationException("allowAccess not supported for NoOpAclService"));
   }
 
   @Override
-  public void revokeAccess(Object principal, Resource resource, Operation operation) {
+  public void revokeAccess(Object principal, Resource resource, Operation operation, Callback<Void> callback) {
+    callback.onCompletion(null, new UnsupportedOperationException("revokeAccess not supported for NoOpAclService"));
   }
 }

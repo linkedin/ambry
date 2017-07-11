@@ -13,7 +13,6 @@
  */
 package com.github.ambry.config;
 
-import com.github.ambry.account.AclServiceFactory;
 import java.util.Arrays;
 import java.util.List;
 
@@ -45,13 +44,6 @@ public class FrontendConfig {
   public final String frontendSecurityServiceFactory;
 
   /**
-   * The {@link AclServiceFactory} that needs to be used by AmbryBlobStorageService to
-   * make authorization decisions.
-   */
-  @Config("frontend.acl.service.factory")
-  @Default("com.github.ambry.frontend.NoOpAclServiceFactory")
-  public final String frontendAclServiceFactory;
-  /**
    * The comma separated list of prefixes to remove from paths.
    */
   @Config("frontend.path.prefixes.to.remove")
@@ -71,8 +63,6 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbryIdConverterFactory");
     frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
         "com.github.ambry.frontend.AmbrySecurityServiceFactory");
-    frontendAclServiceFactory = verifiableProperties.getString("frontend.acl.service.factory",
-        "com.github.ambry.frontend.NoOpAclServiceFactory");
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =

@@ -14,15 +14,12 @@
 
 package com.github.ambry.account;
 
-import com.github.ambry.rest.SecurityService;
+import com.github.ambry.router.Callback;
 
 
 /**
- * A service that handles authorization of requests. This will be provided to the {@link SecurityService} for making
- * access decisions that might require the help of an external service. The call to
- * {@link #hasAccess(Object, Resource, Operation)} should not require expensive network calls, since it will potentially
- * be used on the critical path. Instead, the {@link AclService} should maintain a cache of ACLs for the resources it
- * manages permissions on.
+ * A service that handles authorization of requests. The call to {@link #hasAccess(Object, Resource, Operation)} should
+ * be fast, since it will potentially be used on the critical path.
  * @param <P> the type for the principal. This is generic to allow for different requester authentication schemes.
  */
 public interface AclService<P> {
@@ -30,9 +27,9 @@ public interface AclService<P> {
   /**
    * Makes a resource access decision.
    * @param principal the requester principal (identity).
-   * @param targetResource the {@link Resource} to check for access to.
+   * @param resource the {@link Resource} to check for access to.
    * @param operation the {@link Operation} to perform on the resource.
-   * @return an {@link AccessDecision} for the principal performing the specified operation on the target resource.
+   * @return {@code true} if the principal is allowed to perform the specified operation on the target resource.
    */
   boolean hasAccess(P principal, Resource resource, Operation operation);
 
@@ -41,16 +38,18 @@ public interface AclService<P> {
    * @param principal the principal to add a rule for.
    * @param resource the {@link Resource} to add the rule for.
    * @param operation the {@link Operation} to allow the principal to perform on the {@link Resource}.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
    */
-  void allowAccess(P principal, Resource resource, Operation operation);
+  void allowAccess(P principal, Resource resource, Operation operation, Callback<Void> callback);
 
   /**
    * Prevent the provided principal from performing an {@link Operation} on a {@link Resource}.
    * @param principal the principal to add a rule for.
    * @param resource the {@link Resource} to add the rule for.
    * @param operation the {@link Operation} to allow the principal to perform on the {@link Resource}.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
    */
-  void revokeAccess(P principal, Resource resource, Operation operation);
+  void revokeAccess(P principal, Resource resource, Operation operation, Callback<Void> callback);
 
   /**
    * The type of operation to perform on a {@link Resource}.
