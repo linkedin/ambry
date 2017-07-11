@@ -143,21 +143,21 @@ class MockHelixManager implements HelixManager {
   /**
    * Trigger a live instance change notification.
    */
-  void triggerLiveInstanceNotification(boolean initial) {
+  void triggerLiveInstanceNotification(boolean init) {
     List<LiveInstance> liveInstances = new ArrayList<>();
     for (String instance : mockAdmin.getUpInstances()) {
       liveInstances.add(new LiveInstance(instance));
     }
     NotificationContext notificationContext = new NotificationContext(this);
-    if (initial) {
+    if (init) {
       notificationContext.setType(NotificationContext.Type.INIT);
     }
     liveInstanceChangeListener.onLiveInstanceChange(liveInstances, notificationContext);
   }
 
-  void triggerConfigChangeNotification(boolean initial) {
+  void triggerConfigChangeNotification(boolean init) {
     NotificationContext notificationContext = new NotificationContext(this);
-    if (initial) {
+    if (init) {
       notificationContext.setType(NotificationContext.Type.INIT);
     }
     instanceConfigChangeListener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext);

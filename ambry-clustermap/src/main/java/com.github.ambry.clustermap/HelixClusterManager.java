@@ -302,6 +302,8 @@ class HelixClusterManager implements ClusterMap {
     private final String dcName;
     final Set<String> allInstances = new HashSet<>();
     private final Object notificationLock = new Object();
+    private boolean instanceConfigInitialized = false;
+    private boolean liveStateInitialized = false;
 
     /**
      * Initialize a ClusterChangeHandler in the given datacenter.
@@ -313,15 +315,16 @@ class HelixClusterManager implements ClusterMap {
 
     @Override
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
-      logger.trace("Config change triggered in {} with: {}", dcName, configs);
+      logger.trace("InstanceConfig change triggered in {} with: {}", dcName, configs);
       synchronized (notificationLock) {
-        if (changeContext.getType() == NotificationContext.Type.INIT) {
+        if (!instanceConfigInitialized) {
+          logger.info("Received initial notification for instance config change from {}", dcName);
           try {
-            logger.info("Received initial notification for instance config change from {}", dcName);
             initializeInstances(configs);
           } catch (Exception e) {
             initializationException.compareAndSet(null, e);
           }
+          instanceConfigInitialized = true;
         } else {
           updateSealedStateOfReplicas(configs);
         }
@@ -373,10 +376,11 @@ class HelixClusterManager implements ClusterMap {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       logger.trace("Live instance change triggered from {} with: {}", dcName, liveInstances);
-      if (changeContext.getType() == NotificationContext.Type.INIT) {
-        logger.info("Received initial notification for live instance change from {}", dcName);
-      }
       updateInstanceLiveness(liveInstances);
+      if (!liveStateInitialized) {
+        logger.info("Received initial notification for live instance change from {}", dcName);
+        liveStateInitialized = true;
+      }
       helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
     }
 

@@ -283,6 +283,7 @@ public class HelixClusterManagerTest {
 
   /**
    * Test that the changes to the sealed states of replicas get reflected correctly in the cluster manager.
+   * This also tests multiple InstanceConfig change callbacks and that they are dealt with correctly.
    */
   @Test
   public void sealedReplicaChangeTest() throws Exception {
@@ -316,6 +317,7 @@ public class HelixClusterManagerTest {
         clusterManager.getWritablePartitionIds().contains(partition));
     assertEquals("If no replica is SEALED, the whole partition should be Writable", PartitionState.READ_WRITE,
         partition.getPartitionState());
+    assertStateEquivalency();
   }
 
   /**
@@ -511,9 +513,11 @@ public class HelixClusterManagerTest {
     Set<String> downInstancesInClusterManager = new HashSet<>();
     for (DataNodeId dataNode : clusterManager.getDataNodeIds()) {
       if (dataNode.getState() == HardwareState.UNAVAILABLE) {
-        downInstancesInClusterManager.add(ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort()));
+        assertTrue("Datanode should not be a duplicate", downInstancesInClusterManager.add(
+            ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort())));
       } else {
-        upInstancesInClusterManager.add(ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort()));
+        assertTrue("Datanode should not be a duplicate", upInstancesInClusterManager.add(
+            ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort())));
       }
     }
     assertEquals(downInstancesInCluster, downInstancesInClusterManager);
