@@ -317,6 +317,8 @@ class AsyncRequestWorker implements Runnable {
           }
         }
       }
+    } catch (Throwable t) {
+      logger.error("AsyncRequestWorker encountered a throwable", t);
     } finally {
       running.set(false);
       discardRequests();

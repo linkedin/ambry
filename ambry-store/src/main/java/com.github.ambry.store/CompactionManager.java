@@ -262,6 +262,8 @@ class CompactionManager {
             logger.error("Compaction executor for {} encountered an error. Continuing", mountPath, e);
           }
         }
+      } catch (Throwable t) {
+        logger.error("Compaction thread encountered throwable", t);
       } finally {
         isRunning = false;
         logger.info("Stopping compaction thread for {}", mountPath);
