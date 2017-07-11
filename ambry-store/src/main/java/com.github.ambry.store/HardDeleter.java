@@ -145,8 +145,6 @@ public class HardDeleter implements Runnable {
           hardDeleteLock.unlock();
         }
       }
-    } catch (Throwable t) {
-      logger.error("HardDelete thread encountered throwable", t);
     } finally {
       close();
     }
