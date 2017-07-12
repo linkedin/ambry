@@ -13,7 +13,6 @@
  */
 package com.github.ambry.frontend;
 
-import com.github.ambry.account.AclService;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -46,7 +45,6 @@ class AmbrySecurityService implements SecurityService {
   private boolean isOpen;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
-  private final AclService<?> aclService = new NoOpAclService();
 
   public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics) {
     this.frontendConfig = frontendConfig;
@@ -65,25 +63,21 @@ class AmbrySecurityService implements SecurityService {
       if (restRequest == null) {
         throw new IllegalArgumentException("RestRequest is null");
       }
-      if (aclService.hasAccess(null, null, null)) {
-        RestMethod restMethod = restRequest.getRestMethod();
-        switch (restMethod) {
-          case GET:
-            RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-            if (subresource != null) {
-              switch (subresource) {
-                case BlobInfo:
-                case UserMetadata:
-                  break;
-                default:
-                  exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET",
-                      RestServiceErrorCode.BadRequest);
-              }
+      RestMethod restMethod = restRequest.getRestMethod();
+      switch (restMethod) {
+        case GET:
+          RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
+          if (subresource != null) {
+            switch (subresource) {
+              case BlobInfo:
+              case UserMetadata:
+                break;
+              default:
+                exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET",
+                    RestServiceErrorCode.BadRequest);
             }
-            break;
-        }
-      } else {
-        exception = new RestServiceException("Access denied by ACL service.", RestServiceErrorCode.Unauthorized);
+          }
+          break;
       }
     }
     FutureResult<Void> futureResult = new FutureResult<Void>();
