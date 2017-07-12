@@ -20,7 +20,7 @@ import java.util.Collection;
 /**
  * <p>
  *   An {@code AccountService} is a component that can respond to queries for {@link Account} by id or name, and
- *   add/update {@link Account} for future queries. The {@link Account}s under an {@code AccountService} cannot
+ *   add/update {@link Account}s for future queries. The {@link Account}s under an {@code AccountService} cannot
  *   have duplicate ids or names, and <em>MUST</em> have their ids and names one-to-one mapped.
  * </p>
  * <p>
@@ -38,7 +38,7 @@ public interface AccountService extends Closeable {
 
   /**
    * Gets an {@link Account} by its name.
-   * @param accountName The name of an {@link Account} to get.
+   * @param accountName The name of an {@link Account} to get. Cannot be {@code null}.
    * @return The {@link Account} with the specified name. {@code null} if such an {@link Account} does not exist.
    */
   public Account getAccountByName(String accountName);
@@ -55,8 +55,10 @@ public interface AccountService extends Closeable {
    * </p>
    * <p>
    *   When updating {@link Account}s, {@code AccountService} will check that there is no conflict between the
-   *   {@link Account}s to update and the existing {@link Account}s. If there is any conflict, the update operation
-   *   will not go through. Below lists the possible cases when there is conflict.
+   *   {@link Account}s to update and the existing {@link Account}s. Two {@link Account}s can be conflicting with
+   *   each other if they have different account Ids but the same account name. If there is any conflict, the
+   *   update operation will fail for <em>ALL</em> the {@link Account}s to udpate. Below lists the possible cases
+   *   when there is conflict.
    * </p>
    * <pre>
    * Existing account
@@ -73,7 +75,9 @@ public interface AccountService extends Closeable {
    * E      1           "b"           yes            fail update                  conflicts with existing name.
    * </pre>
    * @param accounts The collection of {@link Account}s to update. Cannot be {@code null}.
-   * @return {@code true} if the update operation is successful, {@code false} otherwise.
+   * @return {@code true} indicates that the accounts have been successfully updated, {@code false} indicates the
+   *                      operation has failed, and none of the account has been updated. This is an either succeed-all
+   *                      or fail-all operation.
    */
   public boolean updateAccounts(Collection<Account> accounts);
 

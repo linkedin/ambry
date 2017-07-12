@@ -53,7 +53,7 @@ public class HelixNotifier implements Notifier<String> {
 
   /**
    * Constructor.
-   * @param helixStore A {@link HelixPropertyStore} that will be used by this {@code HelixNotifier}.
+   * @param helixStore A {@link HelixPropertyStore} that will be used by this {@code HelixNotifier}. Cannot be {@code null}.
    */
   HelixNotifier(HelixPropertyStore<ZNRecord> helixStore) {
     if (helixStore == null) {
@@ -64,7 +64,7 @@ public class HelixNotifier implements Notifier<String> {
 
   /**
    * A constructor that gets a {@link HelixNotifier} based on {@link HelixPropertyStoreConfig}.
-   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}.
+   * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixNotifier}. Cannot be {@code null}.
    */
   public HelixNotifier(HelixPropertyStoreConfig storeConfig) {
     if (storeConfig == null) {
@@ -82,7 +82,8 @@ public class HelixNotifier implements Notifier<String> {
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
     this.helixStore = helixStore;
-    logger.info("HelixNotifier started, took {}ms", System.currentTimeMillis() - startTimeMs);
+    long startUpTimeInMs = System.currentTimeMillis() - startTimeMs;
+    logger.info("HelixNotifier started, took {} ms", startUpTimeInMs);
   }
 
   /**
@@ -140,7 +141,7 @@ public class HelixNotifier implements Notifier<String> {
       public void onDataDelete(String path) {
         // for now, this is a no-op when a ZNRecord for a topic is deleted, since no
         // topic deletion is currently supported.
-        logger.debug("Message is deleted for topic {} at path {}", topic, path);
+        logger.warn("Message is unexpectedly deleted for topic {} at path {}", topic, path);
       }
     };
     topicListenerToHelixListenerMap.put(topicListener, helixListener);

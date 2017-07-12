@@ -30,7 +30,7 @@ import org.apache.zookeeper.data.Stat;
 /**
  * A mock implementation of {@link HelixPropertyStore} and {@link BaseDataAccessor}.
  */
-class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccessor<T> {
+public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccessor<T> {
   private final Map<String, T> pathToRecords = new HashMap<>();
   private final Map<String, Set<HelixPropertyListener>> pathToListeners = new HashMap<>();
   private boolean shouldFailSetOperation = false;
@@ -91,7 +91,6 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
     if (shouldFailSetOperation) {
       return false;
     }
-    System.out.println("Setting to store path: " + path + ", record: " + record.toString());
     return setAndNotify(path, record);
   }
 
@@ -102,9 +101,18 @@ class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccess
 
   @Override
   public boolean update(String path, DataUpdater<T> updater, int options) {
-    T newRecord = updater.update(pathToRecords.get(path));
-    System.out.println("Updating to store path: " + path + ", record: " + newRecord.toString());
-    return setAndNotify(path, newRecord);
+    T newRecord = null;
+    boolean exceptionDuringUpdater = false;
+    try {
+      newRecord = updater.update(pathToRecords.get(path));
+    } catch (Exception e) {
+      exceptionDuringUpdater = true;
+    }
+    if (exceptionDuringUpdater) {
+      return false;
+    } else {
+      return setAndNotify(path, newRecord);
+    }
   }
 
   @Override

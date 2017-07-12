@@ -35,7 +35,7 @@ import static com.github.ambry.utils.TestUtils.*;
 /**
  * An agent to perform operations on a {@link HelixPropertyStore}.
  */
-class HelixStoreOperator {
+public class HelixStoreOperator {
   private static final Logger logger = LoggerFactory.getLogger(HelixStoreOperator.class);
   private static final long OPERATION_TIMEOUT_MS = 20000;
   private final HelixPropertyStore<ZNRecord> helixStore;
@@ -44,7 +44,7 @@ class HelixStoreOperator {
    * Constructor.
    * @param helixStore A {@link HelixPropertyStore} that will be used by this {@link HelixStoreOperator}.
    */
-  HelixStoreOperator(HelixPropertyStore<ZNRecord> helixStore) {
+  public HelixStoreOperator(HelixPropertyStore<ZNRecord> helixStore) {
     this.helixStore = helixStore;
   }
 
@@ -77,7 +77,7 @@ class HelixStoreOperator {
    * @param zNRecord The {@link ZNRecord} to write.
    * @throws Exception
    */
-  void write(String path, ZNRecord zNRecord) throws Exception {
+  public void write(String path, ZNRecord zNRecord) throws Exception {
     AtomicReference<Exception> exceptionRef = new AtomicReference<>();
     CountDownLatch latch = new CountDownLatch(1);
     StoreOperationListener operationListener =
@@ -96,7 +96,7 @@ class HelixStoreOperator {
    * @param path The store path to delete. This is a relative path under the store root path.
    * @throws InterruptedException
    */
-  void delete(String path) throws Exception {
+  public void delete(String path) throws Exception {
     AtomicReference<Exception> exceptionRef = new AtomicReference<>();
     CountDownLatch latch = new CountDownLatch(1);
     StoreOperationListener operationListener =
@@ -115,7 +115,7 @@ class HelixStoreOperator {
    * @param path The path to check. This is a relative path under the store root path.
    * @return {@code true} if the path exists.
    */
-  boolean exist(String path) {
+  public boolean exist(String path) {
     return helixStore.exists(path, AccessOption.PERSISTENT);
   }
 
