@@ -20,6 +20,5 @@ include 'ambry-api',
         'ambry-tools',
         'ambry-protocol',
         'ambry-rest',
-        'ambry-admin',
         'ambry-router',
         'ambry-frontend'

@@ -13,8 +13,13 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
@@ -22,6 +27,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
@@ -68,6 +74,7 @@ import java.util.Properties;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -167,10 +174,12 @@ public class FrontendIntegrationTest {
    */
   @Test
   public void postGetHeadDeleteTest() throws Exception {
-    doPostGetHeadDeleteTest(0, false);
-    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false);
-    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, false);
-    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, false);
+    doPostGetHeadDeleteTest(0, false, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes - 1, false, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, false, false);
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, false, false);
+    // currently there is no difference in the behavior b/w public and private blobs
+    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, true, false);
   }
 
   /**
@@ -179,8 +188,8 @@ public class FrontendIntegrationTest {
    */
   @Test
   public void multipartPostGetHeadTest() throws Exception {
-    doPostGetHeadDeleteTest(0, true);
-    doPostGetHeadDeleteTest(1024, true);
+    doPostGetHeadDeleteTest(0, false, true);
+    doPostGetHeadDeleteTest(1024, false, true);
   }
 
   /*
@@ -199,6 +208,33 @@ public class FrontendIntegrationTest {
     final String expectedResponseBody = "GOOD";
     ByteBuffer content = getContent(responseParts, expectedResponseBody.length());
     assertEquals("GET content does not match original content", expectedResponseBody, new String(content.array()));
+  }
+
+  /**
+   * Tests {@link RestUtils.SubResource#Replicas} requests
+   * <p/>
+   * For each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created. The replica list returned from
+   * server is checked for equality against a locally obtained replica list.
+   * @throws Exception
+   */
+  @Test
+  public void getReplicasTest() throws Exception {
+    List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
+    for (PartitionId partitionId : partitionIds) {
+      String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
+      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, partitionId);
+      FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
+          blobId.getID() + "/" + RestUtils.SubResource.Replicas, Unpooled.buffer(0));
+      Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+      HttpResponse response = (HttpResponse) responseParts.poll();
+      assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+      ByteBuffer content = getContent(responseParts, HttpUtil.getContentLength(response));
+      JSONObject responseJson = new JSONObject(new String(content.array()));
+      String returnedReplicasStr = responseJson.getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
+      assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
+          originalReplicaStr, returnedReplicasStr);
+    }
   }
 
   // helpers
@@ -308,16 +344,17 @@ public class FrontendIntegrationTest {
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
    * @param contentSize the size of the blob to be tested
+   * @param isPrivate {@code true} if blob should be marked as private, {@code false} otherwise.
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doPostGetHeadDeleteTest(int contentSize, boolean multipartPost) throws Exception {
+  private void doPostGetHeadDeleteTest(int contentSize, boolean isPrivate, boolean multipartPost) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
     String serviceId = "postGetHeadDeleteServiceID";
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
     HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId);
     String blobId;
     byte[] usermetadata = null;
     if (multipartPost) {
@@ -329,28 +366,30 @@ public class FrontendIntegrationTest {
       blobId = postBlobAndVerify(headers, content);
     }
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
-    getBlobAndVerify(blobId, null, headers, content);
-    getHeadAndVerify(blobId, null, headers);
+    getBlobAndVerify(blobId, null, null, headers, content);
+    getHeadAndVerify(blobId, null, null, headers);
+    getBlobAndVerify(blobId, null, GetOption.None, headers, content);
+    getHeadAndVerify(blobId, null, GetOption.None, headers);
     ByteRange range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(content.capacity() + 1));
-    getBlobAndVerify(blobId, range, headers, content);
-    getHeadAndVerify(blobId, range, headers);
+    getBlobAndVerify(blobId, range, null, headers, content);
+    getHeadAndVerify(blobId, range, null, headers);
     if (contentSize > 0) {
       range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(content.capacity()));
-      getBlobAndVerify(blobId, range, headers, content);
-      getHeadAndVerify(blobId, range, headers);
+      getBlobAndVerify(blobId, range, null, headers, content);
+      getHeadAndVerify(blobId, range, null, headers);
       long random1 = ThreadLocalRandom.current().nextLong(content.capacity());
       long random2 = ThreadLocalRandom.current().nextLong(content.capacity());
       range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
-      getBlobAndVerify(blobId, range, headers, content);
-      getHeadAndVerify(blobId, range, headers);
+      getBlobAndVerify(blobId, range, null, headers, content);
+      getHeadAndVerify(blobId, range, null, headers);
     }
-    getNotModifiedBlobAndVerify(blobId, false);
-    getUserMetadataAndVerify(blobId, headers, usermetadata);
-    getBlobInfoAndVerify(blobId, headers, usermetadata);
+    getNotModifiedBlobAndVerify(blobId, null, isPrivate);
+    getUserMetadataAndVerify(blobId, null, headers, usermetadata);
+    getBlobInfoAndVerify(blobId, null, headers, usermetadata);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
+    verifyOperationsAfterDelete(blobId, headers, content, usermetadata);
   }
 
   /**
@@ -414,16 +453,20 @@ public class FrontendIntegrationTest {
    * Gets the blob with blob ID {@code blobId} and verifies that the headers and content match with what is expected.
    * @param blobId the blob ID of the blob to GET.
    * @param range the {@link ByteRange} for the request.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param expectedContent the expected content of the blob.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getBlobAndVerify(String blobId, ByteRange range, HttpHeaders expectedHeaders, ByteBuffer expectedContent)
-      throws ExecutionException, InterruptedException, RestServiceException {
-    HttpHeaders headers = null;
+  private void getBlobAndVerify(String blobId, ByteRange range, GetOption getOption, HttpHeaders expectedHeaders,
+      ByteBuffer expectedContent) throws ExecutionException, InterruptedException, RestServiceException {
+    HttpHeaders headers = new DefaultHttpHeaders();
     if (range != null) {
-      headers = new DefaultHttpHeaders().add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+      headers.add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+    }
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -460,11 +503,15 @@ public class FrontendIntegrationTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
    * @param blobId the blob ID of the blob to GET.
+   * @param getOption the options to use while getting the blob.
    * @param isPrivate {@code true} if the blob is private, {@code false} if not.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId, boolean isPrivate) throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption, boolean isPrivate) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -485,15 +532,20 @@ public class FrontendIntegrationTest {
   /**
    * Gets the user metadata of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param usermetadata if non-null, this is expected to come as the body.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getUserMetadataAndVerify(String blobId, HttpHeaders expectedHeaders, byte[] usermetadata)
-      throws ExecutionException, InterruptedException {
+  private void getUserMetadataAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
+      byte[] usermetadata) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     FullHttpRequest httpRequest =
-        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
+        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
@@ -505,15 +557,20 @@ public class FrontendIntegrationTest {
   /**
    * Gets the blob info of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param usermetadata if non-null, this is expected to come as the body.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getBlobInfoAndVerify(String blobId, HttpHeaders expectedHeaders, byte[] usermetadata)
-      throws ExecutionException, InterruptedException {
+  private void getBlobInfoAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
+      byte[] usermetadata) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     FullHttpRequest httpRequest =
-        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
+        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
@@ -527,15 +584,19 @@ public class FrontendIntegrationTest {
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
    * @param range the {@link ByteRange} for the request.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getHeadAndVerify(String blobId, ByteRange range, HttpHeaders expectedHeaders)
+  private void getHeadAndVerify(String blobId, ByteRange range, GetOption getOption, HttpHeaders expectedHeaders)
       throws ExecutionException, InterruptedException, RestServiceException {
-    HttpHeaders headers = null;
+    HttpHeaders headers = new DefaultHttpHeaders();
     if (range != null) {
-      headers = new DefaultHttpHeaders().add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+      headers.add(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+    }
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -636,18 +697,35 @@ public class FrontendIntegrationTest {
   /**
    * Verifies that the right response code is returned for GET, HEAD and DELETE once a blob is deleted.
    * @param blobId the ID of the blob that was deleted.
-   * @throws ExecutionException
-   * @throws InterruptedException
+   * @param expectedHeaders the expected headers in the response if the right options are provided.
+   * @param expectedContent the expected content of the blob if the right options are provided.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @throws Exception
    */
-  private void verifyOperationsAfterDelete(String blobId) throws ExecutionException, InterruptedException {
+  private void verifyOperationsAfterDelete(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent,
+      byte[] usermetadata) throws Exception {
+    HttpHeaders headers = new DefaultHttpHeaders().add(RestUtils.Headers.GET_OPTION, GetOption.None.toString());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
+    verifyDeleted(httpRequest, HttpResponseStatus.GONE);
+    httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 
     httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
+    httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
+    verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 
     httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
+
+    GetOption[] options = {GetOption.Include_Deleted_Blobs, GetOption.Include_All};
+    for (GetOption option : options) {
+      getBlobAndVerify(blobId, null, option, expectedHeaders, expectedContent);
+      getNotModifiedBlobAndVerify(blobId, option, Boolean.parseBoolean(expectedHeaders.get(RestUtils.Headers.PRIVATE)));
+      getUserMetadataAndVerify(blobId, option, expectedHeaders, usermetadata);
+      getBlobInfoAndVerify(blobId, option, expectedHeaders, usermetadata);
+      getHeadAndVerify(blobId, null, option, expectedHeaders);
+    }
   }
 
   /**

@@ -14,13 +14,19 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.MockRestRequest;
@@ -364,30 +370,32 @@ public class AmbryBlobStorageServiceTest {
     String blobId = postBlobAndVerify(headers, content);
 
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
-    getBlobAndVerify(blobId, null, headers, content);
-    getHeadAndVerify(blobId, null, headers);
+    getBlobAndVerify(blobId, null, null, headers, content);
+    getBlobAndVerify(blobId, null, GetOption.None, headers, content);
+    getHeadAndVerify(blobId, null, null, headers);
+    getHeadAndVerify(blobId, null, GetOption.None, headers);
 
     ByteRange range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH));
-    getBlobAndVerify(blobId, range, headers, content);
-    getHeadAndVerify(blobId, range, headers);
+    getBlobAndVerify(blobId, range, null, headers, content);
+    getHeadAndVerify(blobId, range, null, headers);
 
     range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH + 1));
-    getBlobAndVerify(blobId, range, headers, content);
-    getHeadAndVerify(blobId, range, headers);
+    getBlobAndVerify(blobId, range, null, headers, content);
+    getHeadAndVerify(blobId, range, null, headers);
 
     long random1 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     long random2 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
-    getBlobAndVerify(blobId, range, headers, content);
-    getHeadAndVerify(blobId, range, headers);
+    getBlobAndVerify(blobId, range, null, headers, content);
+    getHeadAndVerify(blobId, range, null, headers);
 
-    getNotModifiedBlobAndVerify(blobId);
-    getUserMetadataAndVerify(blobId, headers);
-    getBlobInfoAndVerify(blobId, headers);
+    getNotModifiedBlobAndVerify(blobId, null);
+    getUserMetadataAndVerify(blobId, null, headers);
+    getBlobInfoAndVerify(blobId, null, headers);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
+    verifyOperationsAfterDelete(blobId, headers, content);
   }
 
   /**
@@ -565,6 +573,59 @@ public class AmbryBlobStorageServiceTest {
       fail("Request should have failed");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MissingArgs, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Tests {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)}
+   * <p/>
+   * For each {@link PartitionId} in the {@link ClusterMap}, a {@link BlobId} is created. The replica list returned from
+   * {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)}is checked for equality against a locally
+   * obtained replica list.
+   * @throws Exception
+   */
+  @Test
+  public void getReplicasTest() throws Exception {
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    for (PartitionId partitionId : partitionIds) {
+      String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
+      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, partitionId);
+      RestRequest restRequest =
+          createRestRequest(RestMethod.GET, blobId.getID() + "/" + RestUtils.SubResource.Replicas, null, null);
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      doOperation(restRequest, restResponseChannel);
+      JSONObject response = new JSONObject(new String(restResponseChannel.getResponseBody()));
+      String returnedReplicasStr = response.getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
+      assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
+          originalReplicaStr, returnedReplicasStr);
+    }
+  }
+
+  /**
+   * Tests reactions of the {@link GetReplicasHandler#getReplicas(String, RestResponseChannel)} operation to bad input -
+   * specifically if we do not include required parameters.
+   * @throws Exception
+   */
+  @Test
+  public void getReplicasWithBadInputTest() throws Exception {
+    // bad input - invalid blob id.
+    RestRequest restRequest = createRestRequest(RestMethod.GET, "12345/" + RestUtils.SubResource.Replicas, null, null);
+    try {
+      doOperation(restRequest, new MockRestResponseChannel());
+      fail("Exception should have been thrown because the blobid is invalid");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.NotFound, e.getErrorCode());
+    }
+
+    // bad input - invalid blob id for this cluster map.
+    String blobId = "AAEAAQAAAAAAAADFAAAAJDMyYWZiOTJmLTBkNDYtNDQyNS1iYzU0LWEwMWQ1Yzg3OTJkZQ.gif";
+    restRequest = createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.Replicas, null, null);
+    try {
+      doOperation(restRequest, new MockRestResponseChannel());
+      fail("Exception should have been thrown because the blobid is invalid");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.NotFound, e.getErrorCode());
     }
   }
 
@@ -769,13 +830,14 @@ public class AmbryBlobStorageServiceTest {
    * Gets the blob with blob ID {@code blobId} and verifies that the headers and content match with what is expected.
    * @param blobId the blob ID of the blob to GET.
    * @param range the optional {@link ByteRange} for the request.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param expectedContent the expected content of the blob.
    * @throws Exception
    */
-  private void getBlobAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders, ByteBuffer expectedContent)
-      throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, createRequestHeaders(range), null);
+  private void getBlobAndVerify(String blobId, ByteRange range, GetOption getOption, JSONObject expectedHeaders,
+      ByteBuffer expectedContent) throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, createRequestHeaders(range, getOption), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
@@ -808,10 +870,14 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
    * @param blobId the blob ID of the blob to GET.
+   * @param getOption the options to use while getting the blob.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId) throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption) throws Exception {
     JSONObject headers = new JSONObject();
+    if (getOption != null) {
+      headers.put(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
     dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
     Date date = new Date(System.currentTimeMillis());
@@ -836,12 +902,18 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Gets the user metadata of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getUserMetadataAndVerify(String blobId, JSONObject expectedHeaders) throws Exception {
+  private void getUserMetadataAndVerify(String blobId, GetOption getOption, JSONObject expectedHeaders)
+      throws Exception {
+    JSONObject headers = new JSONObject();
+    if (getOption != null) {
+      headers.put(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     RestRequest restRequest =
-        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
+        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -856,12 +928,17 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Gets the blob info of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getBlobInfoAndVerify(String blobId, JSONObject expectedHeaders) throws Exception {
+  private void getBlobInfoAndVerify(String blobId, GetOption getOption, JSONObject expectedHeaders) throws Exception {
+    JSONObject headers = new JSONObject();
+    if (getOption != null) {
+      headers.put(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     RestRequest restRequest =
-        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
+        createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
@@ -878,11 +955,13 @@ public class AmbryBlobStorageServiceTest {
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
    * @param range the optional {@link ByteRange} for the request.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, ByteRange range, JSONObject expectedHeaders) throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range), null);
+  private void getHeadAndVerify(String blobId, ByteRange range, GetOption getOption, JSONObject expectedHeaders)
+      throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range, getOption), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
@@ -971,9 +1050,12 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Verifies that the right {@link ResponseStatus} is returned for GET, HEAD and DELETE once a blob is deleted.
    * @param blobId the ID of the blob that was deleted.
+   * @param expectedHeaders the expected headers in the response if the right options are provided.
+   * @param expectedContent the expected content of the blob if the right options are provided.
    * @throws Exception
    */
-  private void verifyOperationsAfterDelete(String blobId) throws Exception {
+  private void verifyOperationsAfterDelete(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent)
+      throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
     verifyGone(restRequest);
 
@@ -982,6 +1064,15 @@ public class AmbryBlobStorageServiceTest {
 
     restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
     verifyDeleteAccepted(restRequest);
+
+    GetOption[] options = {GetOption.Include_Deleted_Blobs, GetOption.Include_All};
+    for (GetOption option : options) {
+      getBlobAndVerify(blobId, null, option, expectedHeaders, expectedContent);
+      getNotModifiedBlobAndVerify(blobId, option);
+      getUserMetadataAndVerify(blobId, option, expectedHeaders);
+      getBlobInfoAndVerify(blobId, option, expectedHeaders);
+      getHeadAndVerify(blobId, null, option, expectedHeaders);
+    }
   }
 
   /**
@@ -1162,15 +1253,22 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Generate a {@link JSONObject} with a range header from a {@link ByteRange}
    * @param range the {@link ByteRange} to include in the headers.
-   * @return the {@link JSONObject} with a range header, or null if {@code range} is null.
+   * @param getOption the options to use while getting the blob.
+   * @return the {@link JSONObject} with range and getOption headers (if non-null). {@code null} if both args are
+   * {@code null}.
    * @throws Exception
    */
-  private JSONObject createRequestHeaders(ByteRange range) throws Exception {
-    if (range == null) {
+  private JSONObject createRequestHeaders(ByteRange range, GetOption getOption) throws Exception {
+    if (range == null && getOption == null) {
       return null;
     }
     JSONObject requestHeaders = new JSONObject();
-    requestHeaders.put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+    if (range != null) {
+      requestHeaders.put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range));
+    }
+    if (getOption != null) {
+      requestHeaders.put(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     return requestHeaders;
   }
 }

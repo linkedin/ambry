@@ -59,26 +59,8 @@ class AmbrySecurityService implements SecurityService {
     long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
-    } else {
-      if (restRequest == null) {
-        throw new IllegalArgumentException("RestRequest is null");
-      }
-      RestMethod restMethod = restRequest.getRestMethod();
-      switch (restMethod) {
-        case GET:
-          RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-          if (subresource != null) {
-            switch (subresource) {
-              case BlobInfo:
-              case UserMetadata:
-                break;
-              default:
-                exception = new RestServiceException("Sub-resource [" + subresource + "] not allowed for GET",
-                    RestServiceErrorCode.BadRequest);
-            }
-          }
-          break;
-      }
+    } else if (restRequest == null) {
+      throw new IllegalArgumentException("RestRequest is null");
     }
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (callback != null) {

@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.admin;
+package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -33,22 +33,22 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Performs the {@link RestUtils.SubResource#Replicas} operation supported by the Admin.
+ * Performs the {@link RestUtils.SubResource#Replicas} operation.
  */
 class GetReplicasHandler {
   static String REPLICAS_KEY = "replicas";
 
-  private final AdminMetrics adminMetrics;
+  private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
   private final Logger logger = LoggerFactory.getLogger(GetReplicasHandler.class);
 
   /**
    * Instantiate a handler to handle {@link RestUtils.SubResource#Replicas} operations.
-   * @param adminMetrics the {@link AdminMetrics} instance to use for metrics.
+   * @param metrics the {@link FrontendMetrics} instance to use for metrics.
    * @param clusterMap the {@link ClusterMap} to use to find the replicas of a blob ID.
    */
-  GetReplicasHandler(AdminMetrics adminMetrics, ClusterMap clusterMap) {
-    this.adminMetrics = adminMetrics;
+  GetReplicasHandler(FrontendMetrics metrics, ClusterMap clusterMap) {
+    this.metrics = metrics;
     this.clusterMap = clusterMap;
   }
 
@@ -71,7 +71,7 @@ class GetReplicasHandler {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, replicasResponseBytes.length);
       channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(replicasResponseBytes));
     } finally {
-      adminMetrics.getReplicasProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
+      metrics.getReplicasProcessingTimeInMs.update(System.currentTimeMillis() - startTime);
     }
     return channel;
   }
@@ -88,18 +88,18 @@ class GetReplicasHandler {
     try {
       PartitionId partitionId = new BlobId(blobId, clusterMap).getPartition();
       if (partitionId == null) {
-        adminMetrics.invalidBlobIdError.inc();
+        metrics.invalidBlobIdError.inc();
         logger.warn("Partition for blob id {} is null. The blob id might be invalid", blobId);
         throw new RestServiceException("Partition for blob id " + blobId + " is null. The id might be invalid",
             RestServiceErrorCode.NotFound);
       }
       return packageResult(partitionId.getReplicaIds());
     } catch (IllegalArgumentException e) {
-      adminMetrics.invalidBlobIdError.inc();
+      metrics.invalidBlobIdError.inc();
       throw new RestServiceException("Invalid blob id received for getReplicasForBlob request - " + blobId, e,
           RestServiceErrorCode.NotFound);
     } catch (IOException | JSONException e) {
-      adminMetrics.responseConstructionError.inc();
+      metrics.responseConstructionError.inc();
       throw new RestServiceException("Could not create response for GET of replicas for " + blobId, e,
           RestServiceErrorCode.InternalServerError);
     }

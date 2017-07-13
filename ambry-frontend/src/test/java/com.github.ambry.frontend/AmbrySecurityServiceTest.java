@@ -103,18 +103,9 @@ public class AmbrySecurityServiceTest {
     callback.reset();
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
-      switch (subResource) {
-        case BlobInfo:
-        case UserMetadata:
-          securityService.processRequest(restRequest, callback).get();
-          Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-          Assert.assertNull("Exception should not have been thrown", callback.exception);
-          break;
-        default:
-          testExceptionCasesProcessRequest(restRequest, RestServiceErrorCode.BadRequest);
-          break;
-      }
-
+      securityService.processRequest(restRequest, callback).get();
+      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+      Assert.assertNull("Exception should not have been thrown", callback.exception);
       callback.reset();
     }
 
