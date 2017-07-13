@@ -1254,7 +1254,8 @@ public class AmbryBlobStorageServiceTest {
    * Generate a {@link JSONObject} with a range header from a {@link ByteRange}
    * @param range the {@link ByteRange} to include in the headers.
    * @param getOption the options to use while getting the blob.
-   * @return the {@link JSONObject} with a range header, or null if {@code range} is null.
+   * @return the {@link JSONObject} with range and getOption headers (if non-null). {@code null} if both args are
+   * {@code null}.
    * @throws Exception
    */
   private JSONObject createRequestHeaders(ByteRange range, GetOption getOption) throws Exception {

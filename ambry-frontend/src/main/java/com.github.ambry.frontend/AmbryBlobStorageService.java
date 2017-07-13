@@ -410,16 +410,20 @@ class AmbryBlobStorageService implements BlobStorageService {
       } else if (exception == null) {
         try {
           RestMethod restMethod = restRequest.getRestMethod();
-          logger.trace("Forwarding {} of {} to the router", restMethod, result);
+          logger.trace("Handling {} of {}", restMethod, result);
           switch (restMethod) {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-              if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource.equals(
-                  RestUtils.SubResource.UserMetadata)) {
+              if (subresource == null) {
                 getCallback.markStartTime();
                 router.getBlob(result, getCallback.options, getCallback);
               } else {
                 switch (subresource) {
+                  case BlobInfo:
+                  case UserMetadata:
+                    getCallback.markStartTime();
+                    router.getBlob(result, getCallback.options, getCallback);
+                    break;
                   case Replicas:
                     response = getReplicasHandler.getReplicas(result, restResponseChannel);
                     break;
@@ -473,6 +477,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     private BlobProperties blobProperties;
     private byte[] userMetadata;
 
+    /**
+     * Constructor for GETs that will eventually reach the {@link Router}.
+     */
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         GetCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_GET, frontendMetrics.getSecurityRequestTimeInMs,
@@ -480,11 +487,17 @@ class AmbryBlobStorageService implements BlobStorageService {
       this.getCallback = callback;
     }
 
+    /**
+     * Constructor for GETs that will not be sent to the {@link Router}.
+     */
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel) {
       this(restRequest, restResponseChannel, PROCESS_GET, frontendMetrics.getSecurityRequestTimeInMs,
           frontendMetrics.getSecurityRequestCallbackProcessingTimeInMs);
     }
 
+    /**
+     * Constructor for HEAD that will eventually reach the {@link Router}.
+     */
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         HeadCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_HEAD, frontendMetrics.headSecurityRequestTimeInMs,
@@ -492,6 +505,9 @@ class AmbryBlobStorageService implements BlobStorageService {
       this.headCallback = callback;
     }
 
+    /**
+     * Constructor for POST that will eventually reach the {@link Router}.
+     */
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         BlobProperties blobProperties, byte[] userMetadata, PostCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_POST, frontendMetrics.postSecurityRequestTimeInMs,
@@ -501,6 +517,9 @@ class AmbryBlobStorageService implements BlobStorageService {
       this.postCallback = callback;
     }
 
+    /**
+     * Constructor for DELETE that will eventually reach the {@link Router}.
+     */
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         DeleteCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_DELETE, frontendMetrics.deleteSecurityRequestTimeInMs,
