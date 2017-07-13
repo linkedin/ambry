@@ -117,7 +117,7 @@ public class MockBlobStorageService implements BlobStorageService {
    */
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    Exception exception = new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod);
+    Exception exception = new RestServiceException("PUT is not supported. Allowed methods are: GET, POST, HEAD, DELETE", RestServiceErrorCode.UnsupportedHttpMethod);
     handleResponse(restRequest, restResponseChannel, null, exception);
   }
 
