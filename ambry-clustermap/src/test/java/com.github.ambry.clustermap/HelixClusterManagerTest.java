@@ -283,8 +283,8 @@ public class HelixClusterManagerTest {
 
   /**
    * Test that the changes to the sealed states of replicas get reflected correctly in the cluster manager.
-   * This also tests multiple InstanceConfig change callbacks (including multiple such callbacks tagged with
-   * {@link NotficationContext.INIT} and that they are dealt with correctly.
+   * This also tests multiple InstanceConfig change callbacks (including multiple such callbacks tagged as
+   * {@link org.apache.helix.NotificationContext.Type#INIT} and that they are dealt with correctly.
    */
   @Test
   public void sealedReplicaChangeTest() throws Exception {
