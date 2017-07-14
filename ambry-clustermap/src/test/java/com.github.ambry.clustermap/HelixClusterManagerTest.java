@@ -283,7 +283,8 @@ public class HelixClusterManagerTest {
 
   /**
    * Test that the changes to the sealed states of replicas get reflected correctly in the cluster manager.
-   * This also tests multiple InstanceConfig change callbacks and that they are dealt with correctly.
+   * This also tests multiple InstanceConfig change callbacks (including multiple such callbacks tagged with
+   * {@link NotficationContext.INIT} and that they are dealt with correctly.
    */
   @Test
   public void sealedReplicaChangeTest() throws Exception {
@@ -296,22 +297,22 @@ public class HelixClusterManagerTest {
 
     AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds().get(0);
     List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
-    helixCluster.setReplicaSealedState(partition, instances.get(0), true);
+    helixCluster.setReplicaSealedState(partition, instances.get(0), true, false);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
         clusterManager.getWritablePartitionIds().contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
-    helixCluster.setReplicaSealedState(partition, instances.get(1), true);
+    helixCluster.setReplicaSealedState(partition, instances.get(1), true, true);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
         clusterManager.getWritablePartitionIds().contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
-    helixCluster.setReplicaSealedState(partition, instances.get(1), false);
+    helixCluster.setReplicaSealedState(partition, instances.get(1), false, true);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
         clusterManager.getWritablePartitionIds().contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
-    helixCluster.setReplicaSealedState(partition, instances.get(0), false);
+    helixCluster.setReplicaSealedState(partition, instances.get(0), false, false);
     // At this point all replicas have been marked READ_WRITE. Now, the entire partition should be READ_WRITE.
     assertTrue("If no replica is SEALED, the whole partition should be Writable",
         clusterManager.getWritablePartitionIds().contains(partition));

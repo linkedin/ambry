@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.HelixManager;
@@ -302,8 +303,8 @@ class HelixClusterManager implements ClusterMap {
     private final String dcName;
     final Set<String> allInstances = new HashSet<>();
     private final Object notificationLock = new Object();
-    private boolean instanceConfigInitialized = false;
-    private boolean liveStateInitialized = false;
+    private final AtomicBoolean instanceConfigInitialized = new AtomicBoolean(false);
+    private final AtomicBoolean liveStateInitialized = new AtomicBoolean(false);
 
     /**
      * Initialize a ClusterChangeHandler in the given datacenter.
@@ -317,14 +318,14 @@ class HelixClusterManager implements ClusterMap {
     public void onInstanceConfigChange(List<InstanceConfig> configs, NotificationContext changeContext) {
       logger.trace("InstanceConfig change triggered in {} with: {}", dcName, configs);
       synchronized (notificationLock) {
-        if (!instanceConfigInitialized) {
+        if (!instanceConfigInitialized.get()) {
           logger.info("Received initial notification for instance config change from {}", dcName);
           try {
             initializeInstances(configs);
           } catch (Exception e) {
             initializationException.compareAndSet(null, e);
           }
-          instanceConfigInitialized = true;
+          instanceConfigInitialized.set(true);
         } else {
           updateSealedStateOfReplicas(configs);
         }
@@ -377,9 +378,9 @@ class HelixClusterManager implements ClusterMap {
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       logger.trace("Live instance change triggered from {} with: {}", dcName, liveInstances);
       updateInstanceLiveness(liveInstances);
-      if (!liveStateInitialized) {
+      if (!liveStateInitialized.get()) {
         logger.info("Received initial notification for live instance change from {}", dcName);
-        liveStateInitialized = true;
+        liveStateInitialized.set(true);
       }
       helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
     }
