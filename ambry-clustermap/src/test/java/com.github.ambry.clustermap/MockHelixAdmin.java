@@ -137,8 +137,10 @@ public class MockHelixAdmin implements HelixAdmin {
    * @param partition the {@link AmbryPartition}
    * @param instance the instance name.
    * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
+   * @param tagAsInit whether the InstanceConfig notification should be tagged with
+   *                  {@link org.apache.helix.NotificationContext.Type#INIT}
    */
-  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed, boolean tagAsInit) {
     InstanceConfig instanceConfig = getInstanceConfig(clusterName, instance);
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
     if (isSealed) {
@@ -147,7 +149,7 @@ public class MockHelixAdmin implements HelixAdmin {
       sealedReplicas.remove(partition.toPathString());
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
-    triggerInstanceConfigChangeNotification();
+    triggerInstanceConfigChangeNotification(tagAsInit);
   }
 
   /**
@@ -222,10 +224,12 @@ public class MockHelixAdmin implements HelixAdmin {
 
   /**
    * Trigger an instance config change notification.
+   * @param tagAsInit whether the InstanceConfig notification should be tagged with
+   *                  {@link org.apache.helix.NotificationContext.Type#INIT}
    */
-  private void triggerInstanceConfigChangeNotification() {
+  private void triggerInstanceConfigChangeNotification(boolean tagAsInit) {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
-      helixManager.triggerConfigChangeNotification(false);
+      helixManager.triggerConfigChangeNotification(tagAsInit);
     }
   }
 

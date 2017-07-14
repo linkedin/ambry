@@ -67,10 +67,18 @@ public class MockHelixCluster {
     return helixAdmins.keySet();
   }
 
-  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed) {
+  /**
+   * Set or reset the replica state for the given partition on the given instance.
+   * @param partition the partition whose replica needs the state change.
+   * @param instance the instance hosting the replica.
+   * @param isSealed whether to set or reset the state.
+   * @param tagAsInit whether the InstanceConfig notification should be tagged with
+   *                  {@link org.apache.helix.NotificationContext.Type#INIT}
+   */
+  void setReplicaSealedState(AmbryPartition partition, String instance, boolean isSealed, boolean tagAsInit) {
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       if (helixAdmin.getInstancesInCluster(clusterName).contains(instance)) {
-        helixAdmin.setReplicaSealedState(partition, instance, isSealed);
+        helixAdmin.setReplicaSealedState(partition, instance, isSealed, tagAsInit);
       }
     }
   }
