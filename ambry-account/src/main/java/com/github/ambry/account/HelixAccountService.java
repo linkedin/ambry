@@ -19,11 +19,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.helix.AccessOption;
@@ -33,6 +31,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.account.AccountUtils.*;
 
 
 /**
@@ -292,31 +292,6 @@ class HelixAccountService implements AccountService {
     } finally {
       lock.unlock();
     }
-  }
-
-  /**
-   * Checks if there are duplicate accountId or accountName in the given collection of {@link Account}s.
-   *
-   * @param accounts A collection of {@link Account}s to check duplication.
-   * @return {@code true} if there are duplicated accounts in id or name in the given collection of accounts,
-   *                      {@code false} otherwise.
-   */
-  private boolean hasDuplicateAccountIdOrName(Collection<Account> accounts) {
-    if (accounts == null) {
-      return false;
-    }
-    Set<Short> idSet = new HashSet<>();
-    Set<String> nameSet = new HashSet<>();
-    boolean res = false;
-    for (Account account : accounts) {
-      if (!idSet.add(account.getId()) || !nameSet.add(account.getName())) {
-        logger.debug("Accounts to update have conflicting id or name. Conflicting accountId={} accountName={}",
-            account.getId(), account.getName());
-        res = true;
-        break;
-      }
-    }
-    return res;
   }
 
   /**

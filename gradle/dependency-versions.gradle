@@ -10,7 +10,7 @@
 ext {
     junitVersion = "4.8.1"
     slf4jVersion = "1.7.5"
-    joptSimpleVersion = "4.3"
+    joptSimpleVersion = "4.9"
     log4jVersion = "1.2.17"
     jsonVersion = "20090211"
     metricsVersion = "3.0.1"

@@ -65,8 +65,8 @@ public class HelixParticipantTest {
   private final Properties props;
 
   public HelixParticipantTest() throws Exception {
-    List<ZkInfo> zkInfoList = new ArrayList<>();
-    zkInfoList.add(new ZkInfo(null, "DC0", 2199, false));
+    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");

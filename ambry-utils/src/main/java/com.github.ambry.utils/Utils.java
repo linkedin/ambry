@@ -13,7 +13,16 @@
  */
 package com.github.ambry.utils;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
@@ -30,6 +39,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -507,8 +517,8 @@ public class Utils {
   public static void writeStringToFile(String string, String path) throws IOException {
     FileWriter fileWriter = null;
     try {
-      File clusterFile = new File(path);
-      fileWriter = new FileWriter(clusterFile);
+      File file = new File(path);
+      fileWriter = new FileWriter(file);
       fileWriter.write(string);
     } finally {
       if (fileWriter != null) {
@@ -525,8 +535,20 @@ public class Utils {
    * @throws IOException
    * @throws JSONException
    */
-  public static void writeJsonToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
+  public static void writeJsonObjectToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
     writeStringToFile(jsonObject.toString(2), path);
+  }
+
+  /**
+   * Pretty prints specified {@link JSONArray} to specified file path.
+   *
+   * @param jsonArray to pretty print
+   * @param path file path
+   * @throws IOException
+   * @throws JSONException
+   */
+  public static void writeJsonArrayToFile(JSONArray jsonArray, String path) throws IOException, JSONException {
+    writeStringToFile(jsonArray.toString(2), path);
   }
 
   /**
@@ -584,8 +606,8 @@ public class Utils {
       if (process.exitValue() != 0) {
         throw new IOException(
             "error while trying to preallocate file " + file.getAbsolutePath() + " exitvalue " + process.exitValue()
-                + " error string " + new BufferedReader(new InputStreamReader(process.getErrorStream()))
-                    .lines().collect(Collectors.joining("/n")));
+                + " error string " + new BufferedReader(new InputStreamReader(process.getErrorStream())).lines()
+                .collect(Collectors.joining("/n")));
       }
     }
   }
