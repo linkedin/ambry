@@ -34,7 +34,6 @@ public class BlobProperties {
   private final long creationTimeInMs;
   private final short accountId;
   private final short containerId;
-  private final short creatorAccountId;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -50,11 +49,10 @@ public class BlobProperties {
    * @param serviceId The service id that is creating this blob
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
-   * @param creatorAccountId refers to accountId of the creator of the blob
    */
-  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, short creatorAccountId) {
+  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, creatorAccountId);
+        accountId, containerId);
   }
 
   /**
@@ -81,12 +79,11 @@ public class BlobProperties {
    * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
-   * @param creatorAccountId refers to accountId of the creator of the blob
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, short accountId, short containerId, short creatorAccountId) {
+      long timeToLiveInSeconds, short accountId, short containerId) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-        SystemTime.getInstance().milliseconds(), accountId, containerId, creatorAccountId);
+        SystemTime.getInstance().milliseconds(), accountId, containerId);
   }
 
   /**
@@ -102,7 +99,7 @@ public class BlobProperties {
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
       long timeToLiveInSeconds, long creationTimeInMs) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, creationTimeInMs,
-        UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, UNKNOWN_ACCOUNT_ID);
+        UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
   }
 
   /**
@@ -115,10 +112,9 @@ public class BlobProperties {
    * @param creationTimeInMs The time at which the blob is created.
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
-   * @param creatorAccountId refers to accountId of the creator of the blob
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, short creatorAccountId) {
+      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -128,7 +124,6 @@ public class BlobProperties {
     this.timeToLiveInSeconds = timeToLiveInSeconds;
     this.accountId = accountId;
     this.containerId = containerId;
-    this.creatorAccountId = creatorAccountId;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -151,6 +146,10 @@ public class BlobProperties {
     return contentType;
   }
 
+  /**
+   * ServiceId of the uploader of the blob
+   * @return the serviceId of the uploader of the blob
+   */
   public String getServiceId() {
     return serviceId;
   }
@@ -165,10 +164,6 @@ public class BlobProperties {
 
   public short getContainerId() {
     return containerId;
-  }
-
-  public short getCreatorAccountId() {
-    return creatorAccountId;
   }
 
   @Override
@@ -200,7 +195,6 @@ public class BlobProperties {
     }
     sb.append(", ").append("AccountId=").append(getAccountId());
     sb.append(", ").append("ContainerId=").append(getContainerId());
-    sb.append(", ").append("CreatorAccountId=").append(getCreatorAccountId());
     sb.append("]");
     return sb.toString();
   }

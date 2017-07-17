@@ -59,10 +59,9 @@ public class BlobPropertiesSerDe {
       case Version2:
         short accountId = stream.readShort();
         short containerId = stream.readShort();
-        short issuerAccountId = stream.readShort();
         toReturn =
             new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-                containerId, issuerAccountId);
+                containerId);
         break;
       default:
         throw new IllegalArgumentException("stream has unknown blob property version " + version);

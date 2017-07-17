@@ -59,37 +59,34 @@ public class BlobPropertiesTest {
 
     short accountId = UNKNOWN_ACCOUNT_ID;
     short containerId = UNKNOWN_CONTAINER_ID;
-    short creatorAccountId = UNKNOWN_ACCOUNT_ID;
     if (version == BlobPropertiesSerDe.Version2) {
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      creatorAccountId = Utils.getRandomShort(TestUtils.RANDOM);
     }
 
-    BlobProperties blobProperties =
-        getBlobProperties(blobSize, serviceId, accountId, containerId, creatorAccountId, version);
+    BlobProperties blobProperties = getBlobProperties(blobSize, serviceId, accountId, containerId, version);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, Utils.Infinite_Time, accountId,
-        containerId, creatorAccountId);
+        containerId);
     assertTrue(blobProperties.getCreationTimeInMs() > 0);
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
 
     blobProperties =
         getBlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, accountId, containerId,
-            creatorAccountId, version);
+            version);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
-        accountId, containerId, creatorAccountId);
+        accountId, containerId);
     assertTrue(blobProperties.getCreationTimeInMs() > 0);
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
 
     long creationTimeMs = SystemTime.getInstance().milliseconds();
     blobProperties =
         getBlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, creationTimeMs,
-            accountId, containerId, creatorAccountId, version);
+            accountId, containerId, version);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
-        accountId, containerId, creatorAccountId);
+        accountId, containerId);
     assertEquals(blobProperties.getCreationTimeInMs(), creationTimeMs);
 
     long creationTimeInSecs = TimeUnit.MILLISECONDS.toSeconds(creationTimeMs);
@@ -105,9 +102,9 @@ public class BlobPropertiesTest {
     for (long ttl : validTTLs) {
       blobProperties =
           getBlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs, accountId,
-              containerId, creatorAccountId, version);
-      verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountId, containerId,
-          creatorAccountId);
+              containerId, version);
+      verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountId,
+          containerId);
     }
   }
 
@@ -122,19 +119,18 @@ public class BlobPropertiesTest {
    * @param creationTimeMs creation time of the blob in ms
    * @param accountId accountId of the user who uploaded the blob
    * @param containerId containerId of the blob
-   * @param creatorAccountId Issuer AccountId of the put request
    * @param version the version in which {@link BlobProperties} needs to be created
    * @return the {@link BlobProperties} thus created
    */
   private BlobProperties getBlobProperties(long blobSize, String serviceId, String ownerId, String contentType,
       boolean isPrivate, long timeToLiveInSeconds, long creationTimeMs, short accountId, short containerId,
-      short creatorAccountId, short version) {
+      short version) {
     if (version == BlobPropertiesSerDe.Version1) {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
           creationTimeMs);
     } else {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-          creationTimeMs, accountId, containerId, creatorAccountId);
+          creationTimeMs, accountId, containerId);
     }
   }
 
@@ -148,18 +144,16 @@ public class BlobPropertiesTest {
    * @param timeToLiveInSeconds the time to live associated with the {@link BlobProperties} in secs
    * @param accountId accountId of the user who uploaded the blob
    * @param containerId containerId of the blob
-   * @param creatorAccountId Issuer AccountId of the put request
    * @param version the version in which {@link BlobProperties} needs to be created
    * @return the {@link BlobProperties} thus created
    */
   private BlobProperties getBlobProperties(long blobSize, String serviceId, String ownerId, String contentType,
-      boolean isPrivate, long timeToLiveInSeconds, short accountId, short containerId, short creatorAccountId,
-      short version) {
+      boolean isPrivate, long timeToLiveInSeconds, short accountId, short containerId, short version) {
     if (version == BlobPropertiesSerDe.Version1) {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds);
     } else {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, accountId,
-          containerId, creatorAccountId);
+          containerId);
     }
   }
 
@@ -169,16 +163,15 @@ public class BlobPropertiesTest {
    * @param serviceId the serviceId associated with the {@link BlobProperties}
    * @param accountId accountId of the user who uploaded the blob
    * @param containerId containerId of the blob
-   * @param creatorAccountId Issuer AccountId of the put request
    * @param version the version in which {@link BlobProperties} needs to be created
    * @return the {@link BlobProperties} thus created
    */
   private BlobProperties getBlobProperties(long blobSize, String serviceId, short accountId, short containerId,
-      short creatorAccountId, short version) {
+      short version) {
     if (version == BlobPropertiesSerDe.Version1) {
       return new BlobProperties(blobSize, serviceId);
     } else {
-      return new BlobProperties(blobSize, serviceId, accountId, containerId, creatorAccountId);
+      return new BlobProperties(blobSize, serviceId, accountId, containerId);
     }
   }
 
@@ -193,11 +186,9 @@ public class BlobPropertiesTest {
    * @param ttlInSecs the time to live associated with the {@link BlobProperties} in secs
    * @param accountId accountId of the user who uploaded the blob
    * @param containerId containerId of the blob
-   * @param issuerAccountId Issuer AccountId of the put request
    */
   private void verifyBlobProperties(BlobProperties blobProperties, long blobSize, String serviceId, String ownerId,
-      String contentType, boolean isPrivate, long ttlInSecs, short accountId, short containerId,
-      short issuerAccountId) {
+      String contentType, boolean isPrivate, long ttlInSecs, short accountId, short containerId) {
     assertEquals(blobProperties.getBlobSize(), blobSize);
     assertEquals(blobProperties.getServiceId(), serviceId);
     assertEquals(blobProperties.getOwnerId(), ownerId);
@@ -206,6 +197,5 @@ public class BlobPropertiesTest {
     assertEquals(blobProperties.getTimeToLiveInSeconds(), ttlInSecs);
     assertEquals("AccountId mismatch ", accountId, blobProperties.getAccountId());
     assertEquals("ContainerId mismatch ", containerId, blobProperties.getContainerId());
-    assertEquals("IssuerAccountId mismatch ", issuerAccountId, blobProperties.getCreatorAccountId());
   }
 }
