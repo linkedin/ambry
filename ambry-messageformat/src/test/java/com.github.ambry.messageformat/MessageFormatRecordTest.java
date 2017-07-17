@@ -135,9 +135,7 @@ public class MessageFormatRecordTest {
       } else {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-        short issuerAccountId = Utils.getRandomShort(TestUtils.RANDOM);
-        properties =
-            new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, issuerAccountId);
+        properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId);
       }
       ByteBuffer stream;
       if (version == Version1) {
@@ -156,7 +154,6 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(properties.getServiceId(), result.getServiceId());
       Assert.assertEquals(properties.getAccountId(), result.getAccountId());
       Assert.assertEquals(properties.getContainerId(), result.getContainerId());
-      Assert.assertEquals(properties.getCreatorAccountId(), result.getCreatorAccountId());
 
       // corrupt blob property V1 record
       stream.flip();
@@ -193,7 +190,7 @@ public class MessageFormatRecordTest {
     int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
         + Utils.getNullableStringLength(properties.getContentType()) + Integer.BYTES + Utils.getNullableStringLength(
         properties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(properties.getServiceId())
-        + Short.BYTES + Short.BYTES + Short.BYTES;
+        + Short.BYTES + Short.BYTES;
     return Version_Field_Size_In_Bytes + size + Crc_Size;
   }
 
@@ -213,7 +210,6 @@ public class MessageFormatRecordTest {
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
-    outputBuffer.putShort(properties.getCreatorAccountId());
   }
 
   /**
