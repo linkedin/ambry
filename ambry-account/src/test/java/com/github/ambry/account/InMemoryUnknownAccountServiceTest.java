@@ -38,14 +38,15 @@ public class InMemoryUnknownAccountServiceTest {
   @Test
   public void testAllMethods() throws Exception {
     accountService = new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
-    Account refAccount = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE, null).build();
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById(Utils.getRandomShort(random)));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById((short) -1));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT,
         accountService.getAccountByName(UtilsTest.getRandomString(10)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
+    // updating the InMemoryUnknownAccountService should fail.
+    Account account = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE, null).build();
     assertFalse("Wrong return value from an unsuccessful update operation",
-        accountService.updateAccounts(Collections.singletonList(refAccount)));
+        accountService.updateAccounts(Collections.singletonList(account)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     accountService.close();
   }

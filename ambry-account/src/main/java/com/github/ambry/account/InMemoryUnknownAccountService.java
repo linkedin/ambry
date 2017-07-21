@@ -24,28 +24,20 @@ import java.util.Objects;
  * is in memory, and does not talk to any persistent storage service.
  */
 class InMemoryUnknownAccountService implements AccountService {
-  private static final Account unknownAccount = Account.UNKNOWN_ACCOUNT;
-  private static final Collection<Account> accounts = Collections.singletonList(unknownAccount);
-  private volatile boolean isOpen = false;
-
-  /**
-   * Constructor.
-   */
-  InMemoryUnknownAccountService() {
-    isOpen = true;
-  }
+  private static final Collection<Account> accounts = Collections.singletonList(Account.UNKNOWN_ACCOUNT);
+  private volatile boolean isOpen = true;
 
   @Override
   public Account getAccountById(short accountId) {
     checkOpen();
-    return unknownAccount;
+    return Account.UNKNOWN_ACCOUNT;
   }
 
   @Override
   public Account getAccountByName(String accountName) {
     checkOpen();
     Objects.requireNonNull(accountName, "accountName cannot be null.");
-    return unknownAccount;
+    return Account.UNKNOWN_ACCOUNT;
   }
 
   @Override
@@ -57,7 +49,7 @@ class InMemoryUnknownAccountService implements AccountService {
 
   @Override
   public Collection<Account> getAllAccounts() {
-    return accounts;
+    return Collections.unmodifiableCollection(accounts);
   }
 
   @Override

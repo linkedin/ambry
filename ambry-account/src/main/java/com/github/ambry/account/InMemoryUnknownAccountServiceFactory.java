@@ -39,9 +39,6 @@ public class InMemoryUnknownAccountServiceFactory implements AccountServiceFacto
   @Override
   public AccountService getAccountService() {
     logger.info("Starting an InMemoryUnknownAccountService.");
-    long startTime = System.currentTimeMillis();
-    AccountService res = new InMemoryUnknownAccountService();
-    logger.info("InMemoryUnknownAccountService started, took {} ms", System.currentTimeMillis() - startTime);
-    return res;
+    return new InMemoryUnknownAccountService();
   }
 }
