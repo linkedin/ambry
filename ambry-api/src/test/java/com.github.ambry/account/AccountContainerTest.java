@@ -468,6 +468,31 @@ public class AccountContainerTest {
   }
 
   /**
+   * Tests for {@link Account#UNKNOWN_ACCOUNT} and {@link Container#UNKNOWN_CONTAINER}.
+   */
+  @Test
+  public void testUnknownAccountAndContainer() {
+    Account unknownAccount = Account.UNKNOWN_ACCOUNT;
+    Container unknownContainer = Container.UNKNOWN_CONTAINER;
+    assertEquals("Wrong id for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_ID, unknownContainer.getId());
+    assertEquals("Wrong name for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_NAME, unknownContainer.getName());
+    assertEquals("Wrong status for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_STATUS,
+        unknownContainer.getStatus());
+    assertEquals("Wrong description for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_DESCRIPTION,
+        unknownContainer.getDescription());
+    assertEquals("Wrong privacy setting for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_IS_PRIVATE_SETTING,
+        unknownContainer.isPrivate());
+    assertEquals("Wrong parent account id for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
+        unknownContainer.getParentAccountId());
+    assertEquals("Wrong id for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_ID, unknownAccount.getId());
+    assertEquals("Wrong name for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_NAME, unknownAccount.getName());
+    assertEquals("Wrong status for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_STATUS, unknownAccount.getStatus());
+    assertEquals("Wrong number of containers for UNKNOWN_ACCOUNT", 1, unknownAccount.getAllContainers().size());
+    assertEquals("Wrong container get from UNKNOWN_ACCOUNT", Container.UNKNOWN_CONTAINER,
+        unknownAccount.getContainerById(Container.UNKNOWN_CONTAINER_ID));
+  }
+
+  /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.
    * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson()}, and also
