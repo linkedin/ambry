@@ -50,8 +50,46 @@ import org.json.JSONObject;
  *  </p>
  */
 public class Container {
-  // containerId == UNKNOWN_CONTAINER_ID indicate containerId is not available at the time when this blobId is formed.
+  /**
+   * The id of {@link #UNKNOWN_CONTAINER}.
+   */
   public static final short UNKNOWN_CONTAINER_ID = -1;
+
+  /**
+   * The name of {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final String UNKNOWN_CONTAINER_NAME = "ambry-unknown-container-name";
+
+  /**
+   * The status of {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final ContainerStatus UNKNOWN_CONTAINER_STATUS = ContainerStatus.ACTIVE;
+
+  /**
+   * The description of {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final String UNKNOWN_CONTAINER_DESCRIPTION =
+      "This is a container for the blobs without specifying a target account and container when they are put";
+
+  /**
+   * The privacy setting of {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_IS_PRIVATE_SETTING = false;
+
+  /**
+   * The parent account id of {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final short UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID = Account.UNKNOWN_ACCOUNT_ID;
+
+  /**
+   * A container defined specifically for the blobs put without specifying target account and container. In the
+   * pre-containerization world, a put-blob request does not carry any information which account/container to store
+   * the blob. These blobs are literally put into this container, because the target container information is unknown.
+   */
+  public static final Container UNKNOWN_CONTAINER =
+      new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
+          UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_IS_PRIVATE_SETTING, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String CONTAINER_NAME_KEY = "containerName";

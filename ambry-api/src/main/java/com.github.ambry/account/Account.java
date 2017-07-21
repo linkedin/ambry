@@ -72,8 +72,30 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
-  // accountId == UNKNOWN_ACCOUNT_ID indicate accountId is not available at the time when this blobId is formed.
+  /**
+   * The id of {@link #UNKNOWN_ACCOUNT}.
+   */
   public static final short UNKNOWN_ACCOUNT_ID = -1;
+
+  /**
+   * The name of {@link #UNKNOWN_ACCOUNT}.
+   */
+  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account-name";
+
+  /**
+   * The status of {@link #UNKNOWN_ACCOUNT}.
+   */
+  public static final AccountStatus UNKNOWN_ACCOUNT_STATUS = AccountStatus.ACTIVE;
+
+  /**
+   * An account defined specifically for the blobs put without specifying target account and container. In the
+   * pre-containerization world, a put-blob request does not carry any information which account/container to store
+   * the blob. These blobs are literally put under this account, because the target account information is unknown.
+   */
+  public static final Account UNKNOWN_ACCOUNT =
+      new Account(UNKNOWN_ACCOUNT_ID, UNKNOWN_ACCOUNT_NAME, UNKNOWN_ACCOUNT_STATUS,
+          Collections.singleton(Container.UNKNOWN_CONTAINER));
+
   // static variables
   static final String JSON_VERSION_KEY = "version";
   static final String ACCOUNT_ID_KEY = "accountId";
@@ -129,7 +151,7 @@ public class Account {
    * @param status The status of the account. Cannot be null.
    * @param containers A collection of {@link Container}s to be part of this account.
    */
-  Account(Short id, String name, AccountStatus status, Collection<Container> containers) throws JSONException {
+  Account(Short id, String name, AccountStatus status, Collection<Container> containers) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -305,19 +327,23 @@ public class Account {
    * {@link #containerNameToContainerMap}.
    * @param container A {@code Container} to check conflicting name or id.
    * @throws IllegalStateException If there are containers that have different ids but the same names, or vise versa.
-   * @throws JSONException If fails to parse {@link JSONObject} in a {@link Container}.
    */
-  private void checkDuplicateContainerNameOrId(Container container) throws JSONException {
+  private void checkDuplicateContainerNameOrId(Container container) {
     if (containerIdToContainerMap.containsKey(container.getId()) || containerNameToContainerMap.containsKey(
         container.getName())) {
       Container conflictContainer = containerIdToContainerMap.get(container.getId());
       conflictContainer =
           conflictContainer == null ? containerNameToContainerMap.get(container.getName()) : conflictContainer;
-      StringBuilder sb =
-          new StringBuilder("Duplicate container id or name exists. container=").append(container.toJson().toString())
-              .append(" conflicts with container=")
-              .append(conflictContainer.toJson().toString());
-      throw new IllegalStateException(sb.toString());
+      String errorMessage =
+          new StringBuilder("Duplicate container id or name exists. containerId=").append(container.getId())
+              .append(" containerName=")
+              .append(container.getName())
+              .append(" conflicts with containerId=")
+              .append(conflictContainer.getId())
+              .append(" containerName=")
+              .append(conflictContainer.getName())
+              .toString();
+      throw new IllegalStateException(errorMessage);
     }
   }
 }
