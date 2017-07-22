@@ -48,6 +48,12 @@ public class InMemoryUnknownAccountServiceTest {
     assertFalse("Wrong return value from an unsuccessful update operation",
         accountService.updateAccounts(Collections.singletonList(account)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
+    try {
+      accountService.getAllAccounts().add(account);
+      fail("Should have thrown.");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
     accountService.close();
   }
 

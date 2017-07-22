@@ -24,7 +24,8 @@ import java.util.Objects;
  * is in memory, and does not talk to any persistent storage service.
  */
 class InMemoryUnknownAccountService implements AccountService {
-  private static final Collection<Account> accounts = Collections.singletonList(Account.UNKNOWN_ACCOUNT);
+  private static final Collection<Account> accounts =
+      Collections.unmodifiableCollection(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
   private volatile boolean isOpen = true;
 
   @Override
@@ -49,7 +50,7 @@ class InMemoryUnknownAccountService implements AccountService {
 
   @Override
   public Collection<Account> getAllAccounts() {
-    return Collections.unmodifiableCollection(accounts);
+    return accounts;
   }
 
   @Override
