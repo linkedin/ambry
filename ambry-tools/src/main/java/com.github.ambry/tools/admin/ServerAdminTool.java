@@ -46,6 +46,8 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.RequestControlAdminRequest;
+import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -91,7 +93,7 @@ public class ServerAdminTool implements Closeable {
    * The different operations supported by the tool.
    */
   private enum Operation {
-    GetBlobProperties, GetUserMetadata, GetBlob, TriggerCompaction
+    GetBlobProperties, GetUserMetadata, GetBlob, TriggerCompaction, RequestControl
   }
 
   /**
@@ -113,7 +115,7 @@ public class ServerAdminTool implements Closeable {
 
     /**
      * The type of operation.
-     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction
+     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
@@ -150,11 +152,29 @@ public class ServerAdminTool implements Closeable {
 
     /**
      * Comma separated list of the string representations of the partitions to operate on (if applicable).
-     * Applicable for: TriggerCompaction
+     * Some requests (TriggerCompaction) will not work with an empty list but some requests treat empty lists as "all
+     * partitions" (RequestControl).
+     * Applicable for: TriggerCompaction,RequestControl
      */
     @Config("partition.ids")
     @Default("")
     final String[] partitionIds;
+
+    /**
+     * The type of request to control
+     * Applicable for: RequestControl
+     */
+    @Config("request.type.to.control")
+    @Default("PutRequest")
+    final RequestOrResponseType requestTypeToControl;
+
+    /**
+     * Enables the request type if {@code true}. Disables if {@code false}.
+     * Applicable for: RequestControl
+     */
+    @Config("request.enable")
+    @Default("true")
+    final boolean requestEnable;
 
     /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
@@ -177,6 +197,9 @@ public class ServerAdminTool implements Closeable {
       blobId = verifiableProperties.getString("blob.id", "");
       getOption = GetOption.valueOf(verifiableProperties.getString("get.option", "None"));
       partitionIds = verifiableProperties.getString("partition.ids", "").split(",");
+      requestTypeToControl =
+          RequestOrResponseType.valueOf(verifiableProperties.getString("request.type.to.control", "PutRequest"));
+      requestEnable = verifiableProperties.getBoolean("request.enable", true);
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -259,6 +282,19 @@ public class ServerAdminTool implements Closeable {
           LOGGER.error("There were no partitions provided to trigger compaction on");
         }
         break;
+      case RequestControl:
+        if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
+          for (String partitionId : config.partitionIds) {
+            sendControlRequest(serverAdminTool, clusterMap, dataNodeId, partitionId, config.requestTypeToControl,
+                config.requestEnable);
+          }
+        } else {
+          LOGGER.info("No partition list provided. Requesting enable status of {} to be set to {} on all partitions",
+              config.requestTypeToControl, config.requestEnable);
+          sendControlRequest(serverAdminTool, clusterMap, dataNodeId, null, config.requestTypeToControl,
+              config.requestEnable);
+        }
+        break;
       default:
         throw new IllegalStateException("Recognized but unsupported operation: " + config.typeOfOperation);
     }
@@ -277,6 +313,29 @@ public class ServerAdminTool implements Closeable {
     byte[] bytes = new byte[buffer.remaining()];
     buffer.get(bytes);
     outputFileStream.write(bytes);
+  }
+
+  /**
+   * Sends a {@link RequestControlAdminRequest} to {@code dataNodeId} to set enable status of {@code toControl} to
+   * {@code enable} for {@code partitionId}.
+   * @param serverAdminTool the {@link ServerAdminTool} instance to use.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @param dataNodeId the {@link DataNodeId} to send the request to.
+   * @param partitionId the partition id (string) on which the operation will take place. Can be {@code null}.
+   * @param toControl the {@link RequestOrResponseType} to control.
+   * @param enable the enable (or disable) status required for {@code toControl}.
+   * @throws IOException
+   * @throws TimeoutException
+   */
+  private static void sendControlRequest(ServerAdminTool serverAdminTool, ClusterMap clusterMap, DataNodeId dataNodeId,
+      String partitionId, RequestOrResponseType toControl, boolean enable) throws IOException, TimeoutException {
+    ServerErrorCode errorCode = serverAdminTool.controlRequest(dataNodeId, partitionId, toControl, enable, clusterMap);
+    if (errorCode == ServerErrorCode.No_Error) {
+      LOGGER.info("{} enable state has been set to {} for {} on {}", toControl, enable, partitionId, dataNodeId);
+    } else {
+      LOGGER.error("From {}, received server error code {} for enable state {} request for {} on {}", dataNodeId,
+          errorCode, enable, toControl, partitionId);
+    }
   }
 
   /**
@@ -388,6 +447,50 @@ public class ServerAdminTool implements Closeable {
    */
   public ServerErrorCode triggerCompaction(DataNodeId dataNodeId, String partitionIdStr, ClusterMap clusterMap)
       throws IOException, TimeoutException {
+    PartitionId targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, targetPartitionId,
+        correlationId.incrementAndGet(), CLIENT_ID);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, adminRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    return adminResponse.getError();
+  }
+
+  /**
+   * Sends a {@link RequestControlAdminRequest} to set the enable state of {@code toControl} on {@code partitionIdStr}
+   * to {@code enable} in {@code dataNodeId}.
+   * @param dataNodeId the {@link DataNodeId} to contact.
+   * @param partitionIdStr the String representation of the {@link PartitionId} to compact. Can be {@code null}.
+   * @param toControl the {@link RequestOrResponseType} to control.
+   * @param enable the enable (or disable) status required for {@code toControl}.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @return the {@link ServerErrorCode} that is returned.
+   * @throws IOException
+   * @throws TimeoutException
+   */
+  public ServerErrorCode controlRequest(DataNodeId dataNodeId, String partitionIdStr, RequestOrResponseType toControl,
+      boolean enable, ClusterMap clusterMap) throws IOException, TimeoutException {
+    PartitionId targetPartitionId = null;
+    if (partitionIdStr != null) {
+      targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+    }
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.RequestControl, targetPartitionId, correlationId.incrementAndGet(),
+            CLIENT_ID);
+    RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    return adminResponse.getError();
+  }
+
+  /**
+   * Gets the {@link PartitionId} in the {@code clusterMap} whose string representation matches {@code partitionIdStr}.
+   * @param partitionIdStr the string representation of the partition required.
+   * @param clusterMap the {@link ClusterMap} to use to list and process {@link PartitionId}s.
+   * @return the {@link PartitionId} in the {@code clusterMap} whose string repr matches {@code partitionIdStr}.
+   * @throws IllegalArgumentException if there is no @link PartitionId} in the {@code clusterMap} whose string repr
+   * matches {@code partitionIdStr}.
+   */
+  private PartitionId getPartitionIdFromStr(String partitionIdStr, ClusterMap clusterMap) {
     PartitionId targetPartitionId = null;
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
     for (PartitionId partitionId : partitionIds) {
@@ -399,11 +502,7 @@ public class ServerAdminTool implements Closeable {
     if (targetPartitionId == null) {
       throw new IllegalArgumentException("Partition Id is not valid: [" + partitionIdStr + "]");
     }
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, targetPartitionId,
-        correlationId.incrementAndGet(), CLIENT_ID);
-    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, adminRequest);
-    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
-    return adminResponse.getError();
+    return targetPartitionId;
   }
 
   /**

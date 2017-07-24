@@ -27,5 +27,7 @@ public enum ServerErrorCode {
   Partition_Unknown,
   Disk_Unavailable,
   Partition_ReadOnly,
-  Unknown_Error
+  Unknown_Error,
+  Temporarily_Unavailable,
+  Bad_Request
 }

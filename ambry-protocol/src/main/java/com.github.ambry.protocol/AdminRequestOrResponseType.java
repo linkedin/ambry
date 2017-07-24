@@ -17,5 +17,6 @@ package com.github.ambry.protocol;
  * Enum of types of administration requests/responses.
  */
 public enum AdminRequestOrResponseType {
-  TriggerCompaction
+  TriggerCompaction,
+  RequestControl
 }

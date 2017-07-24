@@ -53,6 +53,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
@@ -71,8 +72,13 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,6 +102,7 @@ public class AmbryRequests implements RequestAPI {
   private final NotificationSystem notification;
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
+  private final Map<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo = new HashMap<>();
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
@@ -111,6 +118,11 @@ public class AmbryRequests implements RequestAPI {
     this.notification = operationNotification;
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
+
+    requestsDisableInfo.put(RequestOrResponseType.PutRequest, new HashSet<>());
+    requestsDisableInfo.put(RequestOrResponseType.GetRequest, new HashSet<>());
+    requestsDisableInfo.put(RequestOrResponseType.DeleteRequest, new HashSet<>());
+    requestsDisableInfo.put(RequestOrResponseType.ReplicaMetadataRequest, new HashSet<>());
   }
 
   public void handleRequests(Request request) throws InterruptedException {
@@ -152,7 +164,8 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     PutResponse response = null;
     try {
-      ServerErrorCode error = validateRequest(receivedRequest.getBlobId().getPartition(), true);
+      ServerErrorCode error =
+          validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating put request failed with error {} for request {}", error, receivedRequest);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error);
@@ -250,7 +263,7 @@ public class AmbryRequests implements RequestAPI {
       List<PartitionResponseInfo> partitionResponseInfoList =
           new ArrayList<PartitionResponseInfo>(getRequest.getPartitionInfoList().size());
       for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
-        ServerErrorCode error = validateRequest(partitionRequestInfo.getPartition(), false);
+        ServerErrorCode error = validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest);
         if (error != ServerErrorCode.No_Error) {
           logger.error("Validating get request failed for partition {} with error {}",
               partitionRequestInfo.getPartition(), error);
@@ -352,7 +365,8 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     DeleteResponse response = null;
     try {
-      ServerErrorCode error = validateRequest(deleteRequest.getBlobId().getPartition(), false);
+      ServerErrorCode error =
+          validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
@@ -428,7 +442,7 @@ public class AmbryRequests implements RequestAPI {
       for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
         long partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
         PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
-        ServerErrorCode error = validateRequest(partitionId, false);
+        ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.ReplicaMetadataRequest);
         logger.trace("{} Time used to validate metadata request: {}", partitionId,
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
@@ -502,6 +516,29 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
+   * @param requestType the {@link RequestOrResponseType} of the request.
+   * @param id the partition id that the request is targeting.
+   * @return {@code true} if the request is enabled. {@code false} otherwise.
+   */
+  private boolean isRequestEnabled(RequestOrResponseType requestType, PartitionId id) {
+    Set<PartitionId> requestDisableInfo = requestsDisableInfo.get(requestType);
+    return requestDisableInfo == null || !requestDisableInfo.contains(id);
+  }
+
+  /**
+   * Enables/disables {@code requestOrResponseType} on the given {@code id}.
+   * @param requestType the {@link RequestOrResponseType} to enable/disable.
+   * @param id the {@link PartitionId} to enable/disable it on.
+   */
+  private void controlRequestForPartition(RequestOrResponseType requestType, PartitionId id, boolean enable) {
+    if (enable) {
+      requestsDisableInfo.get(requestType).remove(id);
+    } else {
+      requestsDisableInfo.get(requestType).add(id);
+    }
+  }
+
+  /**
    * Handles an administration request. These requests can query for or change the internal state of the server.
    * @param request the request that needs to be handled.
    * @throws InterruptedException if response sending is interrupted.
@@ -511,12 +548,14 @@ public class AmbryRequests implements RequestAPI {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
-    AdminRequest adminRequest = AdminRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    DataInputStream requestStream = new DataInputStream(request.getInputStream());
+    AdminRequest adminRequest = AdminRequest.readFrom(requestStream, clusterMap);
     Histogram processingTimeHistogram = null;
     Histogram responseQueueTimeHistogram = null;
     Histogram responseSendTimeHistogram = null;
     Histogram responseTotalTimeHistogram = null;
     AdminResponse response = null;
+    ServerErrorCode error = ServerErrorCode.Unknown_Error;
     try {
       switch (adminRequest.getType()) {
         case TriggerCompaction:
@@ -526,7 +565,7 @@ public class AmbryRequests implements RequestAPI {
           responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
           responseTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
-          ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), false);
+          error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
           if (error != ServerErrorCode.No_Error) {
             logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
           } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
@@ -534,8 +573,36 @@ public class AmbryRequests implements RequestAPI {
             logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
                 adminRequest);
           }
-          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+          break;
+        case RequestControl:
+          metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.requestControlRequestRate.mark();
+          processingTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
+          responseTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
+          RequestControlAdminRequest controlRequest = RequestControlAdminRequest.readFrom(requestStream, adminRequest);
+          RequestOrResponseType toControl = controlRequest.getRequestTypeToControl();
+          if (!requestsDisableInfo.containsKey(toControl)) {
+            metrics.badRequestError.inc();
+            error = ServerErrorCode.Bad_Request;
+          } else {
+            List<? extends PartitionId> partitionIds;
+            if (controlRequest.getPartitionId() != null) {
+              partitionIds = Collections.singletonList(controlRequest.getPartitionId());
+            } else {
+              partitionIds = clusterMap.getAllPartitionIds();
+            }
+            for (PartitionId partitionId : partitionIds) {
+              controlRequestForPartition(toControl, partitionId, controlRequest.shouldEnable());
+              logger.info("Enable state for {} on {} is {}", toControl, partitionId,
+                  isRequestEnabled(toControl, partitionId));
+            }
+            error = ServerErrorCode.No_Error;
+          }
+          break;
       }
+      response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
       response =
@@ -638,12 +705,17 @@ public class AmbryRequests implements RequestAPI {
   /**
    * Check that the provided partition is valid, on the disk, and can be written to.
    * @param partition the partition to validate.
-   * @param checkPartitionState {@code true} to check if a partition is read-write.
+   * @param requestType the {@link RequestOrResponseType} being validated.
    * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
    *         if it cannot.
    */
-  private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
-    // 1. check if partition exists on this node and that the store for this partition has been started
+  private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType) {
+    // 1. Check partition is null
+    if (partition == null) {
+      metrics.badRequestError.inc();
+      return ServerErrorCode.Bad_Request;
+    }
+    // 2. check if partition exists on this node and that the store for this partition has been started
     if (storageManager.getStore(partition) == null) {
       boolean partitionPresent = false;
       for (ReplicaId replica : partition.getReplicaIds()) {
@@ -660,7 +732,7 @@ public class AmbryRequests implements RequestAPI {
         return ServerErrorCode.Partition_Unknown;
       }
     }
-    // 2. ensure the disk for the partition/replica is available
+    // 3. ensure the disk for the partition/replica is available
     List<? extends ReplicaId> replicaIds = partition.getReplicaIds();
     for (ReplicaId replica : replicaIds) {
       if (replica.getDataNodeId().getHostname().equals(currentNode.getHostname())
@@ -671,10 +743,16 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     }
-    // 3. ensure if the partition can be written to
-    if (checkPartitionState && partition.getPartitionState() == PartitionState.READ_ONLY) {
+    // 4. ensure if the partition can be written to
+    if (requestType.equals(RequestOrResponseType.PutRequest)
+        && partition.getPartitionState() == PartitionState.READ_ONLY) {
       metrics.partitionReadOnlyError.inc();
       return ServerErrorCode.Partition_ReadOnly;
+    }
+    // 5. Ensure that the request is enabled.
+    if (!isRequestEnabled(requestType, partition)) {
+      metrics.temporarilyUnavailableError.inc();
+      return ServerErrorCode.Temporarily_Unavailable;
     }
     return ServerErrorCode.No_Error;
   }

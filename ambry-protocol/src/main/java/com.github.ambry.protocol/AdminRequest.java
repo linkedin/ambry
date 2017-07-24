@@ -27,7 +27,8 @@ import java.nio.channels.WritableByteChannel;
  */
 public class AdminRequest extends RequestOrResponse {
   private static final int REQUEST_TYPE_SIZE = 2;
-  private static final short ADMIN_REQUEST_VERSION_V1 = 1;
+  private static final int PARTITION_ID_PRESENT_FLAG_SIZE = 1;
+  private static final short ADMIN_REQUEST_VERSION_V2 = 2;
 
   private final AdminRequestOrResponseType type;
   private final PartitionId partitionId;
@@ -44,22 +45,17 @@ public class AdminRequest extends RequestOrResponse {
    */
   public static AdminRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     Short versionId = stream.readShort();
-    if (!versionId.equals(ADMIN_REQUEST_VERSION_V1)) {
-      throw new IllegalStateException("Unrecognized version for AdminRequest: " + ADMIN_REQUEST_VERSION_V1);
+    if (!versionId.equals(ADMIN_REQUEST_VERSION_V2)) {
+      throw new IllegalStateException("Unrecognized version for AdminRequest: " + ADMIN_REQUEST_VERSION_V2);
     }
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     AdminRequestOrResponseType type = AdminRequestOrResponseType.values()[stream.readShort()];
-    AdminRequest request;
-    switch (type) {
-      case TriggerCompaction:
-        PartitionId id = clusterMap.getPartitionIdFromStream(stream);
-        request = new AdminRequest(type, id, correlationId, clientId);
-        break;
-      default:
-        throw new IllegalArgumentException("Unrecognized admin request type: " + type);
+    PartitionId id = null;
+    if (stream.readByte() == 1){
+      id = clusterMap.getPartitionIdFromStream(stream);
     }
-    return request;
+    return new AdminRequest(type, id, correlationId, clientId);
   }
 
   /**
@@ -70,7 +66,7 @@ public class AdminRequest extends RequestOrResponse {
    * @param clientId the ID of the client.
    */
   public AdminRequest(AdminRequestOrResponseType type, PartitionId partitionId, int correlationId, String clientId) {
-    super(RequestOrResponseType.AdminRequest, ADMIN_REQUEST_VERSION_V1, correlationId, clientId);
+    super(RequestOrResponseType.AdminRequest, ADMIN_REQUEST_VERSION_V2, correlationId, clientId);
     this.type = type;
     this.partitionId = partitionId;
     sizeInBytes = computeAndGetSizeInBytes();
@@ -81,6 +77,7 @@ public class AdminRequest extends RequestOrResponse {
     long written = 0;
     if (bufferToSend == null) {
       serializeIntoBuffer();
+      bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
       written = channel.write(bufferToSend);
@@ -120,32 +117,26 @@ public class AdminRequest extends RequestOrResponse {
   }
 
   /**
-   * @return the size in bytes of the serialized version of the request
-   */
-  private long computeAndGetSizeInBytes() {
-    long size = super.sizeInBytes() + REQUEST_TYPE_SIZE;
-    switch (type) {
-      case TriggerCompaction:
-        size += partitionId.getBytes().length;
-        break;
-      default:
-        throw new IllegalArgumentException("Unrecognized admin request type: " + type);
-    }
-    return size;
-  }
-
-  /**
    * Serializes the request into bytes and loads into the buffer for sending.
    */
-  private void serializeIntoBuffer() {
+  protected void serializeIntoBuffer() {
     bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
     writeHeader();
     bufferToSend.putShort((short) type.ordinal());
-    switch (type) {
-      case TriggerCompaction:
-        bufferToSend.put(partitionId.getBytes());
-        break;
+    bufferToSend.put(partitionId == null ? (byte) 0 : 1);
+    if (partitionId != null){
+      bufferToSend.put(partitionId.getBytes());
     }
-    bufferToSend.flip();
+  }
+
+  /**
+   * @return the size in bytes of the serialized version of the request
+   */
+  private long computeAndGetSizeInBytes() {
+    long size = super.sizeInBytes() + REQUEST_TYPE_SIZE + PARTITION_ID_PRESENT_FLAG_SIZE;
+    if (partitionId != null) {
+      size += partitionId.getBytes().length;
+    }
+    return size;
   }
 }
