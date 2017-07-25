@@ -17,7 +17,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
-import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
@@ -43,6 +42,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.github.ambry.router.RouterUtils.*;
+
 
 /**
  * An implementation of {@link Router} that holds blobs in memory.
@@ -51,9 +52,6 @@ public class InMemoryRouter implements Router {
   public final static String OPERATION_THROW_EARLY_RUNTIME_EXCEPTION = "routerThrowEarlyRuntimeException";
   public final static String OPERATION_THROW_LATE_RUNTIME_EXCEPTION = "routerThrowLateRuntimeException";
   public final static String OPERATION_THROW_ROUTER_EXCEPTION = "routerThrowRouterException";
-  private static final long BLOB_ID_SIZE =
-      new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, new MockPartitionId()).getID().length();
   private final ConcurrentHashMap<String, InMemoryBlob> blobs = new ConcurrentHashMap<>();
   private final ConcurrentSkipListSet<String> deletedBlobs = new ConcurrentSkipListSet<>();
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
@@ -160,39 +158,35 @@ public class InMemoryRouter implements Router {
     ReadableStreamChannel blobDataChannel = null;
     BlobInfo blobInfo = null;
     Exception exception = null;
-    if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
-      completeOperation(futureResult, callback, null,
-          new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
-    } else {
-      try {
-        if (deletedBlobs.contains(blobId) && !options.getGetOption().equals(GetOption.Include_All)
-            && !options.getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
-          exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
-        } else if (!blobs.containsKey(blobId)) {
-          exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
-        } else {
-          InMemoryBlob blob = blobs.get(blobId);
-          switch (options.getOperationType()) {
-            case Data:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
-              break;
-            case BlobInfo:
-              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-              break;
-            case All:
-              blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
-              blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
-              break;
-          }
+    try {
+      getBlobIdFromString(blobId, clusterMap);
+      if (deletedBlobs.contains(blobId) && !options.getGetOption().equals(GetOption.Include_All)
+          && !options.getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
+        exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
+      } else if (!blobs.containsKey(blobId)) {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+      } else {
+        InMemoryBlob blob = blobs.get(blobId);
+        switch (options.getOperationType()) {
+          case Data:
+            blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
+            break;
+          case BlobInfo:
+            blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+            break;
+          case All:
+            blobDataChannel = new ByteBufferRSC(blob.getBlob(options.getRange()));
+            blobInfo = new BlobInfo(blob.getBlobProperties(), blob.getUserMetadata());
+            break;
         }
-      } catch (RouterException e) {
-        exception = e;
-      } catch (Exception e) {
-        exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-      } finally {
-        GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel) : null;
-        completeOperation(futureResult, callback, operationResult, exception);
       }
+    } catch (RouterException e) {
+      exception = e;
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      GetBlobResult operationResult = exception == null ? new GetBlobResult(blobInfo, blobDataChannel) : null;
+      completeOperation(futureResult, callback, operationResult, exception);
     }
     return futureResult;
   }
@@ -222,24 +216,20 @@ public class InMemoryRouter implements Router {
     FutureResult<Void> futureResult = new FutureResult<>();
     handlePrechecks(futureResult, callback);
     Exception exception = null;
-    if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
-      completeOperation(futureResult, callback, null,
-          new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
-    } else {
-      try {
-        if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
-          deletedBlobs.add(blobId);
-          if (notificationSystem != null) {
-            notificationSystem.onBlobDeleted(blobId, serviceId);
-          }
-        } else if (!deletedBlobs.contains(blobId)) {
-          exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+    try {
+      getBlobIdFromString(blobId, clusterMap);
+      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
+        deletedBlobs.add(blobId);
+        if (notificationSystem != null) {
+          notificationSystem.onBlobDeleted(blobId, serviceId);
         }
-      } catch (Exception e) {
-        exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-      } finally {
-        completeOperation(futureResult, callback, null, exception);
+      } else if (!deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
       }
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      completeOperation(futureResult, callback, null, exception);
     }
     return futureResult;
   }
@@ -347,7 +337,7 @@ class InMemoryBlobPoster implements Runnable {
     Exception exception = null;
     try {
       String blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, getPartitionForPut(Collections.EMPTY_LIST)).getID();
+          Container.UNKNOWN_CONTAINER_ID, getPartitionForPut()).getID();
       if (blobs.containsKey(blobId)) {
         exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
@@ -399,16 +389,13 @@ class InMemoryBlobPoster implements Runnable {
   }
 
   /**
-   * Choose a random {@link PartitionId} for putting the current chunk and return it. This code is copied from
+   * Choose a random {@link PartitionId} and return it. This code is partially copied from
    * {@code PutOperation#getPartitionForPut}.
-   * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
    * @return the chosen {@link PartitionId}
    * @throws RouterException
    */
-  private PartitionId getPartitionForPut(List<PartitionId> partitionIdsToExclude) throws RouterException {
-    // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
+  private PartitionId getPartitionForPut() throws RouterException {
     List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
-    partitions.removeAll(partitionIdsToExclude);
     if (partitions.isEmpty()) {
       throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
     }
