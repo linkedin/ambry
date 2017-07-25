@@ -529,6 +529,7 @@ public class AmbryRequests implements RequestAPI {
    * Enables/disables {@code requestOrResponseType} on the given {@code id}.
    * @param requestType the {@link RequestOrResponseType} to enable/disable.
    * @param id the {@link PartitionId} to enable/disable it on.
+   * @param enable whether to enable ({@code true}) or disable
    */
   private void controlRequestForPartition(RequestOrResponseType requestType, PartitionId id, boolean enable) {
     if (enable) {
