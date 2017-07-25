@@ -118,9 +118,9 @@ public class AmbryBlobStorageServiceTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry);
-    router = new InMemoryRouter(verifiableProperties);
-    responseHandler = new FrontendTestResponseHandler();
     clusterMap = new MockClusterMap();
+    router = new InMemoryRouter(verifiableProperties, clusterMap);
+    responseHandler = new FrontendTestResponseHandler();
     ambryBlobStorageService = getAmbryBlobStorageService();
     responseHandler.start();
     ambryBlobStorageService.start();

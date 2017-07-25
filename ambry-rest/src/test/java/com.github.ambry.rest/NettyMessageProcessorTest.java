@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -83,7 +84,7 @@ public class NettyMessageProcessorTest {
   public NettyMessageProcessorTest() throws InstantiationException, IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties(new Properties());
     RestRequestMetricsTracker.setDefaults(new MetricRegistry());
-    router = new InMemoryRouter(verifiableProperties, notificationSystem);
+    router = new InMemoryRouter(verifiableProperties, notificationSystem, new MockClusterMap());
     requestHandler = new MockRestRequestResponseHandler();
     blobStorageService = new MockBlobStorageService(verifiableProperties, requestHandler, router);
     requestHandler.setBlobStorageService(blobStorageService);

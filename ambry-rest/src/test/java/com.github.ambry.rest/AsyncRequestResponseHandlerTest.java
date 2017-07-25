@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.AsyncWritableChannel;
@@ -67,7 +68,7 @@ public class AsyncRequestResponseHandlerTest {
   @BeforeClass
   public static void startRequestResponseHandler() throws InstantiationException, IOException {
     verifiableProperties = new VerifiableProperties(new Properties());
-    router = new InMemoryRouter(verifiableProperties);
+    router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
     asyncRequestResponseHandler = getAsyncRequestResponseHandler(5);
     blobStorageService.start();
     asyncRequestResponseHandler.start();
