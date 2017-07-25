@@ -78,12 +78,10 @@ class AmbrySecurityService implements SecurityService {
     long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
-    } else if (restRequest == null) {
-      throw new IllegalArgumentException("RestRequest is null");
+    } else if (restRequest == null || callback == null) {
+      throw new IllegalArgumentException("RestRequest or Callback is null");
     }
-    if (callback != null) {
-      callback.onCompletion(null, exception);
-    }
+    callback.onCompletion(null, exception);
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
   }
 

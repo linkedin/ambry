@@ -108,6 +108,9 @@ public class GetPeersHandlerTest {
     verifyFailureWithMsg(msg);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PostProcessRequest;
     verifyFailureWithMsg(msg);
+    securityServiceFactory.exceptionToThrow = new IllegalStateException(msg);
+    securityServiceFactory.exceptionToReturn = null;
+    verifyFailureWithMsg(msg);
   }
 
   /**
