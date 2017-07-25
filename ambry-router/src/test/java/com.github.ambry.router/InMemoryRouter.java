@@ -226,6 +226,8 @@ public class InMemoryRouter implements Router {
       } else if (!deletedBlobs.contains(blobId)) {
         exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
       }
+    } catch (RouterException e) {
+      exception = e;
     } catch (Exception e) {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
@@ -350,12 +352,10 @@ class InMemoryBlobPoster implements Runnable {
             NotificationBlobType.Simple);
       }
       operationResult = blobId;
+    } catch (RouterException e) {
+      exception = e;
     } catch (Exception e) {
-      if (e instanceof RouterException) {
-        exception = e;
-      } else {
-        exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
-      }
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
       InMemoryRouter.completeOperation(postData.getFuture(), postData.getCallback(), operationResult, exception);
     }
