@@ -45,7 +45,7 @@ public class AmbryBlobStorageServiceFactoryTest {
 
     AmbryBlobStorageServiceFactory ambryBlobStorageServiceFactory =
         new AmbryBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(),
-            new MockRestRequestResponseHandler(), new InMemoryRouter(verifiableProperties));
+            new MockRestRequestResponseHandler(), new InMemoryRouter(verifiableProperties, new MockClusterMap()));
     BlobStorageService ambryBlobStorageService = ambryBlobStorageServiceFactory.getBlobStorageService();
     assertNotNull("No BlobStorageService returned", ambryBlobStorageService);
     assertEquals("Did not receive an AmbryBlobStorageService instance",
@@ -63,7 +63,7 @@ public class AmbryBlobStorageServiceFactoryTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     ClusterMap clusterMap = new MockClusterMap();
     RestResponseHandler restResponseHandler = new MockRestRequestResponseHandler();
-    Router router = new InMemoryRouter(verifiableProperties);
+    Router router = new InMemoryRouter(verifiableProperties, clusterMap);
 
     // VerifiableProperties null.
     try {

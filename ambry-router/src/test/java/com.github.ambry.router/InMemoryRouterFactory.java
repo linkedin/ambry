@@ -29,16 +29,18 @@ public class InMemoryRouterFactory implements RouterFactory {
 
   private final VerifiableProperties verifiableProperties;
   private final NotificationSystem notificationSystem;
+  private final ClusterMap clusterMap;
 
   public InMemoryRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, Object sslFactory) {
     this.verifiableProperties = verifiableProperties;
     this.notificationSystem = notificationSystem;
+    this.clusterMap = clusterMap;
   }
 
   @Override
   public Router getRouter() throws InstantiationException {
-    latestInstance = new InMemoryRouter(verifiableProperties, notificationSystem);
+    latestInstance = new InMemoryRouter(verifiableProperties, notificationSystem, clusterMap);
     return latestInstance;
   }
 

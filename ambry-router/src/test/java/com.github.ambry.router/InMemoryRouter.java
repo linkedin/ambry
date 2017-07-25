@@ -13,6 +13,13 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -23,14 +30,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -42,16 +51,16 @@ public class InMemoryRouter implements Router {
   public final static String OPERATION_THROW_EARLY_RUNTIME_EXCEPTION = "routerThrowEarlyRuntimeException";
   public final static String OPERATION_THROW_LATE_RUNTIME_EXCEPTION = "routerThrowLateRuntimeException";
   public final static String OPERATION_THROW_ROUTER_EXCEPTION = "routerThrowRouterException";
-
-  private static final long BLOB_ID_SIZE = UUID.randomUUID().toString().length();
-
-  private final ConcurrentHashMap<String, InMemoryBlob> blobs = new ConcurrentHashMap<String, InMemoryBlob>();
-  private final ConcurrentSkipListSet<String> deletedBlobs = new ConcurrentSkipListSet<String>();
-
+  private static final long BLOB_ID_SIZE =
+      new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, new MockPartitionId()).getID().length();
+  private final ConcurrentHashMap<String, InMemoryBlob> blobs = new ConcurrentHashMap<>();
+  private final ConcurrentSkipListSet<String> deletedBlobs = new ConcurrentSkipListSet<>();
   private final AtomicBoolean routerOpen = new AtomicBoolean(true);
   private final ExecutorService operationPool;
-  private VerifiableProperties verifiableProperties;
   private final NotificationSystem notificationSystem;
+  private final ClusterMap clusterMap;
+  private VerifiableProperties verifiableProperties;
 
   /**
    * Changes the {@link VerifiableProperties} instance with the router so that the behaviour can be changed on the fly.
@@ -65,19 +74,24 @@ public class InMemoryRouter implements Router {
    * Creates an instance of InMemoryRouter.
    * @param verifiableProperties properties map that defines the behavior of this instance.
    * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
+   * @param clusterMap the cluster map for the cluster.
    */
-  public InMemoryRouter(VerifiableProperties verifiableProperties, NotificationSystem notificationSystem) {
+  public InMemoryRouter(VerifiableProperties verifiableProperties, NotificationSystem notificationSystem,
+      ClusterMap clusterMap) {
+    Objects.requireNonNull(clusterMap);
     setVerifiableProperties(verifiableProperties);
     operationPool = Executors.newFixedThreadPool(1);
     this.notificationSystem = notificationSystem;
+    this.clusterMap = clusterMap;
   }
 
   /**
    * Creates an instance of InMemoryRouter.
    * @param verifiableProperties properties map that defines the behavior of this instance.
+   * @param clusterMap the cluster map for the cluster.
    */
-  public InMemoryRouter(VerifiableProperties verifiableProperties) {
-    this(verifiableProperties, null);
+  public InMemoryRouter(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
+    this(verifiableProperties, null, clusterMap);
   }
 
   /**
@@ -191,10 +205,10 @@ public class InMemoryRouter implements Router {
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
-    FutureResult<String> futureResult = new FutureResult<String>();
+    FutureResult<String> futureResult = new FutureResult<>();
     handlePrechecks(futureResult, callback);
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);
-    operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem));
+    operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap));
     return futureResult;
   }
 
@@ -205,7 +219,7 @@ public class InMemoryRouter implements Router {
 
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
-    FutureResult<Void> futureResult = new FutureResult<Void>();
+    FutureResult<Void> futureResult = new FutureResult<>();
     handlePrechecks(futureResult, callback);
     Exception exception = null;
     if (blobId == null || blobId.length() != BLOB_ID_SIZE) {
@@ -310,18 +324,21 @@ class InMemoryBlobPoster implements Runnable {
   private final PostData postData;
   private final ConcurrentHashMap<String, InMemoryRouter.InMemoryBlob> blobs;
   private final NotificationSystem notificationSystem;
+  private final ClusterMap clusterMap;
 
   /**
    * Create a new instance.
    * @param postData the data that came with the POST request as {@link PostData}.
    * @param blobs the list of blobs in memory.
    * @param notificationSystem the notification system to use to notify creation/deletion of blobs.
+   * @param clusterMap the cluster map for the cluster.
    */
   public InMemoryBlobPoster(PostData postData, ConcurrentHashMap<String, InMemoryRouter.InMemoryBlob> blobs,
-      NotificationSystem notificationSystem) {
+      NotificationSystem notificationSystem, ClusterMap clusterMap) {
     this.postData = postData;
     this.blobs = blobs;
     this.notificationSystem = notificationSystem;
+    this.clusterMap = clusterMap;
   }
 
   @Override
@@ -329,10 +346,10 @@ class InMemoryBlobPoster implements Runnable {
     String operationResult = null;
     Exception exception = null;
     try {
-      String blobId = UUID.randomUUID().toString();
+      String blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, getPartitionForPut(Collections.EMPTY_LIST)).getID();
       if (blobs.containsKey(blobId)) {
-        exception =
-            new RouterException("UUID is broken. Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
+        exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
       ByteBuffer blobData = readBlob(postData.getReadableStreamChannel());
       InMemoryRouter.InMemoryBlob blob =
@@ -344,7 +361,11 @@ class InMemoryBlobPoster implements Runnable {
       }
       operationResult = blobId;
     } catch (Exception e) {
-      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+      if (e instanceof RouterException) {
+        exception = e;
+      } else {
+        exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+      }
     } finally {
       InMemoryRouter.completeOperation(postData.getFuture(), postData.getCallback(), operationResult, exception);
     }
@@ -375,6 +396,23 @@ class InMemoryBlobPoster implements Runnable {
       }
     }
     return ByteBuffer.wrap(blobDataStream.toByteArray());
+  }
+
+  /**
+   * Choose a random {@link PartitionId} for putting the current chunk and return it. This code is copied from
+   * {@code PutOperation#getPartitionForPut}.
+   * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
+   * @return the chosen {@link PartitionId}
+   * @throws RouterException
+   */
+  private PartitionId getPartitionForPut(List<PartitionId> partitionIdsToExclude) throws RouterException {
+    // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
+    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
+    partitions.removeAll(partitionIdsToExclude);
+    if (partitions.isEmpty()) {
+      throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
+    }
+    return partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
   }
 }
 
