@@ -168,7 +168,7 @@ public class AmbryServer {
       }
 
       List<AmbryHealthReport> ambryHealthReports = new ArrayList<>();
-      if (serverConfig.serverStatsHealthReportEnabled) {
+      if (serverConfig.serverStatsPublishHealthReportEnabled) {
         ambryHealthReports.add(
             new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
       }

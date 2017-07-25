@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * Responsible for performing cluster wide stats aggregation.
  */
 public class HelixClusterAggregator {
-  private final Logger logger = LoggerFactory.getLogger(getClass());
+  private static final Logger LOGGER = LoggerFactory.getLogger(HelixClusterAggregator.class);
   private final ObjectMapper mapper = new ObjectMapper();
   private final long relevantTimePeriodInMs;
 
@@ -62,10 +62,16 @@ public class HelixClusterAggregator {
         combine(partitionSnapshot, snapshotWrapperCopy, statsWrapperJSON.getKey(), partitionTimestampMap);
       }
     }
-    logger.info("Reduced raw snapshot {}", mapper.writeValueAsString(rawPartitionSnapshot));
-    logger.info("Reduced snapshot {}", mapper.writeValueAsString(partitionSnapshot));
+    if (LOGGER.isTraceEnabled()) {
+      LOGGER.trace("Combined raw snapshot {}", mapper.writeValueAsString(rawPartitionSnapshot));
+      LOGGER.trace("Combined snapshot {}", mapper.writeValueAsString(partitionSnapshot));
+    }
     StatsSnapshot reducedRawSnapshot = reduce(rawPartitionSnapshot);
     StatsSnapshot reducedSnapshot = reduce(partitionSnapshot);
+    if (LOGGER.isTraceEnabled()) {
+      LOGGER.trace("Reduced raw snapshot {}", mapper.writeValueAsString(reducedRawSnapshot));
+      LOGGER.trace("Reduced snapshot {}", mapper.writeValueAsString(reducedSnapshot));
+    }
     return new Pair<>(mapper.writeValueAsString(reducedRawSnapshot), mapper.writeValueAsString(reducedSnapshot));
   }
 
@@ -117,22 +123,22 @@ public class HelixClusterAggregator {
             partitionSnapshot.getValue().getValue() - basePartitionSnapshotMap.get(partitionId).getValue();
         long deltaInTimeMs = snapshotTimestamp - partitionTimestampMap.get(partitionId);
         if (Math.abs(deltaInTimeMs) < relevantTimePeriodInMs && deltaInValue > 0) {
-          logger.trace("Updating partition {} snapshot from instance {} as last updated time is within"
+          LOGGER.trace("Updating partition {} snapshot from instance {} as last updated time is within"
               + "relevant time period and delta value has increased ", partitionId, instance);
           basePartitionSnapshotMap.put(partitionId, partitionSnapshot.getValue());
           partitionTimestampMap.put(partitionId, snapshotTimestamp);
           totalValue += deltaInValue;
         } else if (deltaInTimeMs > relevantTimePeriodInMs) {
-          logger.trace("Updating partition {} snapshot from instance {} as new value is updated "
+          LOGGER.trace("Updating partition {} snapshot from instance {} as new value is updated "
               + "within relevant time period compared to already existing one", partitionId, instance);
           basePartitionSnapshotMap.put(partitionId, partitionSnapshot.getValue());
           partitionTimestampMap.put(partitionId, snapshotTimestamp);
           totalValue += deltaInValue;
         } else {
-          logger.trace("Ignoring snapshot from {} for partition {}", instance, partitionId);
+          LOGGER.trace("Ignoring snapshot from {} for partition {}", instance, partitionId);
         }
       } else {
-        logger.trace("First entry for partition {} is from {}", partitionId, instance);
+        LOGGER.trace("First entry for partition {} is from {}", partitionId, instance);
         basePartitionSnapshotMap.put(partitionId, partitionSnapshot.getValue());
         partitionTimestampMap.put(partitionId, snapshotTimestamp);
         totalValue += partitionSnapshot.getValue().getValue();

@@ -44,15 +44,23 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   private final HelixManager manager;
   private final HelixClusterAggregator clusterAggregator;
   private final String healthReportName;
-  private final String fieldName;
+  private final String quotaStatsFieldName;
   private static final Logger logger = LoggerFactory.getLogger(HelixHealthReportAggregatorTask.class);
 
+  /**
+   * Instantiates {@link HelixHealthReportAggregatorTask}
+   * @param context the {@link TaskCallbackContext} associated with the task
+   * @param relevantTimePeriodInMs relevant time period in ms within which values are considered to be valid. Values
+   *                               outside of this period will be ignored.
+   * @param healthReportName Name of the health report
+   * @param quotaStatsFieldName Quota stats field name
+   */
   HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportName,
-      String fieldName) {
+      String quotaStatsFieldName) {
     manager = context.getManager();
     clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
     this.healthReportName = healthReportName;
-    this.fieldName = fieldName;
+    this.quotaStatsFieldName = quotaStatsFieldName;
   }
 
   @Override
@@ -65,7 +73,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
         PropertyKey.Builder keyBuilder = helixDataAccessor.keyBuilder();
         HelixProperty record = helixDataAccessor.getProperty(keyBuilder.healthReport(instanceName, healthReportName));
         if (record != null && record.getRecord() != null) {
-          statsWrappersJSON.put(instanceName, record.getRecord().getSimpleField(fieldName));
+          statsWrappersJSON.put(instanceName, record.getRecord().getSimpleField(quotaStatsFieldName));
         }
       }
       Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
