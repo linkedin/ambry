@@ -74,11 +74,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +100,8 @@ public class AmbryRequests implements RequestAPI {
   private final NotificationSystem notification;
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
-  private final Map<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo = new HashMap<>();
+  private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
+      new ConcurrentHashMap<>();
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
@@ -119,10 +118,11 @@ public class AmbryRequests implements RequestAPI {
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
 
-    requestsDisableInfo.put(RequestOrResponseType.PutRequest, new HashSet<>());
-    requestsDisableInfo.put(RequestOrResponseType.GetRequest, new HashSet<>());
-    requestsDisableInfo.put(RequestOrResponseType.DeleteRequest, new HashSet<>());
-    requestsDisableInfo.put(RequestOrResponseType.ReplicaMetadataRequest, new HashSet<>());
+    requestsDisableInfo.put(RequestOrResponseType.PutRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    requestsDisableInfo.put(RequestOrResponseType.GetRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    requestsDisableInfo.put(RequestOrResponseType.DeleteRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    requestsDisableInfo.put(RequestOrResponseType.ReplicaMetadataRequest,
+        Collections.newSetFromMap(new ConcurrentHashMap<>()));
   }
 
   public void handleRequests(Request request) throws InterruptedException {
