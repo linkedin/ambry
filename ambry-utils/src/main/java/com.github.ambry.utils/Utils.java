@@ -756,6 +756,18 @@ public class Utils {
   }
 
   /**
+   * Extracts the cause of an {@link Exception}.
+   * @param e the {@link Exception}
+   * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
+   *         of exception, return the {@link Throwable} wrapped in an exception. Otherwise, return the cause
+   *         {@link Exception}.
+   */
+  public static Exception extractCause(Exception e) {
+    Throwable cause = e.getCause();
+    return cause == null ? e : (cause instanceof Exception ? (Exception) cause : new Exception(cause));
+  }
+
+  /**
    * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
    * {@link #newScheduler(int, String, boolean)}.
    */

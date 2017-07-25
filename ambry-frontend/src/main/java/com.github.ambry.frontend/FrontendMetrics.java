@@ -53,6 +53,7 @@ class FrontendMetrics {
   // Rates
   // AmbrySecurityService
   public final Meter securityServiceProcessRequestRate;
+  public final Meter securityServicePostProcessRequestRate;
   public final Meter securityServiceProcessResponseRate;
   // AmbryIdConverter
   public final Meter idConverterRequestRate;
@@ -94,6 +95,7 @@ class FrontendMetrics {
   // SecurityProcessRequestCallback
   public final Histogram deleteSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram getSecurityRequestCallbackProcessingTimeInMs;
+  public final Histogram getPeersSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram headSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram postSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram deleteSecurityRequestTimeInMs;
@@ -101,8 +103,11 @@ class FrontendMetrics {
   public final Histogram headSecurityRequestTimeInMs;
   public final Histogram postSecurityRequestTimeInMs;
   public final Histogram getPeersSecurityRequestTimeInMs;
+  // SecurityPostProcessRequestCallback
+  public final Histogram getPeersSecurityPostProcessRequestTimeInMs;
   // AmbrySecurityService
   public final Histogram securityServiceProcessRequestTimeInMs;
+  public final Histogram securityServicePostProcessRequestTimeInMs;
   public final Histogram securityServiceProcessResponseTimeInMs;
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
@@ -172,6 +177,8 @@ class FrontendMetrics {
     // AmbrySecurityService
     securityServiceProcessRequestRate =
         metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "ProcessRequestRate"));
+    securityServicePostProcessRequestRate =
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "PostProcessRequestRate"));
     securityServiceProcessResponseRate =
         metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "ProcessResponseRate"));
     // AmbryIdConverter
@@ -245,6 +252,8 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "HeadSecurityRequestTimeInMs"));
     getSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityRequestCallbackProcessingTimeInMs"));
+    getPeersSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AmbryBlobStorageService.class, "GetPeersSecurityRequestCallbackProcessingTimeInMs"));
     getSecurityRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityRequestTimeInMs"));
     postSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
@@ -253,9 +262,14 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityRequestTimeInMs"));
     getPeersSecurityRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityRequestTimeInMs"));
+    // SecurityPostProcessRequestCallback
+    getPeersSecurityPostProcessRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityPostProcessRequestTimeInMs"));
     // AmbrySecurityService
     securityServiceProcessRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestProcessingTimeInMs"));
+    securityServicePostProcessRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestPostProcessingTimeInMs"));
     securityServiceProcessResponseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "ResponseProcessingTimeInMs"));
     // AmbryIdConverter

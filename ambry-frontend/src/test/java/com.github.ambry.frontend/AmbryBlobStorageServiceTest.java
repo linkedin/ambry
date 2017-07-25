@@ -299,11 +299,11 @@ public class AmbryBlobStorageServiceTest {
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-      assertTrue("Response channel is not open", response.isOpen());
+      assertTrue("ProcessResponse channel is not open", response.isOpen());
       ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, response, null);
       assertNotNull("There is no cause of failure", restResponseChannel.getException());
       // resources should have been cleaned up.
-      assertFalse("Response channel is not cleaned up", response.isOpen());
+      assertFalse("ProcessResponse channel is not cleaned up", response.isOpen());
     } finally {
       responseHandler.start();
     }
@@ -1142,13 +1142,10 @@ public class AmbryBlobStorageServiceTest {
     for (FrontendTestSecurityServiceFactory.Mode mode : FrontendTestSecurityServiceFactory.Mode.values()) {
       securityFactory.mode = mode;
       RestMethod[] restMethods;
-      if (mode.equals(FrontendTestSecurityServiceFactory.Mode.Request)) {
-        restMethods = RestMethod.values();
+      if (mode.equals(FrontendTestSecurityServiceFactory.Mode.ProcessResponse)) {
+        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST};
       } else {
-        restMethods = new RestMethod[3];
-        restMethods[0] = RestMethod.GET;
-        restMethods[1] = RestMethod.HEAD;
-        restMethods[2] = RestMethod.POST;
+        restMethods = RestMethod.values();
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
@@ -1362,10 +1359,17 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     /**
      * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
      */
-    Request, /**
+    ProcessRequest,
+
+    /**
+     * Works in {@link SecurityService#postProcessRequest(RestRequest, Callback)}
+     */
+    PostProcessRequest,
+
+    /**
      * Works in {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)}.
      */
-    Response
+    ProcessResponse
   }
 
   /**
@@ -1379,7 +1383,7 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
   /**
    * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
    */
-  public Mode mode = Mode.Request;
+  public Mode mode = Mode.ProcessRequest;
 
   @Override
   public SecurityService getSecurityService() {
@@ -1394,7 +1398,15 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
       if (!isOpen) {
         throw new IllegalStateException("SecurityService closed");
       }
-      return completeOperation(callback, mode == null || mode == Mode.Request);
+      return completeOperation(callback, mode == null || mode == Mode.ProcessRequest);
+    }
+
+    @Override
+    public void postProcessRequest(RestRequest restRequest, Callback<Void> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("SecurityService closed");
+      }
+      completeOperation(callback, mode == Mode.PostProcessRequest);
     }
 
     @Override
@@ -1403,7 +1415,7 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
       if (!isOpen) {
         throw new IllegalStateException("SecurityService closed");
       }
-      return completeOperation(callback, mode == Mode.Response);
+      return completeOperation(callback, mode == Mode.ProcessResponse);
     }
 
     @Override

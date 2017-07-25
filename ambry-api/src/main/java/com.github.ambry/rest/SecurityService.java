@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.FutureResult;
 import java.io.Closeable;
 import java.util.concurrent.Future;
 
@@ -35,7 +36,16 @@ public interface SecurityService extends Closeable {
    * @return A future that would contain information about whether processing of request succeeded or not,
    * eventually.
    */
-  public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback);
+  Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback);
+
+  /**
+   * Perform security validations (if any) on the {@link RestRequest} when it has been fully parsed. That is, when the
+   * {@link RestRequest} has been annotated with any additional arguments (like account and container ID).
+   * Invokes the {@link Callback} when the validation is complete.
+   * @param restRequest {@link RestRequest} upon which validations has to be performed
+   * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.
+   */
+  void postProcessRequest(RestRequest restRequest, Callback<Void> callback);
 
   /**
    * Perform security validations (if any) on the response for {@link RestRequest} asynchronously, sets headers if need
@@ -49,6 +59,18 @@ public interface SecurityService extends Closeable {
    * @return A future that would contain information about whether processing of request succeeded or not,
    * eventually.
    */
-  public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+  Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback);
+
+  /**
+   * Similar to {@link #postProcessRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+   * a callback.
+   * @param restRequest {@link RestRequest} upon which validations has to be performed
+   * @return a {@link Future} that is completed when the post-processing is done.
+   */
+  default Future<Void> postProcessRequest(RestRequest restRequest) {
+    FutureResult<Void> futureResult = new FutureResult<>();
+    postProcessRequest(restRequest, futureResult::done);
+    return futureResult;
+  }
 }

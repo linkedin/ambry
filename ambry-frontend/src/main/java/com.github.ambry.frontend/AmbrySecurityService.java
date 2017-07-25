@@ -72,6 +72,22 @@ class AmbrySecurityService implements SecurityService {
   }
 
   @Override
+  public void postProcessRequest(RestRequest restRequest, Callback<Void> callback) {
+    Exception exception = null;
+    frontendMetrics.securityServicePostProcessRequestRate.mark();
+    long startTimeMs = System.currentTimeMillis();
+    if (!isOpen) {
+      exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
+    } else if (restRequest == null) {
+      throw new IllegalArgumentException("RestRequest is null");
+    }
+    if (callback != null) {
+      callback.onCompletion(null, exception);
+    }
+    frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
+  @Override
   public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback) {
     Exception exception = null;

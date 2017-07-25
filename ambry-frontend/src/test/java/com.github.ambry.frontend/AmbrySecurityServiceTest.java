@@ -32,6 +32,7 @@ import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -74,29 +75,28 @@ public class AmbrySecurityServiceTest {
    */
   @Test
   public void processRequestTest() throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     //rest request being null
-    try {
-      securityService.processRequest(null, callback).get();
-      Assert.fail("Should have thrown IllegalArgumentException ");
-    } catch (IllegalArgumentException e) {
-    }
+    TestUtils.assertException(IllegalArgumentException.class, () -> securityService.processRequest(null, null).get(),
+        null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> securityService.postProcessRequest(null).get(),
+        null);
 
     // without callbacks
     RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.processRequest(restRequest, null).get();
+      securityService.postProcessRequest(restRequest).get();
     }
 
     // with callbacks
-    callback = new SecurityServiceCallback();
+    SecurityServiceCallback callback = new SecurityServiceCallback();
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.processRequest(restRequest, callback).get();
-      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-      Assert.assertNull("Exception should not have been thrown", callback.exception);
-      callback.reset();
+      assertCallbackSuccess(callback);
+      securityService.postProcessRequest(restRequest, callback);
+      assertCallbackSuccess(callback);
     }
 
     // with GET sub resources
@@ -104,9 +104,9 @@ public class AmbrySecurityServiceTest {
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
       securityService.processRequest(restRequest, callback).get();
-      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-      Assert.assertNull("Exception should not have been thrown", callback.exception);
-      callback.reset();
+      assertCallbackSuccess(callback);
+      securityService.postProcessRequest(restRequest, callback);
+      assertCallbackSuccess(callback);
     }
 
     // security service closed
@@ -264,7 +264,8 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests exception cases for {@link SecurityService#processRequest(RestRequest, Callback)}
+   * Tests exception cases for {@link SecurityService#processRequest(RestRequest, Callback)} and
+   * {@link SecurityService#postProcessRequest(RestRequest)}
    * @param restRequest the {@link RestRequest} to provide as input.
    * @param expectedErrorCode the {@link RestServiceErrorCode} expected in the exception returned.
    * @throws Exception
@@ -272,10 +273,7 @@ public class AmbrySecurityServiceTest {
   private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode)
       throws Exception {
     SecurityServiceCallback callback = new SecurityServiceCallback();
-    try {
-      securityService.processRequest(restRequest, callback).get();
-      Assert.fail("Should have thrown Exception");
-    } catch (ExecutionException e) {
+    TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
       Assert.assertTrue("Exception should have been an instance of RestServiceException",
           e.getCause() instanceof RestServiceException);
       RestServiceException re = (RestServiceException) e.getCause();
@@ -284,7 +282,12 @@ public class AmbrySecurityServiceTest {
       Assert.assertNotNull("Exception should have been thrown", callback.exception);
       re = (RestServiceException) callback.exception;
       Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
-    }
+    };
+
+    TestUtils.assertException(ExecutionException.class,
+        () -> securityService.processRequest(restRequest, callback).get(), errorAction);
+    TestUtils.assertException(ExecutionException.class, () -> securityService.postProcessRequest(restRequest).get(),
+        errorAction);
   }
 
   /**
@@ -297,6 +300,17 @@ public class AmbrySecurityServiceTest {
       Assert.assertNull("[" + header + "] should not have been present in the response",
           restResponseChannel.getHeader(header));
     }
+  }
+
+  /**
+   * Check that the callback was invoked successfully. Resets the callback state afterwards.
+   * @param callback the {@link SecurityServiceCallback}
+   * @throws Exception
+   */
+  private static void assertCallbackSuccess(SecurityServiceCallback callback) throws Exception {
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    callback.reset();
   }
 
   /**
@@ -341,7 +355,7 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response status should have been set",
+    Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForGetBlob(blobInfo.getBlobProperties(), range, restResponseChannel);
   }
@@ -420,7 +434,7 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response status should have been set",
+    Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
   }
@@ -437,7 +451,8 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response status should have been set ", ResponseStatus.Ok, restResponseChannel.getStatus());
+    Assert.assertEquals("ProcessResponse status should have been set ", ResponseStatus.Ok,
+        restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Last Modified does not match creation time",
         RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
@@ -464,7 +479,7 @@ public class AmbrySecurityServiceTest {
     securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
-    Assert.assertEquals("Response status should have been set", ResponseStatus.Created,
+    Assert.assertEquals("ProcessResponse status should have been set", ResponseStatus.Created,
         restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Creation time should have been set correctly",

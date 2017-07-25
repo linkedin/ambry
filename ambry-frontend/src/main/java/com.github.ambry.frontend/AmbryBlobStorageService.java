@@ -41,10 +41,12 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -411,6 +413,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
+          // TODO use callback when AmbryBlobStorageService gets refactored into handlers.
+          securityService.postProcessRequest(restRequest).get();
           switch (restMethod) {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
@@ -444,6 +448,8 @@ class AmbryBlobStorageService implements BlobStorageService {
             default:
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
+        } catch (ExecutionException e) {
+          exception = Utils.extractCause(e);
         } catch (Exception e) {
           exception = e;
         }
@@ -568,6 +574,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case POST:
               postCallback.markStartTime();
+              // TODO use callback when AmbryBlobStorage gets refactored into handlers.
+              securityService.postProcessRequest(restRequest).get();
               router.putBlob(blobProperties, userMetadata, restRequest, postCallback);
               break;
             case DELETE:
@@ -579,6 +587,8 @@ class AmbryBlobStorageService implements BlobStorageService {
             default:
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
+        } catch (ExecutionException e) {
+          exception = Utils.extractCause(e);
         } catch (Exception e) {
           exception = e;
         }

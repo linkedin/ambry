@@ -64,14 +64,14 @@ import static org.junit.Assert.*;
  */
 public class GetPeersHandlerTest {
   private final TailoredPeersClusterMap clusterMap;
-  private final DummySecurityService securityService;
+  private final FrontendTestSecurityServiceFactory securityServiceFactory;
   private final GetPeersHandler getPeersHandler;
 
   public GetPeersHandlerTest() {
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
     clusterMap = new TailoredPeersClusterMap();
-    securityService = new DummySecurityService();
-    getPeersHandler = new GetPeersHandler(clusterMap, securityService, metrics);
+    securityServiceFactory = new FrontendTestSecurityServiceFactory();
+    getPeersHandler = new GetPeersHandler(clusterMap, securityServiceFactory.getSecurityService(), metrics);
   }
 
   /**
@@ -103,7 +103,10 @@ public class GetPeersHandlerTest {
   @Test
   public void securityServiceDenialTest() throws Exception {
     String msg = "@@expected";
-    securityService.exceptionToReturn = new IllegalStateException(msg);
+    securityServiceFactory.exceptionToReturn = new IllegalStateException(msg);
+    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
+    verifyFailureWithMsg(msg);
+    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PostProcessRequest;
     verifyFailureWithMsg(msg);
   }
 
@@ -240,32 +243,6 @@ public class GetPeersHandlerTest {
       fail("Request should have failed");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", expectedErrorCode, e.getErrorCode());
-    }
-  }
-
-  /**
-   * Implementation of {@link SecurityService} that can throw exceptions on demand.
-   */
-  private static class DummySecurityService implements SecurityService {
-    Exception exceptionToReturn = null;
-
-    @Override
-    public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
-      FutureResult<Void> futureResult = new FutureResult<>();
-      futureResult.done(null, exceptionToReturn);
-      callback.onCompletion(null, exceptionToReturn);
-      return futureResult;
-    }
-
-    @Override
-    public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
-        Callback<Void> callback) {
-      throw new IllegalStateException();
-    }
-
-    @Override
-    public void close() throws IOException {
-
     }
   }
 }

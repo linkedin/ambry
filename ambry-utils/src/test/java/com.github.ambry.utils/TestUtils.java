@@ -14,9 +14,12 @@
 package com.github.ambry.utils;
 
 import java.util.Random;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
+import org.junit.Assert;
 
 
 /**
@@ -80,5 +83,54 @@ public class TestUtils {
     if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
       throw new TimeoutException("Too long time to complete operation.");
     }
+  }
+
+  /**
+   * Succeed if the {@code body} throws an exception of type {@code exceptionClass}, otherwise fail.
+   * @param exceptionClass the type of exception that should occur.
+   * @param body the body to execute. This should throw an exception of type {@code exceptionClass}
+   * @param errorAction if non-null and the exception class matches, execute this action.
+   */
+  public static <E extends Exception> void assertException(Class<E> exceptionClass, ThrowingRunnable body,
+      ThrowingConsumer<E> errorAction) throws Exception {
+    try {
+      body.run();
+      Assert.fail("Should have thrown exception");
+    } catch (Exception e) {
+      if (exceptionClass.isInstance(e)) {
+        if (errorAction != null) {
+          errorAction.accept(exceptionClass.cast(e));
+        }
+      } else {
+        throw e;
+      }
+    }
+  }
+
+
+  /**
+   * Similar to {@link Runnable}, but able to throw checked exceptions.
+   */
+  public interface ThrowingRunnable {
+
+    /**
+     * Run the action.
+     * @throws Exception
+     */
+    void run() throws Exception;
+  }
+
+  /**
+   * Similar to {@link Consumer}, but able to throw checked exceptions.
+   * @param <T> the type of the input to the operation
+   */
+  public interface ThrowingConsumer<T> {
+
+    /**
+     * Performs this operation on the given argument.
+     *
+     * @param t the input argument
+     */
+    void accept(T t) throws Exception;
   }
 }

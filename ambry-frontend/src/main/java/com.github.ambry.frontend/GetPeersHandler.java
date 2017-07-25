@@ -82,8 +82,57 @@ class GetPeersHandler {
   }
 
   /**
-   * Callback for the {@link SecurityService} that handles generating the replica list if the security checks
-   * succeeded.
+   * Gets the {@link DataNodeId} based on query parameters in the {@code restRequest}. Return is always non-null.
+   * @param restRequest the {@link RestRequest} containing the parameters of the request.
+   * @return the {@link DataNodeId} based on query parameters in the {@code restRequest}. Return is always non-null.
+   * @throws RestServiceException if either {@link #NAME_QUERY_PARAM} or {@link #PORT_QUERY_PARAM} is missing, if
+   * {@link #PORT_QUERY_PARAM} is not an {@link Integer} or if there is no datanode that corresponds to the given
+   * parameters.
+   */
+  private DataNodeId getDataNodeId(RestRequest restRequest) throws RestServiceException {
+    String name = (String) restRequest.getArgs().get(NAME_QUERY_PARAM);
+    String portStr = (String) restRequest.getArgs().get(PORT_QUERY_PARAM);
+    if (name == null || portStr == null) {
+      throw new RestServiceException("Missing name and/or port of data node", RestServiceErrorCode.MissingArgs);
+    }
+    int port;
+    try {
+      port = Integer.parseInt(portStr);
+    } catch (NumberFormatException e) {
+      throw new RestServiceException("Port " + "[" + portStr + "] could not parsed into a number",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    DataNodeId dataNodeId = clusterMap.getDataNodeId(name, port);
+    if (dataNodeId == null) {
+      metrics.unknownDatanodeError.inc();
+      throw new RestServiceException("No datanode found for parameters " + name + ":" + port,
+          RestServiceErrorCode.NotFound);
+    }
+    return dataNodeId;
+  }
+
+  /**
+   * Constructs the response body as a JSON that contains the details of all the {@code dataNodeIds}.
+   * @param dataNodeIds the {@link DataNodeId}s that need to be packaged as peers.
+   * @return a {@link ReadableStreamChannel} containing the response.
+   * @throws JSONException if there is any problem with JSON construction or manipulation.
+   */
+  private static ReadableStreamChannel getResponseBody(Set<DataNodeId> dataNodeIds) throws JSONException {
+    JSONObject peers = new JSONObject();
+    peers.put(PEERS_FIELD_NAME, new JSONArray());
+    for (DataNodeId dataNodeId : dataNodeIds) {
+      JSONObject peer = new JSONObject();
+      peer.put(NAME_QUERY_PARAM, dataNodeId.getHostname());
+      peer.put(PORT_QUERY_PARAM, dataNodeId.getPort());
+      peers.append(PEERS_FIELD_NAME, peer);
+    }
+    return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(peers.toString().getBytes()));
+  }
+
+  /**
+   * Callback for {@link SecurityService#processRequest(RestRequest, Callback)} that subsequently calls
+   * {@link SecurityService#postProcessRequest(RestRequest, Callback)}. If post processing succeeds, the replica
+   * list will be generated.
    */
   private class SecurityProcessRequestCallback implements Callback<Void> {
     private final RestRequest restRequest;
@@ -92,6 +141,52 @@ class GetPeersHandler {
     private final long operationStartTimeMs;
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
+        Callback<ReadableStreamChannel> callback) {
+      this.restRequest = restRequest;
+      this.restResponseChannel = restResponseChannel;
+      this.callback = callback;
+      operationStartTimeMs = SystemTime.getInstance().milliseconds();
+    }
+
+    /**
+     * If {@code exception} is null, call {@link SecurityService#postProcessRequest(RestRequest, Callback)}.
+     * @param result The result of the request. This would be non null when the request executed successfully
+     * @param exception The exception that was reported on execution of the request
+     */
+    @Override
+    public void onCompletion(Void result, Exception exception) {
+      long processingStartTimeMs = SystemTime.getInstance().milliseconds();
+      metrics.getPeersSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
+      ReadableStreamChannel channel = null;
+      try {
+        if (exception == null) {
+          securityService.postProcessRequest(restRequest,
+              new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, callback));
+        }
+      } catch (Exception e) {
+        exception = e;
+      } finally {
+        metrics.getPeersSecurityRequestCallbackProcessingTimeInMs.update(
+            SystemTime.getInstance().milliseconds() - processingStartTimeMs);
+        if (exception != null) {
+          callback.onCompletion(null, exception);
+        }
+      }
+    }
+  }
+
+  /**
+   * Callback for {@link SecurityService#postProcessRequest(RestRequest, Callback)} that handles generating the replica
+   * list if the security checks succeeded.
+   */
+  private class SecurityPostProcessRequestCallback implements Callback<Void> {
+
+    private final RestRequest restRequest;
+    private final RestResponseChannel restResponseChannel;
+    private final Callback<ReadableStreamChannel> callback;
+    private final long operationStartTimeMs;
+
+    SecurityPostProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
         Callback<ReadableStreamChannel> callback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
@@ -109,7 +204,7 @@ class GetPeersHandler {
     @Override
     public void onCompletion(Void result, Exception exception) {
       long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.getPeersSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
+      metrics.getPeersSecurityPostProcessRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
       ReadableStreamChannel channel = null;
       try {
         if (exception == null) {
@@ -133,54 +228,6 @@ class GetPeersHandler {
         metrics.getPeersProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - processingStartTimeMs);
         callback.onCompletion(exception == null ? channel : null, exception);
       }
-    }
-
-    /**
-     * Gets the {@link DataNodeId} based on query parameters in the {@code restRequest}. Return is always non-null.
-     * @param restRequest the {@link RestRequest} containing the parameters of the request.
-     * @return the {@link DataNodeId} based on query parameters in the {@code restRequest}. Return is always non-null.
-     * @throws RestServiceException if either {@link #NAME_QUERY_PARAM} or {@link #PORT_QUERY_PARAM} is missing, if
-     * {@link #PORT_QUERY_PARAM} is not an {@link Integer} or if there is no datanode that corresponds to the given
-     * parameters.
-     */
-    private DataNodeId getDataNodeId(RestRequest restRequest) throws RestServiceException {
-      String name = (String) restRequest.getArgs().get(NAME_QUERY_PARAM);
-      String portStr = (String) restRequest.getArgs().get(PORT_QUERY_PARAM);
-      if (name == null || portStr == null) {
-        throw new RestServiceException("Missing name and/or port of data node", RestServiceErrorCode.MissingArgs);
-      }
-      int port;
-      try {
-        port = Integer.parseInt(portStr);
-      } catch (NumberFormatException e) {
-        throw new RestServiceException("Port " + "[" + portStr + "] could not parsed into a number",
-            RestServiceErrorCode.InvalidArgs);
-      }
-      DataNodeId dataNodeId = clusterMap.getDataNodeId(name, port);
-      if (dataNodeId == null) {
-        metrics.unknownDatanodeError.inc();
-        throw new RestServiceException("No datanode found for parameters " + name + ":" + port,
-            RestServiceErrorCode.NotFound);
-      }
-      return dataNodeId;
-    }
-
-    /**
-     * Constructs the response body as a JSON that contains the details of all the {@code dataNodeIds}.
-     * @param dataNodeIds the {@link DataNodeId}s that need to be packaged as peers.
-     * @return a {@link ReadableStreamChannel} containing the response.
-     * @throws JSONException if there is any problem with JSON construction or manipulation.
-     */
-    private ReadableStreamChannel getResponseBody(Set<DataNodeId> dataNodeIds) throws JSONException {
-      JSONObject peers = new JSONObject();
-      peers.put(PEERS_FIELD_NAME, new JSONArray());
-      for (DataNodeId dataNodeId : dataNodeIds) {
-        JSONObject peer = new JSONObject();
-        peer.put(NAME_QUERY_PARAM, dataNodeId.getHostname());
-        peer.put(PORT_QUERY_PARAM, dataNodeId.getPort());
-        peers.append(PEERS_FIELD_NAME, peer);
-      }
-      return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(peers.toString().getBytes()));
     }
   }
 }
