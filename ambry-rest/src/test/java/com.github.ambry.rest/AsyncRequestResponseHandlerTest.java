@@ -257,7 +257,7 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * Tests {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, * Exception)} with good input.
+   * Tests {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)} with good input.
    * @throws Exception
    */
   @Test
@@ -268,7 +268,7 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * Tests the reaction of {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, * ReadableStreamChannel, Exception)} to some misbehaving components.
+   * Tests the reaction of {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)} to some misbehaving components.
    * @throws Exception
    */
   @Test
@@ -528,7 +528,7 @@ public class AsyncRequestResponseHandlerTest {
   }
 
   /**
-   * Tests {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, * Exception)} with good input.
+   * Tests {@link AsyncRequestResponseHandler#handleResponse(RestRequest, RestResponseChannel, ReadableStreamChannel, Exception)} with good input.
    * @throws Exception
    */
   private void doHandleResponseSuccessTest(AsyncRequestResponseHandler asyncRequestResponseHandler) throws Exception {
