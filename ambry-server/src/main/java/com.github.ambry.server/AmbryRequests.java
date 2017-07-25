@@ -526,16 +526,17 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * Enables/disables {@code requestOrResponseType} on the given {@code id}.
+   * Enables/disables {@code requestOrResponseType} on the given {@code ids}.
    * @param requestType the {@link RequestOrResponseType} to enable/disable.
-   * @param id the {@link PartitionId} to enable/disable it on.
+   * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable
    */
-  private void controlRequestForPartition(RequestOrResponseType requestType, PartitionId id, boolean enable) {
+  private void controlRequestForPartitions(RequestOrResponseType requestType, List<? extends PartitionId> ids,
+      boolean enable) {
     if (enable) {
-      requestsDisableInfo.get(requestType).remove(id);
+      requestsDisableInfo.get(requestType).removeAll(ids);
     } else {
-      requestsDisableInfo.get(requestType).add(id);
+      requestsDisableInfo.get(requestType).addAll(ids);
     }
   }
 
@@ -594,8 +595,8 @@ public class AmbryRequests implements RequestAPI {
             } else {
               partitionIds = clusterMap.getAllPartitionIds();
             }
+            controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
             for (PartitionId partitionId : partitionIds) {
-              controlRequestForPartition(toControl, partitionId, controlRequest.shouldEnable());
               logger.info("Enable state for {} on {} is {}", toControl, partitionId,
                   isRequestEnabled(toControl, partitionId));
             }
