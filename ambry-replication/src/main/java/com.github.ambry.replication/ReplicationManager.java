@@ -246,7 +246,7 @@ final class PartitionInfo {
  * 2. Set up replica token persistor used to recover from shutdown/crash
  * 3. Initialize and shutdown all the components required to perform replication
  */
-public final class ReplicationManager {
+public class ReplicationManager {
 
   private final Map<PartitionId, PartitionInfo> partitionsToReplicate;
   private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
@@ -264,8 +264,8 @@ public final class ReplicationManager {
   private final Map<String, DataNodeRemoteReplicaInfos> dataNodeRemoteReplicaInfosPerDC;
   private final StoreKeyFactory storeKeyFactory;
   private final MetricRegistry metricRegistry;
-  private final ArrayList<String> sslEnabledDatacenters;
-  private final Map<String, ArrayList<ReplicaThread>> replicaThreadPools;
+  private final List<String> sslEnabledDatacenters;
+  private final Map<String, List<ReplicaThread>> replicaThreadPools;
   private final Map<String, Integer> numberOfReplicaThreads;
 
   private static final String replicaTokenFileName = "replicaTokens";
@@ -281,10 +281,10 @@ public final class ReplicationManager {
       this.replicationConfig = replicationConfig;
       this.storeKeyFactory = storeKeyFactory;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      this.replicaThreadPools = new HashMap<String, ArrayList<ReplicaThread>>();
+      this.replicaThreadPools = new HashMap<>();
       this.replicationMetrics = new ReplicationMetrics(metricRegistry, clusterMap.getReplicaIds(dataNode));
-      this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
-      this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
+      this.partitionGroupedByMountPath = new HashMap<>();
+      this.partitionsToReplicate = new HashMap<>();
       this.clusterMap = clusterMap;
       this.scheduler = scheduler;
       this.persistor = new ReplicaTokenPersistor();
@@ -294,9 +294,9 @@ public final class ReplicationManager {
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
       this.metricRegistry = metricRegistry;
-      this.dataNodeRemoteReplicaInfosPerDC = new HashMap<String, DataNodeRemoteReplicaInfos>();
+      this.dataNodeRemoteReplicaInfosPerDC = new HashMap<>();
       this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
-      this.numberOfReplicaThreads = new HashMap<String, Integer>();
+      this.numberOfReplicaThreads = new HashMap<>();
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -377,6 +377,25 @@ public final class ReplicationManager {
   }
 
   /**
+   * Enables/disables {@code types} of replication on the given {@code id}s.
+   * @param ids the {@link PartitionId}s to enable/disable it on.
+   * @param origins the list of datacenters from which replication should be enabled/disabled.
+   * @param enable whether to enable ({@code true}) or disable.
+   */
+  public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
+      boolean enable) {
+    if (origins.isEmpty() || !replicaThreadPools.keySet().containsAll(origins)) {
+      return false;
+    }
+    for (String origin : origins) {
+      for (ReplicaThread replicaThread : replicaThreadPools.get(origin)) {
+        replicaThread.controlReplicationForPartitions(ids, enable);
+      }
+    }
+    return true;
+  }
+
+  /**
    * Updates the total bytes read by a remote replica from local store
    * @param partitionId PartitionId to which the replica belongs to
    * @param hostName HostName of the datanode where the replica belongs to
@@ -440,21 +459,12 @@ public final class ReplicationManager {
   public void shutdown() throws ReplicationException {
     try {
       // stop all replica threads
-      for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
-        if (replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
-          for (ReplicaThread replicaThread : replicaThreads.getValue()) {
-            replicaThread.shutdown();
-          }
+      for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
+        for (ReplicaThread replicaThread : replicaThreads.getValue()) {
+          replicaThread.shutdown();
         }
       }
 
-      for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
-        if (!replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
-          for (ReplicaThread replicaThread : replicaThreads.getValue()) {
-            replicaThread.shutdown();
-          }
-        }
-      }
       // persist replica tokens
       persistor.write(true);
     } catch (Exception e) {

@@ -53,6 +53,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
@@ -606,6 +607,33 @@ public class AmbryRequests implements RequestAPI {
             }
           }
           break;
+        case ReplicationControl:
+          error = ServerErrorCode.No_Error;
+          metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.replicationControlRequestRate.mark();
+          processingTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
+          ReplicationControlAdminRequest replControlRequest =
+              ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
+          List<? extends PartitionId> partitionIds;
+          if (replControlRequest.getPartitionId() != null) {
+            error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+            partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
+          } else {
+            partitionIds = clusterMap.getAllPartitionIds();
+          }
+          if (!error.equals(ServerErrorCode.Partition_Unknown) && replicationManager.controlReplicationForPartitions(
+              partitionIds, replControlRequest.getOrigins(), replControlRequest.shouldEnable())) {
+            error = ServerErrorCode.No_Error;
+          } else {
+            logger.error("Could not set enable status for replication of {} from {} to {}. Origins list is empty or "
+                    + "contains an unknown datacenter", partitionIds, replControlRequest.getOrigins(),
+                replControlRequest.shouldEnable());
+            error = ServerErrorCode.Unknown_Error;
+          }
+          break;
       }
       response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     } catch (Exception e) {
@@ -756,7 +784,7 @@ public class AmbryRequests implements RequestAPI {
     }
     // 5. Ensure that the request is enabled.
     if (!isRequestEnabled(requestType, partition)) {
-      metrics.temporarilyUnavailableError.inc();
+      metrics.temporarilyDisabledError.inc();
       return ServerErrorCode.Temporarily_Disabled;
     }
     return ServerErrorCode.No_Error;

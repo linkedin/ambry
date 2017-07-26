@@ -325,7 +325,7 @@ public class ReplicationMetrics {
    *                           datacenter
    * @param localDatacenter The datacenter on which the {@link ReplicationManager} is running
    */
-  void trackLiveThreadsCount(final Map<String, ArrayList<ReplicaThread>> replicaThreadPools, String localDatacenter) {
+  void trackLiveThreadsCount(final Map<String, List<ReplicaThread>> replicaThreadPools, String localDatacenter) {
     for (final String datacenter : replicaThreadPools.keySet()) {
       Gauge<Integer> liveThreadsPerDatacenter = new Gauge<Integer>() {
         @Override

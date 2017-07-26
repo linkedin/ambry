@@ -118,6 +118,12 @@ public class ServerMetrics {
   public final Histogram requestControlResponseSendTimeInMs;
   public final Histogram requestControlRequestTotalTimeInMs;
 
+  public final Histogram replicationControlRequestQueueTimeInMs;
+  public final Histogram replicationControlRequestProcessingTimeInMs;
+  public final Histogram replicationControlResponseQueueTimeInMs;
+  public final Histogram replicationControlResponseSendTimeInMs;
+  public final Histogram replicationControlRequestTotalTimeInMs;
+
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -135,6 +141,7 @@ public class ServerMetrics {
   public final Meter replicaMetadataRequestRate;
   public final Meter triggerCompactionRequestRate;
   public final Meter requestControlRequestRate;
+  public final Meter replicationControlRequestRate;
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
@@ -162,7 +169,7 @@ public class ServerMetrics {
   public final Counter idDeletedError;
   public final Counter ttlExpiredError;
   public final Counter badRequestError;
-  public final Counter temporarilyUnavailableError;
+  public final Counter temporarilyDisabledError;
 
   public ServerMetrics(MetricRegistry registry) {
     putBlobRequestQueueTimeInMs =
@@ -301,6 +308,17 @@ public class ServerMetrics {
     requestControlRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "RequestControlRequestTotalTimeInMs"));
 
+    replicationControlRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestQueueTimeInMs"));
+    replicationControlRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestProcessingTimeInMs"));
+    replicationControlResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicationControlResponseQueueTimeInMs"));
+    replicationControlResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicationControlResponseSendTimeInMs"));
+    replicationControlRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestTotalTimeInMs"));
+
     blobSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
 
@@ -321,6 +339,8 @@ public class ServerMetrics {
     triggerCompactionRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestRate"));
     requestControlRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "RequestControlRequestRate"));
+    replicationControlRequestRate =
+        registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobRequestRate"));
@@ -341,8 +361,7 @@ public class ServerMetrics {
     idNotFoundError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDNotFoundError"));
     idDeletedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDDeletedError"));
     ttlExpiredError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TTLExpiredError"));
-    temporarilyUnavailableError =
-        registry.counter(MetricRegistry.name(AmbryRequests.class, "TemporarilyUnavailableError"));
+    temporarilyDisabledError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TemporarilyDisabledError"));
     badRequestError = registry.counter(MetricRegistry.name(AmbryRequests.class, "BadRequestError"));
     unExpectedStorePutError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStorePutError"));
     unExpectedStoreGetError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreGetError"));

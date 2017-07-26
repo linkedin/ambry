@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -49,6 +50,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
@@ -67,7 +69,6 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -76,11 +77,11 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -100,6 +101,7 @@ public class AmbryRequestsTest {
   private final MockClusterMap clusterMap;
   private final DataNodeId dataNodeId;
   private final MockStorageManager storageManager;
+  private final MockReplicationManager replicationManager;
   private final AmbryRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
 
@@ -114,17 +116,9 @@ public class AmbryRequestsTest {
     properties.setProperty("replication.no.of.intra.dc.replica.threads", "0");
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "0");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
-    ReplicationManager replicationManager =
-        new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
-          @Override
-          public StoreKey getStoreKey(DataInputStream stream) throws IOException {
-            return null;
-          }
-        }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null);
+    replicationManager =
+        MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
   }
@@ -212,6 +206,33 @@ public class AmbryRequestsTest {
   public void controlRequestFailureTest() throws InterruptedException, IOException {
     // cannot disable admin request
     sendAndVerifyRequestControlRequest(RequestOrResponseType.AdminRequest, false, null, ServerErrorCode.Bad_Request);
+    // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
+  }
+
+  /**
+   * Tests that {@link AdminRequestOrResponseType#ReplicationControl} works correctly.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void controlReplicationSuccessTest() throws InterruptedException, IOException {
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    for (PartitionId id : partitionIds) {
+      doControlReplicationTest(id, ServerErrorCode.No_Error);
+    }
+    doControlReplicationTest(null, ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Tests that {@link AdminRequestOrResponseType#ReplicationControl} fails when bad input is provided (or when there is
+   * bad internal state).
+   */
+  @Test
+  public void controlReplicationFailureTest() throws InterruptedException, IOException {
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = false;
+    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false, clusterMap.getWritablePartitionIds().get(0),
+        ServerErrorCode.Unknown_Error);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
 
@@ -387,6 +408,61 @@ public class AmbryRequestsTest {
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
     Response response = sendRequestGetResponse(controlRequest, expectedServerErrorCode);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+  }
+
+  // controlReplicationSuccessTest() and controlReplicationFailureTest() helpers
+
+  /**
+   * Does the test for {@link AdminRequestOrResponseType#ReplicationControl} by checking that the request is correctly
+   * deserialized in {@link AmbryRequests} and passed to the {@link ReplicationManager}.
+   * @param id the {@link PartitionId} to disable replication on. Can be {@code null}.
+   * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  private void doControlReplicationTest(PartitionId id, ServerErrorCode expectedServerErrorCode)
+      throws InterruptedException, IOException {
+    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
+    List<String> origins = new ArrayList<>();
+    for (int i = 0; i < numOrigins; i++) {
+      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+    }
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = true;
+    sendAndVerifyReplicationControlRequest(origins, false, id, expectedServerErrorCode);
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = true;
+    sendAndVerifyReplicationControlRequest(origins, true, id, expectedServerErrorCode);
+  }
+
+  /**
+   * Sends and verifies that a {@link AdminRequestOrResponseType#ReplicationControl} request received the error code
+   * expected and that {@link AmbryRequests} sent the right details to {@link ReplicationManager}.
+   * @param origins the list of datacenters from which replication should be enabled/disabled.
+   * @param enable {@code true} if replication needs to be enabled. {@code false} otherwise.
+   * @param id the {@link PartitionId} to send the request for. Can be {@code null}.
+   * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  private void sendAndVerifyReplicationControlRequest(List<String> origins, boolean enable, PartitionId id,
+      ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.ReplicationControl, id, correlationId, clientId);
+    ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
+    Response response = sendRequestGetResponse(controlRequest, expectedServerErrorCode);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    List<? extends PartitionId> idsVal;
+    if (id == null) {
+      idsVal = clusterMap.getAllPartitionIds();
+    } else {
+      idsVal = Collections.singletonList(id);
+    }
+    assertEquals("Origins not as provided in request", origins, replicationManager.originsVal);
+    assertEquals("Enable not as provided in request", enable, replicationManager.enableVal);
+    assertEquals("Ids not as provided in request", idsVal, replicationManager.idsVal);
   }
 
   /**
@@ -584,6 +660,76 @@ public class AmbryRequestsTest {
 
     void resetStore() {
       operationReceived = null;
+    }
+  }
+
+  /**
+   * An extension of {@link ReplicationManager} to help with testing.
+   */
+  private static class MockReplicationManager extends ReplicationManager {
+
+    // Variables for controlling and examining the values provided to controlReplicationForPartitions()
+    Boolean controlReplicationReturnVal;
+    List<? extends PartitionId> idsVal;
+    List<String> originsVal;
+    Boolean enableVal;
+
+    /**
+     * Static construction helper
+     * @param verifiableProperties the {@link VerifiableProperties} to use for config.
+     * @param storageManager the {@link StorageManager} to use.
+     * @param clusterMap the {@link ClusterMap} to use.
+     * @param dataNodeId the {@link DataNodeId} to use.
+     * @return an instance of {@link MockReplicationManager}
+     * @throws ReplicationException
+     */
+    static MockReplicationManager getReplicationManager(VerifiableProperties verifiableProperties,
+        StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId) throws ReplicationException {
+      ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+      StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+      return new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+          dataNodeId);
+    }
+
+    /**
+     * Constructor for MockReplicationManager.
+     * @param replicationConfig the config for replication.
+     * @param clusterMapConfig the config for clustermap.
+     * @param storeConfig the config for the store.
+     * @param storageManager the {@link StorageManager} to use.
+     * @param clusterMap the {@link ClusterMap} to use.
+     * @param dataNodeId the {@link DataNodeId} to use.
+     * @throws ReplicationException
+     */
+    MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+        StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId)
+        throws ReplicationException {
+      super(replicationConfig, clusterMapConfig, storeConfig, storageManager, stream -> null, clusterMap, null,
+          dataNodeId, null, clusterMap.getMetricRegistry(), null);
+      reset();
+    }
+
+    @Override
+    public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
+        boolean enable) {
+      if (controlReplicationReturnVal == null) {
+        throw new IllegalStateException("Return val not set. Don't know what to return");
+      }
+      idsVal = ids;
+      originsVal = origins;
+      enableVal = enable;
+      return controlReplicationReturnVal;
+    }
+
+    /**
+     * Resets all state
+     */
+    void reset() {
+      controlReplicationReturnVal = null;
+      idsVal = null;
+      originsVal = null;
+      enableVal = null;
     }
   }
 }

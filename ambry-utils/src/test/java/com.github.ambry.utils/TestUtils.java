@@ -85,6 +85,25 @@ public class TestUtils {
   }
 
   /**
+   * Waits until the HardDeleter thread is in the {@code expectedState} for the specified {@code timeoutMs} time.
+   * @param thread the thread whose state needs to be checked.
+   * @param expectedState Expected HardDeleter thread state
+   * @param timeoutMs time in ms after which the check is considered failed if {@code expectedState} is not reached.
+   */
+  public static boolean waitUntilExpectedState(Thread thread, Thread.State expectedState, long timeoutMs)
+      throws InterruptedException {
+    long timeSoFar = 0;
+    while (expectedState != thread.getState()) {
+      Thread.sleep(10);
+      timeSoFar += 10;
+      if (timeSoFar >= timeoutMs) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
    * Succeed if the {@code body} throws an exception of type {@code exceptionClass}, otherwise fail.
    * @param exceptionClass the type of exception that should occur.
    * @param body the body to execute. This should throw an exception of type {@code exceptionClass}
