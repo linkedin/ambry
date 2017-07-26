@@ -589,18 +589,21 @@ public class AmbryRequests implements RequestAPI {
             metrics.badRequestError.inc();
             error = ServerErrorCode.Bad_Request;
           } else {
+            error = ServerErrorCode.No_Error;
             List<? extends PartitionId> partitionIds;
             if (controlRequest.getPartitionId() != null) {
+              error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
               partitionIds = Collections.singletonList(controlRequest.getPartitionId());
             } else {
               partitionIds = clusterMap.getAllPartitionIds();
             }
-            controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
-            for (PartitionId partitionId : partitionIds) {
-              logger.info("Enable state for {} on {} is {}", toControl, partitionId,
-                  isRequestEnabled(toControl, partitionId));
+            if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+              controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
+              for (PartitionId partitionId : partitionIds) {
+                logger.info("Enable state for {} on {} is {}", toControl, partitionId,
+                    isRequestEnabled(toControl, partitionId));
+              }
             }
-            error = ServerErrorCode.No_Error;
           }
           break;
       }

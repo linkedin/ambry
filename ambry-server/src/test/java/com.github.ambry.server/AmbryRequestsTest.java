@@ -20,6 +20,8 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaEventType;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -96,9 +98,10 @@ public class AmbryRequestsTest {
   private static final FindTokenFactory FIND_TOKEN_FACTORY = new MockFindTokenFactory();
 
   private final MockClusterMap clusterMap;
+  private final DataNodeId dataNodeId;
   private final MockStorageManager storageManager;
-  private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
   private final AmbryRequests ambryRequests;
+  private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
 
   public AmbryRequestsTest() throws IOException, ReplicationException, StoreException {
     clusterMap = new MockClusterMap();
@@ -114,7 +117,7 @@ public class AmbryRequestsTest {
     ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
-    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    dataNodeId = clusterMap.getDataNodeIds().get(0);
     ReplicationManager replicationManager =
         new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
           @Override
@@ -122,9 +125,8 @@ public class AmbryRequestsTest {
             return null;
           }
         }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null);
-    ambryRequests =
-        new AmbryRequests(storageManager, requestResponseChannel, clusterMap, clusterMap.getDataNodeIds().get(0),
-            clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
+    ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
   }
 
   /**
@@ -149,6 +151,9 @@ public class AmbryRequestsTest {
    */
   @Test
   public void scheduleCompactionFailureTest() throws InterruptedException, IOException {
+    // partitionId not specified
+    doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
+
     PartitionId id = clusterMap.getWritablePartitionIds().get(0);
 
     // store is not started - Disk_Unavailable
@@ -156,6 +161,19 @@ public class AmbryRequestsTest {
     doScheduleCompactionTest(id, ServerErrorCode.Disk_Unavailable);
     storageManager.returnNullStore = false;
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
+
+    // disk unavailable
+    ReplicaId replicaId = null;
+    for (ReplicaId replica : id.getReplicaIds()) {
+      if (replica.getDataNodeId().equals(dataNodeId)) {
+        replicaId = replica;
+        break;
+      }
+    }
+    assertNotNull("Should have found a replicaId", replicaId);
+    clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
+    doScheduleCompactionTest(id, ServerErrorCode.Disk_Unavailable);
+    clusterMap.onReplicaEvent(replicaId, ReplicaEventType.Disk_Ok);
 
     // store cannot be scheduled for compaction - Unknown_Error
     storageManager.returnValueOfSchedulingCompaction = false;
@@ -180,9 +198,9 @@ public class AmbryRequestsTest {
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
       List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
       for (PartitionId id : partitionIds) {
-        doControlRequestTest(requestType, id);
+        doRequestControlRequestTest(requestType, id);
       }
-      doControlRequestTest(requestType, null);
+      doRequestControlRequestTest(requestType, null);
     }
   }
 
@@ -193,7 +211,8 @@ public class AmbryRequestsTest {
   @Test
   public void controlRequestFailureTest() throws InterruptedException, IOException {
     // cannot disable admin request
-    sendAndVerifyControlRequest(RequestOrResponseType.AdminRequest, false, null, ServerErrorCode.Bad_Request);
+    sendAndVerifyRequestControlRequest(RequestOrResponseType.AdminRequest, false, null, ServerErrorCode.Bad_Request);
+    // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
 
   // helpers
@@ -259,7 +278,7 @@ public class AmbryRequestsTest {
    * @throws InterruptedException
    * @throws IOException
    */
-  private void doControlRequestTest(RequestOrResponseType toControl, PartitionId id)
+  private void doRequestControlRequestTest(RequestOrResponseType toControl, PartitionId id)
       throws InterruptedException, IOException {
     List<? extends PartitionId> idsToTest;
     if (id == null) {
@@ -270,17 +289,17 @@ public class AmbryRequestsTest {
     // check that everything works
     sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error);
     // disable the request
-    sendAndVerifyControlRequest(toControl, false, id, ServerErrorCode.No_Error);
+    sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // check that it is disabled
     sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Unavailable);
     // ok to call disable again
-    sendAndVerifyControlRequest(toControl, false, id, ServerErrorCode.No_Error);
+    sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // enable
-    sendAndVerifyControlRequest(toControl, true, id, ServerErrorCode.No_Error);
+    sendAndVerifyRequestControlRequest(toControl, true, id, ServerErrorCode.No_Error);
     // check that everything works
     sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error);
     // ok to call enable again
-    sendAndVerifyControlRequest(toControl, true, id, ServerErrorCode.No_Error);
+    sendAndVerifyRequestControlRequest(toControl, true, id, ServerErrorCode.No_Error);
     // check that everything works
     sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.No_Error);
   }
@@ -355,11 +374,11 @@ public class AmbryRequestsTest {
    * @param toControl the {@link AdminRequestOrResponseType#RequestControl} to control.
    * @param enable {@code true} if {@code toControl} needs to be enabled. {@code false} otherwise.
    * @param id the {@link PartitionId} to send the request for. Can be {@code null}.
-   * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the
+   * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
    * @throws InterruptedException
    * @throws IOException
    */
-  private void sendAndVerifyControlRequest(RequestOrResponseType toControl, boolean enable, PartitionId id,
+  private void sendAndVerifyRequestControlRequest(RequestOrResponseType toControl, boolean enable, PartitionId id,
       ServerErrorCode expectedServerErrorCode) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
