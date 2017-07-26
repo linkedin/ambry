@@ -13,6 +13,8 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -674,6 +676,8 @@ public class RestUtilsTest {
    */
   private void verifyBlobPropertiesConstructionSuccess(JSONObject headers) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+    restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
     BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
     long expectedTTL = Utils.Infinite_Time;
     if (headers.has(RestUtils.Headers.TTL) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.TTL))) {
@@ -731,6 +735,8 @@ public class RestUtilsTest {
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
       RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {
@@ -751,6 +757,8 @@ public class RestUtilsTest {
     String uri = "?" + extraValueHeader + "=extraVal1&" + extraValueHeader + "=extraVal2";
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, uri, headers);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
       RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {

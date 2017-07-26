@@ -14,7 +14,11 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.Histogram;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -41,7 +45,7 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
-import com.github.ambry.utils.Utils;
+import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
@@ -50,6 +54,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -82,6 +88,7 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
+  private AccountService accountService = null;
   private GetPeersHandler getPeersHandler;
   private boolean isUp = false;
 
@@ -90,23 +97,23 @@ class AmbryBlobStorageService implements BlobStorageService {
    * response handler controller and a router.
    * @param frontendConfig the {@link FrontendConfig} with configuration parameters.
    * @param frontendMetrics the metrics instance to use in the form of {@link FrontendMetrics}.
-   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
-   *                        out.
+   * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent out.
    * @param router the {@link Router} instance to use to perform blob operations.
-   * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter}.
-   * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService}.
    * @param clusterMap the {@link ClusterMap} in use.
+   * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
+   * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-      RestResponseHandler responseHandler, Router router, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, ClusterMap clusterMap) {
+      RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
+      SecurityServiceFactory securityServiceFactory, AccountService accountService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
     this.router = router;
+    this.clusterMap = clusterMap;
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
-    this.clusterMap = clusterMap;
+    this.accountService = accountService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
@@ -134,6 +141,10 @@ class AmbryBlobStorageService implements BlobStorageService {
       if (idConverter != null) {
         idConverter.close();
         idConverter = null;
+      }
+      if (accountService != null) {
+        accountService.close();
+        accountService = null;
       }
       logger.info("AmbryBlobStorageService shutdown complete");
     } catch (IOException e) {
@@ -210,6 +221,17 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
       long propsBuildStartTime = System.currentTimeMillis();
+      accountAndContainerSanityCheck(restRequest);
+      // check if the request is old (with no accountName nor containerName) or new (otherwise)
+      if (getTargetAccountNameFromHeader(restRequest) != null
+          || getTargetContainerNameFromHeader(restRequest) != null) {
+        ensureRequiredHeadersOrThrow(restRequest,
+            Sets.newHashSet(Headers.AMBRY_CONTENT_TYPE, Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME));
+        injectAccountAndContainerForNewPutRequest(restRequest);
+      } else {
+        ensureRequiredHeadersOrThrow(restRequest, Sets.newHashSet(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID));
+        injectAccountAndContainerForOldPutRequest(restRequest);
+      }
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
@@ -427,6 +449,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
+          injectTargetAccountAndContainerFromBlobIdOrThrow(result, restRequest);
           // TODO use callback when AmbryBlobStorageService gets refactored into handlers.
           securityService.postProcessRequest(restRequest).get();
           switch (restMethod) {
@@ -724,42 +747,38 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
-              new Callback<Void>() {
-                @Override
-                public void onCompletion(Void securityResult, Exception securityException) {
-                  securityCallbackTracker.markOperationEnd();
-                  ReadableStreamChannel response = null;
-                  boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
-                  try {
-                    if (securityException == null) {
-                      if (subResource != null) {
-                        BlobInfo blobInfo = routerResult.getBlobInfo();
-                        Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
-                        if (userMetadata == null) {
-                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
-                              blobInfo.getUserMetadata().length);
-                          response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
-                        } else {
-                          setUserMetadataHeaders(userMetadata, restResponseChannel);
-                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-                          response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
-                        }
-                      } else if (!blobNotModified) {
-                        response = routerResult.getBlobDataChannel();
+              (securityResult, securityException) -> {
+                securityCallbackTracker.markOperationEnd();
+                ReadableStreamChannel response = null;
+                boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
+                try {
+                  if (securityException == null) {
+                    if (subResource != null) {
+                      BlobInfo blobInfo = routerResult.getBlobInfo();
+                      Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
+                      if (userMetadata == null) {
+                        restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
+                        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                        response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                       } else {
-                        // If the blob was not modified, we need to close the channel, as it will not be submitted to
-                        // the RestResponseHandler
-                        routerResult.getBlobDataChannel().close();
+                        setUserMetadataHeaders(userMetadata, restResponseChannel);
+                        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
+                        response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
                       }
+                    } else if (!blobNotModified) {
+                      response = routerResult.getBlobDataChannel();
+                    } else {
+                      // If the blob was not modified, we need to close the channel, as it will not be submitted to
+                      // the RestResponseHandler
+                      routerResult.getBlobDataChannel().close();
                     }
-                  } catch (Exception e) {
-                    frontendMetrics.getSecurityResponseCallbackProcessingError.inc();
-                    securityException = e;
-                  } finally {
-                    submitResponse(restRequest, restResponseChannel, response, securityException);
-                    securityCallbackTracker.markCallbackProcessingEnd();
                   }
+                } catch (Exception e) {
+                  frontendMetrics.getSecurityResponseCallbackProcessingError.inc();
+                  securityException = e;
+                } finally {
+                  submitResponse(restRequest, restResponseChannel, response, securityException);
+                  securityCallbackTracker.markCallbackProcessingEnd();
                 }
               });
         }
@@ -847,30 +866,25 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.postSecurityResponseTimeInMs,
                   frontendMetrics.postSecurityResponseCallbackProcessingTimeInMs);
           idConversionCallbackTracker.markOperationStart();
-          idConverter.convert(restRequest, routerResult, new Callback<String>() {
-            @Override
-            public void onCompletion(String idConversionResult, Exception idConversionException) {
-              idConversionCallbackTracker.markOperationEnd();
-              if (idConversionException != null) {
-                submitResponse(restRequest, restResponseChannel, null, idConversionException);
-              } else {
-                try {
-                  restResponseChannel.setHeader(RestUtils.Headers.LOCATION, idConversionResult);
-                  securityCallbackTracker.markOperationStart();
-                  securityService.processResponse(restRequest, restResponseChannel, blobInfo, new Callback<Void>() {
-                    @Override
-                    public void onCompletion(Void securityResult, Exception securityException) {
+          idConverter.convert(restRequest, routerResult, (idConversionResult, idConversionException) -> {
+            idConversionCallbackTracker.markOperationEnd();
+            if (idConversionException != null) {
+              submitResponse(restRequest, restResponseChannel, null, idConversionException);
+            } else {
+              try {
+                restResponseChannel.setHeader(Headers.LOCATION, idConversionResult);
+                securityCallbackTracker.markOperationStart();
+                securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+                    (securityResult, securityException) -> {
                       securityCallbackTracker.markOperationEnd();
                       submitResponse(restRequest, restResponseChannel, null, securityException);
                       securityCallbackTracker.markCallbackProcessingEnd();
-                    }
-                  });
-                } catch (Exception e) {
-                  frontendMetrics.outboundIdConversionCallbackProcessingError.inc();
-                  submitResponse(restRequest, restResponseChannel, null, e);
-                } finally {
-                  idConversionCallbackTracker.markCallbackProcessingEnd();
-                }
+                    });
+              } catch (Exception e) {
+                frontendMetrics.outboundIdConversionCallbackProcessingError.inc();
+                submitResponse(restRequest, restResponseChannel, null, e);
+              } finally {
+                idConversionCallbackTracker.markCallbackProcessingEnd();
               }
             }
           });
@@ -992,13 +1006,10 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
-              new Callback<Void>() {
-                @Override
-                public void onCompletion(Void securityResult, Exception securityException) {
-                  callbackTracker.markOperationEnd();
-                  submitResponse(restRequest, restResponseChannel, null, securityException);
-                  callbackTracker.markCallbackProcessingEnd();
-                }
+              (securityResult, securityException) -> {
+                callbackTracker.markOperationEnd();
+                submitResponse(restRequest, restResponseChannel, null, securityException);
+                callbackTracker.markCallbackProcessingEnd();
               });
         }
       } catch (Exception e) {
@@ -1017,6 +1028,145 @@ class AmbryBlobStorageService implements BlobStorageService {
      */
     void markStartTime() {
       callbackTracker.markOperationStart();
+    }
+  }
+
+  /**
+   * Injects {@link Account} and {@link Container} for the old put request, which does not carry account or container
+   * header.
+   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be identified.
+   */
+  private void injectAccountAndContainerForOldPutRequest(RestRequest restRequest) throws RestServiceException {
+    Account targetAccount = accountService.getAccountByName(getServiceId(restRequest));
+    if (targetAccount == null) {
+      throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
+    }
+    Container targetContainer;
+    if (getIsPrivateSetting(restRequest.getArgs())) {
+      targetContainer = targetAccount.getContainerById(accountService.getContainerIdForLegacyPutPrivateBlob());
+    } else {
+      targetContainer = targetAccount.getContainerById(accountService.getContainerIdForLegacyPutPublicBlob());
+    }
+    if (targetContainer == null) {
+      throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
+    }
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
+  }
+
+  /**
+   * Injects {@link Account} and {@link Container} for the new put request, which carries both account and container
+   * header.
+   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be identified.
+   */
+  private void injectAccountAndContainerForNewPutRequest(RestRequest restRequest) throws RestServiceException {
+    Account targetAccount = accountService.getAccountByName(getTargetAccountNameFromHeader(restRequest));
+    if (targetAccount == null) {
+      throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
+    }
+    ensureAccountNameMatchOrThrow(targetAccount, restRequest);
+    Container targetContainer = targetAccount.getContainerByName(getTargetContainerNameFromHeader(restRequest));
+    if (targetContainer == null) {
+      throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
+    }
+    ensureContainerNameMatchOrThrow(targetContainer, restRequest);
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
+  }
+
+  /**
+   * Obtains the target {@link Account} and {@link Container} id from the blobId string, queries the {@link AccountService}
+   * to get the corresponding {@link Account} and {@link Container}, and injects the target {@link Account} and
+   * {@link Container} into the {@link RestRequest}.
+   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id。
+   * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
+   * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be identified; or 2)
+   *                              either {@link Account} or {@link Container} were explicitly specified as
+   *                              {@link Account#UNKNOWN_ACCOUNT} or {@link Container#UNKNOWN_CONTAINER}.
+   */
+  private void injectTargetAccountAndContainerFromBlobIdOrThrow(String blobIdStr, RestRequest restRequest)
+      throws RestServiceException {
+    try {
+      BlobId blobId = new BlobId(blobIdStr, clusterMap);
+      Account targetAccount = accountService.getAccountById(blobId.getAccountId());
+      if (targetAccount == null) {
+        throw new RestServiceException("Account from blob id cannot be recognized",
+            RestServiceErrorCode.InvalidAccount);
+      }
+      Container targetContainer = targetAccount.getContainerById(blobId.getContainerId());
+      if (targetContainer == null) {
+        throw new RestServiceException("Container from blob id cannot be recognized",
+            RestServiceErrorCode.InvalidContainer);
+      }
+      RestUtils.setArg(restRequest, InternalKeys.TARGET_ACCOUNT_KEY, targetAccount, false);
+      RestUtils.setArg(restRequest, InternalKeys.TARGET_CONTAINER_KEY, targetContainer, false);
+      logger.trace("Sets targetAccount={} targetContainer={} for restRequest={} ", targetAccount, targetContainer,
+          restRequest);
+    } catch (RestServiceException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RestServiceException(
+          "Invalid blob id=" + blobIdStr + " during injecting account and container from blobId string",
+          RestServiceErrorCode.BadRequest);
+    }
+  }
+
+  /**
+   * Sanity check for {@link RestRequest}. This check ensures that the specified service id, account and container name,
+   * if they exist, should now be the same as the reserved values.
+   * @param restRequest The {@link RestRequest} to check.
+   * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
+   */
+  private void accountAndContainerSanityCheck(RestRequest restRequest) throws RestServiceException {
+    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getTargetAccountNameFromHeader(restRequest)) || Account.UNKNOWN_ACCOUNT_NAME
+        .equals(getServiceId(restRequest))) {
+      throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
+    }
+    String targetContainerName = getTargetContainerNameFromHeader(restRequest);
+    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || Container.UNKNOWN_PUBLIC_CONTAINER_NAME.equals(
+        targetContainerName) || Container.UNKNOWN_PRIVATE_CONTAINER_NAME.equals(targetContainerName)) {
+      throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
+    }
+  }
+
+  /**
+   * Sets target {@link Account} and {@link Container} objects in the {@link RestRequest}.
+   * @param restRequest The {@link RestRequest} to set.
+   * @param targetAccount The target {@link Account} to set.
+   * @param targetContainer The target {@link Container} to set.
+   */
+  private void setTargetAccountAndContainerInRestRequest(RestRequest restRequest, Account targetAccount,
+      Container targetContainer) {
+    RestUtils.setArg(restRequest, InternalKeys.TARGET_ACCOUNT_KEY, targetAccount, false);
+    RestUtils.setArg(restRequest, InternalKeys.TARGET_CONTAINER_KEY, targetContainer, false);
+    logger.trace("Sets targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
+        restRequest);
+  }
+
+  /**
+   * Ensures the {@link Account} matches the account name specified in the {@link RestRequest}, if it is specified.
+   * @param account The {@link Account} to ensure.
+   * @param restRequest The {@link RestRequest} to ensure.
+   * @throws RestServiceException if the {@link Account}'s name does not match the name specified in the {@link RestRequest}.
+   */
+  private void ensureAccountNameMatchOrThrow(Account account, RestRequest restRequest) throws RestServiceException {
+    String accountNameFromHeader = getTargetAccountNameFromHeader(restRequest);
+    if (accountNameFromHeader != null && !accountNameFromHeader.equals(account.getName())) {
+      throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
+    }
+  }
+
+  /**
+   * Ensures the {@link Container} matches the container name specified in the {@link RestRequest}, if it is specified.
+   * @param container The {@link Container} to ensure.
+   * @param restRequest The {@link RestRequest} to ensure.
+   * @throws RestServiceException if the {@link Container}'s name does not match the name specified in the {@link RestRequest}.
+   */
+  private void ensureContainerNameMatchOrThrow(Container container, RestRequest restRequest)
+      throws RestServiceException {
+    String containerNameFromHeader = getTargetContainerNameFromHeader(restRequest);
+    if (containerNameFromHeader != null && !containerNameFromHeader.equals(container.getName())) {
+      throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
     }
   }
 }

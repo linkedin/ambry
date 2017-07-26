@@ -67,13 +67,13 @@ class NettyRequest implements RestRequest {
   protected final HttpRequest request;
   protected final Channel channel;
   protected final NettyMetrics nettyMetrics;
-  protected final Map<String, Object> allArgs = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
-  protected final Queue<HttpContent> requestContents = new LinkedBlockingQueue<HttpContent>();
+  protected final Map<String, Object> allArgs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+  protected final Queue<HttpContent> requestContents = new LinkedBlockingQueue<>();
   protected final ReentrantLock contentLock = new ReentrantLock();
 
-  protected volatile ReadIntoCallbackWrapper callbackWrapper = null;
-  protected volatile Map<String, Object> allArgsReadOnly = null;
+  protected final Map<String, Object> allArgsReadOnly = Collections.unmodifiableMap(allArgs);
   protected final RecvByteBufAllocator savedAllocator;
+  protected volatile ReadIntoCallbackWrapper callbackWrapper = null;
 
   private final long size;
   private final QueryStringDecoder query;
@@ -215,7 +215,6 @@ class NettyRequest implements RestRequest {
       Set<javax.servlet.http.Cookie> cookies = convertHttpToJavaCookies(nettyCookies);
       allArgs.put(RestUtils.Headers.COOKIE, cookies);
     }
-    allArgsReadOnly = Collections.unmodifiableMap(allArgs);
   }
 
   @Override
@@ -236,6 +235,11 @@ class NettyRequest implements RestRequest {
   @Override
   public Map<String, Object> getArgs() {
     return allArgsReadOnly;
+  }
+
+  @Override
+  public Object setArg(String key, Object value) {
+    return allArgs.put(key, value);
   }
 
   @Override
@@ -516,8 +520,8 @@ class NettyRequest implements RestRequest {
   }
 
   /**
-   * Combines {@code values} into {@code currValue} by creating a comma seperated string.
-   * @param currValue the value to which {@code values} have to be appeneded to.
+   * Combines {@code values} into {@code currValue} by creating a comma separated string.
+   * @param currValue the value to which {@code values} have to be appended to.
    * @param values the values that need to be appended to @code currValue}.
    * @return the updated @code currValue}.
    */

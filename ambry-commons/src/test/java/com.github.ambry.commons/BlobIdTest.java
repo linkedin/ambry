@@ -456,19 +456,4 @@ public class BlobIdTest {
         throw new Exception("Unrecognized blobId version " + version);
     }
   }
-
-  /**
-   *  A class that allows getting {@link BlobId#uuid}, and makes {@link BlobId#getCurrentVersion()} to return
-   *  {@link BlobId#BLOB_ID_V2}, which will serialize a blobId to {@link BlobIdV2}.
-   */
-  private class BlobIdV2 extends BlobId {
-    BlobIdV2(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
-      super(flag, datacenterId, accountId, containerId, partitionId);
-    }
-
-    @Override
-    protected short getCurrentVersion() {
-      return BLOB_ID_V2;
-    }
-  }
 }

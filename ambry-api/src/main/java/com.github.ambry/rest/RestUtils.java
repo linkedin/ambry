@@ -13,6 +13,8 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -29,6 +31,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,6 +102,14 @@ public class RestUtils {
      */
     public final static String SERVICE_ID = "x-ambry-service-id";
     /**
+     * for put request; string; name of target account
+     */
+    public final static String TARGET_ACCOUNT_NAME = "x-ambry-target-account-name";
+    /**
+     * for put request; string; name of the target container
+     */
+    public final static String TARGET_CONTAINER_NAME = "x-ambry-target-container-name";
+    /**
      * optional in request; date string; default unset ("infinite ttl")
      */
     public final static String TTL = "x-ambry-ttl";
@@ -138,6 +150,22 @@ public class RestUtils {
      * has been modified after the value set for this header.
      */
     public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
+  }
+
+  /**
+   * Ambry specific keys used internally in a {@link RestRequest}.
+   */
+  public static final class InternalKeys {
+
+    /**
+     * The key for the target {@link com.github.ambry.account.Account} indicated by the request.
+     */
+    public final static String TARGET_ACCOUNT_KEY = "ambry-internal-key-target-account";
+
+    /**
+     * The key for the target {@link com.github.ambry.account.Container} indicated by the request.
+     */
+    public final static String TARGET_CONTAINER_KEY = "ambry-internal--key-target-container";
   }
 
   /**
@@ -183,6 +211,14 @@ public class RestUtils {
    *                                    expected.
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
+    Account account = (Account) args.get(InternalKeys.TARGET_ACCOUNT_KEY);
+    Container container = (Container) args.get(InternalKeys.TARGET_CONTAINER_KEY);
+    Objects.requireNonNull(account, "Target account object has not been injected into rest request");
+    Objects.requireNonNull(container, "Target container object has not been injected into rest request");
+    String serviceId = getHeader(args, Headers.SERVICE_ID, true);
+    String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
+    String ownerId = getHeader(args, Headers.OWNER_ID, false);
+
     long ttl = Utils.Infinite_Time;
     String ttlStr = getHeader(args, Headers.TTL, false);
     if (ttlStr != null) {
@@ -198,23 +234,8 @@ public class RestUtils {
       }
     }
 
-    boolean isPrivate;
-    String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
-    if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
-      isPrivate = false;
-    } else if (isPrivateStr.toLowerCase().equals("true")) {
-      isPrivate = true;
-    } else {
-      throw new RestServiceException(
-          Headers.PRIVATE + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
-          RestServiceErrorCode.InvalidArgs);
-    }
-
-    String serviceId = getHeader(args, Headers.SERVICE_ID, true);
-    String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
-    String ownerId = getHeader(args, Headers.OWNER_ID, false);
-
-    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl);
+    return new BlobProperties(-1, serviceId, ownerId, contentType, getIsPrivateSetting(args), ttl, account.getId(),
+        container.getId());
   }
 
   /**
@@ -520,6 +541,69 @@ public class RestUtils {
   }
 
   /**
+   * Gets the isPrivate setting from the args.
+   * @param args The args where to include the isPrivate setting.
+   * @return A boolean to indicate the value of the isPrivate flag.
+   * @throws RestServiceException if exception occurs during parsing the arg.
+   */
+  public static boolean getIsPrivateSetting(Map<String, Object> args) throws RestServiceException {
+    boolean isPrivate;
+    String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
+    if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
+      isPrivate = false;
+    } else if (isPrivateStr.toLowerCase().equals("true")) {
+      isPrivate = true;
+    } else {
+      throw new RestServiceException(
+          Headers.PRIVATE + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return isPrivate;
+  }
+
+  /**
+   * Gets the name of the target {@link com.github.ambry.account.Account} from a {@link RestRequest}'s header. This
+   * field is expected only for a POST request.
+   * @param restRequest the representation of the request. Cannot be {@code null}.
+   * @return the accountName of the requester's {@link com.github.ambry.account.Account}, or {@code null} if no
+   * accountName was set in the request.
+   * @throws RestServiceException
+   */
+  public static String getTargetAccountNameFromHeader(RestRequest restRequest) throws RestServiceException {
+    Objects.requireNonNull(restRequest, "restRequest cannot be null");
+    return getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
+  }
+
+  /**
+   * Gets the name of the target {@link com.github.ambry.account.Container} from a {@link RestRequest}. This
+   * field is expected only for a POST request.
+   * @param restRequest the representation of the request. Cannot be {@code null}.
+   * @return the containerName of the target {@link com.github.ambry.account.Container}, or {@code null} if no
+   * containerName was set in the request.
+   * @throws RestServiceException
+   */
+  public static String getTargetContainerNameFromHeader(RestRequest restRequest) throws RestServiceException {
+    Objects.requireNonNull(restRequest, "restRequest cannot be null");
+    return getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
+  }
+
+  /**
+   * Ensures the required headers are present.
+   * @param restRequest The {@link RestRequest} to ensure header presence. Cannot be {@code null}.
+   * @param requiredHeaders A set of headers to check presence. Cannot be {@code null}.
+   * @throws RestServiceException if any of the headers is missing.
+   */
+  public static void ensureRequiredHeadersOrThrow(RestRequest restRequest, Set<String> requiredHeaders)
+      throws RestServiceException {
+    Objects.requireNonNull(restRequest, "restRequest cannot be null");
+    Objects.requireNonNull(requiredHeaders, "requiredHeaders cannot be null");
+    Map<String, Object> args = restRequest.getArgs();
+    for (String header : requiredHeaders) {
+      getHeader(args, header, true);
+    }
+  }
+
+  /**
    * Gets the value of the header {@code header} in {@code args}.
    * @param args a map of arguments to be used to look for {@code header}.
    * @param header the name of the header.
@@ -585,5 +669,23 @@ public class RestUtils {
           RestServiceErrorCode.InvalidArgs);
     }
     return range;
+  }
+
+  /**
+   * Sets an argument into the {@link RestRequest}.
+   * @param restRequest The {@link RestRequest} to set the argument. Cannot be {@code null}.
+   * @param key The key of the argument. Cannot be {@code null}.
+   * @param value The value of the argument.
+   * @param isOldValueAllowed {@code true} if an old argument value is allowed; {@code false} otherwise.
+   * @return The old value of the argument.
+   */
+  public static Object setArg(RestRequest restRequest, String key, Object value, boolean isOldValueAllowed) {
+    Objects.requireNonNull(restRequest, "restRequest cannot be null");
+    Objects.requireNonNull(key, "key cannot be null");
+    Object oldVal = restRequest.setArg(key, value);
+    if (!isOldValueAllowed && oldVal != null) {
+      logger.debug("Unexpected key={} in args. Previous value={} has been cleared.", key, oldVal);
+    }
+    return oldVal;
   }
 }

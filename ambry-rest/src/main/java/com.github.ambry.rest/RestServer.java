@@ -19,7 +19,10 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.HelixNotifier;
+import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.SSLFactory;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -170,9 +173,14 @@ public class RestServer {
             restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
     restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
 
+    HelixPropertyStoreConfig helixStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
+    Notifier notifier = null;
+    if (helixStoreConfig.zkClientConnectString != HelixPropertyStoreConfig.INVALID_ZK_CLIENT_CONNECT_STRING) {
+      notifier = new HelixNotifier(helixStoreConfig);
+    }
     BlobStorageServiceFactory blobStorageServiceFactory =
         Utils.getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
-            restResponseHandler, router);
+            restResponseHandler, router, notifier);
     blobStorageService = blobStorageServiceFactory.getBlobStorageService();
 
     RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,

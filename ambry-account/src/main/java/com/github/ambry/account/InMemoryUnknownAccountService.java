@@ -20,10 +20,12 @@ import java.util.Objects;
 
 /**
  * An implementation of {@link AccountService} that always has a single entry {@link Account#UNKNOWN_ACCOUNT}. Any
- * queries to this account service will unconditionally return {@link Account#UNKNOWN_ACCOUNT}. This account service
- * is in memory, and does not talk to any persistent storage service.
+ * queries by account name to this account service will unconditionally return {@link Account#UNKNOWN_ACCOUNT}. This
+ * account service is in memory, and does not talk to any persistent storage service.
  */
 class InMemoryUnknownAccountService implements AccountService {
+  private static final short CONTAINER_ID_FOR_LEGACY_PUT_PUBLIC_BLOB = -1;
+  private static final short CONTAINER_ID_FOR_LEGACY_PUT_PRIVATE_BLOB = -1;
   private static final Collection<Account> accounts =
       Collections.unmodifiableCollection(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
   private volatile boolean isOpen = true;
@@ -31,7 +33,7 @@ class InMemoryUnknownAccountService implements AccountService {
   @Override
   public Account getAccountById(short accountId) {
     checkOpen();
-    return Account.UNKNOWN_ACCOUNT;
+    return accountId == Account.UNKNOWN_ACCOUNT_ID ? Account.UNKNOWN_ACCOUNT : null;
   }
 
   @Override
@@ -50,7 +52,18 @@ class InMemoryUnknownAccountService implements AccountService {
 
   @Override
   public Collection<Account> getAllAccounts() {
+    checkOpen();
     return accounts;
+  }
+
+  @Override
+  public short getContainerIdForLegacyPutPublicBlob() {
+    return CONTAINER_ID_FOR_LEGACY_PUT_PUBLIC_BLOB;
+  }
+
+  @Override
+  public short getContainerIdForLegacyPutPrivateBlob() {
+    return CONTAINER_ID_FOR_LEGACY_PUT_PRIVATE_BLOB;
   }
 
   @Override

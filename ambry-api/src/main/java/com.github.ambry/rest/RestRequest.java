@@ -65,6 +65,14 @@ public interface RestRequest extends ReadableStreamChannel {
   public Map<String, Object> getArgs();
 
   /**
+   * Sets one argument as a key-value pair.
+   * @param key The key of the argument.
+   * @param value The value of the argument.
+   * @return The old value if the argument was previously set.
+   */
+  public Object setArg(String key, Object value);
+
+  /**
    * If this request was over HTTPS, gets the {@link SSLSession} associated with the request.
    * @return The {@link SSLSession} for the request and response, or {@code null} if SSL was not used.
    */

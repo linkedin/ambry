@@ -29,7 +29,6 @@ import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.util.Collections;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -168,7 +167,6 @@ class NettyMultipartRequest extends NettyRequest {
         for (InterfaceHttpData part : postRequestDecoder.getBodyHttpDatas()) {
           processPart(part);
         }
-        allArgsReadOnly = Collections.unmodifiableMap(allArgs);
         requestContents.add(LastHttpContent.EMPTY_LAST_CONTENT);
         readyForRead = true;
       } catch (HttpPostRequestDecoder.ErrorDataDecoderException e) {
