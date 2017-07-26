@@ -66,7 +66,7 @@ class HelixClusterManager implements ClusterMap {
   private final ConcurrentHashMap<ByteBuffer, AmbryPartition> partitionMap = new ConcurrentHashMap<>();
   private long clusterWideRawCapacityBytes;
   private long clusterWideAllocatedRawCapacityBytes;
-  private long clusterWiseAllocatedUsableCapacityBytes;
+  private long clusterWideAllocatedUsableCapacityBytes;
   private final HelixClusterManagerCallback helixClusterManagerCallback;
   private final AtomicReference<Exception> initializationException = new AtomicReference<>();
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
@@ -158,7 +158,7 @@ class HelixClusterManager implements ClusterMap {
     for (Set<AmbryReplica> partitionReplicas : ambryPartitionToAmbryReplicas.values()) {
       long replicaCapacity = partitionReplicas.iterator().next().getCapacityInBytes();
       clusterWideAllocatedRawCapacityBytes += replicaCapacity * partitionReplicas.size();
-      clusterWiseAllocatedUsableCapacityBytes += replicaCapacity;
+      clusterWideAllocatedUsableCapacityBytes += replicaCapacity;
     }
   }
 
@@ -659,7 +659,7 @@ class HelixClusterManager implements ClusterMap {
      * @return the cluster wide allocated usable capacity in bytes.
      */
     long getAllocatedUsableCapacity() {
-      return clusterWiseAllocatedUsableCapacityBytes;
+      return clusterWideAllocatedUsableCapacityBytes;
     }
   }
 }

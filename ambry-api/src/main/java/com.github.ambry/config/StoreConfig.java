@@ -171,6 +171,17 @@ public class StoreConfig {
   @Default("240000")
   public final int storeStatsIndexEntriesPerSecond;
 
+  /**
+   * Specifies the minimum size that index entries should occupy when they get persisted. If the number of bytes for
+   * constituting keys and values fall short of this size, the entries will be padded with dummy bytes to amount to this
+   * number.
+   * Setting this value to N bytes ensures that even if the size of keys put to the store changes at runtime, as long as
+   * the total entry size is still N bytes, the key size change will not cause the active index segment to roll over.
+   */
+  @Config("store.index.persisted.entry.min.bytes")
+  @Default("")
+  public final int storeIndexPersistedEntryMinBytes;
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -207,6 +218,7 @@ public class StoreConfig {
         verifiableProperties.getLongInRange("store.stats.wait.timeout.in.secs", 2 * 60, 0, 30 * 60);
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
+    storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
   }
 }
 
