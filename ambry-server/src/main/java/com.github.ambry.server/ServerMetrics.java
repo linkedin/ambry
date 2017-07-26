@@ -341,7 +341,8 @@ public class ServerMetrics {
     idNotFoundError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDNotFoundError"));
     idDeletedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDDeletedError"));
     ttlExpiredError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TTLExpiredError"));
-    temporarilyUnavailableError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TemporarilyUnavailableError"));
+    temporarilyUnavailableError =
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "TemporarilyUnavailableError"));
     badRequestError = registry.counter(MetricRegistry.name(AmbryRequests.class, "BadRequestError"));
     unExpectedStorePutError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStorePutError"));
     unExpectedStoreGetError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreGetError"));

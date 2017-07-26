@@ -15,6 +15,9 @@ package com.github.ambry.commons;
 
 /**
  * The error codes that the server returns on a failed request
+ * </p>
+ * The order of these enums should not be changed since their relative position goes into the serialized form of
+ * requests/responses
  */
 public enum ServerErrorCode {
   No_Error,

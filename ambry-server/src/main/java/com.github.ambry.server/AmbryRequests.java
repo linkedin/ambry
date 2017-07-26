@@ -555,7 +555,7 @@ public class AmbryRequests implements RequestAPI {
     Histogram processingTimeHistogram = null;
     Histogram responseQueueTimeHistogram = null;
     Histogram responseSendTimeHistogram = null;
-    Histogram responseTotalTimeHistogram = null;
+    Histogram requestTotalTimeHistogram = null;
     AdminResponse response = null;
     ServerErrorCode error = ServerErrorCode.Unknown_Error;
     try {
@@ -566,7 +566,7 @@ public class AmbryRequests implements RequestAPI {
           processingTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
           responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
-          responseTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
+          requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
           error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
           if (error != ServerErrorCode.No_Error) {
             logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
@@ -582,7 +582,7 @@ public class AmbryRequests implements RequestAPI {
           processingTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
           responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
-          responseTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
+          requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
           RequestControlAdminRequest controlRequest = RequestControlAdminRequest.readFrom(requestStream, adminRequest);
           RequestOrResponseType toControl = controlRequest.getRequestTypeToControl();
           if (!requestsDisableInfo.containsKey(toControl)) {
@@ -618,7 +618,7 @@ public class AmbryRequests implements RequestAPI {
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
-            responseTotalTimeHistogram, null, null, totalTimeSpent));
+            requestTotalTimeHistogram, null, null, totalTimeSpent));
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,

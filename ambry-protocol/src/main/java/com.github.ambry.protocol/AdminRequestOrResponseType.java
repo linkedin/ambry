@@ -15,8 +15,10 @@ package com.github.ambry.protocol;
 
 /**
  * Enum of types of administration requests/responses.
+ * </p>
+ * The order of these enums should not be changed since their relative position goes into the serialized form of
+ * requests/responses
  */
 public enum AdminRequestOrResponseType {
-  TriggerCompaction,
-  RequestControl
+  TriggerCompaction, RequestControl
 }

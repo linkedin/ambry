@@ -31,7 +31,7 @@ public class RequestControlAdminRequest extends AdminRequest {
    * Reads from a stream and constructs a {@link RequestControlAdminRequest}.
    * @param stream the stream to read from
    * @param adminRequest the {@link AdminRequest} that contains some necessary headers.
-   * @return
+   * @return the {@link RequestControlAdminRequest} constructed from the {@code stream}.
    * @throws IOException
    */
   public static RequestControlAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)

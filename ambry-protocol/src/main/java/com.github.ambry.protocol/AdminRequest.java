@@ -46,13 +46,13 @@ public class AdminRequest extends RequestOrResponse {
   public static AdminRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     Short versionId = stream.readShort();
     if (!versionId.equals(ADMIN_REQUEST_VERSION_V2)) {
-      throw new IllegalStateException("Unrecognized version for AdminRequest: " + ADMIN_REQUEST_VERSION_V2);
+      throw new IllegalStateException("Unrecognized versionId for AdminRequest: " + ADMIN_REQUEST_VERSION_V2);
     }
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
     AdminRequestOrResponseType type = AdminRequestOrResponseType.values()[stream.readShort()];
     PartitionId id = null;
-    if (stream.readByte() == 1){
+    if (stream.readByte() == 1) {
       id = clusterMap.getPartitionIdFromStream(stream);
     }
     return new AdminRequest(type, id, correlationId, clientId);
@@ -124,7 +124,7 @@ public class AdminRequest extends RequestOrResponse {
     writeHeader();
     bufferToSend.putShort((short) type.ordinal());
     bufferToSend.put(partitionId == null ? (byte) 0 : 1);
-    if (partitionId != null){
+    if (partitionId != null) {
       bufferToSend.put(partitionId.getBytes());
     }
   }
