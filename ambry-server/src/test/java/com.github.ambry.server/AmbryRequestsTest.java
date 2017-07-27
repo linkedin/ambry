@@ -291,7 +291,7 @@ public class AmbryRequestsTest {
     // disable the request
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // check that it is disabled
-    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Unavailable);
+    sendAndVerifyOperationRequest(toControl, idsToTest, ServerErrorCode.Temporarily_Disabled);
     // ok to call disable again
     sendAndVerifyRequestControlRequest(toControl, false, id, ServerErrorCode.No_Error);
     // enable

@@ -31,6 +31,6 @@ public enum ServerErrorCode {
   Disk_Unavailable,
   Partition_ReadOnly,
   Unknown_Error,
-  Temporarily_Unavailable,
+  Temporarily_Disabled,
   Bad_Request
 }

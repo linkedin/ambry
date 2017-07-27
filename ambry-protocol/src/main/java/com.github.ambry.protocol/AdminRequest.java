@@ -46,7 +46,7 @@ public class AdminRequest extends RequestOrResponse {
   public static AdminRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     Short versionId = stream.readShort();
     if (!versionId.equals(ADMIN_REQUEST_VERSION_V2)) {
-      throw new IllegalStateException("Unrecognized versionId for AdminRequest: " + ADMIN_REQUEST_VERSION_V2);
+      throw new IllegalStateException("Unrecognized version for AdminRequest: " + versionId);
     }
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);

@@ -757,7 +757,7 @@ public class AmbryRequests implements RequestAPI {
     // 5. Ensure that the request is enabled.
     if (!isRequestEnabled(requestType, partition)) {
       metrics.temporarilyUnavailableError.inc();
-      return ServerErrorCode.Temporarily_Unavailable;
+      return ServerErrorCode.Temporarily_Disabled;
     }
     return ServerErrorCode.No_Error;
   }

@@ -38,7 +38,7 @@ public class RequestControlAdminRequest extends AdminRequest {
       throws IOException {
     Short versionId = stream.readShort();
     if (!versionId.equals(VERSION_V1)) {
-      throw new IllegalStateException("Unrecognized version for RequestControlAdminRequest: " + VERSION_V1);
+      throw new IllegalStateException("Unrecognized version for RequestControlAdminRequest: " + versionId);
     }
     RequestOrResponseType requestType = RequestOrResponseType.values()[stream.readShort()];
     boolean enable = stream.readByte() == 1;
