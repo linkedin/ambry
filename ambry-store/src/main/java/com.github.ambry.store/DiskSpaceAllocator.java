@@ -21,13 +21,13 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,7 +111,6 @@ class DiskSpaceAllocator {
    * @throws StoreException if the pool could not be allocated to meet the provided requirements
    */
   void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
-    reserveFiles.rwLock.writeLock().lock();
     long startTime = System.currentTimeMillis();
     try {
       Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
@@ -124,7 +123,6 @@ class DiskSpaceAllocator {
       throw new StoreException("Exception while initializing DiskSpaceAllocator pool", e,
           StoreErrorCodes.Initialization_Error);
     } finally {
-      reserveFiles.rwLock.writeLock().unlock();
       long elapsedTime = System.currentTimeMillis() - startTime;
       LOGGER.info("initializePool took {} ms", elapsedTime);
       metrics.diskSpaceAllocatorStartTimeMs.update(elapsedTime);
@@ -330,8 +328,7 @@ class DiskSpaceAllocator {
   }
 
   private static class ReserveFileMap {
-    private final Map<Long, Queue<File>> internalMap = new HashMap<>();
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final ConcurrentMap<Long, Queue<File>> internalMap = new ConcurrentHashMap<>();
 
     /**
      * Add a file of the specified file size to the reserve file map.
@@ -339,12 +336,7 @@ class DiskSpaceAllocator {
      * @param reserveFile the reserve file to add.
      */
     void add(long sizeInBytes, File reserveFile) {
-      rwLock.writeLock().lock();
-      try {
-        internalMap.computeIfAbsent(sizeInBytes, key -> new LinkedList<>()).add(reserveFile);
-      } finally {
-        rwLock.writeLock().unlock();
-      }
+      internalMap.computeIfAbsent(sizeInBytes, key -> new ConcurrentLinkedQueue<>()).add(reserveFile);
     }
 
     /**
@@ -353,22 +345,14 @@ class DiskSpaceAllocator {
      * @return the {@link File}, or {@code null} if no file exists in the map for the specified size.
      */
     File remove(long sizeInBytes) {
-      rwLock.writeLock().lock();
-      try {
-        File reserveFile = null;
-        Queue<File> reserveFilesForSize = internalMap.get(sizeInBytes);
-        if (reserveFilesForSize != null) {
-          if (reserveFilesForSize.size() != 0) {
-            reserveFile = reserveFilesForSize.remove();
-          }
-          if (reserveFilesForSize.size() == 0) {
-            internalMap.remove(sizeInBytes);
-          }
+      File reserveFile = null;
+      Queue<File> reserveFilesForSize = internalMap.get(sizeInBytes);
+      if (reserveFilesForSize != null) {
+        if (reserveFilesForSize.size() != 0) {
+          reserveFile = reserveFilesForSize.remove();
         }
-        return reserveFile;
-      } finally {
-        rwLock.writeLock().unlock();
       }
+      return reserveFile;
     }
 
     /**
@@ -376,25 +360,15 @@ class DiskSpaceAllocator {
      * @return the number of files in the map of size {@code sizeInBytes}
      */
     int getCount(long sizeInBytes) {
-      rwLock.readLock().lock();
-      try {
-        Queue<File> reserveFilesForSize = internalMap.get(sizeInBytes);
-        return reserveFilesForSize != null ? reserveFilesForSize.size() : 0;
-      } finally {
-        rwLock.readLock().unlock();
-      }
+      Queue<File> reserveFilesForSize = internalMap.get(sizeInBytes);
+      return reserveFilesForSize != null ? reserveFilesForSize.size() : 0;
     }
 
     /**
      * @return the set of file sizes present in the map.
      */
     Set<Long> getFileSizeSet() {
-      rwLock.readLock().lock();
-      try {
-        return internalMap.keySet();
-      } finally {
-        rwLock.readLock().unlock();
-      }
+      return internalMap.keySet();
     }
   }
 }
