@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 public class MockDiskId implements DiskId {
   String mountPath;
   MockDataNodeId dataNode;
+  HardwareState state = HardwareState.AVAILABLE;
 
   public MockDiskId(MockDataNodeId dataNode, String mountPath) {
     this.mountPath = mountPath;
@@ -29,7 +30,7 @@ public class MockDiskId implements DiskId {
 
   @Override
   public HardwareState getState() {
-    return HardwareState.AVAILABLE;
+    return state;
   }
 
   @Override
@@ -38,11 +39,11 @@ public class MockDiskId implements DiskId {
   }
 
   public void onDiskError() {
-    /* no-op for now */
+    state = HardwareState.UNAVAILABLE;
   }
 
   public void onDiskOk() {
-    /* no-op for now */
+    state = HardwareState.AVAILABLE;
   }
 
   @Override

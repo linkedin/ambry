@@ -171,6 +171,7 @@ project(':ambry-server') {
         testCompile project(':ambry-network').sourceSets.test.output
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile project(':ambry-replication').sourceSets.test.output
         testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }

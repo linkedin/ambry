@@ -15,6 +15,7 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -28,8 +29,6 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferChannel;
-import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -37,8 +36,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -122,22 +119,7 @@ public class RequestResponseTest {
       PutRequest request =
           new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
               ByteBuffer.wrap(blob), blobSize, blobType);
-      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-      int expectedWriteToCount = ((int) request.sizeInBytes() + allocationSize - 1) / allocationSize;
-      int actualWriteToCount = 0;
-      while (!request.isSendComplete()) {
-        ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(allocationSize));
-        request.writeTo(channel);
-        ByteBuffer underlyingBuf = channel.getBuffer();
-        underlyingBuf.flip();
-        outputStream.write(underlyingBuf.array(), underlyingBuf.arrayOffset(), underlyingBuf.remaining());
-        actualWriteToCount++;
-      }
-      Assert.assertEquals("writeTo() should have written out as much as the channel could take in every call",
-          expectedWriteToCount, actualWriteToCount);
-      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-      requestStream.readLong();
-      Assert.assertEquals(RequestOrResponseType.values()[requestStream.readShort()], RequestOrResponseType.PutRequest);
+      DataInputStream requestStream = serAndPrepForRead(request, allocationSize, true);
       PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
       Assert.assertEquals(deserializedPutRequest.getBlobId(), blobId);
       Assert.assertEquals(deserializedPutRequest.getBlobProperties().getBlobSize(), sizeInBlobProperties);
@@ -156,14 +138,7 @@ public class RequestResponseTest {
     PutRequest request =
         new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
             ByteBuffer.wrap(blob), sizeInBlobProperties, BlobType.DataBlob);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    while (!request.isSendComplete()) {
-      request.writeTo(writableByteChannel);
-    }
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong();
-    Assert.assertEquals(RequestOrResponseType.values()[requestStream.readShort()], RequestOrResponseType.PutRequest);
+    DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     try {
       PutRequest.readFrom(requestStream, clusterMap);
       Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
@@ -216,13 +191,7 @@ public class RequestResponseTest {
 
     // Response test
     PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    do {
-      response.writeTo(writableByteChannel);
-    } while (!response.isSendComplete());
-    DataInputStream responseStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    responseStream.readLong();
+    DataInputStream responseStream = serAndPrepForRead(response, -1, false);
     PutResponse deserializedPutResponse = PutResponse.readFrom(responseStream);
     Assert.assertEquals(deserializedPutResponse.getCorrelationId(), 1234);
     Assert.assertEquals(deserializedPutResponse.getError(), ServerErrorCode.No_Error);
@@ -240,14 +209,7 @@ public class RequestResponseTest {
     partitionRequestInfoList.add(partitionRequestInfo1);
     GetRequest getRequest =
         new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    do {
-      getRequest.writeTo(writableByteChannel);
-    } while (!getRequest.isSendComplete());
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read length
-    requestStream.readShort(); // read short
+    DataInputStream requestStream = serAndPrepForRead(getRequest, -1, true);
     GetRequest deserializedGetRequest = GetRequest.readFrom(requestStream, clusterMap);
     Assert.assertEquals(deserializedGetRequest.getClientId(), "clientId");
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().size(), 1);
@@ -269,12 +231,7 @@ public class RequestResponseTest {
     ByteArrayInputStream byteStream = new ByteArrayInputStream(buf);
     GetResponse response =
         new GetResponse(1234, "clientId", partitionResponseInfoList, byteStream, ServerErrorCode.No_Error);
-    outputStream.reset();
-    do {
-      response.writeTo(writableByteChannel);
-    } while (!response.isSendComplete());
-    requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read size
+    requestStream = serAndPrepForRead(response, -1, false);
     GetResponse deserializedGetResponse = GetResponse.readFrom(requestStream, clusterMap);
     Assert.assertEquals(deserializedGetResponse.getCorrelationId(), 1234);
     Assert.assertEquals(deserializedGetResponse.getError(), ServerErrorCode.No_Error);
@@ -312,14 +269,7 @@ public class RequestResponseTest {
       } else {
         deleteRequest = new DeleteRequestV2(correlationId, "client", id1, deletionTimeMs);
       }
-      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-      WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-      do {
-        deleteRequest.writeTo(writableByteChannel);
-      } while (!deleteRequest.isSendComplete());
-      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-      requestStream.readLong(); // read length
-      requestStream.readShort(); // read short
+      DataInputStream requestStream = serAndPrepForRead(deleteRequest, -1, true);
       DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
       Assert.assertEquals(deserializedDeleteRequest.getClientId(), "client");
       Assert.assertEquals(deserializedDeleteRequest.getBlobId(), id1);
@@ -336,12 +286,7 @@ public class RequestResponseTest {
             deserializedDeleteRequest.getDeletionTimeInMs());
       }
       DeleteResponse response = new DeleteResponse(correlationId, "client", ServerErrorCode.No_Error);
-      outputStream.reset();
-      do {
-        response.writeTo(writableByteChannel);
-      } while (!response.isSendComplete());
-      requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-      requestStream.readLong(); // read size
+      requestStream = serAndPrepForRead(response, -1, false);
       DeleteResponse deserializedDeleteResponse = DeleteResponse.readFrom(requestStream);
       Assert.assertEquals(deserializedDeleteResponse.getCorrelationId(), correlationId);
       Assert.assertEquals(deserializedDeleteResponse.getError(), ServerErrorCode.No_Error);
@@ -358,27 +303,15 @@ public class RequestResponseTest {
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");
     replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(1, "id", replicaMetadataRequestInfoList, 1000);
-    ByteBuffer buffer = ByteBuffer.allocate((int) request.sizeInBytes());
-    ByteBufferOutputStream byteBufferOutputStream = new ByteBufferOutputStream(buffer);
-    do {
-      request.writeTo(Channels.newChannel(byteBufferOutputStream));
-    } while (!request.isSendComplete());
-    buffer.flip();
-    buffer.getLong();
-    buffer.getShort();
+    DataInputStream requestStream = serAndPrepForRead(request, -1, true);
     ReplicaMetadataRequest replicaMetadataRequestFromBytes =
-        ReplicaMetadataRequest.readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
-            new MockFindTokenFactory());
+        ReplicaMetadataRequest.readFrom(requestStream, new MockClusterMap(), new MockFindTokenFactory());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);
 
     try {
       request = new ReplicaMetadataRequest(1, "id", null, 12);
-      buffer = ByteBuffer.allocate((int) request.sizeInBytes());
-      byteBufferOutputStream = new ByteBufferOutputStream(buffer);
-      do {
-        request.writeTo(Channels.newChannel(byteBufferOutputStream));
-      } while (!request.isSendComplete());
+      serAndPrepForRead(request, -1, true);
       Assert.assertEquals(true, false);
     } catch (IllegalArgumentException e) {
       Assert.assertEquals(true, true);
@@ -403,14 +336,7 @@ public class RequestResponseTest {
     replicaMetadataResponseInfoList.add(responseInfo);
     ReplicaMetadataResponse response =
         new ReplicaMetadataResponse(1234, "clientId", ServerErrorCode.No_Error, replicaMetadataResponseInfoList);
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-    outputStream.reset();
-    do {
-      response.writeTo(writableByteChannel);
-    } while (!response.isSendComplete());
-    DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-    requestStream.readLong(); // read size
+    requestStream = serAndPrepForRead(response, -1, false);
     ReplicaMetadataResponse deserializedReplicaMetadataResponse =
         ReplicaMetadataResponse.readFrom(requestStream, new MockFindTokenFactory(), clusterMap);
     Assert.assertEquals(deserializedReplicaMetadataResponse.getCorrelationId(), 1234);
@@ -442,36 +368,131 @@ public class RequestResponseTest {
    */
   @Test
   public void adminRequestResponseTest() throws IOException {
+    int correlationId = 1234;
+    String clientId = "client";
     for (AdminRequestOrResponseType type : AdminRequestOrResponseType.values()) {
       MockClusterMap clusterMap = new MockClusterMap();
       PartitionId id = clusterMap.getWritablePartitionIds().get(0);
-      AdminRequest adminRequest = new AdminRequest(type, id, 1234, "client");
-      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-      WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
-      do {
-        adminRequest.writeTo(writableByteChannel);
-      } while (!adminRequest.isSendComplete());
-      DataInputStream requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-      // read length
-      requestStream.readLong();
-      // read version
-      requestStream.readShort();
-      AdminRequest deserializedAdminRequest = AdminRequest.readFrom(requestStream, clusterMap);
-      Assert.assertEquals(deserializedAdminRequest.getCorrelationId(), 1234);
-      Assert.assertEquals(deserializedAdminRequest.getClientId(), "client");
-      Assert.assertEquals(deserializedAdminRequest.getType(), type);
-      Assert.assertTrue(deserializedAdminRequest.getPartitionId().isEqual(id.toString()));
-      AdminResponse response = new AdminResponse(1234, "client", ServerErrorCode.No_Error);
-      outputStream.reset();
-      do {
-        response.writeTo(writableByteChannel);
-      } while (!response.isSendComplete());
-      requestStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
-      requestStream.readLong(); // read size
-      AdminResponse deserializedAdminResponse = AdminResponse.readFrom(requestStream);
-      Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), 1234);
+      // with a valid partition id
+      AdminRequest adminRequest = new AdminRequest(type, id, correlationId, clientId);
+      DataInputStream requestStream = serAndPrepForRead(adminRequest, -1, true);
+      deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId, type, id);
+      // with a null partition id
+      adminRequest = new AdminRequest(type, null, correlationId, clientId);
+      requestStream = serAndPrepForRead(adminRequest, -1, true);
+      deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId, type, null);
+      // response
+      AdminResponse response = new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
+      DataInputStream responseStream = serAndPrepForRead(response, -1, false);
+      AdminResponse deserializedAdminResponse = AdminResponse.readFrom(responseStream);
+      Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
+      Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
       Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
     }
+  }
+
+  /**
+   * Tests the ser/de of {@link RequestControlAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void requestControlAdminRequestTest() throws IOException {
+    for (RequestOrResponseType requestOrResponseType : RequestOrResponseType.values()) {
+      doRequestControlAdminRequestTest(requestOrResponseType, true);
+      doRequestControlAdminRequestTest(requestOrResponseType, false);
+    }
+  }
+
+  /**
+   * Serializes a {@link RequestOrResponseType} and prepares it for reading.
+   * @param requestOrResponse the {@link RequestOrResponseType} to serialize.
+   * @param allocationSize the amount of data that the output channel should read in one iteration. Setting this to -1
+   *                       will set the size of the output channel buffer to 1/3rd the size of {@code requestOrResponse}
+   * @param isRequest {@code true} if {@code requestOrResponse} is a request. {@code false} otherwise.
+   * @return the serialized form of {@code requestOrResponse} as a {@link DataInputStream}.
+   * @throws IOException
+   */
+  private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse, int allocationSize, boolean isRequest)
+      throws IOException {
+    if (allocationSize == -1) {
+      allocationSize = (int) (requestOrResponse.sizeInBytes() / 3);
+    }
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + allocationSize - 1) / allocationSize);
+    int actualWriteToCount = 0;
+    do {
+      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(allocationSize));
+      requestOrResponse.writeTo(channel);
+      ByteBuffer underlyingBuf = channel.getBuffer();
+      underlyingBuf.flip();
+      outputStream.write(underlyingBuf.array(), underlyingBuf.arrayOffset(), underlyingBuf.remaining());
+      actualWriteToCount++;
+    } while (!requestOrResponse.isSendComplete());
+    Assert.assertEquals("Should not have written anything", 0,
+        requestOrResponse.writeTo(new ByteBufferChannel(ByteBuffer.allocate(1))));
+    Assert.assertEquals("writeTo() should have written out as much as the channel could take in every call",
+        expectedWriteToCount, actualWriteToCount);
+    DataInputStream stream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
+    // read length
+    stream.readLong();
+    if (isRequest) {
+      // read version
+      Assert.assertEquals(RequestOrResponseType.values()[stream.readShort()], requestOrResponse.getRequestType());
+    }
+    return stream;
+  }
+
+  /**
+   * De-serializes {@code adminRequest} and verifies the fields.
+   * @param requestStream the {@link DataInputStream} that contains the request stream
+   * @param clusterMap the {@link ClusterMap} to use for deser
+   * @param correlationId the correlation id of the request
+   * @param clientId the client of the request
+   * @param adminRequestType the {@link AdminRequestOrResponseType}
+   * @param id the partition ID in the request (can be {@code null}).
+   * @return the deserialized {@link AdminRequest}
+   * @throws IOException
+   */
+  private AdminRequest deserAdminRequestAndVerify(DataInputStream requestStream, ClusterMap clusterMap,
+      int correlationId, String clientId, AdminRequestOrResponseType adminRequestType, PartitionId id)
+      throws IOException {
+    AdminRequest deserializedAdminRequest = AdminRequest.readFrom(requestStream, clusterMap);
+    Assert.assertEquals(deserializedAdminRequest.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedAdminRequest.getClientId(), clientId);
+    Assert.assertEquals(deserializedAdminRequest.getType(), adminRequestType);
+    if (id != null) {
+      Assert.assertTrue(deserializedAdminRequest.getPartitionId().isEqual(id.toString()));
+    } else {
+      Assert.assertNull(deserializedAdminRequest.getPartitionId());
+    }
+    return deserializedAdminRequest;
+  }
+
+  /**
+   * Does the actual test of ser/de of {@link RequestControlAdminRequest} and checks for equality of fields with
+   * reference data.
+   * @param requestOrResponseType the {@link RequestOrResponseType} to be used in the {@link RequestControlAdminRequest}
+   * @param enable the value for the enable field in {@link RequestControlAdminRequest}.
+   * @throws IOException
+   */
+  private void doRequestControlAdminRequestTest(RequestOrResponseType requestOrResponseType, boolean enable)
+      throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    int correlationId = 1234;
+    String clientId = "client";
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.RequestControl, id, correlationId, clientId);
+    RequestControlAdminRequest controlRequest =
+        new RequestControlAdminRequest(requestOrResponseType, enable, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(controlRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.RequestControl, id);
+    RequestControlAdminRequest deserializedControlRequest =
+        RequestControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    Assert.assertEquals(requestOrResponseType, deserializedControlRequest.getRequestTypeToControl());
+    Assert.assertEquals(enable, deserializedControlRequest.shouldEnable());
   }
 
   /**

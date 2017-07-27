@@ -15,6 +15,9 @@ package com.github.ambry.commons;
 
 /**
  * The error codes that the server returns on a failed request
+ * </p>
+ * The order of these enums should not be changed since their relative position goes into the serialized form of
+ * requests/responses
  */
 public enum ServerErrorCode {
   No_Error,
@@ -27,5 +30,7 @@ public enum ServerErrorCode {
   Partition_Unknown,
   Disk_Unavailable,
   Partition_ReadOnly,
-  Unknown_Error
+  Unknown_Error,
+  Temporarily_Disabled,
+  Bad_Request
 }
