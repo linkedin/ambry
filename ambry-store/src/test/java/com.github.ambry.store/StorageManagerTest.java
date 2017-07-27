@@ -46,6 +46,9 @@ import static org.junit.Assert.*;
 
 public class StorageManagerTest {
   private static final Random RANDOM = new Random();
+
+  private DiskManagerConfig diskManagerConfig;
+  private StoreConfig storeConfig;
   private MockClusterMap clusterMap;
   private MetricRegistry metricRegistry;
 
@@ -56,7 +59,8 @@ public class StorageManagerTest {
   @Before
   public void initializeCluster() throws IOException {
     clusterMap = new MockClusterMap(false, 1, 3, 3);
-    this.metricRegistry = clusterMap.getMetricRegistry();
+    metricRegistry = clusterMap.getMetricRegistry();
+    generateConfigs(false);
   }
 
   /**
@@ -88,19 +92,11 @@ public class StorageManagerTest {
     Utils.deleteFileOrDirectory(new File(mountPathToDelete));
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(0,
+        getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
     assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(1, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
-    for (ReplicaId replica : replicas) {
-      PartitionId id = replica.getPartitionId();
-      if (replica.getMountPath().equals(mountPathToDelete)) {
-        assertNull("This store should not be accessible.", storageManager.getStore(id));
-        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
-      } else {
-        Store store = storageManager.getStore(id);
-        assertTrue("Store should be started", ((BlobStore) store).isStarted());
-        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
-      }
-    }
+    checkStoreAccessibility(replicas, mountPathToDelete, storageManager);
 
     assertEquals("Compaction thread count is incorrect", mountPaths.size() - 1,
         TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -127,6 +123,8 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(0,
+        getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
     assertEquals(badReplicaIndexes.size(),
         getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
@@ -172,19 +170,11 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(0,
+        getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
     assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
-    for (ReplicaId replica : replicas) {
-      PartitionId id = replica.getPartitionId();
-      if (replica.getMountPath().equals(badDiskMountPath)) {
-        assertNull("This store should not be accessible.", storageManager.getStore(id));
-        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
-      } else {
-        Store store = storageManager.getStore(id);
-        assertTrue("Store should be started", ((BlobStore) store).isStarted());
-        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
-      }
-    }
+    checkStoreAccessibility(replicas, badDiskMountPath, storageManager);
     assertEquals("Compaction thread count is incorrect", mountPaths.size(),
         TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
     verifyCompactionThreadCount(storageManager, mountPaths.size());
@@ -192,6 +182,58 @@ public class StorageManagerTest {
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
     assertEquals(downReplicaCount,
         getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
+  }
+
+  /**
+   * Test that stores on a disk are inaccessible if the {@link DiskSpaceAllocator} fails to start.
+   * @throws Exception
+   */
+  @Test
+  public void diskSpaceAllocatorTest() throws Exception {
+    generateConfigs(true);
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<String> mountPaths = dataNode.getMountPaths();
+
+    // Test that StorageManager starts correctly when segments are created in the reserve pool.
+    // Startup/shutdown one more time to verify the restart scenario.
+    for (int i = 0; i < 2; i++) {
+      metricRegistry = new MetricRegistry();
+      StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+      storageManager.start();
+      checkStoreAccessibility(replicas, null, storageManager);
+      Map<String, Counter> counters = metricRegistry.getCounters();
+      assertEquals(0,
+          getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
+      assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+      assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
+      for (String mountPath : dataNode.getMountPaths()) {
+        DiskSpaceAllocatorTest.verifyPoolState(new File(mountPath, diskManagerConfig.diskManagerReserveFileDirName),
+            new DiskSpaceAllocatorTest.ExpectedStateBuilder().add(storeConfig.storeSegmentSizeInBytes, 4).map);
+      }
+      shutdownAndAssertStoresInaccessible(storageManager, replicas);
+      assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
+    }
+
+    // Induce a initializePool failure by:
+    // 1. deleting a file size directory
+    // 2. instantiating the DiskManagers (this will not fail b/c the directory just won't be inventory)
+    // 3. creating a regular file with the same name as the file size directory
+    // 4. start the DiskManagers (this should cause the DiskSpaceAllocator to fail to initialize when it sees the
+    //    file where the directory should be created.
+    metricRegistry = new MetricRegistry();
+    String diskToFail = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
+    File reservePoolDir = new File(diskToFail, diskManagerConfig.diskManagerReserveFileDirName);
+    File fileSizeDir =
+        new File(reservePoolDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
+    Utils.deleteFileOrDirectory(fileSizeDir);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    assertTrue("File already exists", fileSizeDir.createNewFile());
+    storageManager.start();
+    checkStoreAccessibility(replicas, diskToFail, storageManager);
+    Map<String, Counter> counters = metricRegistry.getCounters();
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+    assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -205,13 +247,10 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
-    for (ReplicaId replica : replicas) {
-      System.out.println(replica.toString());
-      Store store = storageManager.getStore(replica.getPartitionId());
-      assertTrue("Store should be started", ((BlobStore) store).isStarted());
-      assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(replica.getPartitionId()));
-    }
+    checkStoreAccessibility(replicas, null, storageManager);
     Map<String, Counter> counters = metricRegistry.getCounters();
+    assertEquals(0,
+        getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
@@ -233,13 +272,10 @@ public class StorageManagerTest {
    */
   private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
       throws StoreException, InterruptedException {
-    Properties properties = new Properties();
-    properties.put("store.compaction.triggers", "Periodic,Admin");
-    VerifiableProperties vProps = new VerifiableProperties(properties);
     StorageManager storageManager =
-        new StorageManager(new StoreConfig(vProps), new DiskManagerConfig(vProps), metricRegistry, replicas,
-            new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-            SystemTime.getInstance(), Utils.newScheduler(1, false));
+        new StorageManager(storeConfig, diskManagerConfig, metricRegistry, replicas, new MockIdFactory(),
+            new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance(),
+            Utils.newScheduler(1, false));
     return storageManager;
   }
 
@@ -289,6 +325,43 @@ public class StorageManagerTest {
     }
     assertEquals("Compaction thread count report not as expected", expectedCount,
         storageManager.getCompactionThreadCount());
+  }
+
+  /**
+   * Check that stores on a bad disk are not accessible and that all other stores are accessible.
+   * @param replicas a list of all {@link ReplicaId}s on the node.
+   * @param badDiskMountPath the disk mount path that should have caused failures or {@code null} if all disks are fine.
+   * @param storageManager the {@link StorageManager} to test.
+   */
+  private void checkStoreAccessibility(List<ReplicaId> replicas, String badDiskMountPath,
+      StorageManager storageManager) {
+    for (ReplicaId replica : replicas) {
+      PartitionId id = replica.getPartitionId();
+      if (replica.getMountPath().equals(badDiskMountPath)) {
+        assertNull("This store should not be accessible.", storageManager.getStore(id));
+        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
+      } else {
+        Store store = storageManager.getStore(id);
+        assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
+      }
+    }
+  }
+
+  /**
+   * Generates {@link StoreConfig} and {@link DiskManagerConfig} for use in tests.
+   * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
+   */
+  private void generateConfigs(boolean segmentedLog) {
+    Properties properties = new Properties();
+    properties.put("store.compaction.triggers", "Periodic,Admin");
+    if (segmentedLog) {
+      long replicaCapacity = clusterMap.getAllPartitionIds().get(0).getReplicaIds().get(0).getCapacityInBytes();
+      properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
+    }
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    diskManagerConfig = new DiskManagerConfig(vProps);
+    storeConfig = new StoreConfig(vProps);
   }
 }
 

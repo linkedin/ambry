@@ -37,7 +37,6 @@ import static org.junit.Assert.*;
 
 public class DiskSpaceAllocatorTest {
   private static final StorageManagerMetrics METRICS = new StorageManagerMetrics(new MetricRegistry());
-  private static final String FILE_SIZE_DIR_PREFIX = "reserve_size_";
   private int requiredSwapSegmentsPerSize = 0;
   private final File allocatedFileDir;
   private final File reserveFileDir;
@@ -237,7 +236,7 @@ public class DiskSpaceAllocatorTest {
     alloc = constructAllocator();
     alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 2, 0)));
     verifyPoolState(new ExpectedStateBuilder().add(50, 2).map);
-    File fileSizeDir = new File(reserveFileDir, FILE_SIZE_DIR_PREFIX + 50);
+    File fileSizeDir = new File(reserveFileDir, DiskSpaceAllocator.generateFileSizeDirName(50));
     // test a failure while deleting an unneeded directory
     alloc = constructAllocator();
     assertTrue("Could not make non-writable", fileSizeDir.setWritable(false));
@@ -358,27 +357,38 @@ public class DiskSpaceAllocatorTest {
    * @param expectedState a map from file size to the number of reserve files expected of that size.
    */
   private void verifyPoolState(Map<Long, Integer> expectedState) {
-    assertEquals("Wrong number of file size dirs", expectedState.size(), reserveFileDir.list().length);
-    for (Map.Entry<Long, Integer> entry : expectedState.entrySet()) {
-      long size = entry.getKey();
-      int count = entry.getValue();
-      File fileSizeDir = new File(reserveFileDir, FILE_SIZE_DIR_PREFIX + size);
-      System.out.printf("dir thing " + fileSizeDir);
-      String[] filenameList = fileSizeDir.list();
-      assertNotNull("Error while listing files for size " + size, filenameList);
-      assertEquals("Wrong number of files for size " + size, count, filenameList.length);
-    }
+    verifyPoolState(reserveFileDir, expectedState);
   }
 
+  /**
+   * @return a new {@link DiskSpaceAllocator} instance.
+   * @throws StoreException
+   */
   private DiskSpaceAllocator constructAllocator() throws StoreException {
     return new DiskSpaceAllocator(reserveFileDir, requiredSwapSegmentsPerSize, METRICS);
   }
 
   /**
+   * Verify that the layout of the pool matches the expected state.
+   * @param reserveFileDir the reserve file directory to inspect.
+   * @param expectedState a map from file size to the number of reserve files expected of that size.
+   */
+  static void verifyPoolState(File reserveFileDir, Map<Long, Integer> expectedState) {
+    assertEquals("Wrong number of file size dirs", expectedState.size(), reserveFileDir.list().length);
+    for (Map.Entry<Long, Integer> entry : expectedState.entrySet()) {
+      long size = entry.getKey();
+      int count = entry.getValue();
+      File fileSizeDir = new File(reserveFileDir, DiskSpaceAllocator.generateFileSizeDirName(size));
+      String[] filenameList = fileSizeDir.list();
+      assertNotNull("Error while listing files for size " + size, filenameList);
+      assertEquals("Wrong number of files for size " + size, count, filenameList.length);
+    }
+  }
+  /**
    * A builder for a map that describes the number of reserve files for each file size.
    * Used with {@link #verifyPoolState(Map)}
    */
-  private static class ExpectedStateBuilder {
+  static class ExpectedStateBuilder {
     final Map<Long, Integer> map = new HashMap<>();
 
     /**

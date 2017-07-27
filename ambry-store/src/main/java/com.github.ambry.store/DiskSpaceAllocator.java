@@ -120,6 +120,7 @@ class DiskSpaceAllocator {
       // TODO fill the disk with additional swap segments
       poolInitialized = true;
     } catch (Exception e) {
+      metrics.diskSpaceAllocatorInitFailureCount.inc();
       throw new StoreException("Exception while initializing DiskSpaceAllocator pool", e,
           StoreErrorCodes.Initialization_Error);
     } finally {
@@ -300,9 +301,10 @@ class DiskSpaceAllocator {
    * @param sizeInBytes the size of the files in this directory
    * @return a directory name for this size. This is reserve_size_{n} where {n} is {@code sizeInBytes}
    */
-  private static String generateFileSizeDirName(long sizeInBytes) {
+  static String generateFileSizeDirName(long sizeInBytes) {
     return FILE_SIZE_DIR_PREFIX + sizeInBytes;
   }
+
   /**
    * @return a filename for a reserve file. This is reserve_ followed by a random UUID.
    */
