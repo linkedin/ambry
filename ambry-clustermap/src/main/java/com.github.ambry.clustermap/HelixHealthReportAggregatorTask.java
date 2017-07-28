@@ -16,8 +16,9 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
@@ -28,8 +29,13 @@ import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskCallbackContext;
 import org.apache.helix.task.TaskResult;
 import org.apache.helix.task.UserContentStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
+/**
+ * Helix task to aggregate health reports across all storage nodes and update the helix property store with the result
+ */
 class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   public static final String TASK_COMMAND_PREFIX = "aggregate";
   private static final String RAW_VALID_SIZE_FIELD_NAME = "raw_valid_data_size";
@@ -37,15 +43,24 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
   private static final String TIMESTAMP_FIELD_NAME = "timestamp";
   private final HelixManager manager;
   private final HelixClusterAggregator clusterAggregator;
-  private final String healthReportId;
-  private final String fieldName;
+  private final String healthReportName;
+  private final String quotaStatsFieldName;
+  private static final Logger logger = LoggerFactory.getLogger(HelixHealthReportAggregatorTask.class);
 
-  HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportId,
-      String fieldName) {
+  /**
+   * Instantiates {@link HelixHealthReportAggregatorTask}
+   * @param context the {@link TaskCallbackContext} associated with the task
+   * @param relevantTimePeriodInMs relevant time period in ms within which values are considered to be valid. Values
+   *                               outside of this period will be ignored.
+   * @param healthReportName Name of the health report
+   * @param quotaStatsFieldName Quota stats field name
+   */
+  HelixHealthReportAggregatorTask(TaskCallbackContext context, long relevantTimePeriodInMs, String healthReportName,
+      String quotaStatsFieldName) {
     manager = context.getManager();
     clusterAggregator = new HelixClusterAggregator(relevantTimePeriodInMs);
-    this.healthReportId = healthReportId;
-    this.fieldName = fieldName;
+    this.healthReportName = healthReportName;
+    this.quotaStatsFieldName = quotaStatsFieldName;
   }
 
   @Override
@@ -53,16 +68,16 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
     try {
       HelixDataAccessor helixDataAccessor = manager.getHelixDataAccessor();
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
-      List<String> statsWrappersJSON = new ArrayList<>();
+      Map<String, String> statsWrappersJSON = new HashMap<>();
       for (String instanceName : instanceNames) {
         PropertyKey.Builder keyBuilder = helixDataAccessor.keyBuilder();
-        HelixProperty record = helixDataAccessor.getProperty(keyBuilder.healthReport(instanceName, healthReportId));
+        HelixProperty record = helixDataAccessor.getProperty(keyBuilder.healthReport(instanceName, healthReportName));
         if (record != null && record.getRecord() != null) {
-          statsWrappersJSON.add(record.getRecord().getSimpleField(fieldName));
+          statsWrappersJSON.put(instanceName, record.getRecord().getSimpleField(quotaStatsFieldName));
         }
       }
       Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
-      String resultId = String.format("Aggregated_%s", healthReportId);
+      String resultId = String.format("Aggregated_%s", healthReportName);
       ZNRecord znRecord = new ZNRecord(resultId);
       znRecord.setSimpleField(RAW_VALID_SIZE_FIELD_NAME, results.getFirst());
       znRecord.setSimpleField(VALID_SIZE_FIELD_NAME, results.getSecond());
@@ -71,6 +86,7 @@ class HelixHealthReportAggregatorTask extends UserContentStore implements Task {
       manager.getHelixPropertyStore().set(path, znRecord, AccessOption.PERSISTENT);
       return new TaskResult(TaskResult.Status.COMPLETED, "Aggregation success");
     } catch (Exception e) {
+      logger.error("Exception thrown while aggregating stats from health reports across all nodes ", e);
       return new TaskResult(TaskResult.Status.FAILED, "Exception thrown");
     }
   }

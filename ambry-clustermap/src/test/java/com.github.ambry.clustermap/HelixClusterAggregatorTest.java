@@ -58,9 +58,9 @@ public class HelixClusterAggregatorTest {
     }
     StatsWrapper nodeStats = generateNodeStats(storeSnapshots, DEFAULT_TIMESTAMP);
     String nodeStatsJSON = mapper.writeValueAsString(nodeStats);
-    List<String> statsWrappersJSON = new ArrayList<>();
+    Map<String, String> statsWrappersJSON = new HashMap<>();
     for (int i = 0; i < nodeCount; i++) {
-      statsWrappersJSON.add(nodeStatsJSON);
+      statsWrappersJSON.put("Store_"+i,(nodeStatsJSON));
     }
     for (int i = 1; i < storeSnapshots.size(); i++) {
       StatsSnapshot.aggregate(storeSnapshots.get(0), storeSnapshots.get(i));
@@ -107,9 +107,9 @@ public class HelixClusterAggregatorTest {
     StatsWrapper upToDateNodeStats =
         generateNodeStats(upToDateStoreSnapshots, TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES));
     StatsWrapper outdatedNodeStats = generateNodeStats(outdatedStoreSnapshots, 0);
-    List<String> statsWrappersJSON = new ArrayList<>();
-    statsWrappersJSON.add(mapper.writeValueAsString(outdatedNodeStats));
-    statsWrappersJSON.add(mapper.writeValueAsString(upToDateNodeStats));
+    Map<String, String> statsWrappersJSON = new HashMap<>();
+    statsWrappersJSON.put("Store_0",mapper.writeValueAsString(outdatedNodeStats));
+    statsWrappersJSON.put("Store_1", mapper.writeValueAsString(upToDateNodeStats));
     Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
     StatsSnapshot expectedSnapshot = upToDateStoreSnapshots.get(0);
     // verify cluster wide aggregation with outdated node stats
@@ -134,9 +134,9 @@ public class HelixClusterAggregatorTest {
     smallerStoreSnapshots.add(generateStoreStats(5, 3, new Random(seed)));
     StatsWrapper greaterNodeStats = generateNodeStats(greaterStoreSnapshots, DEFAULT_TIMESTAMP);
     StatsWrapper smallerNodeStats = generateNodeStats(smallerStoreSnapshots, DEFAULT_TIMESTAMP);
-    List<String> statsWrappersJSON = new ArrayList<>();
-    statsWrappersJSON.add(mapper.writeValueAsString(smallerNodeStats));
-    statsWrappersJSON.add(mapper.writeValueAsString(greaterNodeStats));
+    Map<String, String> statsWrappersJSON = new HashMap<>();
+    statsWrappersJSON.put("Store_0",mapper.writeValueAsString(smallerNodeStats));
+    statsWrappersJSON.put("Store_1", mapper.writeValueAsString(greaterNodeStats));
     Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
     StatsSnapshot expectedSnapshot = greaterStoreSnapshots.get(0);
     // verify cluster wide aggregation with different node stats

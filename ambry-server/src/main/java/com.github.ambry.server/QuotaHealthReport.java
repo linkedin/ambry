@@ -24,7 +24,7 @@ import org.apache.helix.healthcheck.HealthReportProvider;
  */
 class QuotaHealthReport extends HealthReportProvider implements AmbryHealthReport {
   private static final String QUOTA_REPORT_NAME = "QuotaReport";
-  private static final String QUOTA_FIELD_NAME = "QuotaStats";
+  private static final String QUOTA_STATS_FIELD_NAME = "QuotaStats";
   private final StatsManager statsManager;
   private final long aggregatePeriodInMinutes;
 
@@ -40,7 +40,7 @@ class QuotaHealthReport extends HealthReportProvider implements AmbryHealthRepor
   @Override
   public Map<String, String> getRecentHealthReport() {
     Map<String, String> report = new HashMap<>();
-    report.put(QUOTA_FIELD_NAME, statsManager.getNodeStatsInJSON());
+    report.put(QUOTA_STATS_FIELD_NAME, statsManager.getNodeStatsInJSON());
     return report;
   }
 
@@ -50,8 +50,8 @@ class QuotaHealthReport extends HealthReportProvider implements AmbryHealthRepor
   }
 
   @Override
-  public String getFieldName() {
-    return QUOTA_FIELD_NAME;
+  public String getQuotaStatsFieldName() {
+    return QUOTA_STATS_FIELD_NAME;
   }
 
   @Override

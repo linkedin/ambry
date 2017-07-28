@@ -108,7 +108,7 @@ class HelixParticipant implements ClusterParticipant {
               @Override
               public Task createNewTask(TaskCallbackContext context) {
                 return new HelixHealthReportAggregatorTask(context, healthReport.getAggregateIntervalInMinutes(),
-                    healthReport.getReportName(), healthReport.getFieldName());
+                    healthReport.getReportName(), healthReport.getQuotaStatsFieldName());
               }
             });
       }

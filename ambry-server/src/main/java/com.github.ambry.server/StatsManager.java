@@ -157,6 +157,7 @@ class StatsManager {
       try {
         statsSnapshot = store.getStoreStats().getStatsSnapshot(time.milliseconds());
       } catch (StoreException e) {
+        logger.error("StoreException on fetching stats snapshot for store {}", store, e);
         unreachableStores.add(partitionId.toString());
       }
     }
@@ -164,7 +165,8 @@ class StatsManager {
   }
 
   /**
-   * Get the combined {@link StatsSnapshot} of all partitions in this node.
+   * Get the combined {@link StatsSnapshot} of all partitions in this node. This json will contain one entry per partition
+   * wrt valid data size.
    * @return a combined {@link StatsSnapshot} of this node
    */
   String getNodeStatsInJSON() {
@@ -214,6 +216,7 @@ class StatsManager {
         Iterator<PartitionId> iterator = totalPartitionIds.iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
+          logger.info("Aggregating stats started for store {}", partitionId );
           collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
         }
         if (!cancelled) {
