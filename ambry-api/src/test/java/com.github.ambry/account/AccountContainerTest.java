@@ -468,12 +468,16 @@ public class AccountContainerTest {
   }
 
   /**
-   * Tests for {@link Account#UNKNOWN_ACCOUNT} and {@link Container#UNKNOWN_CONTAINER}.
+   * Tests for {@link Account#UNKNOWN_ACCOUNT}, {@link Container#UNKNOWN_CONTAINER},
+   * {@link Container#UNKNOWN_PUBLIC_CONTAINER}, and {@link Container#UNKNOWN_PRIVATE_CONTAINER}.
    */
   @Test
   public void testUnknownAccountAndContainer() {
     Account unknownAccount = Account.UNKNOWN_ACCOUNT;
     Container unknownContainer = Container.UNKNOWN_CONTAINER;
+    Container unknownPublicContainer = Container.UNKNOWN_PUBLIC_CONTAINER;
+    Container unknownPrivateContainer = Container.UNKNOWN_PRIVATE_CONTAINER;
+    // UNKNOWN_CONTAINER
     assertEquals("Wrong id for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_ID, unknownContainer.getId());
     assertEquals("Wrong name for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_NAME, unknownContainer.getName());
     assertEquals("Wrong status for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_STATUS,
@@ -484,12 +488,43 @@ public class AccountContainerTest {
         unknownContainer.isPrivate());
     assertEquals("Wrong parent account id for UNKNOWN_CONTAINER", Container.UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID,
         unknownContainer.getParentAccountId());
+    // UNKNOWN_PUBLIC_CONTAINER
+    assertEquals("Wrong id for UNKNOWN_CONTAINER", Container.UNKNOWN_PUBLIC_CONTAINER_ID,
+        unknownPublicContainer.getId());
+    assertEquals("Wrong name for UNKNOWN_CONTAINER", Container.UNKNOWN_PUBLIC_CONTAINER_NAME,
+        unknownPublicContainer.getName());
+    assertEquals("Wrong status for UNKNOWN_CONTAINER", Container.UNKNOWN_PUBLIC_CONTAINER_STATUS,
+        unknownPublicContainer.getStatus());
+    assertEquals("Wrong description for UNKNOWN_CONTAINER", Container.UNKNOWN_PUBLIC_CONTAINER_DESCRIPTION,
+        unknownPublicContainer.getDescription());
+    assertEquals("Wrong privacy setting for UNKNOWN_CONTAINER", Container.UNKNOWN_PUBLIC_CONTAINER_IS_PRIVATE_SETTING,
+        unknownPublicContainer.isPrivate());
+    assertEquals("Wrong parent account id for UNKNOWN_CONTAINER", Container.UNKNOWN_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID,
+        unknownPublicContainer.getParentAccountId());
+    // UNKNOWN_PRIVATE_CONTAINER
+    assertEquals("Wrong id for UNKNOWN_CONTAINER", Container.UNKNOWN_PRIVATE_CONTAINER_ID,
+        unknownPrivateContainer.getId());
+    assertEquals("Wrong name for UNKNOWN_CONTAINER", Container.UNKNOWN_PRIVATE_CONTAINER_NAME,
+        unknownPrivateContainer.getName());
+    assertEquals("Wrong status for UNKNOWN_CONTAINER", Container.UNKNOWN_PRIVATE_CONTAINER_STATUS,
+        unknownPrivateContainer.getStatus());
+    assertEquals("Wrong description for UNKNOWN_CONTAINER", Container.UNKNOWN_PRIVATE_CONTAINER_DESCRIPTION,
+        unknownPrivateContainer.getDescription());
+    assertEquals("Wrong privacy setting for UNKNOWN_CONTAINER", Container.UNKNOWN_PRIVATE_CONTAINER_IS_PRIVATE_SETTING,
+        unknownPrivateContainer.isPrivate());
+    assertEquals("Wrong parent account id for UNKNOWN_CONTAINER", Container.UNKNOWN_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID,
+        unknownPrivateContainer.getParentAccountId());
+    // UNKNOWN_ACCOUNT
     assertEquals("Wrong id for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_ID, unknownAccount.getId());
     assertEquals("Wrong name for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_NAME, unknownAccount.getName());
     assertEquals("Wrong status for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_STATUS, unknownAccount.getStatus());
-    assertEquals("Wrong number of containers for UNKNOWN_ACCOUNT", 1, unknownAccount.getAllContainers().size());
-    assertEquals("Wrong container get from UNKNOWN_ACCOUNT", Container.UNKNOWN_CONTAINER,
+    assertEquals("Wrong number of containers for UNKNOWN_ACCOUNT", 3, unknownAccount.getAllContainers().size());
+    assertEquals("Wrong unknown container get from UNKNOWN_ACCOUNT", Container.UNKNOWN_CONTAINER,
         unknownAccount.getContainerById(Container.UNKNOWN_CONTAINER_ID));
+    assertEquals("Wrong unknown public container get from UNKNOWN_ACCOUNT", Container.UNKNOWN_PUBLIC_CONTAINER,
+        unknownAccount.getContainerById(Container.UNKNOWN_PUBLIC_CONTAINER_ID));
+    assertEquals("Wrong unknown private container get from UNKNOWN_ACCOUNT", Container.UNKNOWN_PRIVATE_CONTAINER,
+        unknownAccount.getContainerById(Container.UNKNOWN_PRIVATE_CONTAINER_ID));
   }
 
   /**

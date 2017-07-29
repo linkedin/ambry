@@ -56,14 +56,44 @@ public class Container {
   public static final short UNKNOWN_CONTAINER_ID = -1;
 
   /**
+   * The id of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final short UNKNOWN_PUBLIC_CONTAINER_ID = -2;
+
+  /**
+   * The id of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   */
+  public static final short UNKNOWN_PRIVATE_CONTAINER_ID = -3;
+
+  /**
    * The name of {@link #UNKNOWN_CONTAINER}.
    */
   public static final String UNKNOWN_CONTAINER_NAME = "ambry-unknown-container-name";
 
   /**
+   * The name of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final String UNKNOWN_PUBLIC_CONTAINER_NAME = "ambry-unknown-public-container-name";
+
+  /**
+   * The name of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final String UNKNOWN_PRIVATE_CONTAINER_NAME = "ambry-unknown-private-container-name";
+
+  /**
    * The status of {@link #UNKNOWN_CONTAINER}.
    */
   public static final ContainerStatus UNKNOWN_CONTAINER_STATUS = ContainerStatus.ACTIVE;
+
+  /**
+   * The status of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final ContainerStatus UNKNOWN_PUBLIC_CONTAINER_STATUS = ContainerStatus.ACTIVE;
+
+  /**
+   * The status of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   */
+  public static final ContainerStatus UNKNOWN_PRIVATE_CONTAINER_STATUS = ContainerStatus.ACTIVE;
 
   /**
    * The description of {@link #UNKNOWN_CONTAINER}.
@@ -72,14 +102,46 @@ public class Container {
       "This is a container for the blobs without specifying a target account and container when they are put";
 
   /**
+   * The description of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final String UNKNOWN_PUBLIC_CONTAINER_DESCRIPTION =
+      "This is a container for the blobs without specifying a target account and container when they are put and isPrivate flag is false";
+
+  /**
+   * The description of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   */
+  public static final String UNKNOWN_PRIVATE_CONTAINER_DESCRIPTION =
+      "This is a container for the blobs without specifying a target account and container when they are put and isPrivate flag is true";
+
+  /**
    * The privacy setting of {@link #UNKNOWN_CONTAINER}.
    */
   public static final boolean UNKNOWN_CONTAINER_IS_PRIVATE_SETTING = false;
 
   /**
+   * The privacy setting of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_PUBLIC_CONTAINER_IS_PRIVATE_SETTING = false;
+
+  /**
+   * The privacy setting of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_PRIVATE_CONTAINER_IS_PRIVATE_SETTING = false;
+
+  /**
    * The parent account id of {@link #UNKNOWN_CONTAINER}.
    */
   public static final short UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID = Account.UNKNOWN_ACCOUNT_ID;
+
+  /**
+   * The parent account id of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   */
+  public static final short UNKNOWN_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID = Account.UNKNOWN_ACCOUNT_ID;
+
+  /**
+   * The parent account id of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   */
+  public static final short UNKNOWN_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID = Account.UNKNOWN_ACCOUNT_ID;
 
   /**
    * A container defined specifically for the blobs put without specifying target account and container. In the
@@ -89,6 +151,24 @@ public class Container {
   public static final Container UNKNOWN_CONTAINER =
       new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_IS_PRIVATE_SETTING, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+
+  /**
+   * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
+   * set to {@code false}.
+   */
+  public static final Container UNKNOWN_PUBLIC_CONTAINER =
+      new Container(UNKNOWN_PUBLIC_CONTAINER_ID, UNKNOWN_PUBLIC_CONTAINER_NAME, UNKNOWN_PUBLIC_CONTAINER_STATUS,
+          UNKNOWN_PUBLIC_CONTAINER_DESCRIPTION, UNKNOWN_PUBLIC_CONTAINER_IS_PRIVATE_SETTING,
+          UNKNOWN_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+
+  /**
+   * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
+   * set to {@code true}.
+   */
+  public static final Container UNKNOWN_PRIVATE_CONTAINER =
+      new Container(UNKNOWN_PRIVATE_CONTAINER_ID, UNKNOWN_PRIVATE_CONTAINER_NAME, UNKNOWN_PRIVATE_CONTAINER_STATUS,
+          UNKNOWN_PRIVATE_CONTAINER_DESCRIPTION, UNKNOWN_PRIVATE_CONTAINER_IS_PRIVATE_SETTING,
+          UNKNOWN_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
 
   // static variables
   static final String JSON_VERSION_KEY = "version";
