@@ -126,7 +126,7 @@ public class Container {
   /**
    * The privacy setting of {@link #UNKNOWN_PRIVATE_CONTAINER}.
    */
-  public static final boolean UNKNOWN_PRIVATE_CONTAINER_IS_PRIVATE_SETTING = false;
+  public static final boolean UNKNOWN_PRIVATE_CONTAINER_IS_PRIVATE_SETTING = true;
 
   /**
    * The parent account id of {@link #UNKNOWN_CONTAINER}.
