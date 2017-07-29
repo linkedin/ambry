@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -94,7 +95,8 @@ public class Account {
    */
   public static final Account UNKNOWN_ACCOUNT =
       new Account(UNKNOWN_ACCOUNT_ID, UNKNOWN_ACCOUNT_NAME, UNKNOWN_ACCOUNT_STATUS,
-          Collections.singleton(Container.UNKNOWN_CONTAINER));
+          Arrays.asList(Container.UNKNOWN_CONTAINER, Container.UNKNOWN_PUBLIC_CONTAINER,
+              Container.UNKNOWN_PRIVATE_CONTAINER));
 
   // static variables
   static final String JSON_VERSION_KEY = "version";
