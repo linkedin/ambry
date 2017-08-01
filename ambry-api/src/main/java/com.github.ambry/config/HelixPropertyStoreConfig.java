@@ -18,7 +18,7 @@ package com.github.ambry.config;
  */
 public class HelixPropertyStoreConfig {
   public static final String HELIX_PROPERTY_STORE_PREFIX = "helix.property.store.";
-  public static final String INVALID_ZK_CLIENT_CONNECT_STRING = "invalidZkClientConnectString";
+  public static final String INVALID_ZK_CLIENT_CONNECT_STRING = "";
 
   /**
    * Time in ms to time out a connection to a ZooKeeper server.

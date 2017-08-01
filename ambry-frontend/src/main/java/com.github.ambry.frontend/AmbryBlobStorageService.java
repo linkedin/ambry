@@ -1043,10 +1043,10 @@ class AmbryBlobStorageService implements BlobStorageService {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
     Container targetContainer;
-    if (getIsPrivateSetting(restRequest.getArgs())) {
-      targetContainer = targetAccount.getContainerById(accountService.getContainerIdForLegacyPutPrivateBlob());
+    if (isPrivate(restRequest.getArgs())) {
+      targetContainer = targetAccount.getContainerById(Container.UNKNOWN_PRIVATE_CONTAINER_ID);
     } else {
-      targetContainer = targetAccount.getContainerById(accountService.getContainerIdForLegacyPutPublicBlob());
+      targetContainer = targetAccount.getContainerById(Container.UNKNOWN_PUBLIC_CONTAINER_ID);
     }
     if (targetContainer == null) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
@@ -1113,7 +1113,7 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   /**
    * Sanity check for {@link RestRequest}. This check ensures that the specified service id, account and container name,
-   * if they exist, should now be the same as the reserved values.
+   * if they exist, should not be the same as the reserved values.
    * @param restRequest The {@link RestRequest} to check.
    * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
    */

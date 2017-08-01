@@ -87,18 +87,4 @@ public interface AccountService extends Closeable {
    * @return A collection of {@link Account}s.
    */
   public Collection<Account> getAllAccounts();
-
-  /**
-   * Gets the default {@link Container} id for pre-containerization requests (without specifying account and container
-   * headers in the http request), when the blob is specified as {@code public}.
-   * @return The id of the {@link Container} for public blobs put by pre-containerization requests.
-   */
-  public short getContainerIdForLegacyPutPublicBlob();
-
-  /**
-   * Gets the default {@link Container} id for pre-containerization requests (without specifying account and container
-   * headers in the http request), when the blob is specified as {@code private}.
-   * @return The id of the {@link Container} for private blobs put by pre-containerization requests.
-   */
-  public short getContainerIdForLegacyPutPrivateBlob();
 }

@@ -56,14 +56,16 @@ public class Container {
   public static final short UNKNOWN_CONTAINER_ID = -1;
 
   /**
-   * The id of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   * The id for the containers to be associated with the blobs that are put without specifying a target container,
+   * but are specified public. {@link #UNKNOWN_PUBLIC_CONTAINER} is one of the containers that use it.
    */
-  public static final short UNKNOWN_PUBLIC_CONTAINER_ID = -2;
+  public static final short UNKNOWN_PUBLIC_CONTAINER_ID = 0;
 
   /**
-   * The id of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   * The id for the containers to be associated with the blobs that are put without specifying a target container,
+   * but are specified private. {@link #UNKNOWN_PRIVATE_CONTAINER} is one of the containers that use it.
    */
-  public static final short UNKNOWN_PRIVATE_CONTAINER_ID = -3;
+  public static final short UNKNOWN_PRIVATE_CONTAINER_ID = 1;
 
   /**
    * The name of {@link #UNKNOWN_CONTAINER}.
@@ -71,12 +73,14 @@ public class Container {
   public static final String UNKNOWN_CONTAINER_NAME = "ambry-unknown-container-name";
 
   /**
-   * The name of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   * The name for the containers to be associated with the blobs that are put without specifying a target container,
+   * but are specified public. {@link #UNKNOWN_PUBLIC_CONTAINER} is one of the containers that use it.
    */
   public static final String UNKNOWN_PUBLIC_CONTAINER_NAME = "ambry-unknown-public-container-name";
 
   /**
-   * The name of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   * The name for the containers to be associated with the blobs that are put without specifying a target container,
+   * but are specified private. {@link #UNKNOWN_PRIVATE_CONTAINER} is one of the containers that use it.
    */
   public static final String UNKNOWN_PRIVATE_CONTAINER_NAME = "ambry-unknown-private-container-name";
 
@@ -86,12 +90,14 @@ public class Container {
   public static final ContainerStatus UNKNOWN_CONTAINER_STATUS = ContainerStatus.ACTIVE;
 
   /**
-   * The status of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   * The status for the containers to be associated with the blobs that are put without specifying a target container,
+   * but are specified public. {@link #UNKNOWN_PUBLIC_CONTAINER} is one of the containers that use it.
    */
   public static final ContainerStatus UNKNOWN_PUBLIC_CONTAINER_STATUS = ContainerStatus.ACTIVE;
 
   /**
-   * The status of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   * The status for the containers to be associated with the blobs that are put without specifying a target container,
+   * but are specified private. {@link #UNKNOWN_PRIVATE_CONTAINER} is one of the containers that use it.
    */
   public static final ContainerStatus UNKNOWN_PRIVATE_CONTAINER_STATUS = ContainerStatus.ACTIVE;
 
@@ -102,13 +108,15 @@ public class Container {
       "This is a container for the blobs without specifying a target account and container when they are put";
 
   /**
-   * The description of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   * The description for the containers to be associated with the blobs that are put without specifying a target
+   * container, but are specified public. {@link #UNKNOWN_PUBLIC_CONTAINER} is one of the containers that use it.
    */
   public static final String UNKNOWN_PUBLIC_CONTAINER_DESCRIPTION =
       "This is a container for the blobs without specifying a target account and container when they are put and isPrivate flag is false";
 
   /**
-   * The description of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   * The description for the containers to be associated with the blobs that are put without specifying a target
+   * container, but are specified private. {@link #UNKNOWN_PRIVATE_CONTAINER} is one of the containers that use it.
    */
   public static final String UNKNOWN_PRIVATE_CONTAINER_DESCRIPTION =
       "This is a container for the blobs without specifying a target account and container when they are put and isPrivate flag is true";
@@ -119,12 +127,14 @@ public class Container {
   public static final boolean UNKNOWN_CONTAINER_IS_PRIVATE_SETTING = false;
 
   /**
-   * The privacy setting of {@link #UNKNOWN_PUBLIC_CONTAINER}.
+   * The privacy setting for the containers to be associated with the blobs that are put without specifying a target
+   * container, but are specified private. {@link #UNKNOWN_PRIVATE_CONTAINER} is one of the containers that use it.
    */
   public static final boolean UNKNOWN_PUBLIC_CONTAINER_IS_PRIVATE_SETTING = false;
 
   /**
-   * The privacy setting of {@link #UNKNOWN_PRIVATE_CONTAINER}.
+   * The privacy setting for the containers to be associated with the blobs that are put without specifying a target
+   * container, but are specified public. {@link #UNKNOWN_PUBLIC_CONTAINER} is one of the containers that use it.
    */
   public static final boolean UNKNOWN_PRIVATE_CONTAINER_IS_PRIVATE_SETTING = true;
 

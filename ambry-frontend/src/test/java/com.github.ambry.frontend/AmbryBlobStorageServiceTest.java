@@ -400,7 +400,7 @@ public class AmbryBlobStorageServiceTest {
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
-    String blobId = postBlobAndVerify(headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+    String blobId = postBlobAndVerify(headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_PUBLIC_CONTAINER);
 
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
@@ -1627,7 +1627,7 @@ public class AmbryBlobStorageServiceTest {
 
     // should succeed, and the target account and container are set to UNKNOWN.
     blobId = putBlobAndVerifyWithAccountAndContainer(null, null, "someServiceId", isPrivate, Account.UNKNOWN_ACCOUNT,
-        Container.UNKNOWN_CONTAINER, null);
+        isPrivate ? Container.UNKNOWN_PRIVATE_CONTAINER : Container.UNKNOWN_PUBLIC_CONTAINER, null);
     verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER, null);
 
     // should fail, because accountName needs to be specified.
@@ -1785,11 +1785,11 @@ public class AmbryBlobStorageServiceTest {
         RestServiceErrorCode.MissingArgs);
 
     Container legacyContainerForPublicBlob =
-        new ContainerBuilder(accountService.getContainerIdForLegacyPutPublicBlob(), "containerForLegacyPublicPut",
+        new ContainerBuilder(Container.UNKNOWN_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false,
             refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
-        new ContainerBuilder(accountService.getContainerIdForLegacyPutPrivateBlob(), "containerForLegacyPrivatePut",
+        new ContainerBuilder(Container.UNKNOWN_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", true,
             refAccount.getId()).build();
     refAccount = new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
@@ -1799,14 +1799,14 @@ public class AmbryBlobStorageServiceTest {
     if (isPrivate) {
       // should succeed.
       putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-          refAccount.getContainerById(accountService.getContainerIdForLegacyPutPrivateBlob()), null);
+          refAccount.getContainerById(Container.UNKNOWN_PRIVATE_CONTAINER_ID), null);
       // should fail, because accountName needs to be specified.
       putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
           RestServiceErrorCode.MissingArgs);
     } else {
       // should succeed.
       putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-          refAccount.getContainerById(accountService.getContainerIdForLegacyPutPublicBlob()), null);
+          refAccount.getContainerById(Container.UNKNOWN_PUBLIC_CONTAINER_ID), null);
       // should fail, because accountName needs to be specified.
       putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
           RestServiceErrorCode.MissingArgs);

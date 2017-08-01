@@ -75,8 +75,6 @@ class HelixAccountService implements AccountService {
   static final String ACCOUNT_METADATA_MAP_KEY = "accountMetadata";
   static final String FULL_ACCOUNT_METADATA_PATH = "/account_metadata/full_data";
   private static final String ZN_RECORD_ID = "full_account_metadata";
-  private static final short CONTAINER_ID_FOR_LEGACY_PUT_PUBLIC_BLOB = 0;
-  private static final short CONTAINER_ID_FOR_LEGACY_PUT_PRIVATE_BLOB = 1;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final HelixPropertyStore<ZNRecord> helixStore;
   private final AccountServiceMetrics accountServiceMetrics;
@@ -146,16 +144,6 @@ class HelixAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     checkOpen();
     return accountInfoMapRef.get().getAccounts();
-  }
-
-  @Override
-  public short getContainerIdForLegacyPutPublicBlob() {
-    return CONTAINER_ID_FOR_LEGACY_PUT_PUBLIC_BLOB;
-  }
-
-  @Override
-  public short getContainerIdForLegacyPutPrivateBlob() {
-    return CONTAINER_ID_FOR_LEGACY_PUT_PRIVATE_BLOB;
   }
 
   /**

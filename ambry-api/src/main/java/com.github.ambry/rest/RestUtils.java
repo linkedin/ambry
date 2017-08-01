@@ -165,7 +165,7 @@ public class RestUtils {
     /**
      * The key for the target {@link com.github.ambry.account.Container} indicated by the request.
      */
-    public final static String TARGET_CONTAINER_KEY = "ambry-internal--key-target-container";
+    public final static String TARGET_CONTAINER_KEY = "ambry-internal-key-target-container";
   }
 
   /**
@@ -205,7 +205,7 @@ public class RestUtils {
 
   /**
    * Builds {@link BlobProperties} given the arguments associated with a request.
-   * @param args the arguments associated with the request.
+   * @param args the arguments associated with the request. Cannot be {@code null}.
    * @return the {@link BlobProperties} extracted from the arguments.
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format or number
    *                                    expected.
@@ -213,8 +213,6 @@ public class RestUtils {
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
     Account account = (Account) args.get(InternalKeys.TARGET_ACCOUNT_KEY);
     Container container = (Container) args.get(InternalKeys.TARGET_CONTAINER_KEY);
-    Objects.requireNonNull(account, "Target account object has not been injected into rest request");
-    Objects.requireNonNull(container, "Target container object has not been injected into rest request");
     String serviceId = getHeader(args, Headers.SERVICE_ID, true);
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
@@ -234,7 +232,7 @@ public class RestUtils {
       }
     }
 
-    return new BlobProperties(-1, serviceId, ownerId, contentType, getIsPrivateSetting(args), ttl, account.getId(),
+    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate(args), ttl, account.getId(),
         container.getId());
   }
 
@@ -546,7 +544,7 @@ public class RestUtils {
    * @return A boolean to indicate the value of the isPrivate flag.
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
-  public static boolean getIsPrivateSetting(Map<String, Object> args) throws RestServiceException {
+  public static boolean isPrivate(Map<String, Object> args) throws RestServiceException {
     boolean isPrivate;
     String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
     if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
@@ -570,7 +568,6 @@ public class RestUtils {
    * @throws RestServiceException
    */
   public static String getTargetAccountNameFromHeader(RestRequest restRequest) throws RestServiceException {
-    Objects.requireNonNull(restRequest, "restRequest cannot be null");
     return getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
   }
 
@@ -583,7 +580,6 @@ public class RestUtils {
    * @throws RestServiceException
    */
   public static String getTargetContainerNameFromHeader(RestRequest restRequest) throws RestServiceException {
-    Objects.requireNonNull(restRequest, "restRequest cannot be null");
     return getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
   }
 
@@ -595,8 +591,6 @@ public class RestUtils {
    */
   public static void ensureRequiredHeadersOrThrow(RestRequest restRequest, Set<String> requiredHeaders)
       throws RestServiceException {
-    Objects.requireNonNull(restRequest, "restRequest cannot be null");
-    Objects.requireNonNull(requiredHeaders, "requiredHeaders cannot be null");
     Map<String, Object> args = restRequest.getArgs();
     for (String header : requiredHeaders) {
       getHeader(args, header, true);
@@ -680,8 +674,6 @@ public class RestUtils {
    * @return The old value of the argument.
    */
   public static Object setArg(RestRequest restRequest, String key, Object value, boolean isOldValueAllowed) {
-    Objects.requireNonNull(restRequest, "restRequest cannot be null");
-    Objects.requireNonNull(key, "key cannot be null");
     Object oldVal = restRequest.setArg(key, value);
     if (!isOldValueAllowed && oldVal != null) {
       logger.debug("Unexpected key={} in args. Previous value={} has been cleared.", key, oldVal);
