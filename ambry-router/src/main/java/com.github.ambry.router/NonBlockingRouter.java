@@ -242,7 +242,7 @@ class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback);
+      getOperationController().deleteBlob(blobId, serviceId, futureResult, callback, true);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
@@ -261,16 +261,13 @@ class NonBlockingRouter implements Router {
     for (BackgroundDeleteRequest deleteRequest : deleteRequests) {
       currentOperationsCount.incrementAndGet();
       currentBackgroundOperationsCount.incrementAndGet();
-      backgroundDeleter.deleteBlob(deleteRequest.getBlobId(), deleteRequest.getServiceId(), new FutureResult<Void>(),
-          new Callback<Void>() {
-            @Override
-            public void onCompletion(Void result, Exception exception) {
-              if (exception != null) {
-                logger.error("Background delete operation failed with exception", exception);
-              }
-              currentBackgroundOperationsCount.decrementAndGet();
+      backgroundDeleter.deleteBlob(deleteRequest.getBlobId(), deleteRequest.getServiceId(), new FutureResult<>(),
+          (Void result, Exception exception) -> {
+            if (exception != null) {
+              logger.error("Background delete operation failed with exception", exception);
             }
-          });
+            currentBackgroundOperationsCount.decrementAndGet();
+          }, false);
     }
   }
 
@@ -281,24 +278,25 @@ class NonBlockingRouter implements Router {
    * @param serviceId the service ID associated with the original delete request.
    */
   private void initiateChunkDeletesIfAny(final String blobId, final String serviceId) {
-    Callback<GetBlobResultInternal> callback = new Callback<GetBlobResultInternal>() {
-      @Override
-      public void onCompletion(GetBlobResultInternal result, Exception exception) {
-        if (exception != null) {
-          logger.error(
-              "Encountered exception when attempting to get chunks of a possibly composite deleted blob" + blobId,
-              exception);
-        } else if (result.getBlobResult != null) {
-          logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
-        } else if (result.storeKeys != null) {
-          List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
-          for (StoreKey storeKey : result.storeKeys) {
-            deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId));
-          }
-          initiateBackgroundDeletes(deleteRequests);
+    Callback<GetBlobResultInternal> callback = (GetBlobResultInternal result, Exception exception) -> {
+      if (exception != null) {
+        // It is expected that these requests will not always succeed. For example, this may have been triggered by a
+        // duplicate delete and the blob could have already been hard deleted, so the deserialization can fail, or the
+        // blob could have been garbage collected and not found at all and so on.
+        logger.trace(
+            "Encountered exception when attempting to get chunks of a possibly composite deleted blob " + blobId,
+            exception);
+      } else if (result.getBlobResult != null) {
+        logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
+      } else if (result.storeKeys != null) {
+        List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
+        for (StoreKey storeKey : result.storeKeys) {
+          logger.trace("Initiating delete of chunk blob: " + storeKey);
+          deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId));
         }
-        currentBackgroundOperationsCount.decrementAndGet();
+        initiateBackgroundDeletes(deleteRequests);
       }
+      currentBackgroundOperationsCount.decrementAndGet();
     };
     currentOperationsCount.incrementAndGet();
     currentBackgroundOperationsCount.incrementAndGet();
@@ -480,18 +478,17 @@ class NonBlockingRouter implements Router {
      * @param futureResult A future that would contain information about whether the deletion succeeded or not,
      *                     eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of a request.
+     * @param attemptChunkDeletes whether delete of chunks of the given blob (if it turns out to be composite) should be
+     *                            attempted. Set this to false if it is known that the given blob is a data chunk.
      */
     protected void deleteBlob(final String blobId, final String serviceId, FutureResult<Void> futureResult,
-        final Callback<Void> callback) {
-      deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, new Callback<Void>() {
-        @Override
-        public void onCompletion(Void result, Exception exception) {
-          if (exception == null) {
-            initiateChunkDeletesIfAny(blobId, serviceId);
-          }
-          if (callback != null) {
-            callback.onCompletion(result, exception);
-          }
+        final Callback<Void> callback, boolean attemptChunkDeletes) {
+      deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, (Void result, Exception exception) -> {
+        if (exception == null && attemptChunkDeletes) {
+          initiateChunkDeletesIfAny(blobId, serviceId);
+        }
+        if (callback != null) {
+          callback.onCompletion(result, exception);
         }
       });
       routerCallback.onPollReady();

@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +64,7 @@ class MockServer {
   private boolean getErrorOnDataBlobOnly = false;
   private final ClusterMap clusterMap;
   private final String dataCenter;
+  private final HashMap<RequestOrResponseType, Integer> requestCounts = new HashMap<>();
 
   MockServer(ClusterMap clusterMap, String dataCenter) {
     this.clusterMap = clusterMap;
@@ -84,6 +86,8 @@ class MockServer {
         hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : ServerErrorCode.No_Error;
     RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
     RequestOrResponse response;
+    int count = requestCounts.getOrDefault(type, 0);
+    requestCounts.put(type, count + 1);
     switch (type) {
       case PutRequest:
         response = makePutResponse((PutRequest) send, serverError);
@@ -427,6 +431,15 @@ class MockServer {
    */
   public void setBlobFormatVersion(short blobFormatVersion) {
     this.blobFormatVersion = blobFormatVersion;
+  }
+
+  /**
+   * Get the count of requests of the given type.
+   * @param type the type of request
+   * @return the count of requests this server has received of the given type.
+   */
+  public int getCount(RequestOrResponseType type) {
+    return requestCounts.getOrDefault(type, 0);
   }
 }
 
