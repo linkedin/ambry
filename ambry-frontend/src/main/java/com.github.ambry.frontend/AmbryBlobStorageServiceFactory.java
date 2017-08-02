@@ -36,7 +36,6 @@ import org.slf4j.LoggerFactory;
  * instance on {@link #getBlobStorageService()}.
  */
 public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory {
-  private final MetricRegistry metricRegistry;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final VerifiableProperties verifiableProperties;
@@ -59,9 +58,8 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {
-      metricRegistry = clusterMap.getMetricRegistry();
       frontendConfig = new FrontendConfig(verifiableProperties);
-      frontendMetrics = new FrontendMetrics(metricRegistry);
+      frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
       this.verifiableProperties = verifiableProperties;
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
@@ -80,10 +78,10 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       // TODO get account service from factory here and pass it into AmbryBlobStorageService.
       AccountService accountService = null;
       IdConverterFactory idConverterFactory =
-          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, metricRegistry);
+          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
       SecurityServiceFactory securityServiceFactory =
-          Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties, metricRegistry,
-              accountService);
+          Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
+              clusterMap.getMetricRegistry(), accountService);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
           securityServiceFactory, clusterMap);
     } catch (Exception e) {
