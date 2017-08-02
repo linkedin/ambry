@@ -30,6 +30,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -95,7 +96,19 @@ public class StoreCopier implements Closeable {
   /**
    * Config class for the {@link StoreCopier}.
    */
-  static class CopierConfig {
+  private static class CopierConfig {
+
+    /**
+     * The path to the hardware layout file.
+     */
+    @Config("hardware.layout.file.path")
+    final String hardwareLayoutFilePath;
+
+    /**
+     * The path to the partition layout file.
+     */
+    @Config("partition.layout.file.path")
+    final String partitionLayoutFilePath;
 
     /**
      * The path of the directory where the source store files are.
@@ -123,6 +136,8 @@ public class StoreCopier implements Closeable {
     final long fetchSizeInBytes;
 
     CopierConfig(VerifiableProperties verifiableProperties) {
+      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
+      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
       srcStoreDirPath = verifiableProperties.getString("src.store.dir");
       tgtStoreDirPath = verifiableProperties.getString("tgt.store.dir");
       storeCapacity = verifiableProperties.getLong("store.capacity");
@@ -134,7 +149,7 @@ public class StoreCopier implements Closeable {
 
   private final Store src;
   private final Store tgt;
-  private final CopierConfig config;
+  private final long fetchSizeInBytes;
   private final List<Transformer> transformers;
   private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
   private boolean isOpen = true;
@@ -143,21 +158,24 @@ public class StoreCopier implements Closeable {
     VerifiableProperties properties = ToolUtils.getVerifiableProperties(args);
     CopierConfig config = new CopierConfig(properties);
     StoreConfig storeConfig = new StoreConfig(properties);
-    String hardwareLayoutFilePath = properties.getString("hardware.layout.file.path");
-    String partitionLayoutFilePath = properties.getString("partition.layout.file.path");
-    try (
-        ClusterMap clusterMap = new StaticClusterAgentsFactory(new ClusterMapConfig(properties), hardwareLayoutFilePath,
-            partitionLayoutFilePath).getClusterMap()) {
+    try (ClusterMap clusterMap = new StaticClusterAgentsFactory(new ClusterMapConfig(properties),
+        config.hardwareLayoutFilePath, config.partitionLayoutFilePath).getClusterMap()) {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      try (StoreCopier storeCopier = new StoreCopier(config, storeConfig, clusterMap.getMetricRegistry(),
-          storeKeyFactory, new DiskIOScheduler(null), Collections.EMPTY_LIST, SystemTime.getInstance())) {
+      File srcDir = new File(config.srcStoreDirPath);
+      File tgtDir = new File(config.tgtStoreDirPath);
+      try (StoreCopier storeCopier = new StoreCopier(srcDir, tgtDir, config.storeCapacity, config.fetchSizeInBytes,
+          storeConfig, clusterMap.getMetricRegistry(), storeKeyFactory, new DiskIOScheduler(null),
+          Collections.EMPTY_LIST, SystemTime.getInstance())) {
         storeCopier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
       }
     }
   }
 
   /**
-   * @param config {@link CopierConfig} that contains the config for the copier.
+   * @param srcDir the directory of the {@link Store} to be copied from
+   * @param tgtDir the directory of the {@link Store} to be copied to.
+   * @param storeCapacity the capacity of the store.
+   * @param fetchSizeInBytes the size of each fetch from the soure store.
    * @param storeConfig {@link StoreConfig} that contains config to initiate a {@link BlobStore}.
    * @param metricRegistry {@link MetricRegistry} to use for metrics.
    * @param storeKeyFactory the {@link StoreKeyFactory} to use for {@link StoreKey}s in the {@link Store}.
@@ -166,17 +184,18 @@ public class StoreCopier implements Closeable {
    * @param time the {@link Time} instance to use.
    * @throws StoreException
    */
-  public StoreCopier(CopierConfig config, StoreConfig storeConfig, MetricRegistry metricRegistry,
-      StoreKeyFactory storeKeyFactory, DiskIOScheduler diskIOScheduler, List<Transformer> transformers, Time time)
-      throws StoreException {
-    this.config = config;
+  public StoreCopier(File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes, StoreConfig storeConfig,
+      MetricRegistry metricRegistry, StoreKeyFactory storeKeyFactory, DiskIOScheduler diskIOScheduler,
+      List<Transformer> transformers, Time time) throws StoreException {
+    this.fetchSizeInBytes = fetchSizeInBytes;
     this.transformers = transformers;
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    src = new BlobStore("src", storeConfig, null, null, diskIOScheduler, metrics, config.srcStoreDirPath,
-        config.storeCapacity, storeKeyFactory, recovery, null, time);
-    tgt = new BlobStore("tgt", storeConfig, scheduler, null, diskIOScheduler, metrics, config.tgtStoreDirPath,
-        config.storeCapacity, storeKeyFactory, recovery, null, time);
+    src =
+        new BlobStore("src", storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(), storeCapacity,
+            storeKeyFactory, recovery, null, time);
+    tgt = new BlobStore("tgt", storeConfig, scheduler, null, diskIOScheduler, metrics, tgtDir.getAbsolutePath(),
+        storeCapacity, storeKeyFactory, recovery, null, time);
     src.start();
     tgt.start();
   }
@@ -212,7 +231,7 @@ public class StoreCopier implements Closeable {
     FindToken token = startToken;
     do {
       lastToken = token;
-      FindInfo findInfo = src.findEntriesSince(lastToken, config.fetchSizeInBytes);
+      FindInfo findInfo = src.findEntriesSince(lastToken, fetchSizeInBytes);
       List<MessageInfo> messageInfos = findInfo.getMessageEntries();
       for (MessageInfo messageInfo : messageInfos) {
         logger.trace("Processing {} - isDeleted: {}, isExpired {}", messageInfo.getStoreKey(), messageInfo.isDeleted(),

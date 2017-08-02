@@ -86,13 +86,12 @@ public class StoreCopierTest {
     properties.setProperty("tgt.store.dir", tgtDir.getAbsolutePath());
     properties.setProperty("store.capacity", Long.toString(STORE_CAPACITY));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
-    StoreCopier.CopierConfig config = new StoreCopier.CopierConfig(verifiableProperties);
     storeConfig = new StoreConfig(verifiableProperties);
     setupTestState();
     time.sleep(1000);
     _storeCopier =
-        new StoreCopier(config, storeConfig, clusterMap.getMetricRegistry(), STORE_KEY_FACTORY, DISK_IO_SCHEDULER,
-            Collections.EMPTY_LIST, time);
+        new StoreCopier(srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig, clusterMap.getMetricRegistry(),
+            STORE_KEY_FACTORY, DISK_IO_SCHEDULER, Collections.EMPTY_LIST, time);
   }
 
   /**
