@@ -464,7 +464,7 @@ public class AmbryBlobStorageServiceTest {
    * prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
    *
    * accountHeader    containerHeader   serviceIdHeader     expected Error      injected account      injected container
-   * null             null              "someServiceId"     InvalidAccount      null                  null
+   * null             null              "someServiceId"     null                UNKNOWN_ACCOUNT       UNKNOWN_CONTAINER
    * null             nonExistName      "someServiceId"     MissingArgs         null                  null
    * null             C#UNKOWN          "someServiceId"     InvalidContainer    null                  null
    * null             realCntName       "someServiceId"     MissingArgs         null                  null
@@ -1684,9 +1684,9 @@ public class AmbryBlobStorageServiceTest {
     generateRefAccountAndContainer();
     AccountService accountService = prePopulateHelixAccountService();
 
-    // should fail, because accountName and containerName need to be specified.
-    putBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate, null, null,
-        RestServiceErrorCode.InvalidAccount);
+    // should succeed, since this is the current type of request with only a non-null serviceId.
+    putBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate, Account.UNKNOWN_ACCOUNT,
+        isPrivate ? Container.UNKNOWN_PRIVATE_CONTAINER : Container.UNKNOWN_PUBLIC_CONTAINER, null);
 
     // should fail, because accountName needs to be specified.
     putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", isPrivate, null, null,
@@ -1768,9 +1768,10 @@ public class AmbryBlobStorageServiceTest {
     putBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null,
         null, RestServiceErrorCode.InvalidAccount);
 
-    // should fail, because accountName implicitly set by serviceId does not have the default container.
-    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, null, null,
-        RestServiceErrorCode.InvalidContainer);
+    // should succeed, but this is a special case that account is created without the legacy containers for public and private
+    // put. It should fall back to the frontend behavior before containerization.
+    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, Account.UNKNOWN_ACCOUNT,
+        Container.UNKNOWN_CONTAINER, null);
 
     // should fail, because accountName needs to be specified.
     putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,

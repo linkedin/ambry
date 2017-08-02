@@ -65,6 +65,8 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
   /**
    * Gets a {@link HelixPropertyStore} configured by {@link #shouldUseMockHelixStore}, it will either return a
    * {@link MockHelixPropertyStore} if set to {@code true}, or {@link HelixPropertyStore} if set to {@code false}.
+   * When {@code shouldUseMockHelixStore} is {@code true}, it will return an existing store if a store has been
+   * created for the {@code storeConfig}.
    * @param storeConfig The config for constructing a {@link HelixPropertyStore}.
    * @return A {@link HelixPropertyStore}.
    */
@@ -85,12 +87,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
    * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
    */
   private MockHelixPropertyStore<ZNRecord> getMockHelixStore(HelixPropertyStoreConfig storeConfig) {
-    String storeRootPath = storeConfig.zkClientConnectString + storeConfig.rootPath;
-    MockHelixPropertyStore<ZNRecord> helixStore = storeKeyToMockStoreMap.get(storeRootPath);
-    if (helixStore == null) {
-      helixStore = new MockHelixPropertyStore<>();
-      storeKeyToMockStoreMap.put(storeRootPath, helixStore);
-    }
-    return helixStore;
+    return storeKeyToMockStoreMap.computeIfAbsent(storeConfig.zkClientConnectString + storeConfig.rootPath,
+        path -> new MockHelixPropertyStore<>());
   }
 }

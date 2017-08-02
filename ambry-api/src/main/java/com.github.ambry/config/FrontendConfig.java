@@ -64,6 +64,13 @@ public class FrontendConfig {
   @Default("8192")
   public final Integer frontendChunkedGetResponseThresholdInBytes;
 
+  /**
+   * Boolean indicator to specify if unrecognized account and container should be prohibited for old put requests.
+   */
+  @Config("frontend.should.prohibit.old.put.with.unrecognized.account.and.container")
+  @Default("false")
+  public final boolean frontendShouldProhibitOldPutWithUnrecognizedAccountAndContainer;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendIdConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
@@ -76,5 +83,8 @@ public class FrontendConfig {
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
+    frontendShouldProhibitOldPutWithUnrecognizedAccountAndContainer =
+        verifiableProperties.getBoolean("frontend.should.prohibit.old.put.with.unrecognized.account.and.container",
+            false);
   }
 }

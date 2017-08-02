@@ -36,7 +36,8 @@ public class HelixPropertyStoreConfig {
   public final int zkClientSessionTimeoutMs;
 
   /**
-   * The ZooKeeper server address.
+   * The ZooKeeper server address. This config is required when using {@code HelixAccountService}, but not for
+   * {@code InMemoryUnknownAccountService}.
    */
   @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string")
   @Default(INVALID_ZK_CLIENT_CONNECT_STRING)

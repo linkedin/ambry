@@ -31,7 +31,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -676,7 +675,8 @@ public class RestUtils {
   public static Object setArg(RestRequest restRequest, String key, Object value, boolean isOldValueAllowed) {
     Object oldVal = restRequest.setArg(key, value);
     if (!isOldValueAllowed && oldVal != null) {
-      logger.debug("Unexpected key={} in args. Previous value={} has been cleared.", key, oldVal);
+      logger.info("Unexpected key={} in args. Previous value={} has been cleared for restRequest={}.", key, oldVal,
+          restRequest);
     }
     return oldVal;
   }
