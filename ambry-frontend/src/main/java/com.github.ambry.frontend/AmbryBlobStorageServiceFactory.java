@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -37,11 +38,10 @@ import org.slf4j.LoggerFactory;
 public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
+  private final VerifiableProperties verifiableProperties;
   private final ClusterMap clusterMap;
   private final RestResponseHandler responseHandler;
   private final Router router;
-  private final IdConverterFactory idConverterFactory;
-  private final SecurityServiceFactory securityServiceFactory;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -54,20 +54,16 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AmbryBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router) throws Exception {
+      RestResponseHandler responseHandler, Router router) {
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {
-      MetricRegistry metricRegistry = clusterMap.getMetricRegistry();
       frontendConfig = new FrontendConfig(verifiableProperties);
-      frontendMetrics = new FrontendMetrics(metricRegistry);
+      frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
+      this.verifiableProperties = verifiableProperties;
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
       this.router = router;
-      idConverterFactory =
-          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, metricRegistry);
-      securityServiceFactory = Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
-          clusterMap.getMetricRegistry());
     }
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
   }
@@ -78,7 +74,18 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   @Override
   public BlobStorageService getBlobStorageService() {
-    return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
-        securityServiceFactory, clusterMap);
+    try {
+      // TODO get account service from factory here and pass it into AmbryBlobStorageService.
+      AccountService accountService = null;
+      IdConverterFactory idConverterFactory =
+          Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
+      SecurityServiceFactory securityServiceFactory =
+          Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
+              clusterMap.getMetricRegistry(), accountService);
+      return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, idConverterFactory,
+          securityServiceFactory, clusterMap);
+    } catch (Exception e) {
+      throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
+    }
   }
 }

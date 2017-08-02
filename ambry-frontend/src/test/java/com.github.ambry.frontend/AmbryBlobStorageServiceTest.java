@@ -117,7 +117,7 @@ public class AmbryBlobStorageServiceTest {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
-    securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry);
+    securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null);
     clusterMap = new MockClusterMap();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();

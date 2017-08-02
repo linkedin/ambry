@@ -15,6 +15,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.router.Callback;
+import java.io.Closeable;
 
 
 /**
@@ -22,7 +23,7 @@ import com.github.ambry.router.Callback;
  * be fast, since it will potentially be used on the critical path.
  * @param <P> the type for the principal. This is generic to allow for different requester authentication schemes.
  */
-public interface AclService<P> {
+public interface AclService<P> extends Closeable {
 
   /**
    * Makes a resource access decision.

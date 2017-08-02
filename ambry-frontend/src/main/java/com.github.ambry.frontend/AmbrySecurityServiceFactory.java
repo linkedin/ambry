@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.SecurityService;
@@ -30,7 +31,8 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
 
-  public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      AccountService accountService) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(metricRegistry);
   }
