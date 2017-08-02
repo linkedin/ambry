@@ -14,20 +14,20 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.JmxReporter;
-import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.StaticClusterAgentsFactory;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
-import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,8 +38,6 @@ import org.slf4j.LoggerFactory;
  * 2) In the index file boundaries on all replicas in a partition
  */
 public class ConsistencyCheckerTool {
-  private final VerifiableProperties verifiableProperties;
-
   /* Path referring to root directory containing one directory per replica
   Expected format of the partition root directory
   - Partition Root Directory
@@ -58,37 +56,28 @@ public class ConsistencyCheckerTool {
    User of this tool is expected to copy all index files for replicas of interest locally and run the tool with last
    modified times of the files unchanged. In linux use "cp -p" to maintain the file attributes.
    */
-  private final String partitionRootDirectory;
 
-  // True if acceptable inconsistent blobs should be part of the output or not
-  private final boolean includeAcceptableInconsistentBlobs;
-
-  private final StoreToolsMetrics metrics;
+  private final DumpIndexTool dumpIndexTool;
+  private final Time time;
 
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
 
-  private ConsistencyCheckerTool(VerifiableProperties verifiableProperties, StoreToolsMetrics metrics)
-      throws IOException, JSONException {
-    partitionRootDirectory = verifiableProperties.getString("partition.root.directory");
-    // Setting this to true implies user is interested in knowing information about acceptable inconsistent blobs.
-    // Setting this to true will only print the blobId and their states in every replica(and not IndexValue in every
-    // replica). If user is interested in IndexValues, might have to call DumpIndexTool separately for these blobs
-    includeAcceptableInconsistentBlobs =
-        verifiableProperties.getBoolean("include.acceptable.inconsistent.blobs", false);
-    this.verifiableProperties = verifiableProperties;
-    this.metrics = metrics;
-  }
-
   public static void main(String args[]) throws Exception {
-    VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
-    MetricRegistry registry = new MetricRegistry();
-    StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
+    VerifiableProperties properties = ToolUtils.getVerifiableProperties(args);
+    String hardwareLayoutFilePath = properties.getString("hardware.layout.file.path");
+    String partitionLayoutFilePath = properties.getString("partition.layout.file.path");
+    String partitionRootDirectory = properties.getString("partition.root.directory");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
     JmxReporter reporter = null;
-    try {
-      reporter = JmxReporter.forRegistry(registry).build();
+    try (ClusterMap clusterMap = new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutFilePath,
+        partitionLayoutFilePath).getClusterMap()) {
+      StoreToolsMetrics metrics = new StoreToolsMetrics(clusterMap.getMetricRegistry());
+      reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
       reporter.start();
-      ConsistencyCheckerTool consistencyCheckerTool = new ConsistencyCheckerTool(verifiableProperties, metrics);
-      boolean success = consistencyCheckerTool.checkConsistency();
+      File rootDir = new File(partitionRootDirectory);
+      ConsistencyCheckerTool consistencyCheckerTool =
+          new ConsistencyCheckerTool(clusterMap, metrics, SystemTime.getInstance());
+      boolean success = consistencyCheckerTool.checkConsistency(rootDir.listFiles());
       System.exit(success ? 0 : 1);
     } finally {
       if (reporter != null) {
@@ -97,74 +86,49 @@ public class ConsistencyCheckerTool {
     }
   }
 
+  public ConsistencyCheckerTool(ClusterMap clusterMap, StoreToolsMetrics metrics, Time time) {
+    this.time = time;
+    dumpIndexTool = new DumpIndexTool(clusterMap, true, time, metrics);
+  }
+
   /**
    * Executes the operation with the help of properties passed during initialization of {@link DumpDataTool}
+   * @param replicas the replicas b/w which consistency has to be checked
    * @return {@code true} if no real inconsistent blobs. {@code false}
    * @throws Exception
    */
-  private boolean checkConsistency() throws Exception {
-    File rootDir = new File(partitionRootDirectory);
-    logger.info("Root directory for Partition" + rootDir);
-    ArrayList<String> replicaList = populateReplicaList(rootDir);
-    logger.trace("Replica List " + replicaList);
+  public boolean checkConsistency(File[] replicas) throws Exception {
+    List<String> replicaList = populateReplicaList(replicas);
     Map<String, BlobStatus> blobIdToStatusMap = new HashMap<>();
-    AtomicLong totalKeysProcessed = new AtomicLong(0);
-    int replicaCount = replicaList.size();
-
-    collectData(rootDir.listFiles(), replicaList, blobIdToStatusMap, totalKeysProcessed);
-    List<String> realInconsistentBlobs = new ArrayList<>();
-    populateOutput(totalKeysProcessed, blobIdToStatusMap, replicaCount, includeAcceptableInconsistentBlobs,
-        realInconsistentBlobs);
-    if (realInconsistentBlobs.size() > 0) {
-      logger.info("\nDumping Inconsistent blobs ");
-      // @TODO: This needs fixes. Doesn't work as some properties in verifiableProperties needs to be fixed
-      // dumpInconsistentBlobs(rootDir.listFiles(), realInconsistentBlobs);
-    }
-    return realInconsistentBlobs.size() == 0;
-  }
-
-  private ArrayList<String> populateReplicaList(File rootDir) {
-    ArrayList<String> replicaList = new ArrayList<String>();
-    File[] replicas = rootDir.listFiles();
-    for (File replicaFile : replicas) {
-      replicaList.add(replicaFile.getName());
-    }
-    return replicaList;
+    collectData(replicas, blobIdToStatusMap);
+    return populateOutput(blobIdToStatusMap, replicaList.size()).size() == 0;
   }
 
   /**
    * Walks through all replicas and collects blob status in each of them.
    * @param replicas An Array of replica directories from which blob status' need to be collected
-   * @param replicasList {@link List} of all
    * @param blobIdToStatusMap {@link Map} of BlobId to {@link BlobStatus} that needs to be updated with the
    *                                         status of every blob in the index
-   * @param totalKeysProcessed {@link AtomicLong} to track the total keys processed
    * @throws Exception
    */
-  private void collectData(File[] replicas, ArrayList<String> replicasList, Map<String, BlobStatus> blobIdToStatusMap,
-      AtomicLong totalKeysProcessed) throws Exception {
-    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties, metrics);
-    Time time = SystemTime.getInstance();
-    long currentTimeInMs = time.milliseconds();
+  private void collectData(File[] replicas, Map<String, BlobStatus> blobIdToStatusMap) throws Exception {
+    long totalKeysProcessed = 0;
     IndexStats indexStats = new IndexStats();
     for (File replica : replicas) {
-      try {
-        File[] indexFiles = replica.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
-        long keysProcessedforReplica = 0;
-        Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
-        logger.info("Processing index files for replica {} ", replica.getName());
-        for (int i = 0; i < indexFiles.length; i++) {
-          keysProcessedforReplica +=
-              dumpIndexTool.dumpIndex(indexFiles[i], replica.getName(), replicasList, new ArrayList<String>(),
-                  blobIdToStatusMap, indexStats, i >= (indexFiles.length - 2), time, currentTimeInMs);
-        }
-        logger.debug("Total keys processed for {} is {}", replica.getName(), keysProcessedforReplica);
-        totalKeysProcessed.addAndGet(keysProcessedforReplica);
-      } catch (Exception e) {
-        logger.error("Could not complete processing for {}", replica, e);
+      File[] indexFiles = replica.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER);
+      long keysProcessedforReplica = 0;
+      Arrays.sort(indexFiles, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
+      logger.info("Processing index files for replica {} ", replica.getName());
+      for (int i = 0; i < indexFiles.length; i++) {
+        keysProcessedforReplica +=
+            dumpIndexTool.dumpIndex(indexFiles[i], replica.getName(), populateReplicaList(replicas),
+                Collections.EMPTY_LIST, blobIdToStatusMap, indexStats, i >= (indexFiles.length - 2),
+                time.milliseconds());
       }
+      logger.debug("Total keys processed for {} is {}", replica.getName(), keysProcessedforReplica);
+      totalKeysProcessed += keysProcessedforReplica;
     }
-    logger.debug("Total Keys Processed {}", totalKeysProcessed.get());
+    logger.debug("Total Keys Processed {}", totalKeysProcessed);
     logger.debug("Total Put Records {}", indexStats.getTotalPutRecords().get());
     logger.debug("Total Delete Records {}", indexStats.getTotalDeleteRecords().get());
     logger.debug("Total Duplicate Put Records {}", indexStats.getTotalDuplicatePutRecords().get());
@@ -175,22 +139,18 @@ public class ConsistencyCheckerTool {
 
   /**
    * Walks through blobs and its status in all replicas and collects inconsistent blobs information
-   * @param totalKeysProcessed {@link AtomicLong} to track the total keys processed
    * @param blobIdToStatusMap {@link Map} of BlobId to {@link BlobStatus} that needs to be updated with the
    *                                         status of every blob in the index
    * @param replicaCount total replica count
-   * @param includeAcceptableInconsistentBlobs {@code true} if acceptable inconsistent blobs needs to be considered. {@code false}
-   *                                                       otherwise
-   * @param realInconsistentBlobs {@link List} of real inconsistent blobIds
+   * @return {@link List} of real inconsistent blobIds
    */
-  private void populateOutput(AtomicLong totalKeysProcessed, Map<String, BlobStatus> blobIdToStatusMap,
-      int replicaCount, boolean includeAcceptableInconsistentBlobs, List<String> realInconsistentBlobs) {
-    logger.info("Total keys processed {}", totalKeysProcessed.get());
-    logger.info("\nTotal Blobs Found {}", blobIdToStatusMap.size());
+  private List<String> populateOutput(Map<String, BlobStatus> blobIdToStatusMap, int replicaCount) {
+    List<String> realInconsistentBlobs = new ArrayList<>();
+    logger.info("Total Blobs Found {}", blobIdToStatusMap.size());
     long earliestRealInconsistentBlobTimeMs = Long.MAX_VALUE;
     long latestOpTimeMs = Long.MIN_VALUE;
     long totalInconsistentBlobs = 0;
-    AtomicLong inconsistentDueToReplicationCount = new AtomicLong(0);
+    long inconsistentDueToReplicationCount = 0;
     long acceptableInconsistentBlobs = 0;
     for (String blobId : blobIdToStatusMap.keySet()) {
       BlobStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
@@ -203,16 +163,14 @@ public class ConsistencyCheckerTool {
         if ((consistencyBlobResult.getDeletedOrExpiredReplicaSet().size()
             + consistencyBlobResult.getUnavailableReplicaSet().size() == replicaCount)) {
           // acceptable inconsistent blobs : count of deleted + count of unavailable = total replica count
-          if (includeAcceptableInconsistentBlobs) {
-            logger.error("Partially deleted (acceptable inconsistency) blob {}  isDeletedOrExpired {} \n {}", blobId,
-                consistencyBlobResult.isDeletedOrExpired(), consistencyBlobResult);
-          }
+          logger.debug("Partially deleted (acceptable inconsistency) blob {} isDeletedOrExpired {}. Blob status - {}",
+              blobId, consistencyBlobResult.isDeletedOrExpired(), consistencyBlobResult);
           acceptableInconsistentBlobs++;
         } else {
           if (consistencyBlobResult.belongsToRecentIndexSegment()) {
             logger.debug("Inconsistent blob found possibly due to replication {} Status map {} ", blobId,
                 consistencyBlobResult);
-            inconsistentDueToReplicationCount.incrementAndGet();
+            inconsistentDueToReplicationCount++;
           } else {
             logger.error("Inconsistent blob found {} Status map {}", blobId, consistencyBlobResult);
             realInconsistentBlobs.add(blobId);
@@ -229,30 +187,22 @@ public class ConsistencyCheckerTool {
     // Anything else is considered to be real inconsistent blobs
     logger.info("Total Inconsistent blobs count : {}", totalInconsistentBlobs);
     logger.info("Acceptable Inconsistent blobs count : {}", acceptableInconsistentBlobs);
-    logger.info("Inconsistent blobs count due to replication lag : {}", inconsistentDueToReplicationCount.get());
+    logger.info("Inconsistent blobs count due to replication lag : {}", inconsistentDueToReplicationCount);
     logger.info("Real Inconsistent blobs count : {} ", realInconsistentBlobs.size());
     if (realInconsistentBlobs.size() > 0) {
       logger.info(
-          "The earliest real inconsistent blob had its last operation at {} ms and diffenrence wrt latest operation time is {} ms",
+          "The earliest real inconsistent blob had its last operation at {} ms and difference wrt latest operation time is {} ms",
           earliestRealInconsistentBlobTimeMs, latestOpTimeMs - earliestRealInconsistentBlobTimeMs);
     }
+    return realInconsistentBlobs;
   }
 
-  /**
-   * Dumps inconsistent blobs from all replicas
-   * @param replicas An Array of replica directories from which blobs need to be dumped
-   * @param blobIdList {@link List} of blobIds to be dumped
-   * @throws Exception
-   */
-  private void dumpInconsistentBlobs(File[] replicas, List<String> blobIdList) throws Exception {
-    DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties, metrics);
-    for (File replica : replicas) {
-      try {
-        dumpIndexTool.dumpIndexesForReplica(replica.getAbsolutePath(), blobIdList, Integer.MAX_VALUE);
-      } catch (Exception e) {
-        logger.error("Could not complete processing for {}", replica, e);
-      }
+  private List<String> populateReplicaList(File[] replicas) {
+    List<String> replicaList = new ArrayList<String>();
+    for (File replicaFile : replicas) {
+      replicaList.add(replicaFile.getName());
     }
+    return replicaList;
   }
 }
 

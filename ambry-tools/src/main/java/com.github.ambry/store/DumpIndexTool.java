@@ -27,7 +27,6 @@ import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,116 +50,77 @@ import org.slf4j.LoggerFactory;
  */
 public class DumpIndexTool {
   private final ClusterMap clusterMap;
-  // The index file that needs to be dumped
-  private final String fileToRead;
-  // File path referring to the hardware layout
-  private final String hardwareLayoutFilePath;
-  // File path referring to the partition layout
-  private final String partitionLayoutFilePath;
-  // The type of operation to perform
-  private final String typeOfOperation;
-  // List of blobIds (comma separated values) to filter
-  private final String blobIdList;
-  // Path referring to replica root directory
-  private final String replicaRootDirecotry;
-  // Count of active blobs
-  private final long activeBlobsCount;
-  // True if active blobs onlhy needs to be dumped, false otherwise
-  private final boolean activeBlobsOnly;
   // set to true if only error logging is required
   private final boolean silent;
-  // The throttling value in index entries per sec
-  private final long indexEntriesPerSec;
-  // StoreToolMetrics
   private final StoreToolsMetrics metrics;
   private final Time time;
-  private final long currentTimeInMs;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpIndexTool.class);
 
-  public DumpIndexTool(VerifiableProperties verifiableProperties, StoreToolsMetrics metrics) throws Exception {
-    hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
-    partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
-    fileToRead = verifiableProperties.getString("file.to.read", "");
-    typeOfOperation = verifiableProperties.getString("type.of.operation", "");
-    blobIdList = verifiableProperties.getString("blobId.list", "");
-    replicaRootDirecotry = verifiableProperties.getString("replica.root.directory", "");
-    activeBlobsCount = verifiableProperties.getInt("active.blobs.count", -1);
-    activeBlobsOnly = verifiableProperties.getBoolean("active.blobs.only", false);
-    silent = verifiableProperties.getBoolean("silent", true);
-    indexEntriesPerSec = verifiableProperties.getLong("index.entries.per.sec", 1000);
-    if (!new File(hardwareLayoutFilePath).exists() || !new File(partitionLayoutFilePath).exists()) {
-      throw new IllegalArgumentException("Hardware or Partition Layout file does not exist");
-    }
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-    this.clusterMap =
-        ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
-            hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
-    time = SystemTime.getInstance();
-    currentTimeInMs = time.milliseconds();
+  public DumpIndexTool(ClusterMap clusterMap, boolean silent, Time time, StoreToolsMetrics metrics) {
+    this.clusterMap = clusterMap;
+    this.silent = silent;
+    this.time = time;
     this.metrics = metrics;
   }
 
   public static void main(String args[]) throws Exception {
     VerifiableProperties verifiableProperties = ToolUtils.getVerifiableProperties(args);
-    MetricRegistry registry = new MetricRegistry();
-    StoreToolsMetrics metrics = new StoreToolsMetrics(registry);
+    String hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
+    String partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     JmxReporter reporter = null;
-    try {
-      reporter = JmxReporter.forRegistry(registry).build();
+    try (ClusterMap clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory,
+        clusterMapConfig, hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap()) {
+      String typeOfOperation = verifiableProperties.getString("type.of.operation", "");
+      String blobIdsStr = verifiableProperties.getString("blob.id.list", "");
+      List<String> blobIds = blobIdsStr.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(blobIdsStr.split(","));
+      boolean activeBlobsOnly = verifiableProperties.getBoolean("active.blobs.only", false);
+      boolean silent = verifiableProperties.getBoolean("silent", true);
+      logger.info("Type of Operation - {}", typeOfOperation);
+      if (blobIds.size() > 0) {
+        logger.info("Blobs to look out for - {}", blobIds);
+      }
+
+      Time time = SystemTime.getInstance();
+      StoreToolsMetrics metrics = new StoreToolsMetrics(clusterMap.getMetricRegistry());
+      reporter = JmxReporter.forRegistry(clusterMap.getMetricRegistry()).build();
       reporter.start();
-      DumpIndexTool dumpIndexTool = new DumpIndexTool(verifiableProperties, metrics);
-      dumpIndexTool.doOperation();
+      DumpIndexTool dumpIndexTool = new DumpIndexTool(clusterMap, silent, time, metrics);
+      switch (typeOfOperation) {
+        case "DumpIndexFile":
+          String fileToRead = verifiableProperties.getString("file.to.read");
+          logger.info("File to read " + fileToRead);
+          if (activeBlobsOnly) {
+            dumpIndexTool.dumpActiveBlobsFromIndex(new File(fileToRead), blobIds, time.milliseconds());
+          } else {
+            dumpIndexTool.dumpIndex(new File(fileToRead), null, null, blobIds, null, new IndexStats(), false,
+                time.milliseconds());
+          }
+          break;
+        case "DumpIndexesForReplica":
+          String replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
+          long indexEntriesPerSec = verifiableProperties.getLong("index.entries.per.sec", 1000);
+          if (activeBlobsOnly) {
+            dumpIndexTool.dumpActiveBlobsForReplica(replicaRootDirecotry, blobIds, time.milliseconds());
+          } else {
+            dumpIndexTool.dumpIndexesForReplica(replicaRootDirecotry, blobIds, indexEntriesPerSec, time.milliseconds());
+          }
+          break;
+        case "DumpNRandomActiveBlobsForReplica":
+          replicaRootDirecotry = verifiableProperties.getString("replica.root.directory");
+          long activeBlobsCount = verifiableProperties.getLong("active.blobs.count");
+          dumpIndexTool.dumpNRandomActiveBlobsForReplica(replicaRootDirecotry, blobIds, activeBlobsCount,
+              time.milliseconds());
+          break;
+        default:
+          logger.error("Unknown typeOfOperation " + typeOfOperation);
+          break;
+      }
     } finally {
       if (reporter != null) {
         reporter.stop();
       }
-    }
-  }
-
-  /**
-   * Executes the operation with the help of properties passed
-   * @throws IOException
-   */
-  public void doOperation() throws Exception {
-    ArrayList<String> blobs = null;
-    String[] blobArray;
-    if (!blobIdList.equals("")) {
-      blobArray = blobIdList.split(",");
-      blobs = new ArrayList<>();
-      blobs.addAll(Arrays.asList(blobArray));
-      logger.info("Blobs to look out for :: " + blobs);
-    }
-
-    logger.info("Type of Operation " + typeOfOperation);
-    if (fileToRead != null) {
-      logger.info("File to read " + fileToRead);
-    }
-
-    switch (typeOfOperation) {
-      case "DumpIndexFile":
-        if (activeBlobsOnly) {
-          dumpActiveBlobsFromIndex(new File(fileToRead), blobs);
-        } else {
-          dumpIndex(new File(fileToRead), null, null, blobs, null, new IndexStats(), false, time, currentTimeInMs);
-        }
-        break;
-      case "DumpIndexesForReplica":
-        if (activeBlobsOnly) {
-          dumpActiveBlobsForReplica(replicaRootDirecotry, blobs);
-        } else {
-          dumpIndexesForReplica(replicaRootDirecotry, blobs, indexEntriesPerSec);
-        }
-        break;
-      case "DumpNRandomActiveBlobsForReplica":
-        if (activeBlobsCount == -1) {
-          throw new IllegalArgumentException("Active Blobs count should be set for operation " + typeOfOperation);
-        }
-        dumpNRandomActiveBlobsForReplica(replicaRootDirecotry, blobs, activeBlobsCount);
-        break;
-      default:
-        logger.error("Unknown typeOfOperation " + typeOfOperation);
-        break;
     }
   }
 
@@ -175,11 +135,12 @@ public class DumpIndexTool {
    * @param indexStats the {@link IndexStats} to be updated with some stats info
    * @param recentIndexSegment {@code true} if index file is referring to recent (last or last but one) index segment.
    *                           {@code false} otherwise
+   * @param currentTimeInMs the current time to use (in ms)
    * @return the total number of records processed
    * @throws Exception
    */
   long dumpIndex(File indexFileToDump, String replica, List<String> replicaList, List<String> blobList,
-      Map<String, BlobStatus> blobIdToStatusMap, IndexStats indexStats, boolean recentIndexSegment, Time time,
+      Map<String, BlobStatus> blobIdToStatusMap, IndexStats indexStats, boolean recentIndexSegment,
       long currentTimeInMs) throws Exception {
     final Timer.Context context = metrics.dumpIndexTimeMs.time();
     try {
@@ -257,12 +218,13 @@ public class DumpIndexTool {
    * @param replicaRootDirectory the root directory for a replica
    * @param blobList list of blobIds to be filtered for. Can be {@code null}
    * @param indexEntriesPerSec throttling value in index entries per sec
+   * @param currentTimeInMs the current time to use (in ms)
    * @return a {@link Map} of BlobId to {@link BlobStatus} containing the information about every blob in
    * this replica
    * @throws Exception
    */
   public Map<String, BlobStatus> dumpIndexesForReplica(String replicaRootDirectory, List<String> blobList,
-      long indexEntriesPerSec) throws Exception {
+      long indexEntriesPerSec, long currentTimeInMs) throws Exception {
     final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
       long totalKeysProcessed = 0;
@@ -279,7 +241,7 @@ public class DumpIndexTool {
         logger.info("Dumping index " + indexFile + " for replica " + replicaDirectory.getName());
         long keysProcessedPerIndexSegment =
             dumpIndex(indexFile, replicaDirectory.getName(), null, blobList, blobIdToStatusMap, indexStats,
-                currentIndexCount++ >= (totalIndexCount - 2), time, currentTimeInMs);
+                currentIndexCount++ >= (totalIndexCount - 2), currentTimeInMs);
         throttler.maybeThrottle(keysProcessedPerIndexSegment);
         totalKeysProcessed += keysProcessedPerIndexSegment;
       }
@@ -316,11 +278,13 @@ public class DumpIndexTool {
    * @param blobIdToBlobMessageMap a {@link Map} of BlobId to {@link IndexValue} that needs to be updated with the information
    *                               about the blobs in the index
    * @param activeBlobStats {@link ActiveBlobStats} to be updated with necessary stats
+   * @param currentTimeInMs the current time to use (in ms)
    * @return the total number of blobs parsed from the given index file
    * @throws Exception
    */
-  private long dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList,
-      Map<String, IndexValue> blobIdToBlobMessageMap, ActiveBlobStats activeBlobStats) throws Exception {
+  private long dumpActiveBlobsFromIndex(File indexFileToDump, List<String> blobList,
+      Map<String, IndexValue> blobIdToBlobMessageMap, ActiveBlobStats activeBlobStats, long currentTimeInMs)
+      throws Exception {
     Map<String, IndexValue> blobIdToMessageMapPerIndexFile = new HashMap<>();
     long blobsProcessed =
         dumpBlobsFromIndex(indexFileToDump, blobList, blobIdToMessageMapPerIndexFile, new AtomicLong(0), time);
@@ -357,14 +321,16 @@ public class DumpIndexTool {
    * Dumps active blobs for a given index file
    * @param indexFileToDump the index file that needs to be parsed for
    * @param blobList list of BlobIds that needs to be filtered for. Can be {@code null}
+   * @param currentTimeInMs the current time to use (in ms)
    * @throws Exception
    */
-  private void dumpActiveBlobsFromIndex(File indexFileToDump, ArrayList<String> blobList) throws Exception {
+  private void dumpActiveBlobsFromIndex(File indexFileToDump, List<String> blobList, long currentTimeInMs)
+      throws Exception {
     Map<String, IndexValue> blobIdToBlobMessageMap = new HashMap<>();
     logger.trace("Dumping index {} ", indexFileToDump);
     ActiveBlobStats activeBlobStats = new ActiveBlobStats();
     long totalKeysProcessed =
-        dumpActiveBlobsFromIndex(indexFileToDump, blobList, blobIdToBlobMessageMap, activeBlobStats);
+        dumpActiveBlobsFromIndex(indexFileToDump, blobList, blobIdToBlobMessageMap, activeBlobStats, currentTimeInMs);
     for (String blobId : blobIdToBlobMessageMap.keySet()) {
       logger.info(blobId + " : " + blobIdToBlobMessageMap.get(blobId));
     }
@@ -384,9 +350,11 @@ public class DumpIndexTool {
    * Dumps active blobs for all index files for a given replica
    * @param replicaRootDirectory Root directory of the replica
    * @param blobList List of BlobIds that needs to be filtered for. Can be {@code null}
+   * @param currentTimeInMs the current time to use (in ms)
    * @throws Exception
    */
-  private void dumpActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList) throws Exception {
+  private void dumpActiveBlobsForReplica(String replicaRootDirectory, List<String> blobList, long currentTimeInMs)
+      throws Exception {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
     Map<String, IndexValue> blobIdToMessageMap = new HashMap<>();
@@ -395,7 +363,8 @@ public class DumpIndexTool {
     Arrays.sort(replicas, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File indexFile : replicas) {
       logger.info("Dumping index " + indexFile.getName() + " for " + replicaDirectory.getName());
-      totalKeysProcessed += dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToMessageMap, activeBlobStats);
+      totalKeysProcessed +=
+          dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToMessageMap, activeBlobStats, currentTimeInMs);
     }
 
     for (String blobId : blobIdToMessageMap.keySet()) {
@@ -422,10 +391,11 @@ public class DumpIndexTool {
    * @param replicaRootDirectory Root directory of the replica
    * @param blobList List of BlobIds that needs to be filtered for. Can be {@code null}
    * @param randomBlobsCount total number of random blobs that needs to be fetched from the replica
+   * @param currentTimeInMs the current time to use (in ms)
    * @throws Exception
    */
-  private void dumpNRandomActiveBlobsForReplica(String replicaRootDirectory, ArrayList<String> blobList,
-      long randomBlobsCount) throws Exception {
+  private void dumpNRandomActiveBlobsForReplica(String replicaRootDirectory, List<String> blobList,
+      long randomBlobsCount, long currentTimeInMs) throws Exception {
     long totalKeysProcessed = 0;
     File replicaDirectory = new File(replicaRootDirectory);
     Map<String, IndexValue> blobIdToBlobMessageMap = new HashMap<>();
@@ -434,7 +404,8 @@ public class DumpIndexTool {
     Arrays.sort(replicas, PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
     for (File indexFile : replicas) {
       logger.trace("Dumping index {} for {} ", indexFile.getName(), replicaDirectory.getName());
-      totalKeysProcessed += dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToBlobMessageMap, activeBlobStats);
+      totalKeysProcessed +=
+          dumpActiveBlobsFromIndex(indexFile, blobList, blobIdToBlobMessageMap, activeBlobStats, currentTimeInMs);
     }
     logger.trace("Total Keys processed for replica {} : {} ", replicaDirectory.getName(), totalKeysProcessed);
     logger.trace("Total Put Records {} ", activeBlobStats.getTotalPutRecords().get());
