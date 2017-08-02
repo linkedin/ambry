@@ -32,7 +32,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +55,7 @@ public class DiskReformatter {
   private final StoreKeyFactory storeKeyFactory;
   private final ClusterMap clusterMap;
   private final Time time;
+  private final ConsistencyCheckerTool consistencyChecker;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
 
   /**
@@ -83,16 +87,17 @@ public class DiskReformatter {
     final int datanodePort;
 
     /**
-     * The mount path of the disk whose partitions need to be re-formatted
+     * Comma separated list of the mount paths of the disks whose partitions need to be re-formatted
      */
-    @Config("disk.mount.path")
-    final String diskMountPath;
+    @Config("disk.mount.paths")
+    final String[] diskMountPaths;
 
     /**
-     * The path to the scratch space to which a partition on the disk can be temporarily relocated.
+     * Comma separated list of the paths to the scratch spaces to which a partition on the disks can be temporarily
+     * relocated. This has to be 1-1 mapped with the list of mount paths.
      */
-    @Config("scratch.path")
-    final String scratchPath;
+    @Config("scratch.paths")
+    final String[] scratchPaths;
 
     /**
      * The size of each fetch from the source store.
@@ -110,9 +115,12 @@ public class DiskReformatter {
       partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
       datanodeHostname = verifiableProperties.getString("datanode.hostname");
       datanodePort = verifiableProperties.getIntInRange("datanode.port", 1, 65535);
-      diskMountPath = verifiableProperties.getString("disk.mount.path");
-      scratchPath = verifiableProperties.getString("scratch.path");
+      diskMountPaths = verifiableProperties.getString("disk.mount.paths").split(",");
+      scratchPaths = verifiableProperties.getString("scratch.paths").split(",");
       fetchSizeInBytes = verifiableProperties.getLongInRange("fetch.size.in.bytes", 4 * 1024 * 1024, 1, Long.MAX_VALUE);
+      if (scratchPaths.length != diskMountPaths.length) {
+        throw new IllegalArgumentException("The number of disk mount paths != scratch paths");
+      }
     }
   }
 
@@ -132,7 +140,29 @@ public class DiskReformatter {
       DiskReformatter reformatter =
           new DiskReformatter(dataNodeId, config.fetchSizeInBytes, storeConfig, storeKeyFactory, clusterMap,
               SystemTime.getInstance());
-      reformatter.reformat(config.diskMountPath, new File(config.scratchPath));
+      AtomicInteger exitStatus = new AtomicInteger(0);
+      CountDownLatch latch = new CountDownLatch(config.diskMountPaths.length);
+      for (int i = 0; i < config.diskMountPaths.length; i++) {
+        int finalI = i;
+        Runnable runnable = () -> {
+          try {
+            reformatter.reformat(config.diskMountPaths[finalI], new File(config.scratchPaths[finalI]));
+          } catch (Exception e) {
+            exitStatus.set(1);
+            throw new IllegalStateException(e);
+          } finally {
+            latch.countDown();
+          }
+        };
+        Thread thread = Utils.newThread(config.diskMountPaths[finalI] + "-reformatter", runnable, true);
+        thread.setUncaughtExceptionHandler((t, e) -> {
+          logger.error("Reformatting {} failed", config.diskMountPaths[finalI]);
+          exitStatus.set(1);
+        });
+        thread.start();
+      }
+      latch.await();
+      System.exit(exitStatus.get());
     }
   }
 
@@ -152,6 +182,8 @@ public class DiskReformatter {
     this.storeKeyFactory = storeKeyFactory;
     this.clusterMap = clusterMap;
     this.time = time;
+    consistencyChecker =
+        new ConsistencyCheckerTool(clusterMap, new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
   }
 
   /**
@@ -162,10 +194,9 @@ public class DiskReformatter {
    * 4. Deletes the folder in the scratch space
    * @param diskMountPath the mount path of the disk to reformat
    * @param scratch the scratch space to use
-   * @throws IOException if there is any I/O error during renames, moves or copy.
-   * @throws StoreException if there is any error with {@link Store} operations.
+   * @throws Exception
    */
-  public void reformat(String diskMountPath, File scratch) throws IOException, StoreException {
+  public void reformat(String diskMountPath, File scratch) throws Exception {
     if (!scratch.exists()) {
       throw new IllegalArgumentException("Scratch space " + scratch + " does not exist");
     }
@@ -180,9 +211,10 @@ public class DiskReformatter {
     if (replicasOnDisk.size() == 0) {
       throw new IllegalArgumentException("There are no replicas on " + diskMountPath + " of " + dataNodeId);
     }
+    replicasOnDisk.sort(Comparator.comparingLong(ReplicaId::getCapacityInBytes));
     logger.info("Found {} on {}", replicasOnDisk, diskMountPath);
 
-    // move the last replica id to scratch space
+    // move the last replica id (the largest one) to scratch space
     ReplicaId toMove = replicasOnDisk.get(replicasOnDisk.size() - 1);
     File scratchSrc = new File(toMove.getReplicaPath());
     File scratchTgt = new File(scratch, TEMP_RELOCATION_DIR_NAME);
@@ -215,13 +247,17 @@ public class DiskReformatter {
    * @param src the location of the partition to be copied
    * @param tgt the location where the partition has to be copied to
    * @param capacityInBytes the capacity of the partition.
-   * @throws IOException if there is any I/O error during copy.
-   * @throws StoreException if there is any error with {@link Store} operations.
+   * @throws Exception
    */
-  private void copy(File src, File tgt, long capacityInBytes) throws IOException, StoreException {
+  private void copy(File src, File tgt, long capacityInBytes) throws Exception {
     try (StoreCopier copier = new StoreCopier(src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig,
         new MetricRegistry(), storeKeyFactory, diskIOScheduler, Collections.EMPTY_LIST, time)) {
       copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
+    }
+    // verify that the stores are equivalent
+    File[] replicas = {src, tgt};
+    if (!consistencyChecker.checkConsistency(replicas)) {
+      throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
     }
   }
 
