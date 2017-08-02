@@ -578,7 +578,7 @@ class IndexSegment {
         writer.writeInt(getValueSize());
         writer.writeLong(safeEndPoint.getOffset());
         if (getVersion() != PersistentIndex.VERSION_0) {
-          // write last modified time and reset key in case of version 1
+          // write last modified time and reset key in case of version != 0
           writer.writeLong(lastModifiedTimeSec.get());
           writer.write(resetKey.getFirst().toBytes());
           writer.writeShort(resetKey.getSecond().ordinal());
