@@ -45,7 +45,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +63,7 @@ class MockServer {
   private boolean getErrorOnDataBlobOnly = false;
   private final ClusterMap clusterMap;
   private final String dataCenter;
-  private final HashMap<RequestOrResponseType, Integer> requestCounts = new HashMap<>();
+  private final ConcurrentHashMap<RequestOrResponseType, Integer> requestCounts = new ConcurrentHashMap<>();
 
   MockServer(ClusterMap clusterMap, String dataCenter) {
     this.clusterMap = clusterMap;

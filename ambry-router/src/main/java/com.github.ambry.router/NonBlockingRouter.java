@@ -283,15 +283,14 @@ class NonBlockingRouter implements Router {
         // It is expected that these requests will not always succeed. For example, this may have been triggered by a
         // duplicate delete and the blob could have already been hard deleted, so the deserialization can fail, or the
         // blob could have been garbage collected and not found at all and so on.
-        logger.trace(
-            "Encountered exception when attempting to get chunks of a possibly composite deleted blob " + blobId,
-            exception);
+        logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
+            blobId, exception);
       } else if (result.getBlobResult != null) {
         logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
       } else if (result.storeKeys != null) {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
         for (StoreKey storeKey : result.storeKeys) {
-          logger.trace("Initiating delete of chunk blob: " + storeKey);
+          logger.trace("Initiating delete of chunk blob {}: ", storeKey);
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId));
         }
         initiateBackgroundDeletes(deleteRequests);
