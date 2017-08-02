@@ -372,11 +372,11 @@ class IndexSegment {
   }
 
   private int numberOfEntries(ByteBuffer mmap) {
-    return (mmap.capacity() - indexSizeExcludingEntries) / (persistedEntrySize);
+    return (mmap.capacity() - indexSizeExcludingEntries) / persistedEntrySize;
   }
 
   private StoreKey getKeyAt(ByteBuffer mmap, int index) throws IOException {
-    mmap.position(firstKeyRelativeOffset + (index * (persistedEntrySize)));
+    mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
     return factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
   }
 
@@ -599,17 +599,17 @@ class IndexSegment {
         // crash at this point, the index end offset would be 200 and the span 0-100 would not be represented in the
         // index.
         // write the entries
+        byte[] maxPaddingBytes = null;
+        if (getVersion() == PersistentIndex.VERSION_2) {
+          maxPaddingBytes = new byte[persistedEntrySize - valueSize];
+        }
         for (Map.Entry<StoreKey, IndexValue> entry : index.entrySet()) {
           if (entry.getValue().getOffset().getOffset() + entry.getValue().getSize() <= safeEndPoint.getOffset()) {
             writer.write(entry.getKey().toBytes());
             writer.write(entry.getValue().getBytes().array());
             if (getVersion() == PersistentIndex.VERSION_2) {
               // Add padding if necessary
-              int paddingNumBytes = persistedEntrySize - entry.getKey().sizeInBytes() - valueSize;
-              if (paddingNumBytes > 0) {
-                byte[] padding = new byte[paddingNumBytes];
-                writer.write(padding);
-              }
+              writer.write(maxPaddingBytes, 0, persistedEntrySize - (entry.getKey().sizeInBytes() + valueSize));
             }
             logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
                 getFile().getAbsolutePath(), entry.getKey(), entry.getValue().getOffset(), entry.getValue().getSize(),
@@ -673,8 +673,8 @@ class IndexSegment {
           resetKeyType = mmap.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
-              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
-              .sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH);
+              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
+              .sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         case PersistentIndex.VERSION_2:
@@ -686,8 +686,8 @@ class IndexSegment {
           resetKeyType = mmap.getShort();
           resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
-              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
-              .sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH);
+              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst()
+              .sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
           firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
           break;
         default:
@@ -747,24 +747,24 @@ class IndexSegment {
       long logEndOffset = stream.readLong();
       if (version == PersistentIndex.VERSION_0) {
         lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
-      } else if (version == PersistentIndex.VERSION_1 || version == PersistentIndex.VERSION_2) {
+      } else {
         lastModifiedTimeSec.set(stream.readLong());
         StoreKey storeKey = factory.getStoreKey(stream);
         short resetKeyType = stream.readShort();
         resetKey = new Pair<>(storeKey, PersistentIndex.IndexEntryType.values()[resetKeyType]);
         indexSizeExcludingEntries +=
-            (LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH);
+            LAST_MODIFIED_TIME_FIELD_LENGTH + resetKey.getFirst().sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
       }
       firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
       logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(), logEndOffset);
       long maxEndOffset = Long.MIN_VALUE;
+      byte[] padding = new byte[persistedEntrySize - valueSize];
       while (stream.available() > CRC_FIELD_LENGTH) {
         StoreKey key = factory.getStoreKey(stream);
         byte[] value = new byte[valueSize];
-        stream.read(value);
+        stream.readFully(value);
         if (version == PersistentIndex.VERSION_2) {
-          byte[] padding = new byte[persistedEntrySize - valueSize - key.sizeInBytes()];
-          stream.read(padding);
+          stream.readFully(padding, 0, persistedEntrySize - (key.sizeInBytes() + valueSize));
         }
         IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), version);
         long offsetInLogSegment = blobValue.getOffset().getOffset();

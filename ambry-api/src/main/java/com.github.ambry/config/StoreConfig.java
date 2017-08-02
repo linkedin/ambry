@@ -179,7 +179,7 @@ public class StoreConfig {
    * the total entry size is still N bytes, the key size change will not cause the active index segment to roll over.
    */
   @Config("store.index.persisted.entry.min.bytes")
-  @Default("")
+  @Default("115")
   public final int storeIndexPersistedEntryMinBytes;
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
