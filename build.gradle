@@ -58,6 +58,7 @@ subprojects {
         unitTestCompile sourceSets.test.output
         unitTestCompile configurations.testCompile
         unitTestRuntime configurations.testRuntime
+        testRuntime project(':log4j-test-config')
     }
 
     test {
