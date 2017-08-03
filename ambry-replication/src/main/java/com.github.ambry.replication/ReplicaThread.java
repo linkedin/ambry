@@ -125,8 +125,7 @@ class ReplicaThread implements Runnable {
   public void run() {
     try {
       logger.trace("Starting replica thread on Local node: " + dataNodeId + " Thread name: " + threadName);
-      List<List<RemoteReplicaInfo>> replicasToReplicate =
-          new ArrayList<List<RemoteReplicaInfo>>(replicasToReplicateGroupedByNode.size());
+      List<List<RemoteReplicaInfo>> replicasToReplicate = new ArrayList<>(replicasToReplicateGroupedByNode.size());
       for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateEntry : replicasToReplicateGroupedByNode.entrySet()) {
         logger.info("Remote node: " + replicasToReplicateEntry.getKey() + " Thread name: " + threadName
             + " ReplicasToReplicate: " + replicasToReplicateEntry.getValue());
@@ -134,119 +133,127 @@ class ReplicaThread implements Runnable {
       }
       logger.info("Begin iteration for thread " + threadName);
       while (running) {
-        // shuffle the nodes
-        Collections.shuffle(replicasToReplicate);
-        for (List<RemoteReplicaInfo> replicasToReplicatePerNode : replicasToReplicate) {
-          if (!running) {
-            break;
-          }
-          DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-          logger.trace("Remote node: {} Thread name: {} Remote replicas: {}", remoteNode, threadName,
-              replicasToReplicatePerNode);
-          Timer.Context context = null;
-          Timer.Context portTypeBasedContext = null;
-          if (replicatingFromRemoteColo) {
-            context = replicationMetrics.interColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-            if (replicatingOverSsl) {
-              portTypeBasedContext =
-                  replicationMetrics.sslInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-            } else {
-              portTypeBasedContext =
-                  replicationMetrics.plainTextInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-            }
-          } else {
-            context = replicationMetrics.intraColoReplicationLatency.time();
-            if (replicatingOverSsl) {
-              portTypeBasedContext = replicationMetrics.sslIntraColoReplicationLatency.time();
-            } else {
-              portTypeBasedContext = replicationMetrics.plainTextIntraColoReplicationLatency.time();
-            }
-          }
-          ConnectedChannel connectedChannel = null;
-          long checkoutConnectionTimeInMs = -1;
-          long exchangeMetadataTimeInMs = -1;
-          long fixMissingStoreKeysTimeInMs = -1;
-          long replicationStartTimeInMs = SystemTime.getInstance().milliseconds();
-          long startTimeInMs = replicationStartTimeInMs;
-
-          List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
-          for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-            if (!remoteReplicaInfo.getReplicaId().isDown()) {
-              activeReplicasPerNode.add(remoteReplicaInfo);
-            }
-          }
-          if (activeReplicasPerNode.size() > 0) {
-            try {
-              connectedChannel =
-                  connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
-                      replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
-              checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-              startTimeInMs = SystemTime.getInstance().milliseconds();
-              List<ExchangeMetadataResponse> exchangeMetadataResponseList =
-                  exchangeMetadata(connectedChannel, activeReplicasPerNode);
-              exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-
-              startTimeInMs = SystemTime.getInstance().milliseconds();
-              fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
-              fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-            } catch (Exception e) {
-              if (checkoutConnectionTimeInMs == -1) {
-                // exception happened in checkout connection phase
-                checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-                // recording an exception for any replica on a node will record a node timeout failure
-                responseHandler.onEvent(activeReplicasPerNode.get(0).getReplicaId(), e);
-              } else if (exchangeMetadataTimeInMs == -1) {
-                // exception happened in exchange metadata phase
-                exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-              } else if (fixMissingStoreKeysTimeInMs == -1) {
-                // exception happened in fix missing store phase
-                fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-              }
-              StringBuilder strBuilder = new StringBuilder();
-              strBuilder.append("Remote node: ").append(remoteNode);
-              strBuilder.append(" Thread name: ").append(threadName);
-              strBuilder.append(" Remote replicas: ").append(replicasToReplicatePerNode);
-              strBuilder.append(" Active remote replicas: ").append(activeReplicasPerNode);
-              strBuilder.append(" Error while replicating with remote replica ");
-              strBuilder.append(" Checkout connection time: ").append(checkoutConnectionTimeInMs);
-              strBuilder.append(" Exchange metadata time: ").append(exchangeMetadataTimeInMs);
-              strBuilder.append(" Fix missing store key time: ").append(fixMissingStoreKeysTimeInMs);
-
-              if (logger.isTraceEnabled()) {
-                logger.trace(strBuilder.toString(), e);
-              } else {
-                logger.error(strBuilder.toString() + e);
-              }
-              replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
-              if (connectedChannel != null) {
-                connectionPool.destroyConnection(connectedChannel);
-                connectedChannel = null;
-              }
-            } catch (Throwable e) {
-              logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
-                  + replicasToReplicatePerNode + " Active remote replicas: " + activeReplicasPerNode
-                  + " Throwable exception while replicating with remote replica ", e);
-              replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
-              if (connectedChannel != null) {
-                connectionPool.destroyConnection(connectedChannel);
-                connectedChannel = null;
-              }
-            } finally {
-              long totalReplicationTime = SystemTime.getInstance().milliseconds() - replicationStartTimeInMs;
-              replicationMetrics.updateTotalReplicationTime(totalReplicationTime, replicatingFromRemoteColo,
-                  replicatingOverSsl, datacenterName);
-              if (connectedChannel != null) {
-                connectionPool.checkInConnection(connectedChannel);
-              }
-              context.stop();
-              portTypeBasedContext.stop();
-            }
-          }
-        }
+        replicate(replicasToReplicate);
       }
     } finally {
       running = false;
       shutdownLatch.countDown();
+    }
+  }
+
+  /**
+   * Replicates from the given {@code replicasToReplicate}.
+   * @param replicasToReplicate the remote replicas to replicate from
+   */
+  void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
+    // shuffle the nodes
+    Collections.shuffle(replicasToReplicate);
+    for (List<RemoteReplicaInfo> replicasToReplicatePerNode : replicasToReplicate) {
+      if (!running) {
+        break;
+      }
+      DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
+      logger.trace("Remote node: {} Thread name: {} Remote replicas: {}", remoteNode, threadName,
+          replicasToReplicatePerNode);
+      Timer.Context context = null;
+      Timer.Context portTypeBasedContext = null;
+      if (replicatingFromRemoteColo) {
+        context = replicationMetrics.interColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
+        if (replicatingOverSsl) {
+          portTypeBasedContext =
+              replicationMetrics.sslInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
+        } else {
+          portTypeBasedContext =
+              replicationMetrics.plainTextInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
+        }
+      } else {
+        context = replicationMetrics.intraColoReplicationLatency.time();
+        if (replicatingOverSsl) {
+          portTypeBasedContext = replicationMetrics.sslIntraColoReplicationLatency.time();
+        } else {
+          portTypeBasedContext = replicationMetrics.plainTextIntraColoReplicationLatency.time();
+        }
+      }
+      ConnectedChannel connectedChannel = null;
+      long checkoutConnectionTimeInMs = -1;
+      long exchangeMetadataTimeInMs = -1;
+      long fixMissingStoreKeysTimeInMs = -1;
+      long replicationStartTimeInMs = SystemTime.getInstance().milliseconds();
+      long startTimeInMs = replicationStartTimeInMs;
+
+      List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
+      for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
+        if (!remoteReplicaInfo.getReplicaId().isDown()) {
+          activeReplicasPerNode.add(remoteReplicaInfo);
+        }
+      }
+      if (activeReplicasPerNode.size() > 0) {
+        try {
+          connectedChannel =
+              connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
+                  replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
+          checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          startTimeInMs = SystemTime.getInstance().milliseconds();
+          List<ExchangeMetadataResponse> exchangeMetadataResponseList =
+              exchangeMetadata(connectedChannel, activeReplicasPerNode);
+          exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+
+          startTimeInMs = SystemTime.getInstance().milliseconds();
+          fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
+          fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+        } catch (Exception e) {
+          if (checkoutConnectionTimeInMs == -1) {
+            // exception happened in checkout connection phase
+            checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+            // recording an exception for any replica on a node will record a node timeout failure
+            responseHandler.onEvent(activeReplicasPerNode.get(0).getReplicaId(), e);
+          } else if (exchangeMetadataTimeInMs == -1) {
+            // exception happened in exchange metadata phase
+            exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          } else if (fixMissingStoreKeysTimeInMs == -1) {
+            // exception happened in fix missing store phase
+            fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
+          }
+          StringBuilder strBuilder = new StringBuilder();
+          strBuilder.append("Remote node: ").append(remoteNode);
+          strBuilder.append(" Thread name: ").append(threadName);
+          strBuilder.append(" Remote replicas: ").append(replicasToReplicatePerNode);
+          strBuilder.append(" Active remote replicas: ").append(activeReplicasPerNode);
+          strBuilder.append(" Error while replicating with remote replica ");
+          strBuilder.append(" Checkout connection time: ").append(checkoutConnectionTimeInMs);
+          strBuilder.append(" Exchange metadata time: ").append(exchangeMetadataTimeInMs);
+          strBuilder.append(" Fix missing store key time: ").append(fixMissingStoreKeysTimeInMs);
+
+          if (logger.isTraceEnabled()) {
+            logger.trace(strBuilder.toString(), e);
+          } else {
+            logger.error(strBuilder.toString() + e);
+          }
+          replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
+          if (connectedChannel != null) {
+            connectionPool.destroyConnection(connectedChannel);
+            connectedChannel = null;
+          }
+        } catch (Throwable e) {
+          logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
+              + replicasToReplicatePerNode + " Active remote replicas: " + activeReplicasPerNode
+              + " Throwable exception while replicating with remote replica ", e);
+          replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
+          if (connectedChannel != null) {
+            connectionPool.destroyConnection(connectedChannel);
+            connectedChannel = null;
+          }
+        } finally {
+          long totalReplicationTime = SystemTime.getInstance().milliseconds() - replicationStartTimeInMs;
+          replicationMetrics.updateTotalReplicationTime(totalReplicationTime, replicatingFromRemoteColo,
+              replicatingOverSsl, datacenterName);
+          if (connectedChannel != null) {
+            connectionPool.checkInConnection(connectedChannel);
+          }
+          context.stop();
+          portTypeBasedContext.stop();
+        }
+      }
     }
   }
 
