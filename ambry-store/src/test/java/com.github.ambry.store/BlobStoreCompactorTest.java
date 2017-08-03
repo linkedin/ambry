@@ -147,10 +147,16 @@ public class BlobStoreCompactorTest {
   public void badInputTest() throws Exception {
     refreshState(false, true);
     // compaction range contains a log segment that is still in the journal
-    String lastLogSegmentName = state.referenceIndex.lastKey().getName();
     String firstLogSegmentName = state.referenceIndex.firstKey().getName();
+    String secondLogSegmentName = state.log.getNextSegment(state.log.getSegment(firstLogSegmentName)).getName();
+    String lastLogSegmentName = state.referenceIndex.lastKey().getName();
     CompactionDetails details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
-        Arrays.asList(lastLogSegmentName, firstLogSegmentName));
+        Arrays.asList(firstLogSegmentName, lastLogSegmentName));
+    ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
+
+    // compaction range contains segments in the wrong order
+    details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
+        Arrays.asList(secondLogSegmentName, firstLogSegmentName));
     ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
 
     // compaction contains segments that don't exist
