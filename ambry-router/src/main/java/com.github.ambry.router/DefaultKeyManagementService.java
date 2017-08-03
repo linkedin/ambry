@@ -16,23 +16,27 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
 
 
 /**
  * Default {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
- * {@link #getKey(String, Account, Container)} calls. Default key is fetched from {@link KMSConfig#kmsDefaultKey}
+ * {@link #getKey(String, Account, Container, Callback)} calls. Default key is fetched from {@link KMSConfig#kmsDefaultKey}
  */
 public class DefaultKeyManagementService implements KeyManagementService<SecretKeySpec> {
   private final SecretKeySpec secretKeySpec;
+  private final AtomicBoolean enabled;
 
-  DefaultKeyManagementService(KMSConfig KMSConfig) throws InstantiationException {
+  DefaultKeyManagementService(KMSConfig KMSConfig) {
     if (KMSConfig.kmsDefaultKey.isEmpty()) {
-      throw new InstantiationException("Default key cannot be null");
+      throw new IllegalArgumentException("Default key cannot be null");
     }
     byte[] key = Hex.decode(KMSConfig.kmsDefaultKey);
     this.secretKeySpec = new SecretKeySpec(key, KMSConfig.kmsKeyGenAlgo);
+    enabled = new AtomicBoolean(true);
   }
 
   /**
@@ -48,14 +52,23 @@ public class DefaultKeyManagementService implements KeyManagementService<SecretK
 
   /**
    * Fetches the key associated with the triplet (clusterName, Account, Container). {@link DefaultKeyManagementService} returns
-   * the default key for all {@link #getKey(String, Account, Container)} calls fetched from {@link KMSConfig#kmsDefaultKey}
+   * the default key for all {@link #getKey(String, Account, Container, Callback)} calls fetched from {@link KMSConfig#kmsDefaultKey}
    * @param clusterName the cluster name associated with the account
    * @param account refers to the {@link Account} to register
    * @param container refers to the {@link Container} to register
-   * @return the default key fetched from {@link KMSConfig#kmsDefaultKey}
+   * @param callback the {@link Callback} to be called on completion or on exception
    */
   @Override
-  public SecretKeySpec getKey(String clusterName, Account account, Container container) {
-    return secretKeySpec;
+  public void getKey(String clusterName, Account account, Container container, Callback<SecretKeySpec> callback) {
+    if (enabled.get()) {
+      callback.onCompletion(secretKeySpec, null);
+    } else {
+      throw new IllegalStateException("GetKey() called after DefaultKeyManagementService is closed");
+    }
+  }
+
+  @Override
+  public void close() throws IOException {
+    enabled.compareAndSet(true, false);
   }
 }

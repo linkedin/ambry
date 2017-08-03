@@ -32,7 +32,7 @@ public class DefaultKeyManagementServiceFactory implements KeyManagementServiceF
   }
 
   @Override
-  public KeyManagementService<SecretKeySpec> getKeyManagementService() throws InstantiationException {
+  public KeyManagementService<SecretKeySpec> getKeyManagementService() {
     return new DefaultKeyManagementService(_KMSConfig);
   }
 }

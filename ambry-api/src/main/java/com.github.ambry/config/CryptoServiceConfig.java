@@ -22,15 +22,15 @@ package com.github.ambry.config;
 public class CryptoServiceConfig {
 
   /**
-   * The algorithm to encrypt or decrypt
+   * The mode to encrypt or decrypt. Accepted values are "GCM" for now.
    * Ensure this algo goes hand in hand with {@link com.github.ambry.router.KeyManagementService} implementation
    */
-  @Config("crypto.service.encryption.decryption.algo")
-  @Default("AES/GCM/NoPadding")
-  public final String cryptoServiceEncryptionDecryptionAlgo;
+  @Config("crypto.service.encryption.decryption.mode")
+  @Default("GCM")
+  public final String cryptoServiceEncryptionDecryptionMode;
 
   public CryptoServiceConfig(VerifiableProperties verifiableProperties) {
-    cryptoServiceEncryptionDecryptionAlgo =
-        verifiableProperties.getString("crypto.service.encryption.decryption.algo", "AES/GCM/NoPadding");
+    cryptoServiceEncryptionDecryptionMode =
+        verifiableProperties.getString("crypto.service.encryption.decryption.mode", "GCM");
   }
 }

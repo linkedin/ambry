@@ -14,15 +14,15 @@
 package com.github.ambry.router;
 
 /**
- * CryptoService Factory to assist in fetching an instance of {@link CryptoService} for a given key
- * T refers to the key type that this {@link CryptoServiceFactory} is compatible with.
+ * CryptoService Factory to assist in fetching an instance of {@link CryptoService} which is capable of encrypting or decrypting
+ * bytes for a given key of type T.
  * Ensure that {@link KeyManagementService} implementation is compatible with the same key type.
  */
 public interface CryptoServiceFactory<T> {
 
   /**
-   * Instantiates and returns the {@link CryptoService} for a given key.
-   * @return the {@link CryptoService} instantiated for the given key
+   * Instantiates and returns the {@link CryptoService}
+   * @return the {@link CryptoService} instantiated
    */
-  CryptoService<T> getCryptoService() throws InstantiationException;
+  CryptoService<T> getCryptoService();
 }

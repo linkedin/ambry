@@ -32,7 +32,7 @@ public class DefaultCryptoServiceFactory implements CryptoServiceFactory<SecretK
   }
 
   @Override
-  public CryptoService<SecretKeySpec> getCryptoService() throws InstantiationException {
+  public CryptoService<SecretKeySpec> getCryptoService() {
     return new DefaultCryptoService(cryptoServiceConfig);
   }
 }

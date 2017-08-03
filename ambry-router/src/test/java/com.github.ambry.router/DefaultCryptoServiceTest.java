@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
+import java.nio.ByteBuffer;
 import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
@@ -42,12 +43,13 @@ public class DefaultCryptoServiceTest {
       CryptoService<SecretKeySpec> cryptoService =
           new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
       for (int i = 0; i < 5; i++) {
-        int size = TestUtils.RANDOM.nextInt(100000);
+        int size = TestUtils.RANDOM.nextInt(100);
         byte[] randomData = new byte[size];
         TestUtils.RANDOM.nextBytes(randomData);
-        byte[] encryptedBytes = cryptoService.encrypt(randomData, secretKeySpec);
-        byte[] decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
-        Assert.assertArrayEquals("Decrypted bytes and plain bytes should match", randomData, decryptedBytes);
+        ByteBuffer toEncrypt = ByteBuffer.wrap(randomData);
+        ByteBuffer encryptedBytes = cryptoService.encrypt(toEncrypt, secretKeySpec);
+        ByteBuffer decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
+        Assert.assertArrayEquals("Decrypted bytes and plain bytes should match", randomData, decryptedBytes.array());
       }
     }
   }
@@ -67,8 +69,9 @@ public class DefaultCryptoServiceTest {
     int size = TestUtils.RANDOM.nextInt(100000);
     byte[] randomData = new byte[size];
     TestUtils.RANDOM.nextBytes(randomData);
+    ByteBuffer toDecrypt = ByteBuffer.wrap(randomData);
     try {
-      cryptoService.decrypt(randomData, secretKeySpec);
+      cryptoService.decrypt(toDecrypt, secretKeySpec);
       Assert.fail("Decryption should have failed as input data is not encrypted");
     } catch (CryptoServiceException e) {
     }

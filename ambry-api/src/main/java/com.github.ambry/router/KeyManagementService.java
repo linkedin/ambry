@@ -15,17 +15,18 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import java.io.Closeable;
 
 
 /**
  * Interface that defines the Key management service. KMS is responsible for maintaining keys for every
  * unique triplet of (ClusterName, Account, Container) that is registered with the KMS
- * Every user is expected to register once before trying to fetch keys for the same.
+ * Every caller is expected to register before making any {@link #getKey(String, Account, Container, Callback)} calls.
  * T refers to the Key type that this {@link KeyManagementService} will generate and return.
  * Ensure that {@link CryptoService} implementation is compatible with the key type that
  * {@link KeyManagementService} generates
  */
-public interface KeyManagementService<T> {
+public interface KeyManagementService<T> extends Closeable {
 
   /**
    * Registers with KMS to create key for a unique triplet of (clusterName, Account, Container)
@@ -41,8 +42,21 @@ public interface KeyManagementService<T> {
    * @param clusterName the cluster name associated with the account
    * @param account refers to the {@link Account} to register
    * @param container refers to the {@link Container} to register
-   * @return the key associated for the triplet (clusterName, Account, Container). {@code null} will be returned
-   * if not registered
+   * @param callback the {@link Callback} to be called on completion or on exception.
    */
-  T getKey(String clusterName, Account account, Container container);
+  void getKey(String clusterName, Account account, Container container, Callback<T> callback);
+
+  /**
+   * Fetches the key associated with the triplet (clusterName, Account, Container). User is expected to have
+   * registered using {@link #register(String, Account, Container)} for this triplet before fetching keys.
+   * @param clusterName the cluster name associated with the account
+   * @param account refers to the {@link Account} to register
+   * @param container refers to the {@link Container} to register
+   * @return the {@link FutureResult} that will containing the key (of type T) on completion or exception
+   */
+  default FutureResult<T> getKey(String clusterName, Account account, Container container) {
+    FutureResult<T> futureResult = new FutureResult<>();
+    getKey(clusterName, account, container, futureResult::done);
+    return futureResult;
+  }
 }
