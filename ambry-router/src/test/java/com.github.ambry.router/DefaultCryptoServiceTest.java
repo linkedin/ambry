@@ -40,13 +40,13 @@ public class DefaultCryptoServiceTest {
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
       CryptoService<SecretKeySpec> cryptoService =
-          new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService(secretKeySpec);
+          new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
       for (int i = 0; i < 5; i++) {
         int size = TestUtils.RANDOM.nextInt(100000);
         byte[] randomData = new byte[size];
         TestUtils.RANDOM.nextBytes(randomData);
-        byte[] encryptedBytes = cryptoService.encrypt(randomData);
-        byte[] decryptedBytes = cryptoService.decrypt(encryptedBytes);
+        byte[] encryptedBytes = cryptoService.encrypt(randomData, secretKeySpec);
+        byte[] decryptedBytes = cryptoService.decrypt(encryptedBytes, secretKeySpec);
         Assert.assertArrayEquals("Decrypted bytes and plain bytes should match", randomData, decryptedBytes);
       }
     }
@@ -63,12 +63,12 @@ public class DefaultCryptoServiceTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
     CryptoService<SecretKeySpec> cryptoService =
-        new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService(secretKeySpec);
+        new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
     int size = TestUtils.RANDOM.nextInt(100000);
     byte[] randomData = new byte[size];
     TestUtils.RANDOM.nextBytes(randomData);
     try {
-      cryptoService.decrypt(randomData);
+      cryptoService.decrypt(randomData, secretKeySpec);
       Assert.fail("Decryption should have failed as input data is not encrypted");
     } catch (CryptoServiceException e) {
     }
@@ -80,9 +80,7 @@ public class DefaultCryptoServiceTest {
   @Test
   public void testDefaultKeyManagementServiceFactory() throws Exception {
     // happy path
-    String key = getRandomKey(64);
-    Properties props = getKMSProperties(key);
-    VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService(new SecretKeySpec(Hex.decode(key), "AES"));
+    VerifiableProperties verifiableProperties = new VerifiableProperties((new Properties()));
+    new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
   }
 }

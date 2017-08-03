@@ -22,7 +22,7 @@ import javax.crypto.spec.SecretKeySpec;
  * {@link DefaultCryptoServiceFactory} specific implementation of {@link CryptoServiceFactory}.
  * <p/>
  * Sets up all the supporting cast required for the operation of {@link DefaultCryptoService} and returns a new instance on
- * {@link #getCryptoService(Object)}.
+ * {@link #getCryptoService()}.
  */
 public class DefaultCryptoServiceFactory implements CryptoServiceFactory<SecretKeySpec> {
   private final CryptoServiceConfig cryptoServiceConfig;
@@ -32,7 +32,7 @@ public class DefaultCryptoServiceFactory implements CryptoServiceFactory<SecretK
   }
 
   @Override
-  public CryptoService<SecretKeySpec> getCryptoService(SecretKeySpec key) throws InstantiationException {
-    return new DefaultCryptoService(cryptoServiceConfig, key);
+  public CryptoService<SecretKeySpec> getCryptoService() throws InstantiationException {
+    return new DefaultCryptoService(cryptoServiceConfig);
   }
 }

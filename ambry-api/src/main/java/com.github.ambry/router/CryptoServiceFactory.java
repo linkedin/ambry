@@ -22,8 +22,7 @@ public interface CryptoServiceFactory<T> {
 
   /**
    * Instantiates and returns the {@link CryptoService} for a given key.
-   * @param key key for which the {@link CryptoService} is requested
    * @return the {@link CryptoService} instantiated for the given key
    */
-  CryptoService<T> getCryptoService(T key) throws InstantiationException;
+  CryptoService<T> getCryptoService() throws InstantiationException;
 }

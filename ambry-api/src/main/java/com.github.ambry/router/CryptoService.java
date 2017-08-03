@@ -24,17 +24,19 @@ public interface CryptoService<T> {
   /**
    * Encrypts the {@code toEncrypt} using {@link CryptoService}
    * @param toEncrypt bytes to be encrypted
+   * @param key the secret key of type T to encrypt
    * @return the byte array containing the encrypted content. Ensure the result has all
    * the information like the IV along with the encrypted content, inorder to decrypt the content with a given key
    * @throws {@link CryptoServiceException} on any exception with encryption
    */
-  byte[] encrypt(byte[] toEncrypt) throws CryptoServiceException;
+  byte[] encrypt(byte[] toEncrypt, T key) throws CryptoServiceException;
 
   /**
    * Decrypts the {@code toDecrypt} using {@link CryptoService}
    * @param toDecrypt bytes to be decrypted
+   * @param key the secret key of type T to decrypt
    * @return the byte array that will containing the decrypted content
    * @throws {@link CryptoServiceException} on any exception with decryption
    */
-  byte[] decrypt(byte[] toDecrypt) throws CryptoServiceException;
+  byte[] decrypt(byte[] toDecrypt, T key) throws CryptoServiceException;
 }

@@ -32,19 +32,17 @@ class DefaultCryptoService implements CryptoService<SecretKeySpec> {
 
   private static final Random random = new Random();
   private static final int ivValSize = 12; // 96 bits
-  private final SecretKeySpec key;
   private final CryptoServiceConfig config;
 
   private static final Logger logger = LoggerFactory.getLogger(DefaultCryptoService.class);
 
-  DefaultCryptoService(CryptoServiceConfig cryptoServiceConfig, SecretKeySpec key) {
-    this.key = key;
+  DefaultCryptoService(CryptoServiceConfig cryptoServiceConfig) {
     this.config = cryptoServiceConfig;
     Security.addProvider(new BouncyCastleProvider());
   }
 
   @Override
-  public byte[] encrypt(byte[] toEncrypt) throws CryptoServiceException {
+  public byte[] encrypt(byte[] toEncrypt, SecretKeySpec key) throws CryptoServiceException {
     try {
       Cipher encrypter = Cipher.getInstance(config.cryptoServiceEncryptionDecryptionAlgo, "BC");
       byte[] iv = new byte[ivValSize];
@@ -63,7 +61,7 @@ class DefaultCryptoService implements CryptoService<SecretKeySpec> {
   }
 
   @Override
-  public byte[] decrypt(byte[] toDecrypt) throws CryptoServiceException {
+  public byte[] decrypt(byte[] toDecrypt, SecretKeySpec key) throws CryptoServiceException {
     try {
       Cipher decrypter = Cipher.getInstance(config.cryptoServiceEncryptionDecryptionAlgo, "BC");
       ByteBuffer input = ByteBuffer.wrap(toDecrypt);
