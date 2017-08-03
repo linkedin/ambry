@@ -43,7 +43,7 @@ import static org.junit.Assert.*;
  *
  */
 public class AccountUpdateToolTest {
-  private static final int NUM_REF_ACCOUNT = 10;
+  private static final int NUM_REF_ACCOUNT = 10 + (int) (Math.random() * 50);
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
   private static final int ZK_SERVER_PORT = 2200;
   private static final String DC_NAME = "testDc";
@@ -158,6 +158,7 @@ public class AccountUpdateToolTest {
     } catch (IllegalArgumentException e) {
       // expected
     }
+    Thread.sleep(100);
     assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
 
     // name conflict
@@ -170,6 +171,7 @@ public class AccountUpdateToolTest {
     } catch (IllegalArgumentException e) {
       // expected
     }
+    Thread.sleep(100);
     assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
   }
 

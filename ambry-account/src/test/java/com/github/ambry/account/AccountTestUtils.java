@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -20,7 +21,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -32,7 +32,7 @@ import static org.junit.Assert.*;
  * Utils for testing account-related classes.
  */
 class AccountTestUtils {
-  private static final Random random = new Random();
+  private static final Random random = TestUtils.RANDOM;
 
   /**
    * Assert a collection of {@link Account}s exist in the {@link AccountService}.
@@ -42,8 +42,6 @@ class AccountTestUtils {
    */
   static void assertAccountsInAccountService(Collection<Account> accounts, int expectedAccountCount,
       AccountService accountService) {
-    Objects.requireNonNull(accounts, "accounts cannot be null");
-    Objects.requireNonNull(accountService, "accountService cannot be null");
     assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
         accountService.getAllAccounts().size());
     for (Account account : accounts) {
@@ -57,8 +55,6 @@ class AccountTestUtils {
    * @param accountService The {@link AccountService} to assert {@link Account} existence.
    */
   static void assertAccountInAccountService(Account account, AccountService accountService) {
-    Objects.requireNonNull(account, "account cannot be null");
-    Objects.requireNonNull(accountService, "accountService cannot be null");
     Account accountFoundById = accountService.getAccountById(account.getId());
     Account accountFoundByName = accountService.getAccountByName(account.getName());
     assertEquals("Account got by id from accountService does not match account got by name.", accountFoundById,
@@ -78,8 +74,6 @@ class AccountTestUtils {
    * @param accountService The {@link AccountService} to assert {@link Container} existence.
    */
   static void assertContainerInAccountService(Container container, AccountService accountService) {
-    Objects.requireNonNull(container, "container cannot be null");
-    Objects.requireNonNull(accountService, "accountService cannot be null");
     Container containerFoundById =
         accountService.getAccountById(container.getParentAccountId()).getContainerById(container.getId());
     Container containerFoundByName =

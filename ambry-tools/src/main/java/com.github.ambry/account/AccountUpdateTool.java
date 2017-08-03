@@ -161,7 +161,7 @@ public class AccountUpdateTool {
         throw new Exception("Update failed with unknown reason.");
       } else {
         System.out.println(
-            numOfAccountsSuccessfullyUpdated + " accounts have bee successfully created or updated, took " + (
+            numOfAccountsSuccessfullyUpdated + " accounts have been successfully created or updated, took " + (
                 System.currentTimeMillis() - startTime) + " ms");
       }
     } catch (Exception e) {

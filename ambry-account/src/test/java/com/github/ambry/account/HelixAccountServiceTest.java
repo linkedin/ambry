@@ -721,9 +721,9 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Randomly generates a collection of reference {@link Account}s and {@link Container}s that can be referred from
-   * from {@link #idToRefAccountMap} and {@link #idToRefContainerMap}. It also generates a single {@link Account}
-   * and {@link Container}.
+   * Randomly generates a single {@link Account} and {@link Container}. It also generates a collection of reference
+   * {@link Account}s and {@link Container}s that can be referred from {@link #idToRefAccountMap} and
+   * {@link #idToRefContainerMap}.
    * @throws Exception Any unexpected exception.
    */
   private void generateReferenceAccountsAndContainers() throws Exception {
