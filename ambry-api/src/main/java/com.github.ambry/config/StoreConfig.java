@@ -124,7 +124,7 @@ public class StoreConfig {
    * The factory class used to get the compaction policy
    */
   @Config("store.compaction.policy.factory")
-  @Default("com.github.ambry.store.DefaultCompactionPolicyFactory")
+  @Default("com.github.ambry.store.CompactAllPolicyFactory")
   public final String storeCompactionPolicyFactory;
 
   /**
