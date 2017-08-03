@@ -21,6 +21,9 @@ import com.github.ambry.account.Container;
  * Interface that defines the Key management service. KMS is responsible for maintaining keys for every
  * unique triplet of (ClusterName, Account, Container) that is registered with the KMS
  * Every user is expected to register once before trying to fetch keys for the same.
+ * T refers to the Key type that this {@link KeyManagementService} will generate and return.
+ * Ensure that {@link CryptoService} implementation is compatible with the key type that
+ * {@link KeyManagementService} generates
  */
 public interface KeyManagementService<T> {
 

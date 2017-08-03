@@ -15,6 +15,9 @@ package com.github.ambry.router;
 
 /**
  * Crypto Service to assist in encrypting or decrypting bytes
+ * T refers to the key type that this {@link CryptoService} accepts.
+ * Ensure that {@link KeyManagementService} implementation is compatible with the key type that
+ * {@link CryptoService} generates
  */
 public interface CryptoService<T> {
 
