@@ -148,8 +148,9 @@ public class BlobStoreCompactorTest {
     refreshState(false, true);
     // compaction range contains a log segment that is still in the journal
     String lastLogSegmentName = state.referenceIndex.lastKey().getName();
-    CompactionDetails details =
-        new CompactionDetails(state.time.milliseconds() + Time.MsPerSec, Collections.singletonList(lastLogSegmentName));
+    String firstLogSegmentName = state.referenceIndex.firstKey().getName();
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds() + Time.MsPerSec,
+        Arrays.asList(lastLogSegmentName, firstLogSegmentName));
     ensureArgumentFailure(details, "Should have failed because compaction range contains offsets still in the journal");
 
     // compaction contains segments that don't exist
