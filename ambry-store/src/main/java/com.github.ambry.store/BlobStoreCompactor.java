@@ -288,16 +288,22 @@ class BlobStoreCompactor {
   private void checkSanity(CompactionDetails details) {
     List<String> segmentsUnderCompaction = details.getLogSegmentsUnderCompaction();
     // all segments should be available and should not have anything in the journal
+    // segments should be in order
+    String prevSegmentName = null;
     for (String segmentName : segmentsUnderCompaction) {
       LogSegment segment = srcLog.getSegment(segmentName);
       if (segment == null) {
         throw new IllegalArgumentException(segmentName + " does not exist in the log");
+      }
+      if (prevSegmentName != null && LogSegmentNameHelper.COMPARATOR.compare(prevSegmentName, segmentName) >= 0) {
+        throw new IllegalArgumentException("Ordering of " + segmentsUnderCompaction + " is incorrect");
       }
       // should be outside the range of the journal
       Offset segmentEndOffset = new Offset(segment.getName(), segment.getEndOffset());
       if (segmentEndOffset.compareTo(srcIndex.journal.getFirstOffset()) >= 0) {
         throw new IllegalArgumentException("Some of the offsets provided for compaction are within the journal");
       }
+      prevSegmentName = segment.getName();
     }
   }
 
