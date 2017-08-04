@@ -354,6 +354,20 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   /**
+   * Extracts the cause of an {@link ExecutionException}. This is used to ensure that the correct
+   * {@link RestServiceErrorCode} is set when using a {@link java.util.concurrent.Future} to wait for a task to
+   * complete.
+   * @param e the {@link ExecutionException}
+   * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
+   *         of exception, return the {@link Throwable} wrapped in an exception. Otherwise, return the cause
+   *         {@link Exception}.
+   */
+  public static Exception extractCause(ExecutionException e) {
+    Throwable cause = e.getCause();
+    return cause == null ? e : (cause instanceof Exception ? (Exception) cause : new Exception(cause));
+  }
+
+  /**
    * Callback for {@link IdConverter} that is used when inbound IDs are converted.
    */
   private class InboundIdConverterCallback implements Callback<String> {
@@ -449,7 +463,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
         } catch (ExecutionException e) {
-          exception = Utils.extractCause(e);
+          exception = extractCause(e);
         } catch (Exception e) {
           exception = e;
         }
@@ -588,7 +602,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
         } catch (ExecutionException e) {
-          exception = Utils.extractCause(e);
+          exception = extractCause(e);
         } catch (Exception e) {
           exception = e;
         }

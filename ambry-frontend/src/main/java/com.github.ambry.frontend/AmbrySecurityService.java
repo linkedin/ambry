@@ -62,12 +62,12 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest == null) {
       throw new IllegalArgumentException("RestRequest is null");
     }
+    frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     FutureResult<Void> futureResult = new FutureResult<Void>();
     if (callback != null) {
       callback.onCompletion(null, exception);
     }
     futureResult.done(null, exception);
-    frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     return futureResult;
   }
 
@@ -81,8 +81,8 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
     }
-    callback.onCompletion(null, exception);
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+    callback.onCompletion(null, exception);
   }
 
   @Override
@@ -149,11 +149,11 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
+    frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     futureResult.done(null, exception);
     if (callback != null) {
       callback.onCompletion(null, exception);
     }
-    frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     return futureResult;
   }
 
