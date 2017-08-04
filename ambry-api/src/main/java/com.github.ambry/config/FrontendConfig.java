@@ -65,11 +65,12 @@ public class FrontendConfig {
   public final Integer frontendChunkedGetResponseThresholdInBytes;
 
   /**
-   * Boolean indicator to specify if unrecognized account and container should be prohibited for old put requests.
+   * Boolean indicator to specify if frontend should allow unrecognized account and container for the
+   * pre-containerization requests that carry serviceId used as account name.
    */
-  @Config("frontend.should.prohibit.old.put.with.unrecognized.account.and.container")
+  @Config("frontend.allow.unrecognized.account.and.container.for.pre.containerization.request")
   @Default("false")
-  public final boolean frontendShouldProhibitOldPutWithUnrecognizedAccountAndContainer;
+  public final boolean frontendAllowUnrecognizedAccountAndContainerForPreContainerizationRequest;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -83,8 +84,7 @@ public class FrontendConfig {
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
-    frontendShouldProhibitOldPutWithUnrecognizedAccountAndContainer =
-        verifiableProperties.getBoolean("frontend.should.prohibit.old.put.with.unrecognized.account.and.container",
-            false);
+    frontendAllowUnrecognizedAccountAndContainerForPreContainerizationRequest = verifiableProperties.getBoolean(
+        "frontend.allow.unrecognized.account.and.container.for.pre.containerization.request", true);
   }
 }

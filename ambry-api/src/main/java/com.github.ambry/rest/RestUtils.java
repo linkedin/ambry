@@ -663,21 +663,4 @@ public class RestUtils {
     }
     return range;
   }
-
-  /**
-   * Sets an argument into the {@link RestRequest}.
-   * @param restRequest The {@link RestRequest} to set the argument. Cannot be {@code null}.
-   * @param key The key of the argument. Cannot be {@code null}.
-   * @param value The value of the argument.
-   * @param isOldValueAllowed {@code true} if an old argument value is allowed; {@code false} otherwise.
-   * @return The old value of the argument.
-   */
-  public static Object setArg(RestRequest restRequest, String key, Object value, boolean isOldValueAllowed) {
-    Object oldVal = restRequest.setArg(key, value);
-    if (!isOldValueAllowed && oldVal != null) {
-      logger.info("Unexpected key={} in args. Previous value={} has been cleared for restRequest={}.", key, oldVal,
-          restRequest);
-    }
-    return oldVal;
-  }
 }

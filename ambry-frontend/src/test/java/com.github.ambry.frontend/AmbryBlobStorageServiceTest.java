@@ -400,7 +400,7 @@ public class AmbryBlobStorageServiceTest {
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
-    String blobId = postBlobAndVerify(headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_PUBLIC_CONTAINER);
+    String blobId = postBlobAndVerify(headers, content, Account.UNKNOWN_ACCOUNT, Container.DEFAULT_PUBLIC_CONTAINER);
 
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
@@ -723,6 +723,16 @@ public class AmbryBlobStorageServiceTest {
     } catch (RestServiceException e) {
       assertEquals("Unexpected error code", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
+  }
+
+  /**
+   * Tests put requests with prohibited headers.
+   * @throws Exception
+   */
+  @Test
+  public void badPutRequestWithProhibitedHeadersTest() throws Exception {
+    putRequestWithProhibitedHeader(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
+    putRequestWithProhibitedHeader(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
   }
 
   /**
@@ -1618,6 +1628,24 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
+   * Put with prohibited headers.
+   * @param header The header that is prohibited.
+   * @throws Exception
+   */
+  private void putRequestWithProhibitedHeader(String header) throws Exception {
+    JSONObject headers = new JSONObject();
+    setAmbryHeadersForPut(headers, 7200, true, "someServiceId", "application/octet-stream", "someOwnerId",
+        "someAccountName", "someContainerName");
+    headers.put(header, "adsfksakdfsdfkdaklf");
+    try {
+      doOperation(createRestRequest(RestMethod.POST, "/", headers, null), new MockRestResponseChannel());
+      fail("Should have thrown");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected error code", RestServiceErrorCode.BadRequest, e.getErrorCode());
+    }
+  }
+
+  /**
    * Puts blobs when using {@link com.github.ambry.account.InMemoryUnknownAccountService}.
    * @param isPrivate {@code true} to put private blobs, otherwise public blobs.
    * @throws Exception
@@ -1627,7 +1655,7 @@ public class AmbryBlobStorageServiceTest {
 
     // should succeed, and the target account and container are set to UNKNOWN.
     blobId = putBlobAndVerifyWithAccountAndContainer(null, null, "someServiceId", isPrivate, Account.UNKNOWN_ACCOUNT,
-        isPrivate ? Container.UNKNOWN_PRIVATE_CONTAINER : Container.UNKNOWN_PUBLIC_CONTAINER, null);
+        isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER : Container.DEFAULT_PUBLIC_CONTAINER, null);
     verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER, null);
 
     // should fail, because accountName needs to be specified.
@@ -1686,7 +1714,7 @@ public class AmbryBlobStorageServiceTest {
 
     // should succeed, since this is the current type of request with only a non-null serviceId.
     putBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate, Account.UNKNOWN_ACCOUNT,
-        isPrivate ? Container.UNKNOWN_PRIVATE_CONTAINER : Container.UNKNOWN_PUBLIC_CONTAINER, null);
+        isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER : Container.DEFAULT_PUBLIC_CONTAINER, null);
 
     // should fail, because accountName needs to be specified.
     putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", isPrivate, null, null,
@@ -1786,11 +1814,11 @@ public class AmbryBlobStorageServiceTest {
         RestServiceErrorCode.MissingArgs);
 
     Container legacyContainerForPublicBlob =
-        new ContainerBuilder(Container.UNKNOWN_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
+        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false,
             refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
-        new ContainerBuilder(Container.UNKNOWN_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
+        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", true,
             refAccount.getId()).build();
     refAccount = new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
@@ -1800,14 +1828,14 @@ public class AmbryBlobStorageServiceTest {
     if (isPrivate) {
       // should succeed.
       putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-          refAccount.getContainerById(Container.UNKNOWN_PRIVATE_CONTAINER_ID), null);
+          refAccount.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID), null);
       // should fail, because accountName needs to be specified.
       putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
           RestServiceErrorCode.MissingArgs);
     } else {
       // should succeed.
       putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-          refAccount.getContainerById(Container.UNKNOWN_PUBLIC_CONTAINER_ID), null);
+          refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID), null);
       // should fail, because accountName needs to be specified.
       putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
           RestServiceErrorCode.MissingArgs);

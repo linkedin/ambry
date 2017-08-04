@@ -143,14 +143,14 @@ class FrontendMetrics {
   public final Histogram blobStorageServiceShutdownTimeInMs;
 
   // Account
-  public final Counter oldPutUnrecognizedAccountCount;
-  public final Counter newPutUnRecognizedAccountCount;
-  public final Counter oldPutUnRecognizedContainerCount;
-  public final Counter newPutUnRecognizedContainerCount;
+  public final Counter unrecognizedServiceIdCount;
+  public final Counter unrecognizedAccountNameCount;
+  public final Counter missingDefaultContainerCount;
+  public final Counter unrecognizedContainerNameCount;
   public final Counter getHeadDeleteUnrecognizedAccountCount;
   public final Counter getHeadDeleteUnrecognizedContainerCount;
-  public final Meter oldPutRequestRate;
-  public final Meter newPutRequestRate;
+  public final Meter putWithServiceIdForAccountNameRate;
+  public final Meter putWithAccountAndContainerHeaderRate;
 
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
@@ -331,19 +331,21 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "ShutdownTimeInMs"));
 
     // Account and container
-    oldPutUnrecognizedAccountCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "OldPutUnrecognizedAccountCount"));
-    newPutUnRecognizedAccountCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "NewPutUnRecognizedAccountCount"));
-    oldPutUnRecognizedContainerCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "OldPutUnRecognizedContainerCount"));
-    newPutUnRecognizedContainerCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "NewPutUnRecognizedContainerCount"));
+    unrecognizedServiceIdCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedServiceIdCount"));
+    unrecognizedAccountNameCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedAccountNameCount"));
+    missingDefaultContainerCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "MissingDefaultContainerCount"));
+    unrecognizedContainerNameCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedContainerNameCount"));
     getHeadDeleteUnrecognizedAccountCount = metricRegistry.counter(
         MetricRegistry.name(AmbryBlobStorageService.class, "GetHeadDeleteUnrecognizedAccountCount"));
     getHeadDeleteUnrecognizedContainerCount = metricRegistry.counter(
         MetricRegistry.name(AmbryBlobStorageService.class, "GetHeadDeleteUnrecognizedContainerCount"));
-    oldPutRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "OldPutRequestRate"));
-    newPutRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "NewPutRequestRate"));
+    putWithServiceIdForAccountNameRate =
+        metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PutWithServiceIdForAccountNameRate"));
+    putWithAccountAndContainerHeaderRate = metricRegistry.meter(
+        MetricRegistry.name(AmbryBlobStorageService.class, "PutWithAccountAndContainerHeaderRate"));
   }
 }
