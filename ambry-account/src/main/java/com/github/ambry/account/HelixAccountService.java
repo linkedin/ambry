@@ -278,15 +278,15 @@ class HelixAccountService implements AccountService {
           logger.trace("Start parsing remote account data.");
           AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
           Map<Short, Account> oldIdToAccountMap = accountInfoMapRef.get().idToAccountMap;
-          List<Short> idForUpdatedAccounts = new ArrayList<>();
+          List<Short> idsOfUpdatedAccounts = new ArrayList<>();
           for (Account newAccount : newAccountInfoMap.getAccounts()) {
             if (!newAccount.equals(oldIdToAccountMap.get(newAccount.getId()))) {
-              idForUpdatedAccounts.add(newAccount.getId());
+              idsOfUpdatedAccounts.add(newAccount.getId());
             }
           }
           accountInfoMapRef.set(newAccountInfoMap);
-          logger.info("Received updates for {} accounts. Account IDs={}", idForUpdatedAccounts.size(),
-              idForUpdatedAccounts);
+          logger.info("Received updates for {} accounts. Account IDs={}", idsOfUpdatedAccounts.size(),
+              idsOfUpdatedAccounts);
         }
       }
     } finally {
