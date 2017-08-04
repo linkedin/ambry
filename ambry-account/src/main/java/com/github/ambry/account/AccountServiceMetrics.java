@@ -30,7 +30,7 @@ public class AccountServiceMetrics {
   public final Histogram fetchRemoteAccountTimeInMs;
 
   // Counter
-  public final Counter unRecognizedMessageErrorCount;
+  public final Counter unrecognizedMessageErrorCount;
   public final Counter notifyAccountDataChangeErrorCount;
   public final Counter updateAccountErrorCount;
   public final Counter fetchRemoteAccountErrorCount;
@@ -45,8 +45,8 @@ public class AccountServiceMetrics {
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
 
     // Counter
-    unRecognizedMessageErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UnRecognizedMessageErrorCount"));
+    unrecognizedMessageErrorCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "UnrecognizedMessageErrorCount"));
     notifyAccountDataChangeErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NotifyAccountDataChangeErrorCount"));
     updateAccountErrorCount =
