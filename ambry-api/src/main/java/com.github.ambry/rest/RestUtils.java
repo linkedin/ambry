@@ -528,16 +528,6 @@ public class RestUtils {
   }
 
   /**
-   * Get the service ID from a {@link RestRequest}.
-   * @param restRequest the representation of the request.
-   * @return the service ID, or {@code null} if no service ID was set in the request.
-   * @throws RestServiceException
-   */
-  public static String getServiceId(RestRequest restRequest) throws RestServiceException {
-    return getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
-  }
-
-  /**
    * Gets the isPrivate setting from the args.
    * @param args The args where to include the isPrivate setting.
    * @return A boolean to indicate the value of the isPrivate flag.
@@ -556,30 +546,6 @@ public class RestUtils {
           RestServiceErrorCode.InvalidArgs);
     }
     return isPrivate;
-  }
-
-  /**
-   * Gets the name of the target {@link com.github.ambry.account.Account} from a {@link RestRequest}'s header. This
-   * field is expected only for a POST request.
-   * @param restRequest the representation of the request. Cannot be {@code null}.
-   * @return the accountName of the requester's {@link com.github.ambry.account.Account}, or {@code null} if no
-   * accountName was set in the request.
-   * @throws RestServiceException
-   */
-  public static String getTargetAccountNameFromHeader(RestRequest restRequest) throws RestServiceException {
-    return getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
-  }
-
-  /**
-   * Gets the name of the target {@link com.github.ambry.account.Container} from a {@link RestRequest}. This
-   * field is expected only for a POST request.
-   * @param restRequest the representation of the request. Cannot be {@code null}.
-   * @return the containerName of the target {@link com.github.ambry.account.Container}, or {@code null} if no
-   * containerName was set in the request.
-   * @throws RestServiceException
-   */
-  public static String getTargetContainerNameFromHeader(RestRequest restRequest) throws RestServiceException {
-    return getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
   }
 
   /**
@@ -608,7 +574,7 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  private static String getHeader(Map<String, Object> args, String header, boolean required)
+  public static String getHeader(Map<String, Object> args, String header, boolean required)
       throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {

@@ -79,7 +79,6 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -128,6 +127,8 @@ public class AmbryBlobStorageServiceTest {
   private AmbryBlobStorageService ambryBlobStorageService;
   private Account refAccount;
   private Container refContainer;
+  private Container refDefaultPublicContainer;
+  private Container refDefaultPrivateContainer;
 
   static {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
@@ -1623,8 +1624,16 @@ public class AmbryBlobStorageServiceTest {
     boolean refContainerPrivacy = random.nextBoolean();
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         refContainerPrivacy, refAccountId).build();
-    Collection<Container> refContainers = Collections.singleton(refContainer);
-    refAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, refContainers).build();
+    refDefaultPublicContainer =
+        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
+            Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
+            Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
+    refDefaultPrivateContainer =
+        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
+            Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
+            Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
+    refAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
+        Arrays.asList(refDefaultPublicContainer, refDefaultPrivateContainer, refContainer)).build();
   }
 
   /**
@@ -1798,8 +1807,8 @@ public class AmbryBlobStorageServiceTest {
 
     // should succeed, but this is a special case that account is created without the legacy containers for public and private
     // put. It should fall back to the frontend behavior before containerization.
-    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, Account.UNKNOWN_ACCOUNT,
-        Container.UNKNOWN_CONTAINER, null);
+    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
+        isPrivate ? refDefaultPrivateContainer : refDefaultPublicContainer, null);
 
     // should fail, because accountName needs to be specified.
     putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,

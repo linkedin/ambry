@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.MockNotifier;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.MockRestRequestResponseHandler;
@@ -33,8 +32,6 @@ import static org.junit.Assert.*;
  * Unit tests for {@link AmbryBlobStorageServiceFactory}.
  */
 public class AmbryBlobStorageServiceFactoryTest {
-  private static final String ZK_CONNECT_STRING = "dummyHost:1000";
-  private static final String STORE_ROOT_PATH = "/ambry_test/helix_account_service";
 
   /**
    * Tests the instantiation of an {@link AmbryBlobStorageService} instance through the
@@ -45,9 +42,6 @@ public class AmbryBlobStorageServiceFactoryTest {
   public void getAmbryBlobStorageServiceTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
-    properties.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
-        ZK_CONNECT_STRING);
-    properties.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
     AmbryBlobStorageServiceFactory ambryBlobStorageServiceFactory =

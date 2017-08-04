@@ -145,7 +145,6 @@ class FrontendMetrics {
   // Account
   public final Counter unrecognizedServiceIdCount;
   public final Counter unrecognizedAccountNameCount;
-  public final Counter missingDefaultContainerCount;
   public final Counter unrecognizedContainerNameCount;
   public final Counter getHeadDeleteUnrecognizedAccountCount;
   public final Counter getHeadDeleteUnrecognizedContainerCount;
@@ -157,7 +156,7 @@ class FrontendMetrics {
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public FrontendMetrics(MetricRegistry metricRegistry) {
-    // RestRequestMetrics instances
+    // RestRequestMetrics instancesAmbryBlobStorageServiceTest
     // DELETE
     deleteBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "DeleteBlob", metricRegistry);
     deleteBlobSSLMetrics =
@@ -335,8 +334,6 @@ class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedServiceIdCount"));
     unrecognizedAccountNameCount =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedAccountNameCount"));
-    missingDefaultContainerCount =
-        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "MissingDefaultContainerCount"));
     unrecognizedContainerNameCount =
         metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedContainerNameCount"));
     getHeadDeleteUnrecognizedAccountCount = metricRegistry.counter(

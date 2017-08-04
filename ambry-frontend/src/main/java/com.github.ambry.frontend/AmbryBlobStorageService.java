@@ -45,11 +45,12 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
-import com.google.common.collect.ImmutableSet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,10 +79,8 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
   private static final String OPERATION_TYPE_POST = "POST";
-  private static final Set<String> requiredAmbryHeadersForPutWithServiceId =
-      ImmutableSet.of(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID);
-  private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName =
-      ImmutableSet.of(Headers.AMBRY_CONTENT_TYPE, Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME);
+  private static final Set<String> requiredAmbryHeadersForPutWithServiceId;
+  private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName;
   private final RestResponseHandler responseHandler;
   private final Router router;
   private final IdConverterFactory idConverterFactory;
@@ -91,12 +90,18 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
-
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
-  private AccountService accountService = null;
+  private final AccountService accountService;
   private GetPeersHandler getPeersHandler;
   private boolean isUp = false;
+
+  static {
+    requiredAmbryHeadersForPutWithServiceId =
+        Collections.unmodifiableSet(new HashSet<>(Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID)));
+    requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(new HashSet<>(
+        Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
+  }
 
   /**
    * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
@@ -108,6 +113,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param clusterMap the {@link ClusterMap} in use.
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
+   * @param accountService the {@link AccountService} to use to query for target {@link Account} of a {@link RestRequest}.
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
@@ -150,7 +156,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       if (accountService != null) {
         accountService.close();
-        accountService = null;
       }
       logger.info("AmbryBlobStorageService shutdown complete");
     } catch (IOException e) {
@@ -227,7 +232,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
       long propsBuildStartTime = System.currentTimeMillis();
-      injectAccountAndContainerForPutRequest(restRequest);
+      injectAccountAndContainerForPostRequest(restRequest);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
@@ -476,7 +481,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case DELETE:
               deleteCallback.markStartTime();
-              router.deleteBlob(result, RestUtils.getServiceId(restRequest), deleteCallback);
+              router.deleteBlob(result, getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false), deleteCallback);
               break;
             default:
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
@@ -1034,16 +1039,23 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param restRequest The Put {@link RestRequest}.
    * @throws RestServiceException
    */
-  private void injectAccountAndContainerForPutRequest(RestRequest restRequest) throws RestServiceException {
+  private void injectAccountAndContainerForPostRequest(RestRequest restRequest) throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
-    if (getTargetAccountNameFromHeader(restRequest) != null || getTargetContainerNameFromHeader(restRequest) != null) {
+    if (getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false) != null
+        || getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false) != null) {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithAccountAndContainerName);
       frontendMetrics.putWithAccountAndContainerHeaderRate.mark();
       injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest);
     } else {
-      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
-      frontendMetrics.putWithServiceIdForAccountNameRate.mark();
-      injectAccountAndContainerUsingServiceId(restRequest);
+      if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
+        ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
+        frontendMetrics.putWithServiceIdForAccountNameRate.mark();
+        injectAccountAndContainerUsingServiceId(restRequest);
+      } else {
+        throw new RestServiceException(
+            "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
+            RestServiceErrorCode.BadRequest);
+      }
     }
   }
 
@@ -1052,57 +1064,32 @@ class AmbryBlobStorageService implements BlobStorageService {
    * target container header but a serviceId. The serviceId will be used as account name to query for the target
    * {@link Account}.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
-   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be identified.
+   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
    */
   private void injectAccountAndContainerUsingServiceId(RestRequest restRequest) throws RestServiceException {
-    String accountName = getServiceId(restRequest);
+    String accountName = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
     Account targetAccount = accountService.getAccountByName(accountName);
     if (targetAccount == null) {
       frontendMetrics.unrecognizedServiceIdCount.inc();
-      // @todo The check and config can be removed once every existing ambry user has been migrated to a valid account,
-      // @todo and we want to reject the PUT requests with unidentifiable account name.
-      if (frontendConfig.frontendAllowUnrecognizedAccountAndContainerForPreContainerizationRequest) {
-        logger.debug(
-            "Account cannot be found for accountName={} in put request with serviceId. Setting targetAccount to UNKNOWN_ACCOUNT",
-            accountName);
-        targetAccount = Account.UNKNOWN_ACCOUNT;
-      } else {
-        throw new RestServiceException(
-            "Account cannot be found for accountName=" + accountName + " in put request with serviceId",
-            RestServiceErrorCode.InvalidAccount);
-      }
+      logger.debug(
+          "Account cannot be found for accountName={} in put request with serviceId. Setting targetAccount to UNKNOWN_ACCOUNT",
+          accountName);
+      targetAccount = Account.UNKNOWN_ACCOUNT;
     }
     boolean isBlobPrivate = isPrivate(restRequest.getArgs());
     Container targetContainer = targetAccount.getContainerById(
         isBlobPrivate ? Container.DEFAULT_PRIVATE_CONTAINER_ID : Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    if (targetContainer == null) {
-      frontendMetrics.missingDefaultContainerCount.inc();
-      // @todo The check and config can be removed once every existing ambry user has been migrated to a valid account,
-      // @todo and we want to reject the PUT requests with unidentifiable container name.
-      if (frontendConfig.frontendAllowUnrecognizedAccountAndContainerForPreContainerizationRequest) {
-        logger.debug(
-            "Container cannot be identified for accountName={} and isPrivate={} in put request with serviceId. "
-                + "Setting targetAccount to UNKNOWN_ACCOUNT, targetContainer to UNKNOWN_CONTAINER", accountName,
-            isBlobPrivate);
-        targetAccount = Account.UNKNOWN_ACCOUNT;
-        targetContainer = Container.UNKNOWN_CONTAINER;
-      } else {
-        throw new RestServiceException(
-            "Container cannot be identified for accountName=" + accountName + " and isPrivate=" + isBlobPrivate
-                + " in put request with serviceId.", RestServiceErrorCode.InvalidContainer);
-      }
-    }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
   }
 
   /**
    * Injects {@link Account} and {@link Container} for the PUT requests that carry the target account and container headers.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
-   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be identified.
+   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
    */
   private void injectAccountAndContainerUsingAccountAndContainerHeaders(RestRequest restRequest)
       throws RestServiceException {
-    String accountName = getTargetAccountNameFromHeader(restRequest);
+    String accountName = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
     Account targetAccount = accountService.getAccountByName(accountName);
     if (targetAccount == null) {
       frontendMetrics.unrecognizedAccountNameCount.inc();
@@ -1110,12 +1097,12 @@ class AmbryBlobStorageService implements BlobStorageService {
           + " in put request with account and container headers.", RestServiceErrorCode.InvalidAccount);
     }
     ensureAccountNameMatch(targetAccount, restRequest);
-    String containerName = getTargetContainerNameFromHeader(restRequest);
+    String containerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
     Container targetContainer = targetAccount.getContainerByName(containerName);
     if (targetContainer == null) {
       frontendMetrics.unrecognizedContainerNameCount.inc();
       throw new RestServiceException(
-          "Container cannot be identified for accountName=" + accountName + " and containerName=" + containerName
+          "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
               + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
     }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
@@ -1127,44 +1114,43 @@ class AmbryBlobStorageService implements BlobStorageService {
    * {@link Container} into the {@link RestRequest}.
    * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id。
    * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
-   * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be identified; or 2)
+   * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be found; or 2)
    *                              either {@link Account} or {@link Container} were explicitly specified as
    *                              {@link Account#UNKNOWN_ACCOUNT} or {@link Container#UNKNOWN_CONTAINER}.
    */
   private void injectTargetAccountAndContainerFromBlobId(String blobIdStr, RestRequest restRequest)
       throws RestServiceException {
+    BlobId blobId;
     try {
-      BlobId blobId = new BlobId(blobIdStr, clusterMap);
-      Account targetAccount = accountService.getAccountById(blobId.getAccountId());
-      if (targetAccount == null) {
-        frontendMetrics.getHeadDeleteUnrecognizedAccountCount.inc();
-        // @todo The check can be removed once HelixAccountService is running with UNKNOWN_ACCOUNT created.
-        if (blobId.getAccountId() != Account.UNKNOWN_ACCOUNT_ID) {
-          throw new RestServiceException(
-              "Account from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " cannot be recognized",
-              RestServiceErrorCode.InvalidAccount);
-        } else {
-          logger.debug(
-              "Account cannot be identified for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
-              blobIdStr, blobId.getAccountId());
-          targetAccount = Account.UNKNOWN_ACCOUNT;
-        }
-      }
-      Container targetContainer = targetAccount.getContainerById(blobId.getContainerId());
-      if (targetContainer == null) {
-        frontendMetrics.getHeadDeleteUnrecognizedContainerCount.inc();
-        throw new RestServiceException(
-            "Container from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " containerId="
-                + blobId.getContainerId() + " cannot be recognized", RestServiceErrorCode.InvalidContainer);
-      }
-      setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
-    } catch (RestServiceException e) {
-      throw e;
+      blobId = new BlobId(blobIdStr, clusterMap);
     } catch (Exception e) {
       throw new RestServiceException(
           "Invalid blob id=" + blobIdStr + " during injecting account and container from blobId string",
           RestServiceErrorCode.BadRequest);
     }
+    Account targetAccount = accountService.getAccountById(blobId.getAccountId());
+    if (targetAccount == null) {
+      frontendMetrics.getHeadDeleteUnrecognizedAccountCount.inc();
+      // @todo The check can be removed once HelixAccountService is running with UNKNOWN_ACCOUNT created.
+      if (blobId.getAccountId() != Account.UNKNOWN_ACCOUNT_ID) {
+        throw new RestServiceException(
+            "Account from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " cannot be recognized",
+            RestServiceErrorCode.InvalidAccount);
+      } else {
+        logger.debug(
+            "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
+            blobIdStr, blobId.getAccountId());
+        targetAccount = Account.UNKNOWN_ACCOUNT;
+      }
+    }
+    Container targetContainer = targetAccount.getContainerById(blobId.getContainerId());
+    if (targetContainer == null) {
+      frontendMetrics.getHeadDeleteUnrecognizedContainerCount.inc();
+      throw new RestServiceException(
+          "Container from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " containerId="
+              + blobId.getContainerId() + " cannot be recognized", RestServiceErrorCode.InvalidContainer);
+    }
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
   }
 
   /**
@@ -1174,11 +1160,11 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
    */
   private void accountAndContainerSanityCheck(RestRequest restRequest) throws RestServiceException {
-    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getTargetAccountNameFromHeader(restRequest)) || Account.UNKNOWN_ACCOUNT_NAME
-        .equals(getServiceId(restRequest))) {
+    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
+        || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false))) {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
-    String targetContainerName = getTargetContainerNameFromHeader(restRequest);
+    String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
     if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || Container.DEFAULT_PUBLIC_CONTAINER_NAME.equals(
         targetContainerName) || Container.DEFAULT_PRIVATE_CONTAINER_NAME.equals(targetContainerName)) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
@@ -1213,7 +1199,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @throws RestServiceException if the {@link Account}'s name does not match the name specified in the {@link RestRequest}.
    */
   private void ensureAccountNameMatch(Account account, RestRequest restRequest) throws RestServiceException {
-    String accountNameFromHeader = getTargetAccountNameFromHeader(restRequest);
+    String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
     if (accountNameFromHeader != null && !accountNameFromHeader.equals(account.getName())) {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
