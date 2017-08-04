@@ -15,10 +15,12 @@ package com.github.ambry.account;
 
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -106,7 +108,7 @@ class HelixAccountService implements AccountService {
             logger.trace("Completed processing message={} for topic={}", message, topic);
             break;
           default:
-            accountServiceMetrics.unRecognizedMessageErrorCount.inc();
+            accountServiceMetrics.unrecognizedMessageErrorCount.inc();
             throw new RuntimeException("Could not understand message=" + message + " for topic=" + topic);
         }
       } catch (Exception e) {
@@ -203,7 +205,8 @@ class HelixAccountService implements AccountService {
         // be caught by Helix and helixStore#update will return false.
         if (hasConflictingAccount(accounts, remoteAccountInfoMap)) {
           // Throw exception, so that helixStore can capture and terminate the update operation
-          throw new IllegalArgumentException("Updating accounts failed because one account to update conflicts with existing accounts");
+          throw new IllegalArgumentException(
+              "Updating accounts failed because one account to update conflicts with existing accounts");
         } else {
           for (Account account : accounts) {
             try {
@@ -274,9 +277,16 @@ class HelixAccountService implements AccountService {
         } else {
           logger.trace("Start parsing remote account data.");
           AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
+          Map<Short, Account> oldIdToAccountMap = accountInfoMapRef.get().idToAccountMap;
+          List<Short> idsOfUpdatedAccounts = new ArrayList<>();
+          for (Account newAccount : newAccountInfoMap.getAccounts()) {
+            if (!newAccount.equals(oldIdToAccountMap.get(newAccount.getId()))) {
+              idsOfUpdatedAccounts.add(newAccount.getId());
+            }
+          }
           accountInfoMapRef.set(newAccountInfoMap);
-          logger.trace("Completed updating local cache with number={} accounts",
-              newAccountInfoMap.getAccounts().size());
+          logger.info("Received updates for {} accounts. Account IDs={}", idsOfUpdatedAccounts.size(),
+              idsOfUpdatedAccounts);
         }
       }
     } finally {
