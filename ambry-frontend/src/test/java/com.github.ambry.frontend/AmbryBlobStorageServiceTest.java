@@ -1424,7 +1424,7 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     }
 
     /**
-     * Completes the operation by  invoking the {@code callback}.
+     * Completes the operation by invoking the {@code callback}.
      * @param callback the {@link Callback} to invoke.
      * @param misbehaveIfRequired whether to exhibit misbehavior or not.
      */

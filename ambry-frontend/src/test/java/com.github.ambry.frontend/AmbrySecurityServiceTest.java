@@ -43,12 +43,9 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.TimeZone;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import junit.framework.Assert;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -88,24 +85,11 @@ public class AmbrySecurityServiceTest {
       securityService.postProcessRequest(restRequest).get();
     }
 
-    // with callbacks
-    SecurityServiceCallback callback = new SecurityServiceCallback();
-    for (RestMethod restMethod : methods) {
-      RestRequest restRequest = createRestRequest(restMethod, "/", null);
-      securityService.processRequest(restRequest, callback);
-      assertCallbackSuccess(callback);
-      securityService.postProcessRequest(restRequest, callback);
-      assertCallbackSuccess(callback);
-    }
-
     // with GET sub resources
-    callback.reset();
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
-      securityService.processRequest(restRequest, callback);
-      assertCallbackSuccess(callback);
-      securityService.postProcessRequest(restRequest, callback);
-      assertCallbackSuccess(callback);
+      securityService.processRequest(restRequest).get();
+      securityService.postProcessRequest(restRequest).get();
     }
 
     // security service closed
@@ -288,17 +272,6 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Check that the callback was invoked successfully. Resets the callback state afterwards.
-   * @param callback the {@link SecurityServiceCallback}
-   * @throws Exception
-   */
-  private static void assertCallbackSuccess(SecurityServiceCallback callback) throws Exception {
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
-    callback.reset();
-  }
-
-  /**
    * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Get blob
    * with the passed in {@link BlobInfo} and various range settings, including no set range (entire blob).
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}s
@@ -332,14 +305,11 @@ public class AmbrySecurityServiceTest {
    * @throws Exception
    */
   private void testGetBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForGetBlob(blobInfo.getBlobProperties(), range, restResponseChannel);
@@ -353,7 +323,6 @@ public class AmbrySecurityServiceTest {
    * @throws Exception
    */
   private void testGetNotModifiedBlob(BlobInfo blobInfo, long ifModifiedSinceMs) throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers = new JSONObject();
     SimpleDateFormat dateFormat = new SimpleDateFormat(RestUtils.HTTP_DATE_FORMAT, Locale.ENGLISH);
@@ -362,9 +331,7 @@ public class AmbrySecurityServiceTest {
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", headers);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
       Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
           restResponseChannel.getStatus());
@@ -411,14 +378,11 @@ public class AmbrySecurityServiceTest {
    * @throws Exception
    */
   private void testHeadBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", headers);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
@@ -430,12 +394,9 @@ public class AmbrySecurityServiceTest {
    * @throws Exception
    */
   private void testGetSubResource(RestUtils.SubResource subResource) throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
-    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback);
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO).get();
     Assert.assertEquals("ProcessResponse status should have been set ", ResponseStatus.Ok,
         restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
@@ -458,12 +419,9 @@ public class AmbrySecurityServiceTest {
    * @throws Exception
    */
   private void testPostBlob() throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
-    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback);
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNull("Exception should not have been thrown", callback.exception);
+    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO).get();
     Assert.assertEquals("ProcessResponse status should have been set", ResponseStatus.Created,
         restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
@@ -485,13 +443,15 @@ public class AmbrySecurityServiceTest {
    */
   private void testExceptionCasesProcessResponse(RestMethod restMethod, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode) throws Exception {
+    TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
+      Assert.assertTrue("Exception should have been an instance of RestServiceException",
+          e.getCause() instanceof RestServiceException);
+      RestServiceException re = (RestServiceException) e.getCause();
+      Assert.assertEquals("Unexpected RestServerErrorCode (Future)", expectedErrorCode, re.getErrorCode());
+    };
     RestRequest restRequest = createRestRequest(restMethod, "/", null);
-    SecurityServiceCallback callback = new SecurityServiceCallback();
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
-    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-    Assert.assertNotNull("Exception should have been thrown", callback.exception);
-    RestServiceException re = (RestServiceException) callback.exception;
-    Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
+    TestUtils.assertException(ExecutionException.class,
+        () -> securityService.processResponse(restRequest, restResponseChannel, blobInfo).get(), errorAction);
   }
 
   /**
@@ -652,35 +612,6 @@ public class AmbrySecurityServiceTest {
     if (blobProperties.getOwnerId() != null) {
       Assert.assertEquals("OwnerId mismatch", blobProperties.getOwnerId(),
           restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
-    }
-  }
-
-  /**
-   * Callback for all operations on {@link SecurityService}.
-   */
-  class SecurityServiceCallback implements Callback<Void> {
-    public volatile Exception exception;
-    public CountDownLatch callbackLatch = new CountDownLatch(1);
-
-    private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
-
-    @Override
-    public void onCompletion(Void result, Exception exception) {
-      if (callbackInvoked.compareAndSet(false, true)) {
-        this.exception = exception;
-        callbackLatch.countDown();
-      } else {
-        this.exception = new IllegalStateException("Callback invoked more than once");
-      }
-    }
-
-    /**
-     * Resets the state for using this instance again.
-     */
-    public void reset() {
-      exception = null;
-      callbackInvoked.set(false);
-      callbackLatch = new CountDownLatch(1);
     }
   }
 
