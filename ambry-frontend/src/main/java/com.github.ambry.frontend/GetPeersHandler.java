@@ -157,7 +157,6 @@ class GetPeersHandler {
     public void onCompletion(Void result, Exception exception) {
       long processingStartTimeMs = SystemTime.getInstance().milliseconds();
       metrics.getPeersSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
-      ReadableStreamChannel channel = null;
       try {
         if (exception == null) {
           securityService.postProcessRequest(restRequest,

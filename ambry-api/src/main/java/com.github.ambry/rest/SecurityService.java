@@ -38,7 +38,7 @@ public interface SecurityService extends Closeable {
 
   /**
    * Perform security validations (if any) on the {@link RestRequest} when it has been fully parsed. That is, when the
-   * {@link RestRequest} has been annotated with any additional arguments (like account and container ID).
+   * {@link RestRequest} has been annotated with any additional arguments (like account and container).
    * Invokes the {@link Callback} when the validation is complete.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
    * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.

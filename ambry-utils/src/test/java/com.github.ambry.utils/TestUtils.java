@@ -14,7 +14,6 @@
 package com.github.ambry.utils;
 
 import java.util.Random;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -90,6 +89,7 @@ public class TestUtils {
    * @param exceptionClass the type of exception that should occur.
    * @param body the body to execute. This should throw an exception of type {@code exceptionClass}
    * @param errorAction if non-null and the exception class matches, execute this action.
+   * @throws Exception when an unexpected exception occurs.
    */
   public static <E extends Exception> void assertException(Class<E> exceptionClass, ThrowingRunnable body,
       ThrowingConsumer<E> errorAction) throws Exception {
@@ -106,7 +106,6 @@ public class TestUtils {
       }
     }
   }
-
 
   /**
    * Similar to {@link Runnable}, but able to throw checked exceptions.

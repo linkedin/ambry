@@ -299,11 +299,11 @@ public class AmbryBlobStorageServiceTest {
       assertTrue("RestRequest channel is not open", restRequest.isOpen());
       restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel response = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-      assertTrue("ProcessResponse channel is not open", response.isOpen());
+      assertTrue("Response channel is not open", response.isOpen());
       ambryBlobStorageService.submitResponse(restRequest, restResponseChannel, response, null);
       assertNotNull("There is no cause of failure", restResponseChannel.getException());
       // resources should have been cleaned up.
-      assertFalse("ProcessResponse channel is not cleaned up", response.isOpen());
+      assertFalse("Response channel is not cleaned up", response.isOpen());
     } finally {
       responseHandler.start();
     }
