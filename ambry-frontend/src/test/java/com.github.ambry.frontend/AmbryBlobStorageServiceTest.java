@@ -1394,11 +1394,11 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     private boolean isOpen = true;
 
     @Override
-    public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
+    public void processRequest(RestRequest restRequest, Callback<Void> callback) {
       if (!isOpen) {
         throw new IllegalStateException("SecurityService closed");
       }
-      return completeOperation(callback, mode == null || mode == Mode.ProcessRequest);
+      completeOperation(callback, mode == null || mode == Mode.ProcessRequest);
     }
 
     @Override
@@ -1410,12 +1410,12 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     }
 
     @Override
-    public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+    public void processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
         Callback<Void> callback) {
       if (!isOpen) {
         throw new IllegalStateException("SecurityService closed");
       }
-      return completeOperation(callback, mode == Mode.ProcessResponse);
+      completeOperation(callback, mode == Mode.ProcessResponse);
     }
 
     @Override
@@ -1424,21 +1424,15 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
     }
 
     /**
-     * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
-     * @param callback the {@link Callback} to invoke. Can be null.
+     * Completes the operation by  invoking the {@code callback}.
+     * @param callback the {@link Callback} to invoke.
      * @param misbehaveIfRequired whether to exhibit misbehavior or not.
-     * @return the created {@link Future}.
      */
-    private Future<Void> completeOperation(Callback<Void> callback, boolean misbehaveIfRequired) {
+    private void completeOperation(Callback<Void> callback, boolean misbehaveIfRequired) {
       if (misbehaveIfRequired && exceptionToThrow != null) {
         throw exceptionToThrow;
       }
-      FutureResult<Void> futureResult = new FutureResult<Void>();
-      futureResult.done(null, misbehaveIfRequired ? exceptionToReturn : null);
-      if (callback != null) {
-        callback.onCompletion(null, misbehaveIfRequired ? exceptionToReturn : null);
-      }
-      return futureResult;
+      callback.onCompletion(null, misbehaveIfRequired ? exceptionToReturn : null);
     }
   }
 }

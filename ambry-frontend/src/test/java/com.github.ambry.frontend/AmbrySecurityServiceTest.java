@@ -76,8 +76,7 @@ public class AmbrySecurityServiceTest {
   @Test
   public void processRequestTest() throws Exception {
     //rest request being null
-    TestUtils.assertException(IllegalArgumentException.class, () -> securityService.processRequest(null, null).get(),
-        null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> securityService.processRequest(null).get(), null);
     TestUtils.assertException(IllegalArgumentException.class, () -> securityService.postProcessRequest(null).get(),
         null);
 
@@ -85,7 +84,7 @@ public class AmbrySecurityServiceTest {
     RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
-      securityService.processRequest(restRequest, null).get();
+      securityService.processRequest(restRequest).get();
       securityService.postProcessRequest(restRequest).get();
     }
 
@@ -93,7 +92,7 @@ public class AmbrySecurityServiceTest {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
-      securityService.processRequest(restRequest, callback).get();
+      securityService.processRequest(restRequest, callback);
       assertCallbackSuccess(callback);
       securityService.postProcessRequest(restRequest, callback);
       assertCallbackSuccess(callback);
@@ -103,7 +102,7 @@ public class AmbrySecurityServiceTest {
     callback.reset();
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
-      securityService.processRequest(restRequest, callback).get();
+      securityService.processRequest(restRequest, callback);
       assertCallbackSuccess(callback);
       securityService.postProcessRequest(restRequest, callback);
       assertCallbackSuccess(callback);
@@ -126,31 +125,22 @@ public class AmbrySecurityServiceTest {
   public void processResponseTest() throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
     //rest request being null
-    try {
-      securityService.processResponse(null, new MockRestResponseChannel(), DEFAULT_INFO, null).get();
-      Assert.fail("Should have thrown IllegalArgumentException ");
-    } catch (IllegalArgumentException e) {
-    }
+    TestUtils.assertException(IllegalArgumentException.class,
+        () -> securityService.processResponse(null, new MockRestResponseChannel(), DEFAULT_INFO).get(), null);
 
     //restResponseChannel being null
-    try {
-      securityService.processResponse(restRequest, null, DEFAULT_INFO, null).get();
-      Assert.fail("Should have thrown IllegalArgumentException ");
-    } catch (IllegalArgumentException e) {
-    }
+    TestUtils.assertException(IllegalArgumentException.class,
+        () -> securityService.processResponse(restRequest, null, DEFAULT_INFO).get(), null);
 
     //blob info being null
-    try {
-      securityService.processResponse(restRequest, new MockRestResponseChannel(), null, null).get();
-      Assert.fail("Should have thrown IllegalArgumentException ");
-    } catch (IllegalArgumentException e) {
-    }
+    TestUtils.assertException(IllegalArgumentException.class,
+        () -> securityService.processResponse(restRequest, new MockRestResponseChannel(), null).get(), null);
 
     // without callbacks
     RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.HEAD};
     for (RestMethod restMethod : methods) {
-      restRequest = createRestRequest(restMethod, "/", null);
-      securityService.processResponse(restRequest, new MockRestResponseChannel(), DEFAULT_INFO, null).get();
+      securityService.processResponse(createRestRequest(restMethod, "/", null), new MockRestResponseChannel(),
+          DEFAULT_INFO).get();
     }
 
     // with callbacks
@@ -272,20 +262,15 @@ public class AmbrySecurityServiceTest {
    */
   private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode)
       throws Exception {
-    SecurityServiceCallback callback = new SecurityServiceCallback();
     TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
       Assert.assertTrue("Exception should have been an instance of RestServiceException",
           e.getCause() instanceof RestServiceException);
       RestServiceException re = (RestServiceException) e.getCause();
       Assert.assertEquals("Unexpected RestServerErrorCode (Future)", expectedErrorCode, re.getErrorCode());
-      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-      Assert.assertNotNull("Exception should have been thrown", callback.exception);
-      re = (RestServiceException) callback.exception;
-      Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
     };
 
-    TestUtils.assertException(ExecutionException.class,
-        () -> securityService.processRequest(restRequest, callback).get(), errorAction);
+    TestUtils.assertException(ExecutionException.class, () -> securityService.processRequest(restRequest).get(),
+        errorAction);
     TestUtils.assertException(ExecutionException.class, () -> securityService.postProcessRequest(restRequest).get(),
         errorAction);
   }
@@ -352,7 +337,7 @@ public class AmbrySecurityServiceTest {
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     Assert.assertEquals("ProcessResponse status should have been set",
@@ -377,7 +362,7 @@ public class AmbrySecurityServiceTest {
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", headers);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
@@ -431,7 +416,7 @@ public class AmbrySecurityServiceTest {
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", headers);
-    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     Assert.assertEquals("ProcessResponse status should have been set",
@@ -448,7 +433,7 @@ public class AmbrySecurityServiceTest {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
-    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
+    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback);
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     Assert.assertEquals("ProcessResponse status should have been set ", ResponseStatus.Ok,
@@ -476,7 +461,7 @@ public class AmbrySecurityServiceTest {
     SecurityServiceCallback callback = new SecurityServiceCallback();
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", null);
-    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback).get();
+    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO, callback);
     Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
     Assert.assertNull("Exception should not have been thrown", callback.exception);
     Assert.assertEquals("ProcessResponse status should have been set", ResponseStatus.Created,
@@ -502,19 +487,11 @@ public class AmbrySecurityServiceTest {
       BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode) throws Exception {
     RestRequest restRequest = createRestRequest(restMethod, "/", null);
     SecurityServiceCallback callback = new SecurityServiceCallback();
-    try {
-      securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback).get();
-      Assert.fail("Should have thrown Exception");
-    } catch (ExecutionException e) {
-      Assert.assertTrue("Exception should have been an instance of RestServiceException",
-          e.getCause() instanceof RestServiceException);
-      RestServiceException re = (RestServiceException) e.getCause();
-      Assert.assertEquals("Unexpected RestServerErrorCode (Future)", expectedErrorCode, re.getErrorCode());
-      Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
-      Assert.assertNotNull("Exception should have been thrown", callback.exception);
-      re = (RestServiceException) callback.exception;
-      Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
-    }
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo, callback);
+    Assert.assertTrue("Callback should have been invoked", callback.callbackLatch.await(1, TimeUnit.SECONDS));
+    Assert.assertNotNull("Exception should have been thrown", callback.exception);
+    RestServiceException re = (RestServiceException) callback.exception;
+    Assert.assertEquals("Unexpected RestServerErrorCode (Callback)", expectedErrorCode, re.getErrorCode());
   }
 
   /**

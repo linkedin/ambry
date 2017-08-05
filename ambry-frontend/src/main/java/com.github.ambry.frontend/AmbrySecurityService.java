@@ -33,7 +33,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Date;
 import java.util.GregorianCalendar;
-import java.util.concurrent.Future;
 
 
 /**
@@ -53,7 +52,7 @@ class AmbrySecurityService implements SecurityService {
   }
 
   @Override
-  public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
+  public void processRequest(RestRequest restRequest, Callback<Void> callback) {
     Exception exception = null;
     frontendMetrics.securityServiceProcessRequestRate.mark();
     long startTimeMs = System.currentTimeMillis();
@@ -63,12 +62,7 @@ class AmbrySecurityService implements SecurityService {
       throw new IllegalArgumentException("RestRequest is null");
     }
     frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    FutureResult<Void> futureResult = new FutureResult<Void>();
-    if (callback != null) {
-      callback.onCompletion(null, exception);
-    }
-    futureResult.done(null, exception);
-    return futureResult;
+    callback.onCompletion(null, exception);
   }
 
   @Override
@@ -86,7 +80,7 @@ class AmbrySecurityService implements SecurityService {
   }
 
   @Override
-  public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+  public void processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback) {
     Exception exception = null;
     frontendMetrics.securityServiceProcessResponseRate.mark();
@@ -150,11 +144,7 @@ class AmbrySecurityService implements SecurityService {
       }
     }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    futureResult.done(null, exception);
-    if (callback != null) {
-      callback.onCompletion(null, exception);
-    }
-    return futureResult;
+    callback.onCompletion(null, exception);
   }
 
   @Override

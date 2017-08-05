@@ -32,11 +32,9 @@ public interface SecurityService extends Closeable {
    * Perform security validations (if any) on the {@link RestRequest} asynchronously and invokes the
    * {@link Callback} when the validation completes.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
-   * @param callback The {@link Callback} which will be invoked on the completion of the request.
-   * @return A future that would contain information about whether processing of request succeeded or not,
-   * eventually.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.
    */
-  Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback);
+  void processRequest(RestRequest restRequest, Callback<Void> callback);
 
   /**
    * Perform security validations (if any) on the {@link RestRequest} when it has been fully parsed. That is, when the
@@ -55,12 +53,22 @@ public interface SecurityService extends Closeable {
    * @param restRequest {@link RestRequest} whose response have to be validated
    * @param responseChannel the {@link RestResponseChannel} over which the response is sent
    * @param blobInfo the {@link BlobInfo} pertaining to the rest request made
-   * @param callback The {@link Callback} which will be invoked on the completion of the request.
-   * @return A future that would contain information about whether processing of request succeeded or not,
-   * eventually.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.
    */
-  Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+  void processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback);
+
+  /**
+   * Similar to {@link #processRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+   * a callback.
+   * @param restRequest {@link RestRequest} upon which validations has to be performed
+   * @return a {@link Future} that is completed when the post-processing is done.
+   */
+  default Future<Void> processRequest(RestRequest restRequest) {
+    FutureResult<Void> futureResult = new FutureResult<>();
+    processRequest(restRequest, futureResult::done);
+    return futureResult;
+  }
 
   /**
    * Similar to {@link #postProcessRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
@@ -71,6 +79,21 @@ public interface SecurityService extends Closeable {
   default Future<Void> postProcessRequest(RestRequest restRequest) {
     FutureResult<Void> futureResult = new FutureResult<>();
     postProcessRequest(restRequest, futureResult::done);
+    return futureResult;
+  }
+
+  /**
+   * Similar to {@link #processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} but returns a
+   * {@link Future} instead of requiring a callback.
+   * @param restRequest {@link RestRequest} whose response have to be validated
+   * @param responseChannel the {@link RestResponseChannel} over which the response is sent
+   * @param blobInfo the {@link BlobInfo} pertaining to the rest request made
+   * @return a {@link Future} that is completed when the post-processing is done.
+   */
+  default Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel,
+      BlobInfo blobInfo) {
+    FutureResult<Void> futureResult = new FutureResult<>();
+    processResponse(restRequest, responseChannel, blobInfo, futureResult::done);
     return futureResult;
   }
 }
