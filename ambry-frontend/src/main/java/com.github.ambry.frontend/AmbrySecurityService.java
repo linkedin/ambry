@@ -33,7 +33,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.Date;
 import java.util.GregorianCalendar;
-import java.util.concurrent.Future;
 
 
 /**
@@ -53,7 +52,7 @@ class AmbrySecurityService implements SecurityService {
   }
 
   @Override
-  public Future<Void> processRequest(RestRequest restRequest, Callback<Void> callback) {
+  public void processRequest(RestRequest restRequest, Callback<Void> callback) {
     Exception exception = null;
     frontendMetrics.securityServiceProcessRequestRate.mark();
     long startTimeMs = System.currentTimeMillis();
@@ -62,17 +61,26 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest == null) {
       throw new IllegalArgumentException("RestRequest is null");
     }
-    FutureResult<Void> futureResult = new FutureResult<Void>();
-    if (callback != null) {
-      callback.onCompletion(null, exception);
-    }
-    futureResult.done(null, exception);
     frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    return futureResult;
+    callback.onCompletion(null, exception);
   }
 
   @Override
-  public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
+  public void postProcessRequest(RestRequest restRequest, Callback<Void> callback) {
+    Exception exception = null;
+    frontendMetrics.securityServicePostProcessRequestRate.mark();
+    long startTimeMs = System.currentTimeMillis();
+    if (!isOpen) {
+      exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
+    } else if (restRequest == null || callback == null) {
+      throw new IllegalArgumentException("RestRequest or Callback is null");
+    }
+    frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+    callback.onCompletion(null, exception);
+  }
+
+  @Override
+  public void processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback) {
     Exception exception = null;
     frontendMetrics.securityServiceProcessResponseRate.mark();
@@ -135,12 +143,8 @@ class AmbrySecurityService implements SecurityService {
         exception = e;
       }
     }
-    futureResult.done(null, exception);
-    if (callback != null) {
-      callback.onCompletion(null, exception);
-    }
     frontendMetrics.securityServiceProcessResponseTimeInMs.update(System.currentTimeMillis() - startTimeMs);
-    return futureResult;
+    callback.onCompletion(null, exception);
   }
 
   @Override

@@ -22,14 +22,14 @@ public class ContainerBlobsResource implements AclService.Resource {
   private static final String RESOURCE_TYPE = "ContainerBlobs";
   private static final String SEPARATOR = "_";
 
-  private final Container container;
+  private final String resourceId;
 
   /**
    * Construct the resource from a container.
    * @param container the {@link Container}
    */
   public ContainerBlobsResource(Container container) {
-    this.container = container;
+    resourceId = container.getParentAccountId() + SEPARATOR + container.getId();
   }
 
   /**
@@ -47,6 +47,25 @@ public class ContainerBlobsResource implements AclService.Resource {
    */
   @Override
   public String getResourceId() {
-    return container.getParentAccountId() + SEPARATOR + container.getId();
+    return resourceId;
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    ContainerBlobsResource that = (ContainerBlobsResource) o;
+
+    return resourceId.equals(that.resourceId);
+  }
+
+  @Override
+  public int hashCode() {
+    return resourceId.hashCode();
   }
 }
