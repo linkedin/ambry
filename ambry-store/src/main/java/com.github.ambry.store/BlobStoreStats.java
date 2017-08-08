@@ -378,7 +378,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         referenceTimeInMs);
     long startTimeMs = time.milliseconds();
     Map<StoreKey, Long> deletedKeys = new HashMap<>();
-    NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>();
+    NavigableMap<String, Long> validSizePerLogSegment = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
     int indexSegmentCount = 0;
     for (IndexSegment indexSegment : index.getIndexSegments().descendingMap().values()) {
       if (!enabled.get()) {

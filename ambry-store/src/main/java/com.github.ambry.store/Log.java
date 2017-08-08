@@ -309,7 +309,7 @@ class Log implements Write {
 
   /**
    * Initializes the log.
-   * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log.
+   * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log. These are not in any order
    * @param segmentCapacityInBytes the capacity of a single {@link LogSegment}.
    * @throws IOException if there is any I/O error during initialization.
    */
@@ -319,9 +319,10 @@ class Log implements Write {
       segmentsToLoad = Collections.singletonList(checkArgsAndGetFirstSegment(segmentCapacityInBytes));
     }
 
-    LogSegment firstSegment = segmentsToLoad.get(0);
-    long totalSegments = firstSegment.getName().isEmpty() ? 1 : capacityInBytes / firstSegment.getCapacityInBytes();
+    LogSegment anySegment = segmentsToLoad.get(0);
+    long totalSegments = anySegment.getName().isEmpty() ? 1 : capacityInBytes / anySegment.getCapacityInBytes();
     for (LogSegment segment : segmentsToLoad) {
+      // putting the segments in the map orders them
       segmentsByName.put(segment.getName(), segment);
     }
     remainingUnallocatedSegments.set(totalSegments - segmentsByName.size());
@@ -466,7 +467,8 @@ class Log implements Write {
 
   /**
    * Gets the {@link FileSpan} for a message that is written starting at {@code endOffsetOfPrevMessage} and is of size
-   * {@code size}.
+   * {@code size}. This function is safe to use only immediately after a write to the log to get the {@link FileSpan}
+   * for an index entry.
    * @param endOffsetOfPrevMessage the end offset of the message that is before this one.
    * @param size the size of the write.
    * @return the {@link FileSpan} for a message that is written starting at {@code endOffsetOfPrevMessage} and is of

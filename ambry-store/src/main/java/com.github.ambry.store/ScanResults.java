@@ -55,8 +55,8 @@ class ScanResults {
     long containerBucketTimeMs = startTimeInMs;
     long logSegmentBucketTimeMs = startTimeInMs - logSegmentForecastOffsetMs;
     for (int i = 0; i < bucketCount; i++) {
-      containerBuckets.put(containerBucketTimeMs, new HashMap<String, Map<String, Long>>());
-      logSegmentBuckets.put(logSegmentBucketTimeMs, new TreeMap<String, Long>());
+      containerBuckets.put(containerBucketTimeMs, new HashMap<>());
+      logSegmentBuckets.put(logSegmentBucketTimeMs, new TreeMap<>(LogSegmentNameHelper.COMPARATOR));
       containerBucketTimeMs += bucketSpanInMs;
       logSegmentBucketTimeMs += bucketSpanInMs;
     }
