@@ -30,6 +30,8 @@ import static com.github.ambry.router.CryptoUtils.*;
  */
 public class DefaultCryptoServiceTest {
 
+  private static final int maxDataSize = 10000;
+
   /**
    * Tests basic encryption and decryption for different sizes of keys and random data
    */
@@ -43,7 +45,7 @@ public class DefaultCryptoServiceTest {
       CryptoService<SecretKeySpec> cryptoService =
           new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
       for (int i = 0; i < 5; i++) {
-        int size = TestUtils.RANDOM.nextInt(100);
+        int size = TestUtils.RANDOM.nextInt(maxDataSize);
         byte[] randomData = new byte[size];
         TestUtils.RANDOM.nextBytes(randomData);
         ByteBuffer toEncrypt = ByteBuffer.wrap(randomData);
@@ -66,7 +68,7 @@ public class DefaultCryptoServiceTest {
     SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
     CryptoService<SecretKeySpec> cryptoService =
         new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
-    int size = TestUtils.RANDOM.nextInt(100000);
+    int size = TestUtils.RANDOM.nextInt(maxDataSize);
     byte[] randomData = new byte[size];
     TestUtils.RANDOM.nextBytes(randomData);
     ByteBuffer toDecrypt = ByteBuffer.wrap(randomData);
@@ -85,5 +87,17 @@ public class DefaultCryptoServiceTest {
     // happy path
     VerifiableProperties verifiableProperties = new VerifiableProperties((new Properties()));
     new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
+
+    // unrecognized mode
+    String key = getRandomKey(64);
+    Properties props = getKMSProperties(key);
+    props.setProperty("crypto.service.encryption.decryption.mode", "CBC");
+    verifiableProperties = new VerifiableProperties((props));
+    try {
+      CryptoService<SecretKeySpec> cryptoService =
+          new DefaultCryptoServiceFactory(verifiableProperties).getCryptoService();
+      Assert.fail("IllegalArgumentException should have thrown for un-recognized mode ");
+    } catch (IllegalArgumentException e) {
+    }
   }
 }
