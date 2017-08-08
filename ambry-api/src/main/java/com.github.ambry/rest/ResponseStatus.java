@@ -79,6 +79,8 @@ public enum ResponseStatus {
         return ResponseStatus.NotFound;
       case BadRequest:
       case InvalidArgs:
+      case InvalidAccount:
+      case InvalidContainer:
       case InvalidRequestState:
       case MalformedRequest:
       case MissingArgs:

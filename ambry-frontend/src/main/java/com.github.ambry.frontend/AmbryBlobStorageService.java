@@ -1046,16 +1046,14 @@ class AmbryBlobStorageService implements BlobStorageService {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithAccountAndContainerName);
       frontendMetrics.putWithAccountAndContainerHeaderRate.mark();
       injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest);
+    } else if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
+      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
+      frontendMetrics.putWithServiceIdForAccountNameRate.mark();
+      injectAccountAndContainerUsingServiceId(restRequest);
     } else {
-      if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
-        ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
-        frontendMetrics.putWithServiceIdForAccountNameRate.mark();
-        injectAccountAndContainerUsingServiceId(restRequest);
-      } else {
-        throw new RestServiceException(
-            "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
-            RestServiceErrorCode.BadRequest);
-      }
+      throw new RestServiceException(
+          "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
+          RestServiceErrorCode.BadRequest);
     }
   }
 
@@ -1124,9 +1122,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       blobId = new BlobId(blobIdStr, clusterMap);
     } catch (Exception e) {
-      throw new RestServiceException(
-          "Invalid blob id=" + blobIdStr + " during injecting account and container from blobId string",
-          RestServiceErrorCode.BadRequest);
+      throw new RestServiceException("Invalid blob id=" + blobIdStr, RestServiceErrorCode.BadRequest);
     }
     Account targetAccount = accountService.getAccountById(blobId.getAccountId());
     if (targetAccount == null) {

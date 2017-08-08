@@ -20,9 +20,6 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
-import com.github.ambry.account.InMemoryUnknownAccountServiceFactory;
-import com.github.ambry.account.MockHelixAccountServiceFactory;
-import com.github.ambry.account.MockNotifier;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -30,9 +27,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdV2;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -79,6 +74,7 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -100,6 +96,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -107,12 +105,14 @@ import static org.junit.Assert.*;
 /**
  * Unit tests for {@link AmbryBlobStorageService}.
  */
+@RunWith(Parameterized.class)
 public class AmbryBlobStorageServiceTest {
-  private static final Random random = new Random();
-  private static final VerifiableProperties verifiableProperties;
-  private static final String ZK_CONNECT_STRING = "dummyHost:dummyPort";
-  private static final String STORE_ROOT_PATH = "/ambry_test/helix_account_service";
-  private static final Properties helixConfigProps = new Properties();
+  private static final Random random = TestUtils.RANDOM;
+  private static final Account refAccount;
+  private static final Container refContainer;
+  private static final Container refDefaultPublicContainer;
+  private static final Container refDefaultPrivateContainer;
+  private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
   private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
   private final FrontendConfig frontendConfig;
@@ -123,32 +123,66 @@ public class AmbryBlobStorageServiceTest {
   private final ClusterMap clusterMap;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
-  private AccountServiceFactory accountServiceFactory;
+  private final AccountServiceFactory accountServiceFactory;
+  private final VerifiableProperties verifiableProperties;
+  private final boolean shouldAllowServiceIdBasedPut;
   private AmbryBlobStorageService ambryBlobStorageService;
-  private Account refAccount;
-  private Container refContainer;
-  private Container refDefaultPublicContainer;
-  private Container refDefaultPrivateContainer;
 
+  /**
+   * Randomly generates a reference {@link Account} and {@link Container}s.
+   */
   static {
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
-        ZK_CONNECT_STRING);
-    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
-    verifiableProperties = new VerifiableProperties(helixConfigProps);
+    short refAccountId = Utils.getRandomShort(random);
+    String refAccountName = UtilsTest.getRandomString(10);
+    Account.AccountStatus refAccountStatus =
+        random.nextBoolean() ? Account.AccountStatus.ACTIVE : Account.AccountStatus.INACTIVE;
+    short refContainerId = Utils.getRandomShort(random);
+    String refContainerName = UtilsTest.getRandomString(10);
+    Container.ContainerStatus refContainerStatus =
+        random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
+    String refContainerDescription = UtilsTest.getRandomString(10);
+    boolean refContainerPrivacy = random.nextBoolean();
+    refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
+        refContainerPrivacy, refAccountId).build();
+    refDefaultPublicContainer =
+        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
+            Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
+            Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
+    refDefaultPrivateContainer =
+        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
+            Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
+            Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
+    refAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
+        Arrays.asList(refDefaultPublicContainer, refDefaultPrivateContainer, refContainer)).build();
+  }
+
+  /**
+   * Running for both {@link FrontendConfig#frontendAllowServiceIdBasedPostRequest} is {@code true} and {@code false}.
+   * @return an array with {@code true} and {@code false}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{true}, {false}});
   }
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
+   * @param shouldAllowServiceIdBasedPut {@code true} if PUT using serviceId as account name is allowed, {@code false}
+   *                                                 otherwise.
    * @throws InstantiationException
    * @throws IOException
    */
-  public AmbryBlobStorageServiceTest() throws Exception {
+  public AmbryBlobStorageServiceTest(boolean shouldAllowServiceIdBasedPut) throws Exception {
+    this.shouldAllowServiceIdBasedPut = shouldAllowServiceIdBasedPut;
+    configProps.setProperty("frontend.allow.service.id.based.post.request",
+        String.valueOf(shouldAllowServiceIdBasedPut));
+    verifiableProperties = new VerifiableProperties(configProps);
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null);
-    Notifier notifier = new MockNotifier();
-    accountServiceFactory = new InMemoryUnknownAccountServiceFactory(verifiableProperties, metricRegistry, notifier);
+    accountServiceFactory = new FrontendTestAccountServiceFactory();
+    accountServiceFactory.getAccountService().updateAccounts(Collections.singletonList(refAccount));
     clusterMap = new MockClusterMap();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
@@ -396,12 +430,13 @@ public class AmbryBlobStorageServiceTest {
     String contentType = "application/octet-stream";
     String ownerId = "postGetHeadDeleteOwnerID";
     JSONObject headers = new JSONObject();
-    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId, null, null);
+    setAmbryHeadersForPut(headers, 7200, false, serviceId, contentType, ownerId, refAccount.getName(),
+        refContainer.getName());
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
-    String blobId = postBlobAndVerify(headers, content, Account.UNKNOWN_ACCOUNT, Container.DEFAULT_PUBLIC_CONTAINER);
+    String blobId = postBlobAndVerify(headers, content, refAccount, refContainer);
 
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
@@ -434,34 +469,7 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests injecting target {@link Account} and {@link Container} when putting blobs and the {@link AccountService} is
-   * {@link com.github.ambry.account.InMemoryUnknownAccountService}. The expected behavior should be:
-   *
-   * accountHeader    containerHeader   serviceIdHeader     expected Error    expected account      expected container
-   * null             null              "someServiceId"     null              UNKNOWN_ACCOUNT       UNKNOWN_CONTAINER
-   * null             someName          "someServiceId"     MissingArgs       null                  null
-   * null             C#UNKOWN          "someServiceId"     InvalidContainer  null                  null
-   * someName         null              "someServiceId"     MissingArgs       null                  null
-   * someName         someName          "someServiceId"     InvalidAccount    null                  null
-   * someName         C#UNKOWN          "someServiceId"     InvalidContainer  null                  null
-   * A#UNKNOWN        null              "someServiceId"     InvalidAccount    null                  null
-   * A#UNKNOWN        someName          "someServiceId"     InvalidAccount    null                  null
-   * A#UNKNOWN        C#UNKOWN          "someServiceId"     InvalidAccount    null                  null
-   * null             null              A#UNKNOWN           InvalidAccount    null                  null
-   * null             someName          A#UNKNOWN           InvalidAccount    null                  null
-   * null             C#UNKOWN          A#UNKNOWN           InvalidAccount    null                  null
-   *
-   * @throws Exception
-   */
-  @Test
-  public void injectionForPutUsingInMemoryUnknownAccountServiceTest() throws Exception {
-    putBlobUsingUnknownAccountServiceAndVerify(true);
-    putBlobUsingUnknownAccountServiceAndVerify(false);
-  }
-
-  /**
-   * Tests injecting target {@link Account} and {@link Container} when putting blobs and the {@link AccountService} is
-   * {@link com.github.ambry.account.HelixAccountService}. The {@link com.github.ambry.account.HelixAccountService} is
+   * Tests injecting target {@link Account} and {@link Container} for PUT requests. The {@link AccountService} is
    * prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
    *
    * accountHeader    containerHeader   serviceIdHeader     expected Error      injected account      injected container
@@ -493,53 +501,14 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void injectionForPutUsingHelixAccountServiceTest() throws Exception {
-    putBlobUsingHelixAccountServiceAndVerify(true);
-    putBlobUsingHelixAccountServiceAndVerify(false);
+  public void injectionAccountAndContainerForPutTest() throws Exception {
+    injectAccountAndContainerForPutAndVerify(true, shouldAllowServiceIdBasedPut);
+    injectAccountAndContainerForPutAndVerify(false, shouldAllowServiceIdBasedPut);
   }
 
   /**
-   * Tests injecting target {@link Account} and {@link Container} when get/head/delete blobs and the {@link AccountService}
-   * is {@link com.github.ambry.account.InMemoryUnknownAccountService}. The expected behavior should be:
-   *
-   * AId in blobId    CId in blobId     expected Error      injected account      injected container
-   * someAId           someCId          InvalidAccount      null                  null
-   * UNKNOWN           UNKNOWN          NotFound            UNKNOWN               UNKNOWN
-   * UNKNOWN           someCId          InvalidContainer    null                  null
-   * someAId           UNKNOWN          InvalidAccount      null                  null
-   *
-   * @throws Exception
-   */
-  @Test
-  public void injectionForGetHeadDeleteUsingInMemoryUnknownAccountServiceTest() throws Exception {
-    generateRefAccountAndContainer();
-
-    // aid=refAId, cid=refCId
-    String blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-        refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
-
-    // aid=unknownAId, cid=unknownCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
-        RestServiceErrorCode.NotFound);
-
-    // aid=unknownAId, cid=refCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
-
-    // aid=refAId, cid=unknownCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
-  }
-
-  /**
-   * Tests injecting target {@link Account} and {@link Container} when get/head/delete blobs and the {@link AccountService}
-   * is {@link com.github.ambry.account.HelixAccountService}. The {@link com.github.ambry.account.HelixAccountService} is
-   * prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
+   * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE requests. The {@link AccountService}
+   * is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
    *
    * AId in blobId    CId in blobId     expected Error      injected account      injected container
    * realAId           realCId          NotFound            refAccount            refContainer
@@ -555,9 +524,8 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void injectionForGetHeadDeleteUsingHelixAccountServiceTest() throws Exception {
-    generateRefAccountAndContainer();
-    prePopulateHelixAccountService();
+  public void injectionAccountAndContainerForGetHeadDeleteTest() throws Exception {
+    populateAccountService();
 
     // aid=refAId, cid=refCId
     String blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
@@ -1011,7 +979,7 @@ public class AmbryBlobStorageServiceTest {
         case POST:
           JSONObject headers = new JSONObject();
           setAmbryHeadersForPut(headers, Utils.Infinite_Time, false, "test-serviceID", "text/plain", "test-ownerId",
-              null, null);
+              refAccount.getName(), refContainer.getName());
           restRequest = createRestRequest(restMethod, "/", headers, null);
           doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");
@@ -1413,7 +1381,7 @@ public class AmbryBlobStorageServiceTest {
       List<ByteBuffer> contents = null;
       if (restMethod.equals(RestMethod.POST)) {
         setAmbryHeadersForPut(headers, 7200, false, "doExternalServicesBadInputTest", "application/octet-stream",
-            "doExternalServicesBadInputTest", null, null);
+            "doExternalServicesBadInputTest", refAccount.getName(), refContainer.getName());
         contents = new ArrayList<>(1);
         contents.add(null);
       }
@@ -1456,7 +1424,7 @@ public class AmbryBlobStorageServiceTest {
           testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
           JSONObject headers = new JSONObject();
           setAmbryHeadersForPut(headers, 7200, false, "routerExceptionPipelineTest", "application/octet-stream",
-              "routerExceptionPipelineTest", null, null);
+              "routerExceptionPipelineTest", refAccount.getName(), refContainer.getName());
           checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
           break;
         case DELETE:
@@ -1591,49 +1559,15 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Starts an {@link AmbryBlobStorageService} that employs a {@link com.github.ambry.account.HelixAccountService}, and
-   * prepopulates the {@link com.github.ambry.account.HelixAccountService} with a reference {@link Account} and
-   * {@link Account#UNKNOWN_ACCOUNT}.
+   * Prepopulates the {@link AccountService} with a reference {@link Account} and {@link Account#UNKNOWN_ACCOUNT}.
    * @return The {@link AccountService} used to update {@link Account}.
    * @throws Exception
    */
-  private AccountService prePopulateHelixAccountService() throws Exception {
-    accountServiceFactory =
-        new MockHelixAccountServiceFactory(verifiableProperties, metricRegistry, new MockNotifier<>(), true);
-    ambryBlobStorageService = getAmbryBlobStorageService();
-    responseHandler.start();
-    ambryBlobStorageService.start();
-    AccountService accountService = accountServiceFactory.getAccountService();
+  private AccountService populateAccountService() throws Exception {
+    FrontendTestAccountService accountService = (FrontendTestAccountService) accountServiceFactory.getAccountService();
+    accountService.clear();
     accountService.updateAccounts(Lists.newArrayList(refAccount, Account.UNKNOWN_ACCOUNT));
     return accountService;
-  }
-
-  /**
-   * Randomly generates a reference {@link Account} and a {@link Container}.
-   */
-  private void generateRefAccountAndContainer() {
-    short refAccountId = Utils.getRandomShort(random);
-    String refAccountName = UtilsTest.getRandomString(10);
-    Account.AccountStatus refAccountStatus =
-        random.nextBoolean() ? Account.AccountStatus.ACTIVE : Account.AccountStatus.INACTIVE;
-    short refContainerId = Utils.getRandomShort(random);
-    String refContainerName = UtilsTest.getRandomString(10);
-    Container.ContainerStatus refContainerStatus =
-        random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
-    String refContainerDescription = UtilsTest.getRandomString(10);
-    boolean refContainerPrivacy = random.nextBoolean();
-    refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerPrivacy, refAccountId).build();
-    refDefaultPublicContainer =
-        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
-            Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
-            Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
-    refDefaultPrivateContainer =
-        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
-            Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
-            Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
-    refAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
-        Arrays.asList(refDefaultPublicContainer, refDefaultPrivateContainer, refContainer)).build();
   }
 
   /**
@@ -1655,75 +1589,22 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Puts blobs when using {@link com.github.ambry.account.InMemoryUnknownAccountService}.
+   * Puts blobs and verify injected target {@link Account} and {@link Container}.
    * @param isPrivate {@code true} to put private blobs, otherwise public blobs.
+   * @param shouldAllowServiceIdBasedPut {@code true} if PUT requests with serviceId parsed as {@link Account} name is
+   *                                                 allowed; {@code false} otherwise.
    * @throws Exception
    */
-  private void putBlobUsingUnknownAccountServiceAndVerify(boolean isPrivate) throws Exception {
-    String blobId;
+  private void injectAccountAndContainerForPutAndVerify(boolean isPrivate, boolean shouldAllowServiceIdBasedPut)
+      throws Exception {
+    AccountService accountService = populateAccountService();
 
-    // should succeed, and the target account and container are set to UNKNOWN.
-    blobId = putBlobAndVerifyWithAccountAndContainer(null, null, "someServiceId", isPrivate, Account.UNKNOWN_ACCOUNT,
-        isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER : Container.DEFAULT_PUBLIC_CONTAINER, null);
-    verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER, null);
-
-    // should fail, because accountName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "someServiceId", isPrivate, null, null,
-        RestServiceErrorCode.MissingArgs);
-
-    // should fail, because the container name is specified but not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, "someServiceId", isPrivate, null,
-        null, RestServiceErrorCode.InvalidContainer);
-
-    // should fail, because containerName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", null, "someServiceId", isPrivate, null, null,
-        RestServiceErrorCode.MissingArgs);
-
-    // should fail, because the account name is specified but does not exist in account service.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", "dummyContainerName", "someServiceId", isPrivate, null,
-        null, RestServiceErrorCode.InvalidAccount);
-
-    // should fail, because the account name is specified but does not exist in account service.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", Container.UNKNOWN_CONTAINER_NAME, "someServiceId",
-        isPrivate, null, null, RestServiceErrorCode.InvalidContainer);
-
-    // should fail, because the account name is specified but not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, null, "someServiceId", isPrivate, null, null,
-        RestServiceErrorCode.InvalidAccount);
-
-    // should fail, because the account name is specified but not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, "dummyContainerName", "someServiceId",
-        isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
-
-    // should fail, because the account name is specified but not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, Container.UNKNOWN_CONTAINER_NAME,
-        "someServiceId", isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
-
-    // should fail, because account name is specified implicitly through service id, and the account name is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, null, Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null, null,
-        RestServiceErrorCode.InvalidAccount);
-
-    // should fail, because the target container is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null,
-        null, RestServiceErrorCode.InvalidAccount);
-
-    // should fail, because the container name is specified but not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, Account.UNKNOWN_ACCOUNT_NAME,
-        isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
-  }
-
-  /**
-   * Puts blobs when using {@link com.github.ambry.account.HelixAccountService}.
-   * @param isPrivate {@code true} to put private blobs, otherwise public blobs.
-   * @throws Exception
-   */
-  private void putBlobUsingHelixAccountServiceAndVerify(boolean isPrivate) throws Exception {
-    generateRefAccountAndContainer();
-    AccountService accountService = prePopulateHelixAccountService();
-
-    // should succeed, since this is the current type of request with only a non-null serviceId.
-    putBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate, Account.UNKNOWN_ACCOUNT,
-        isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER : Container.DEFAULT_PUBLIC_CONTAINER, null);
+    // should succeed when serviceId-based PUT requests are allowed.
+    putBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate,
+        shouldAllowServiceIdBasedPut ? Account.UNKNOWN_ACCOUNT : null,
+        shouldAllowServiceIdBasedPut ? (isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER
+            : Container.DEFAULT_PUBLIC_CONTAINER) : null,
+        shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
 
     // should fail, because accountName needs to be specified.
     putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", isPrivate, null, null,
@@ -1805,10 +1686,12 @@ public class AmbryBlobStorageServiceTest {
     putBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null,
         null, RestServiceErrorCode.InvalidAccount);
 
-    // should succeed, but this is a special case that account is created without the legacy containers for public and private
-    // put. It should fall back to the frontend behavior before containerization.
-    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-        isPrivate ? refDefaultPrivateContainer : refDefaultPublicContainer, null);
+    // should succeed if the serviceId-based PUT requests are allowed, but this is a special case that account is
+    // created without the legacy containers for public and private put.
+    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate,
+        shouldAllowServiceIdBasedPut ? refAccount : null,
+        shouldAllowServiceIdBasedPut ? (isPrivate ? refDefaultPrivateContainer : refDefaultPublicContainer) : null,
+        shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
 
     // should fail, because accountName needs to be specified.
     putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
@@ -1830,24 +1713,31 @@ public class AmbryBlobStorageServiceTest {
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", true,
             refAccount.getId()).build();
-    refAccount = new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
-        .addOrUpdateContainer(legacyContainerForPublicBlob)
-        .build();
-    accountService.updateAccounts(Collections.singletonList(refAccount));
+    Account accountWithTwoDefaultContainers =
+        new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
+            .addOrUpdateContainer(legacyContainerForPublicBlob)
+            .build();
+    accountService.updateAccounts(Collections.singletonList(accountWithTwoDefaultContainers));
     if (isPrivate) {
-      // should succeed.
-      putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-          refAccount.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID), null);
+      // should succeed if serviceId-based PUT requests are allowed.
+      putBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(), isPrivate,
+          shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
+          shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers.getContainerById(
+              Container.DEFAULT_PRIVATE_CONTAINER_ID) : null,
+          shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
       // should fail, because accountName needs to be specified.
-      putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
-          RestServiceErrorCode.MissingArgs);
+      putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
+          isPrivate, null, null, RestServiceErrorCode.MissingArgs);
     } else {
-      // should succeed.
-      putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate, refAccount,
-          refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID), null);
+      // should succeed if serviceId-based PUT requests are allowed.
+      putBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(), isPrivate,
+          shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
+          shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers.getContainerById(
+              Container.DEFAULT_PUBLIC_CONTAINER_ID) : null,
+          shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
       // should fail, because accountName needs to be specified.
-      putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
-          RestServiceErrorCode.MissingArgs);
+      putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
+          isPrivate, null, null, RestServiceErrorCode.MissingArgs);
     }
   }
 }
@@ -2243,5 +2133,67 @@ class FrontendTestRouter implements Router {
       callback.onCompletion(result, exception);
     }
     return futureResult;
+  }
+}
+
+/**
+ * A singleton implementation of {@link AccountServiceFactory} that returns an instance of {@link FrontendTestAccountService}.
+ */
+class FrontendTestAccountServiceFactory implements AccountServiceFactory {
+  private AccountService accountService = null;
+
+  @Override
+  public AccountService getAccountService() throws InstantiationException {
+    if (accountService == null) {
+      accountService = new FrontendTestAccountService();
+      return accountService;
+    } else {
+      return accountService;
+    }
+  }
+}
+
+/**
+ * Implementation of {@link AccountService} for test. This implementation is not thread-safe.
+ */
+class FrontendTestAccountService implements AccountService {
+  private final Map<Short, Account> idToAccountMap = new HashMap<>();
+  private final Map<String, Account> nameToAccountMap = new HashMap<>();
+
+  @Override
+  public Account getAccountById(short accountId) {
+    return idToAccountMap.get(accountId);
+  }
+
+  @Override
+  public Account getAccountByName(String accountName) {
+    return nameToAccountMap.get(accountName);
+  }
+
+  @Override
+  public boolean updateAccounts(Collection<Account> accounts) {
+    for (Account account : accounts) {
+      idToAccountMap.put(account.getId(), account);
+      nameToAccountMap.put(account.getName(), account);
+    }
+    return true;
+  }
+
+  @Override
+  public Collection<Account> getAllAccounts() {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public void close() throws IOException {
+    // no op
+  }
+
+  /**
+   * Clears all the accounts in this {@code AccountService}.
+   */
+  void clear() {
+    idToAccountMap.clear();
+    nameToAccountMap.clear();
   }
 }

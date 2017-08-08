@@ -156,7 +156,7 @@ class FrontendMetrics {
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
    */
   public FrontendMetrics(MetricRegistry metricRegistry) {
-    // RestRequestMetrics instancesAmbryBlobStorageServiceTest
+    // RestRequestMetrics instances
     // DELETE
     deleteBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "DeleteBlob", metricRegistry);
     deleteBlobSSLMetrics =
