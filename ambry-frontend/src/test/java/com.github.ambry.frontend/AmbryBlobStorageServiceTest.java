@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.clustermap.ClusterMap;
@@ -84,7 +83,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
@@ -96,8 +94,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -105,9 +101,7 @@ import static org.junit.Assert.*;
 /**
  * Unit tests for {@link AmbryBlobStorageService}.
  */
-@RunWith(Parameterized.class)
 public class AmbryBlobStorageServiceTest {
-  private static final Random random = TestUtils.RANDOM;
   private static final Account refAccount;
   private static final Container refContainer;
   private static final Container refDefaultPublicContainer;
@@ -115,7 +109,6 @@ public class AmbryBlobStorageServiceTest {
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
   private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
-  private final FrontendConfig frontendConfig;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
   private final FrontendTestResponseHandler responseHandler;
@@ -123,25 +116,24 @@ public class AmbryBlobStorageServiceTest {
   private final ClusterMap clusterMap;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
-  private final AccountServiceFactory accountServiceFactory;
-  private final VerifiableProperties verifiableProperties;
-  private final boolean shouldAllowServiceIdBasedPut;
+  private FrontendConfig frontendConfig;
+  private VerifiableProperties verifiableProperties;
+  private boolean shouldAllowServiceIdBasedPut = true;
+  private AccountService accountService = new FrontendTestAccountService();
   private AmbryBlobStorageService ambryBlobStorageService;
 
   /**
    * Randomly generates a reference {@link Account} and {@link Container}s.
    */
   static {
-    short refAccountId = Utils.getRandomShort(random);
+    short refAccountId = Utils.getRandomShort(TestUtils.RANDOM);
     String refAccountName = UtilsTest.getRandomString(10);
-    Account.AccountStatus refAccountStatus =
-        random.nextBoolean() ? Account.AccountStatus.ACTIVE : Account.AccountStatus.INACTIVE;
-    short refContainerId = Utils.getRandomShort(random);
+    Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
+    short refContainerId = Utils.getRandomShort(TestUtils.RANDOM);
     String refContainerName = UtilsTest.getRandomString(10);
-    Container.ContainerStatus refContainerStatus =
-        random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
+    Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
     String refContainerDescription = UtilsTest.getRandomString(10);
-    boolean refContainerPrivacy = random.nextBoolean();
+    boolean refContainerPrivacy = TestUtils.RANDOM.nextBoolean();
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         refContainerPrivacy, refAccountId).build();
     refDefaultPublicContainer =
@@ -157,32 +149,19 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Running for both {@link FrontendConfig#frontendAllowServiceIdBasedPostRequest} is {@code true} and {@code false}.
-   * @return an array with {@code true} and {@code false}.
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true}, {false}});
-  }
-
-  /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
-   * @param shouldAllowServiceIdBasedPut {@code true} if PUT using serviceId as account name is allowed, {@code false}
-   *                                                 otherwise.
    * @throws InstantiationException
    * @throws IOException
    */
-  public AmbryBlobStorageServiceTest(boolean shouldAllowServiceIdBasedPut) throws Exception {
-    this.shouldAllowServiceIdBasedPut = shouldAllowServiceIdBasedPut;
+  public AmbryBlobStorageServiceTest() throws Exception {
+    RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
     verifiableProperties = new VerifiableProperties(configProps);
-    RestRequestMetricsTracker.setDefaults(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null);
-    accountServiceFactory = new FrontendTestAccountServiceFactory();
-    accountServiceFactory.getAccountService().updateAccounts(Collections.singletonList(refAccount));
+    accountService.updateAccounts(Collections.singletonList(refAccount));
     clusterMap = new MockClusterMap();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
@@ -472,54 +451,60 @@ public class AmbryBlobStorageServiceTest {
    * Tests injecting target {@link Account} and {@link Container} for PUT requests. The {@link AccountService} is
    * prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
    *
-   * accountHeader    containerHeader   serviceIdHeader     expected Error      injected account      injected container
-   * null             null              "someServiceId"     null                UNKNOWN_ACCOUNT       UNKNOWN_CONTAINER
-   * null             nonExistName      "someServiceId"     MissingArgs         null                  null
-   * null             C#UNKOWN          "someServiceId"     InvalidContainer    null                  null
-   * null             realCntName       "someServiceId"     MissingArgs         null                  null
-   * A#UNKNOWN        null              "someServiceId"     InvalidAccount      null                  null
-   * A#UNKNOWN        nonExistName      "someServiceId"     InvalidAccount      null                  null
-   * A#UNKNOWN        C#UNKOWN          "someServiceId"     InvalidAccount      null                  null
-   * A#UNKNOWN        realCntName       "someServiceId"     InvalidAccount      null                  null
-   * realAcctName     null              "someServiceId"     MissingArgs         null                  null
-   * realAcctName     nonExistName      "someServiceId"     InvalidContainer    null                  null
-   * realAcctName     C#UNKOWN          "someServiceId"     InvalidContainer    null                  null
-   * realAcctName     realCntName       "someServiceId"     null                realAccount           realContainer
-   * nonExistName     null              "someServiceId"     MissingArgs         null                  null
-   * nonExistName     nonExistName      "someServiceId"     InvalidAccount      null                  null
-   * nonExistName     C#UNKOWN          "someServiceId"     InvalidAccount      null                  null
-   * nonExistName     realCntName       "someServiceId"     InvalidAccount      null                  null
-   * null             null              A#UNKNOWN           InvalidAccount      null                  null
-   * null             nonExistName      A#UNKNOWN           InvalidAccount      null                  null
-   * null             C#UNKOWN          A#UNKNOWN           InvalidAccount      null                  null
-   * null             realCntName       A#UNKNOWN           InvalidAccount      null                  null
-   * null             null              realAcctName        InvalidContainer    null                  null     Note: The account does not have the two default containers for legacy public and private blobs.
-   * null             nonExistName      realAcctName        MissingArgs         null                  null
-   * null             C#UNKOWN          realAcctName        InvalidContainer    null                  null
-   * null             realCntName       realAcctName        MissingArgs         null                  null
-   * null             null              realAcctName        null                realAccount           default pub/private ctn     Note: The account has the two default containers for legacy public and private blobs.
+   * <pre>
+   *   accountHeader    containerHeader   serviceIdHeader     expected Error      injected account      injected container
+   *    null             null              "someServiceId"     null                UNKNOWN_ACCOUNT       UNKNOWN_CONTAINER
+   *    null             nonExistName      "someServiceId"     MissingArgs         null                  null
+   *    null             C#UNKOWN          "someServiceId"     InvalidContainer    null                  null
+   *    null             realCntName       "someServiceId"     MissingArgs         null                  null
+   *    A#UNKNOWN        null              "someServiceId"     InvalidAccount      null                  null
+   *    A#UNKNOWN        nonExistName      "someServiceId"     InvalidAccount      null                  null
+   *    A#UNKNOWN        C#UNKOWN          "someServiceId"     InvalidAccount      null                  null
+   *    A#UNKNOWN        realCntName       "someServiceId"     InvalidAccount      null                  null
+   *    realAcctName     null              "someServiceId"     MissingArgs         null                  null
+   *    realAcctName     nonExistName      "someServiceId"     InvalidContainer    null                  null
+   *    realAcctName     C#UNKOWN          "someServiceId"     InvalidContainer    null                  null
+   *    realAcctName     realCntName       "someServiceId"     null                realAccount           realContainer
+   *    nonExistName     null              "someServiceId"     MissingArgs         null                  null
+   *    nonExistName     nonExistName      "someServiceId"     InvalidAccount      null                  null
+   *    nonExistName     C#UNKOWN          "someServiceId"     InvalidAccount      null                  null
+   *    nonExistName     realCntName       "someServiceId"     InvalidAccount      null                  null
+   *    null             null              A#UNKNOWN           InvalidAccount      null                  null
+   *    null             nonExistName      A#UNKNOWN           InvalidAccount      null                  null
+   *    null             C#UNKOWN          A#UNKNOWN           InvalidAccount      null                  null
+   *    null             realCntName       A#UNKNOWN           InvalidAccount      null                  null
+   *    null             null              realAcctName        InvalidContainer    null                  null     Note: The account does not have the two default containers for legacy public and private blobs.
+   *    null             nonExistName      realAcctName        MissingArgs         null                  null
+   *    null             C#UNKOWN          realAcctName        InvalidContainer    null                  null
+   *    null             realCntName       realAcctName        MissingArgs         null                  null
+   *    null             null              realAcctName        null                realAccount           default pub/private ctn     Note: The account has the two default containers for legacy public and private blobs.
+   * </pre>
    * @throws Exception
    */
   @Test
   public void injectionAccountAndContainerForPutTest() throws Exception {
-    injectAccountAndContainerForPutAndVerify(true, shouldAllowServiceIdBasedPut);
-    injectAccountAndContainerForPutAndVerify(false, shouldAllowServiceIdBasedPut);
+    injectAccountAndContainerForPutAndVerify(true, true);
+    injectAccountAndContainerForPutAndVerify(true, false);
+    injectAccountAndContainerForPutAndVerify(false, true);
+    injectAccountAndContainerForPutAndVerify(false, false);
   }
 
   /**
    * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE requests. The {@link AccountService}
    * is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
    *
-   * AId in blobId    CId in blobId     expected Error      injected account      injected container
-   * realAId           realCId          NotFound            refAccount            refContainer
-   * realAId           UNKNOWN          InvalidContainer    null                  null
-   * realAId           nonExistCId      InvalidContainer    null                  null
-   * UNKNOWN           realCId          InvalidContainer    null                  null
-   * UNKNOWN           UNKNOWN          NotFound            UNKNOWN               UNKNOWN
-   * UNKNOWN           nonExistCId      InvalidContainer    null                  null
-   * nonExistAId       realCId          InvalidAccount      null                  null
-   * nonExistAId       UNKNOWN          InvalidAccount      null                  null
-   * nonExistAId       nonExistCId      InvalidAccount      null                  null
+   * <pre>
+   *   AId in blobId    CId in blobId     expected Error      injected account      injected container
+   *    realAId           realCId          NotFound            refAccount            refContainer       This can succeed if the blob exists in backend.
+   *    realAId           UNKNOWN          InvalidContainer    null                  null
+   *    realAId           nonExistCId      InvalidContainer    null                  null
+   *    UNKNOWN           realCId          InvalidContainer    null                  null
+   *    UNKNOWN           UNKNOWN          NotFound            UNKNOWN               UNKNOWN            This can succeed if the blob exists in backend.
+   *    UNKNOWN           nonExistCId      InvalidContainer    null                  null
+   *    nonExistAId       realCId          InvalidAccount      null                  null
+   *    nonExistAId       UNKNOWN          InvalidAccount      null                  null
+   *    nonExistAId       nonExistCId      InvalidAccount      null                  null
+   * </pre>
    *
    * @throws Exception
    */
@@ -538,7 +523,7 @@ public class AmbryBlobStorageServiceTest {
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
     // aid=refAId, cid=nonExistCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), (short) 1234,
+    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), (short) -1234,
         clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
@@ -555,24 +540,38 @@ public class AmbryBlobStorageServiceTest {
 
     // aid=unknownAId, cid=nonExistCId
     blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        (short) 1234, clusterMap.getWritablePartitionIds().get(0)).getID();
+        (short) -1234, clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
     // aid=nonExistAId, cid=refCId
     blobId =
-        new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) 1234, refContainer.getId(),
+        new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, refContainer.getId(),
             clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
     // aid=nonExistAId, cid=unknownCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) 1234,
+    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
     // aid=nonExistAId, cid=nonExistCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) 1234, (short) 11,
+    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, (short) -11,
         clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
+  }
+
+  /**
+   * Tests a corner case when {@link Account} inquired from {@link AccountService} has a name that does not match the
+   * target account name set by the request.
+   * @throws Exception
+   */
+  @Test
+  public void accountNameMismatchTest() throws Exception {
+    accountService = new FrontendTestAccountService(true);
+    ambryBlobStorageService = getAmbryBlobStorageService();
+    ambryBlobStorageService.start();
+    postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId", false, null,
+        null, RestServiceErrorCode.InternalServerError);
   }
 
   /**
@@ -713,7 +712,7 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, accountServiceFactory.getAccountService());
+            idConverterFactory, securityServiceFactory, accountService);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -734,7 +733,7 @@ public class AmbryBlobStorageServiceTest {
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, accountServiceFactory.getAccountService());
+            idConverterFactory, securityServiceFactory, accountService);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -852,8 +851,8 @@ public class AmbryBlobStorageServiceTest {
    * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
    *                    type.
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
-   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header.
-   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header.
+   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
+   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
    * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
    *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
    * @throws JSONException
@@ -924,7 +923,7 @@ public class AmbryBlobStorageServiceTest {
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() throws Exception {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-        idConverterFactory, securityServiceFactory, accountServiceFactory.getAccountService());
+        idConverterFactory, securityServiceFactory, accountService);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1003,7 +1002,7 @@ public class AmbryBlobStorageServiceTest {
    * @return the blob ID of the blob.
    * @throws Exception
    */
-  public String postBlobAndVerify(JSONObject headers, ByteBuffer content, Account expectedAccount,
+  private String postBlobAndVerify(JSONObject headers, ByteBuffer content, Account expectedAccount,
       Container expectedContainer) throws Exception {
     List<ByteBuffer> contents = new LinkedList<>();
     contents.add(content);
@@ -1335,7 +1334,7 @@ public class AmbryBlobStorageServiceTest {
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, accountServiceFactory.getAccountService());
+            converterFactory, securityServiceFactory, accountService);
     ambryBlobStorageService.start();
     doExternalServicesBadInputTest(RestMethod.values(), expectedExceptionMsg);
   }
@@ -1359,7 +1358,7 @@ public class AmbryBlobStorageServiceTest {
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              clusterMap, idConverterFactory, securityFactory, accountServiceFactory.getAccountService());
+              clusterMap, idConverterFactory, securityFactory, accountService);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg);
     }
@@ -1408,7 +1407,7 @@ public class AmbryBlobStorageServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, accountServiceFactory.getAccountService());
+            idConverterFactory, securityServiceFactory, accountService);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
@@ -1499,9 +1498,7 @@ public class AmbryBlobStorageServiceTest {
       try {
         doOperation(restRequest, restResponseChannel);
         if (expectedRestErrorCode != null) {
-          if (expectedRestErrorCode != null) {
-            fail("Should have thrown");
-          }
+          fail("Should have thrown");
         }
       } catch (RestServiceException e) {
         assertEquals("Wrong RestServiceErrorCode", expectedRestErrorCode, e.getErrorCode());
@@ -1510,15 +1507,11 @@ public class AmbryBlobStorageServiceTest {
           restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
       assertEquals("Wrong container object in RestRequest's args", expectedContainer,
           restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
-      assertEquals("Wrong account object in RestRequest's args", expectedAccount,
-          restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
-      assertEquals("Wrong container object in RestRequest's args", expectedContainer,
-          restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
     }
   }
 
   /**
-   * Puts a blob and verifies the injected {@link Account} and {@link Container} into the {@link RestRequest}.
+   * Posts a blob and verifies the injected {@link Account} and {@link Container} into the {@link RestRequest}.
    * @param accountName The accountName to send as the header of the request.
    * @param containerName The containerName to send as the header of the request.
    * @param serviceId The serviceId to send as the header of the request.
@@ -1529,7 +1522,7 @@ public class AmbryBlobStorageServiceTest {
    * @return The blobId string if the put operation is successful, {@link null} otherwise.
    * @throws Exception
    */
-  private String putBlobAndVerifyWithAccountAndContainer(String accountName, String containerName, String serviceId,
+  private String postBlobAndVerifyWithAccountAndContainer(String accountName, String containerName, String serviceId,
       boolean isPrivate, Account expectedAccount, Container expectedContainer,
       RestServiceErrorCode expectedRestErrorCode) throws Exception {
     int CONTENT_LENGTH = 1024;
@@ -1560,14 +1553,11 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Prepopulates the {@link AccountService} with a reference {@link Account} and {@link Account#UNKNOWN_ACCOUNT}.
-   * @return The {@link AccountService} used to update {@link Account}.
    * @throws Exception
    */
-  private AccountService populateAccountService() throws Exception {
-    FrontendTestAccountService accountService = (FrontendTestAccountService) accountServiceFactory.getAccountService();
-    accountService.clear();
+  private void populateAccountService() throws Exception {
+    ((FrontendTestAccountService) accountService).clear();
     accountService.updateAccounts(Lists.newArrayList(refAccount, Account.UNKNOWN_ACCOUNT));
-    return accountService;
   }
 
   /**
@@ -1597,112 +1587,118 @@ public class AmbryBlobStorageServiceTest {
    */
   private void injectAccountAndContainerForPutAndVerify(boolean isPrivate, boolean shouldAllowServiceIdBasedPut)
       throws Exception {
-    AccountService accountService = populateAccountService();
+    configProps.setProperty("frontend.allow.service.id.based.post.request",
+        String.valueOf(shouldAllowServiceIdBasedPut));
+    verifiableProperties = new VerifiableProperties(configProps);
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    ambryBlobStorageService = getAmbryBlobStorageService();
+    ambryBlobStorageService.start();
+    populateAccountService();
 
     // should succeed when serviceId-based PUT requests are allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate,
+    postBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", isPrivate,
         shouldAllowServiceIdBasedPut ? Account.UNKNOWN_ACCOUNT : null,
         shouldAllowServiceIdBasedPut ? (isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER
             : Container.DEFAULT_PUBLIC_CONTAINER) : null,
         shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
 
     // should fail, because accountName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", isPrivate, null, null,
         RestServiceErrorCode.MissingArgs);
 
     // should fail, because account name from serviceId could not be located in account service.
-    putBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, "serviceId", isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, "serviceId", isPrivate, null, null,
         RestServiceErrorCode.InvalidContainer);
 
     // should fail, because accountName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), "serviceId", isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), "serviceId", isPrivate, null, null,
         RestServiceErrorCode.MissingArgs);
 
     // should fail, because accountName is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, null, "serviceId", isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, null, "serviceId", isPrivate, null, null,
         RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, "dummyContainerName", "serviceId", isPrivate,
+    postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, "dummyContainerName", "serviceId", isPrivate,
         null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, Container.UNKNOWN_CONTAINER_NAME, "serviceId",
-        isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
+    postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, Container.UNKNOWN_CONTAINER_NAME,
+        "serviceId", isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, refContainer.getName(), "serviceId",
+    postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, refContainer.getName(), "serviceId",
         isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because container name needs to be specified
-    putBlobAndVerifyWithAccountAndContainer(refAccount.getName(), null, "serviceId", isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), null, "serviceId", isPrivate, null, null,
         RestServiceErrorCode.MissingArgs);
 
     // should fail, because containerName does not exist.
-    putBlobAndVerifyWithAccountAndContainer(refAccount.getName(), "dummyContainerName", "serviceId", isPrivate, null,
+    postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), "dummyContainerName", "serviceId", isPrivate, null,
         null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because containerName is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(refAccount.getName(), Container.UNKNOWN_CONTAINER_NAME, "serviceId",
+    postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), Container.UNKNOWN_CONTAINER_NAME, "serviceId",
         isPrivate, null, null, RestServiceErrorCode.InvalidContainer);
 
     // should succeed.
     String blobIdStr =
-        putBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId", isPrivate,
+        postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId", isPrivate,
             refAccount, refContainer, null);
     // The expected account and container embedded in blob id are UNKNOWN, because the blobId is deserialized into v1.
     // @todo change the expected account and container to refAccount and refContainer when blobId v2 is enabled.
     verifyAccountAndContainerFromBlobId(blobIdStr, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER, null);
 
     // should fail, because containerName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", null, "serviceId", isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer("dummyAccountName", null, "serviceId", isPrivate, null, null,
         RestServiceErrorCode.MissingArgs);
 
     // should fail, because accountName does not exist.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", "dummyContainerName", "serviceId", isPrivate, null,
+    postBlobAndVerifyWithAccountAndContainer("dummyAccountName", "dummyContainerName", "serviceId", isPrivate, null,
         null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because container name is now allowed.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", Container.UNKNOWN_CONTAINER_NAME, "serviceId",
+    postBlobAndVerifyWithAccountAndContainer("dummyAccountName", Container.UNKNOWN_CONTAINER_NAME, "serviceId",
         isPrivate, null, null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because accountName does not exist.
-    putBlobAndVerifyWithAccountAndContainer("dummyAccountName", refContainer.getName(), "serviceId", isPrivate, null,
+    postBlobAndVerifyWithAccountAndContainer("dummyAccountName", refContainer.getName(), "serviceId", isPrivate, null,
         null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, null, Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(null, null, Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null, null,
         RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null,
+    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null,
         null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, Account.UNKNOWN_ACCOUNT_NAME,
+    postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, Account.UNKNOWN_ACCOUNT_NAME,
         isPrivate, null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
-    putBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), Account.UNKNOWN_ACCOUNT_NAME, isPrivate, null,
-        null, RestServiceErrorCode.InvalidAccount);
+    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), Account.UNKNOWN_ACCOUNT_NAME, isPrivate,
+        null, null, RestServiceErrorCode.InvalidAccount);
 
     // should succeed if the serviceId-based PUT requests are allowed, but this is a special case that account is
     // created without the legacy containers for public and private put.
-    putBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate,
+    postBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), isPrivate,
         shouldAllowServiceIdBasedPut ? refAccount : null,
         shouldAllowServiceIdBasedPut ? (isPrivate ? refDefaultPrivateContainer : refDefaultPublicContainer) : null,
         shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
 
     // should fail, because accountName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), isPrivate, null, null,
         RestServiceErrorCode.MissingArgs);
 
     // should fail, because accountName implicitly set by serviceId does not have the default container.
-    putBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, refAccount.getName(), isPrivate,
+    postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, refAccount.getName(), isPrivate,
         null, null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because accountName needs to be specified.
-    putBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), refAccount.getName(), isPrivate, null, null,
+    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), refAccount.getName(), isPrivate, null, null,
         RestServiceErrorCode.MissingArgs);
 
     Container legacyContainerForPublicBlob =
@@ -1720,23 +1716,23 @@ public class AmbryBlobStorageServiceTest {
     accountService.updateAccounts(Collections.singletonList(accountWithTwoDefaultContainers));
     if (isPrivate) {
       // should succeed if serviceId-based PUT requests are allowed.
-      putBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(), isPrivate,
+      postBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(), isPrivate,
           shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
           shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers.getContainerById(
               Container.DEFAULT_PRIVATE_CONTAINER_ID) : null,
           shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
       // should fail, because accountName needs to be specified.
-      putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
+      postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
           isPrivate, null, null, RestServiceErrorCode.MissingArgs);
     } else {
       // should succeed if serviceId-based PUT requests are allowed.
-      putBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(), isPrivate,
+      postBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(), isPrivate,
           shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
           shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers.getContainerById(
               Container.DEFAULT_PUBLIC_CONTAINER_ID) : null,
           shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
       // should fail, because accountName needs to be specified.
-      putBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
+      postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
           isPrivate, null, null, RestServiceErrorCode.MissingArgs);
     }
   }
@@ -2137,28 +2133,28 @@ class FrontendTestRouter implements Router {
 }
 
 /**
- * A singleton implementation of {@link AccountServiceFactory} that returns an instance of {@link FrontendTestAccountService}.
- */
-class FrontendTestAccountServiceFactory implements AccountServiceFactory {
-  private AccountService accountService = null;
-
-  @Override
-  public AccountService getAccountService() throws InstantiationException {
-    if (accountService == null) {
-      accountService = new FrontendTestAccountService();
-      return accountService;
-    } else {
-      return accountService;
-    }
-  }
-}
-
-/**
  * Implementation of {@link AccountService} for test. This implementation is not thread-safe.
  */
 class FrontendTestAccountService implements AccountService {
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
   private final Map<String, Account> nameToAccountMap = new HashMap<>();
+  private boolean shouldReturnUnknownAccountByName = false;
+
+  /**
+   * Constructor.
+   * @param shouldReturnUnknownAccountByName {@code true} if always returns {@link Account#UNKNOWN_ACCOUNT} when queried
+   *                                                     by account name; {@code false} to do the actual query.
+   */
+  FrontendTestAccountService(boolean shouldReturnUnknownAccountByName) {
+    this.shouldReturnUnknownAccountByName = shouldReturnUnknownAccountByName;
+  }
+
+  /**
+   * Constructor with {@link #shouldReturnUnknownAccountByName} set to {@code false}.
+   */
+  FrontendTestAccountService() {
+    this(false);
+  }
 
   @Override
   public Account getAccountById(short accountId) {
@@ -2167,7 +2163,7 @@ class FrontendTestAccountService implements AccountService {
 
   @Override
   public Account getAccountByName(String accountName) {
-    return nameToAccountMap.get(accountName);
+    return shouldReturnUnknownAccountByName ? Account.UNKNOWN_ACCOUNT : nameToAccountMap.get(accountName);
   }
 
   @Override

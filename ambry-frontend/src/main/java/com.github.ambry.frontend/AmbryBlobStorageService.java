@@ -53,6 +53,7 @@ import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -79,8 +80,11 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
   private static final String OPERATION_TYPE_POST = "POST";
-  private static final Set<String> requiredAmbryHeadersForPutWithServiceId;
-  private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName;
+  private static final Set<String> requiredAmbryHeadersForPutWithServiceId =
+      Collections.unmodifiableSet(new HashSet<>(Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID)));
+  private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
+      new HashSet<>(
+          Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
   private final RestResponseHandler responseHandler;
   private final Router router;
   private final IdConverterFactory idConverterFactory;
@@ -95,13 +99,6 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final AccountService accountService;
   private GetPeersHandler getPeersHandler;
   private boolean isUp = false;
-
-  static {
-    requiredAmbryHeadersForPutWithServiceId =
-        Collections.unmodifiableSet(new HashSet<>(Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID)));
-    requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(new HashSet<>(
-        Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
-  }
 
   /**
    * Create a new instance of AmbryBlobStorageService by supplying it with config, metrics, cluster map, a
@@ -118,6 +115,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, AccountService accountService) {
+    this.accountService = Objects.requireNonNull(accountService, "accountService cannot be null.");
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
@@ -125,7 +123,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.clusterMap = clusterMap;
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
-    this.accountService = accountService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
@@ -154,9 +151,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         idConverter.close();
         idConverter = null;
       }
-      if (accountService != null) {
-        accountService.close();
-      }
+      accountService.close();
       logger.info("AmbryBlobStorageService shutdown complete");
     } catch (IOException e) {
       logger.error("Downstream service close failed", e);
@@ -1151,7 +1146,7 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   /**
    * Sanity check for {@link RestRequest}. This check ensures that the specified service id, account and container name,
-   * if they exist, should not be the same as the reserved values. It also makes sure certain headers must not be present.
+   * if they exist, should not be the same as the not-allowed values. It also makes sure certain headers must not be present.
    * @param restRequest The {@link RestRequest} to check.
    * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
    */
@@ -1161,8 +1156,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
     String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || Container.DEFAULT_PUBLIC_CONTAINER_NAME.equals(
-        targetContainerName) || Container.DEFAULT_PRIVATE_CONTAINER_NAME.equals(targetContainerName)) {
+    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName)) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
     }
     List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);
@@ -1197,7 +1191,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private void ensureAccountNameMatch(Account account, RestRequest restRequest) throws RestServiceException {
     String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
     if (accountNameFromHeader != null && !accountNameFromHeader.equals(account.getName())) {
-      throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
+      throw new RestServiceException("Error occurs when locating account", RestServiceErrorCode.InternalServerError);
     }
   }
 }

@@ -682,6 +682,8 @@ public class RestUtilsTest {
       assertEquals("Blob owner ID does not match", headers.getString(RestUtils.Headers.OWNER_ID),
           blobProperties.getOwnerId());
     }
+    assertEquals("Target account id does not match", Account.UNKNOWN_ACCOUNT_ID, blobProperties.getAccountId());
+    assertEquals("Target container id does not match", Container.UNKNOWN_CONTAINER_ID, blobProperties.getContainerId());
   }
 
   /**
