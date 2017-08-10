@@ -173,6 +173,9 @@ public class IndexSegmentTest {
     }
   }
 
+  // helpers
+  // comprehensiveTest() helpers
+
   /**
    * Comprehensive tests for {@link IndexSegment}.
    * 1. Creates a segment and checks the getters to make sure they return the right values
@@ -249,9 +252,6 @@ public class IndexSegmentTest {
     }
   }
 
-  // helpers
-  // comprehensiveTest() helpers
-
   /**
    * @return a random log segment name.
    */
@@ -304,6 +304,8 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to add the entries to.
    * @param referenceIndex the {@link NavigableMap} to add all the entries to. This represents the source of truth for
    *                       all checks.
+   * @param includeSmallKeys if true, entries that are added will include small keys.
+   * @param includeLargeKeys if true, entries that are added will include large keys.
    * @return {@link List} of {@link IndexEntry}s that were added to the {@link IndexSegment}
    * @throws StoreException
    */

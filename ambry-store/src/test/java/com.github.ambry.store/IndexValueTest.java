@@ -331,7 +331,7 @@ public class IndexValueTest {
    *                              in the same log segment. Set to -1 otherwise.
    * @return the {@link IndexValue} thus constructed
    */
-  private static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
+  static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
       long originalMessageOffset) {
     ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
     value.putLong(size);

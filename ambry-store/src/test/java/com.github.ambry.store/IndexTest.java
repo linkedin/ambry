@@ -1004,11 +1004,12 @@ public class IndexTest {
    * Tests index segment rollover behavior with respect to key size changes. For the current version
    * ({@link PersistentIndex#VERSION_2}), a change in key size should cause a rollover only if the persistedEntrySize of
    * the active segment is smaller than the entry size of the incoming entry.
+   * Also test index segment rollover with respect to a value size change.
    * @throws StoreException
    * @throws IOException
    */
   @Test
-  public void testIndexSegmentRollOverKeySizeChange() throws StoreException, IOException {
+  public void testIndexSegmentRollOverKeySizeAndValueSizeChange() throws StoreException, IOException {
     state.closeAndClearIndex();
     int persistedEntryMinBytes = 100;
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes));
@@ -1023,31 +1024,31 @@ public class IndexTest {
     int latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     // add first entry with size under storeIndexPersistedEntryMinBytes.
     int keySize =
-        config.storeIndexPersistedEntryMinBytes/2 - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize);
+        config.storeIndexPersistedEntryMinBytes / 2 - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // Now, the active segment consists of one element. Add 2nd element of a smaller key size; and entry size still under
     // storeIndexPersistedEntryMinBytes.
     keySize = keySize / 2;
-    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
 
     // 3rd element with key size greater than the first entry, but still under storeIndexPersistedEntryMinBytes.
     keySize = keySize * 3;
-    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
 
     // 4th element with key size increase, and entry size at exactly storeIndexPersistedEntryMinBytes.
     // This should also not cause a rollover.
     keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
 
     // 5th element key size increase, and above storeIndexPersistedEntryMinBytes. This continues to be supported via
     // a rollover.
     keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes + 1;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, ++latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, ++latestSegmentExpectedEntrySize, false);
 
     // 2nd and 3rd element in the next segment of original size. This should be accommodated in the same segment.
     keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 2, indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 2, indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
     verifyIndexValues(indexEntries);
@@ -1057,14 +1058,14 @@ public class IndexTest {
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes / 2));
     state.reloadIndex(true, false);
     keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 7, indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 7, indexCount, latestSegmentExpectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created honors the new config value.
     config = new StoreConfig(new VerifiableProperties(state.properties));
     latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     keySize = config.storeIndexPersistedEntryMinBytes - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
     verifyIndexValues(indexEntries);
@@ -1075,16 +1076,20 @@ public class IndexTest {
     state.reloadIndex(true, false);
     // Make sure we add entries that can fit in the latest segment.
     keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 9, indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 9, indexCount, latestSegmentExpectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created has the new entry size.
     config = new StoreConfig(new VerifiableProperties(state.properties));
     keySize = latestSegmentExpectedEntrySize - IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1 - serOverheadBytes;
     latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize);
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
 
     // verify index values
+    verifyIndexValues(indexEntries);
+
+    // Verify that a value size change will cause a rollover
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, true);
     verifyIndexValues(indexEntries);
   }
 
@@ -2295,7 +2300,7 @@ public class IndexTest {
     indexEntries.add(entry);
     // add more entries to the segment
     indexEntries.addAll(addPutEntries(fileSpan.getEndOffset(), indexSegment, 2, CuratedLogIndexState.PUT_RECORD_SIZE,
-        Utils.Infinite_Time, 10));
+        Utils.Infinite_Time, 10, false));
     // persist the index segment of older version.
     indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
 
@@ -2307,7 +2312,8 @@ public class IndexTest {
     currentEndOffset = state.index.getCurrentEndOffset();
     if (rollOverWithPutRecord) {
       indexEntries.addAll(
-          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10));
+          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10,
+              false));
     } else {
       IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
       state.appendToLog(state.DELETE_RECORD_SIZE);
@@ -2319,7 +2325,7 @@ public class IndexTest {
     assertEquals("Index roll over should have happened ", indexCount + 1, state.index.getIndexSegments().size());
     currentEndOffset = state.index.getCurrentEndOffset();
     indexEntries.addAll(
-        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10));
+        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10, false));
     assertEquals("Index roll over should not have happened ", indexCount + 1, state.index.getIndexSegments().size());
     // verify index values
     verifyIndexValues(indexEntries);
@@ -2335,16 +2341,17 @@ public class IndexTest {
    * @param expectedSegmentCount the expected number of index segments after the entries are added.
    * @param latestSegmentExpectedEntrySize the expected persistedEntrySize of the latest segment after the entries are
    *                                       added.
+   * @param createV0IndexValue if true, create {@link IndexValue} in V0.
    * @throws IOException
    * @throws StoreException
    */
   private void addEntriesAndAssert(List<IndexEntry> indexEntries, int keySize, int numEntriesToAdd,
-      int expectedSegmentCount, int latestSegmentExpectedEntrySize) throws IOException, StoreException {
+      int expectedSegmentCount, int latestSegmentExpectedEntrySize, boolean createV0IndexValue)
+      throws IOException, StoreException {
     Offset currentEndOffset = state.index.getCurrentEndOffset();
     indexEntries.addAll(addPutEntries(currentEndOffset, null, numEntriesToAdd, CuratedLogIndexState.PUT_RECORD_SIZE,
-        Utils.Infinite_Time, keySize));
-    assertEquals("Index rollover has or has not happened as expected ", expectedSegmentCount,
-        state.index.getIndexSegments().size());
+        Utils.Infinite_Time, keySize, createV0IndexValue));
+    assertEquals("Unexpected index segment count", expectedSegmentCount, state.index.getIndexSegments().size());
     assertEquals(latestSegmentExpectedEntrySize,
         state.index.getIndexSegments().lastEntry().getValue().getPersistedEntrySize());
   }
@@ -2389,12 +2396,13 @@ public class IndexTest {
    * @param count total count of put entries to be added
    * @param size size of put entries
    * @param expiresAtMs expiration value at ms for the put entries
+   * @param createV0IndexValue if true, create {@link IndexValue} in V0.
    * @return a list {@link IndexEntry}s added to the {@link PersistentIndex}
    * @throws IOException
    * @throws StoreException
    */
   private List<IndexEntry> addPutEntries(Offset prevEntryEndOffset, IndexSegment indexSegment, int count, long size,
-      long expiresAtMs, int idLength) throws IOException, StoreException {
+      long expiresAtMs, int idLength, boolean createV0IndexValue) throws IOException, StoreException {
     List<IndexEntry> indexEntries = new ArrayList<>();
     for (int i = 0; i < count; i++) {
       state.appendToLog(size);
@@ -2406,9 +2414,15 @@ public class IndexTest {
                 UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, indexSegment.getVersion()));
         indexSegment.addEntry(entry, fileSpan.getEndOffset());
       } else {
-        entry = new IndexEntry(state.getUniqueId(idLength),
-            new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds()));
-        state.index.addToIndex(entry, fileSpan);
+        if (createV0IndexValue) {
+          entry = new IndexEntry(state.getUniqueId(idLength),
+              IndexValueTest.getIndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, -1L));
+          state.index.addToIndex(entry, fileSpan);
+        } else {
+          entry = new IndexEntry(state.getUniqueId(idLength),
+              new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds()));
+          state.index.addToIndex(entry, fileSpan);
+        }
       }
       indexEntries.add(entry);
       prevEntryEndOffset = fileSpan.getEndOffset();
