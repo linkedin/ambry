@@ -13,14 +13,7 @@
  */
 package com.github.ambry.utils;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
@@ -36,6 +29,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -590,7 +584,8 @@ public class Utils {
       if (process.exitValue() != 0) {
         throw new IOException(
             "error while trying to preallocate file " + file.getAbsolutePath() + " exitvalue " + process.exitValue()
-                + " error string " + process.getErrorStream());
+                + " error string " + new BufferedReader(new InputStreamReader(process.getErrorStream()))
+                    .lines().collect(Collectors.joining("/n")));
       }
     }
   }
