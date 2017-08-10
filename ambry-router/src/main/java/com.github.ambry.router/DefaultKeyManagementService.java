@@ -15,60 +15,63 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.KMSConfig;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
 
 
 /**
  * Default {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
- * {@link #getKey(String, Account, Container, Callback)} calls. Default key is fetched from {@link KMSConfig#kmsDefaultKey}
+ * {@link #getKey(short, short)} calls. Default key is fetched from {@link KMSConfig#kmsDefaultKey}
  */
 public class DefaultKeyManagementService implements KeyManagementService<SecretKeySpec> {
+  private final String clusterName;
   private final SecretKeySpec secretKeySpec;
-  private final AtomicBoolean enabled;
+  private volatile boolean enabled;
 
-  DefaultKeyManagementService(KMSConfig KMSConfig) {
+  DefaultKeyManagementService(KMSConfig KMSConfig, ClusterMapConfig clusterMapConfig) {
     if (KMSConfig.kmsDefaultKey.isEmpty()) {
       throw new IllegalArgumentException("Default key cannot be null");
     }
+    clusterName = clusterMapConfig.clusterMapClusterName;
     byte[] key = Hex.decode(KMSConfig.kmsDefaultKey);
     this.secretKeySpec = new SecretKeySpec(key, KMSConfig.kmsKeyGenAlgo);
-    enabled = new AtomicBoolean(true);
+    enabled = true;
   }
 
   /**
-   * Registers with KMS to create key for a unique triplet of (clusterName, Account, Container)
-   * @param clusterName the cluster name associated with the account
-   * @param account refers to the {@link Account} to register
-   * @param container refers to the {@link Container} to register
+   * Registers with KMS to create key for a unique pair of AccountId and ContainerId
+   * @param accountId refers to the id of the {@link Account} to register
+   * @param containerId refers to the id of the {@link Container} to register
+   * @throws KeyManagementServiceException in registration. {@link DefaultKeyManagementService} doesnt support
+   * registration as the default key is read from config.
    */
   @Override
-  public void register(String clusterName, Account account, Container container) {
-    // no op
+  public void register(short accountId, short containerId) throws KeyManagementServiceException {
+    throw new KeyManagementServiceException("Registration is not allowed with DefaultKeyManagementService");
   }
 
   /**
-   * Fetches the key associated with the triplet (clusterName, Account, Container). {@link DefaultKeyManagementService} returns
-   * the default key for all {@link #getKey(String, Account, Container, Callback)} calls fetched from {@link KMSConfig#kmsDefaultKey}
-   * @param clusterName the cluster name associated with the account
-   * @param account refers to the {@link Account} to register
-   * @param container refers to the {@link Container} to register
-   * @param callback the {@link Callback} to be called on completion or on exception
+   * Fetches the key associated with the pair of AccountId and ContainerId. {@link DefaultKeyManagementService} returns
+   * the default key for all {@link #getKey(short, short)}} calls fetched from {@link KMSConfig#kmsDefaultKey}
+   * @param accountId refers to the id of the {@link Account} for which key is expected
+   * @param containerId refers to the id of the {@link Container} for which key is expected
+   * @return {@link SecretKeySpec} the key associated with the accountId and containerId
    */
   @Override
-  public void getKey(String clusterName, Account account, Container container, Callback<SecretKeySpec> callback) {
-    if (enabled.get()) {
-      callback.onCompletion(secretKeySpec, null);
+  public SecretKeySpec getKey(short accountId, short containerId) throws KeyManagementServiceException {
+    if (enabled) {
+      return secretKeySpec;
     } else {
-      throw new IllegalStateException("GetKey() called after DefaultKeyManagementService is closed");
+      throw new KeyManagementServiceException("getKey() called after DefaultKeyManagementService is closed",
+          new IllegalStateException());
     }
   }
 
   @Override
   public void close() throws IOException {
-    enabled.compareAndSet(true, false);
+    enabled = false;
   }
 }

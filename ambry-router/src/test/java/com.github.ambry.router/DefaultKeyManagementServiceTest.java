@@ -17,8 +17,10 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
+import java.util.Random;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
 import org.junit.Assert;
@@ -32,11 +34,13 @@ import static com.github.ambry.router.CryptoUtils.*;
  */
 public class DefaultKeyManagementServiceTest {
 
+  private static final Random random = TestUtils.RANDOM;
+
   /**
-   * Test the {@link DefaultKeyManagementService} for happy getKey() path with FutureResult
+   * Test the {@link DefaultKeyManagementService} for happy getKey() path
    */
   @Test
-  public void testDefaultKMSBasic() throws Exception {
+  public void testDefaultKMS() throws Exception {
     int[] keySizes = {16, 32, 64, 128};
     for (int keySize : keySizes) {
       String key = getRandomKey(keySize);
@@ -46,55 +50,25 @@ public class DefaultKeyManagementServiceTest {
       SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), KMSConfig.kmsKeyGenAlgo);
       KeyManagementService<SecretKeySpec> defaultKMS =
           new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
-      FutureResult<SecretKeySpec> result = defaultKMS.getKey("", Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
-      SecretKeySpec loadedKey = result.get(1, TimeUnit.SECONDS);
-      Assert.assertEquals("Secret key mismatch ", secretKeySpec, loadedKey);
+      SecretKeySpec keyFromKMS = defaultKMS.getKey(Utils.getRandomShort(random), Utils.getRandomShort(random));
+      Assert.assertEquals("Secret key mismatch ", secretKeySpec, keyFromKMS);
     }
   }
 
   /**
-   * Test the {@link DefaultKeyManagementService} for happy getKey() path with Callback
+   * Test the {@link DefaultKeyManagementService} for {@link DefaultKeyManagementService#register(short, short)}
    */
   @Test
-  public void testDefaultKMSCallback() throws Exception {
-    int[] keySizes = {16, 32, 64, 128};
-    for (int keySize : keySizes) {
-      String key = getRandomKey(keySize);
-      Properties props = getKMSProperties(key);
-      VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-      KMSConfig KMSConfig = new KMSConfig(verifiableProperties);
-      SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), KMSConfig.kmsKeyGenAlgo);
-      KeyManagementService<SecretKeySpec> defaultKMS =
-          new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
-      defaultKMS.getKey("", Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER, new Callback<SecretKeySpec>() {
-        @Override
-        public void onCompletion(SecretKeySpec result, Exception exception) {
-          Assert.assertEquals("Secret key mismatch ", secretKeySpec, result);
-          Assert.assertNull("Exception should be null ", exception);
-        }
-      });
-    }
-  }
-
-  /**
-   * Test the {@link DefaultKeyManagementService} with different cluster names
-   */
-  @Test
-  public void testDefaultKMSDiffClusterNames() throws Exception {
+  public void testDefaultKMSRegister() throws Exception {
     String key = getRandomKey(64);
     Properties props = getKMSProperties(key);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    KMSConfig KMSConfig = new KMSConfig(verifiableProperties);
-    SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), KMSConfig.kmsKeyGenAlgo);
     KeyManagementService<SecretKeySpec> defaultKMS =
         new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
-    String[] clusterNames = {"", "Staging", "Production"};
-    for (String clusterName : clusterNames) {
-      // for any clusterName, same key is expected
-      FutureResult<SecretKeySpec> result =
-          defaultKMS.getKey(clusterName, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
-      SecretKeySpec loadedKey = result.get(1, TimeUnit.SECONDS);
-      Assert.assertEquals("Secret key mismatch ", secretKeySpec, loadedKey);
+    try {
+      defaultKMS.register(Account.UNKNOWN_ACCOUNT.getId(), Container.UNKNOWN_CONTAINER.getId());
+      Assert.fail("register() on DefaultKMS should have failed");
+    } catch (KeyManagementServiceException e) {
     }
   }
 
@@ -110,9 +84,10 @@ public class DefaultKeyManagementServiceTest {
         new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
     defaultKMS.close();
     try {
-      defaultKMS.getKey("", Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+      defaultKMS.getKey(Account.UNKNOWN_ACCOUNT.getId(), Container.UNKNOWN_CONTAINER.getId());
       Assert.fail("getKey() on DefaultKMS should have failed as KMS is closed");
-    } catch (IllegalStateException e) {
+    } catch (KeyManagementServiceException e) {
+      Assert.assertTrue("Cause mismatch", e.getCause() instanceof IllegalStateException);
     }
   }
 

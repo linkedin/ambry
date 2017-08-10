@@ -30,6 +30,9 @@ class CryptoUtils {
   static Properties getKMSProperties(String key) {
     Properties properties = new Properties();
     properties.setProperty("kms.default.key", key);
+    properties.setProperty("clustermap.cluster.name", "dev");
+    properties.setProperty("clustermap.datacenter.name", "DC1");
+    properties.setProperty("clustermap.host.name", "localhost");
     return properties;
   }
 

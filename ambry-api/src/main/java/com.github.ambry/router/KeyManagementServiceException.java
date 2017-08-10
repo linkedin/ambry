@@ -13,16 +13,17 @@
  */
 package com.github.ambry.router;
 
-import java.nio.ByteBuffer;
-
-
 /**
- * Custom exception thrown by {@link CryptoService} on any exception during {@link CryptoService#encrypt(ByteBuffer, Object)}
- * or {@link CryptoService#decrypt(ByteBuffer, Object)}
+ * Custom exception thrown by {@link KeyManagementService} on any exception during
+ * {@link KeyManagementService#register(short, short)} } or {@link KeyManagementService#getKey(short, short)}}
  */
-class CryptoServiceException extends Exception {
+public class KeyManagementServiceException extends Exception {
 
-  CryptoServiceException(String message, Throwable throwable) {
+  KeyManagementServiceException(String message) {
+    super(message);
+  }
+
+  KeyManagementServiceException(String message, Throwable throwable) {
     super(message, throwable);
   }
 }

@@ -66,7 +66,6 @@ class DefaultCryptoService implements CryptoService<SecretKeySpec> {
       encryptedContent.flip();
       return encryptedContent;
     } catch (Exception e) {
-      logger.error("Exception thrown while encrypting data", e);
       throw new CryptoServiceException("Exception thrown while encrypting data", e);
     }
   }
@@ -83,7 +82,6 @@ class DefaultCryptoService implements CryptoService<SecretKeySpec> {
       decryptedContent.flip();
       return decryptedContent;
     } catch (Exception e) {
-      logger.error("Exception thrown while decrypting data", e);
       throw new CryptoServiceException("Exception thrown while decrypting data", e);
     }
   }

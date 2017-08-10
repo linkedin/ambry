@@ -20,8 +20,8 @@ import java.io.Closeable;
 
 /**
  * Interface that defines the Key management service. KMS is responsible for maintaining keys for every
- * unique triplet of (ClusterName, Account, Container) that is registered with the KMS
- * Every caller is expected to register before making any {@link #getKey(String, Account, Container, Callback)} calls.
+ * unique pair of AccountId and ContainerId that is registered with the KMS
+ * Every caller is expected to register before making any {@link #getKey(short, short)} calls.
  * T refers to the Key type that this {@link KeyManagementService} will generate and return.
  * Ensure that {@link CryptoService} implementation is compatible with the key type that
  * {@link KeyManagementService} generates
@@ -29,34 +29,20 @@ import java.io.Closeable;
 public interface KeyManagementService<T> extends Closeable {
 
   /**
-   * Registers with KMS to create key for a unique triplet of (clusterName, Account, Container)
-   * @param clusterName the cluster name associated with the account
-   * @param account refers to the {@link Account} to register
-   * @param container refers to the {@link Container} to register
+   * Registers with KMS to create key for a unique pair of AccountId and ContainerId
+   * @param accountId refers to the id of the {@link Account} to register
+   * @param containerId refers to the id of the {@link Container} to register
+   * @throws KeyManagementServiceException on KMS unavailability or duplicate registration
    */
-  void register(String clusterName, Account account, Container container);
+  void register(short accountId, short containerId) throws KeyManagementServiceException;
 
   /**
-   * Fetches the key associated with the triplet (clusterName, Account, Container). User is expected to have
-   * registered using {@link #register(String, Account, Container)} for this triplet before fetching keys.
-   * @param clusterName the cluster name associated with the account
-   * @param account refers to the {@link Account} to register
-   * @param container refers to the {@link Container} to register
-   * @param callback the {@link Callback} to be called on completion or on exception.
+   * Fetches the key associated with the pair of AccountId and ContainerId. User is expected to have
+   * registered using {@link #register(short, short)} for this pair before fetching keys.
+   * @param accountId refers to the id of the {@link Account} for which key is expected
+   * @param containerId refers to the id of the {@link Container} for which key is expected
+   * @return T the key associated with the accountId and containerId
+   * @throws KeyManagementServiceException on KMS unavailability
    */
-  void getKey(String clusterName, Account account, Container container, Callback<T> callback);
-
-  /**
-   * Fetches the key associated with the triplet (clusterName, Account, Container). User is expected to have
-   * registered using {@link #register(String, Account, Container)} for this triplet before fetching keys.
-   * @param clusterName the cluster name associated with the account
-   * @param account refers to the {@link Account} to register
-   * @param container refers to the {@link Container} to register
-   * @return the {@link FutureResult} that will containing the key (of type T) on completion or exception
-   */
-  default FutureResult<T> getKey(String clusterName, Account account, Container container) {
-    FutureResult<T> futureResult = new FutureResult<>();
-    getKey(clusterName, account, container, futureResult::done);
-    return futureResult;
-  }
+  T getKey(short accountId, short containerId) throws KeyManagementServiceException;
 }
