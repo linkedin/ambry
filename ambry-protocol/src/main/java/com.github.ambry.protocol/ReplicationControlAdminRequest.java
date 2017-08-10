@@ -42,7 +42,7 @@ public class ReplicationControlAdminRequest extends AdminRequest {
       throws IOException {
     Short versionId = stream.readShort();
     if (!versionId.equals(VERSION_V1)) {
-      throw new IllegalStateException("Unrecognized version for ReplicationControlAdminRequest: " + VERSION_V1);
+      throw new IllegalStateException("Unrecognized version for ReplicationControlAdminRequest: " + versionId);
     }
     int listSize = stream.readInt();
     List<String> origins = new ArrayList<>();

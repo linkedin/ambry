@@ -48,7 +48,7 @@ public class AdminResponse extends Response {
     }
     Short versionId = stream.readShort();
     if (!versionId.equals(ADMIN_RESPONSE_VERSION_V1)) {
-      throw new IllegalStateException("Unrecognized version for AdminResponse: " + ADMIN_RESPONSE_VERSION_V1);
+      throw new IllegalStateException("Unrecognized version for AdminResponse: " + versionId);
     }
     int correlationId = stream.readInt();
     String clientId = Utils.readIntString(stream);
