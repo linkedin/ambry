@@ -89,6 +89,10 @@ public class OffsetTest {
     offsets.add(new Offset("0_1", 1));
     offsets.add(new Offset("1_0", 0));
     offsets.add(new Offset("1_0", 1));
+    offsets.add(new Offset("2_0", 0));
+    offsets.add(new Offset("3_0", 1));
+    offsets.add(new Offset("10_0", 0));
+    offsets.add(new Offset("21_0", 0));
     for (int i = 0; i < offsets.size(); i++) {
       for (int j = 0; j < offsets.size(); j++) {
         int expectCompare = i == j ? 0 : i > j ? 1 : -1;

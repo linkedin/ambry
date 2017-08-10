@@ -38,8 +38,8 @@ import static org.junit.Assert.*;
  * Tests for {@link Log}.
  */
 public class LogTest {
-  private static final long LOG_CAPACITY = 5 * 1024;
-  private static final long SEGMENT_CAPACITY = 1024;
+  private static final long SEGMENT_CAPACITY = 512;
+  private static final long LOG_CAPACITY = 12 * SEGMENT_CAPACITY;
   private static final Appender BUFFER_APPENDER = new Appender() {
     @Override
     public void append(Log log, ByteBuffer buffer) throws IOException {
@@ -524,18 +524,18 @@ public class LogTest {
     assertEquals("Segment capacity not as expected", Math.min(logCapacity, segmentCapacity), log.getSegmentCapacity());
     try {
       // only preloaded segments should be in expectedSegmentNames.
-      checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, expectedSegmentNames);
+      checkLog(log, Math.min(logCapacity, segmentCapacity), expectedSegmentNames);
       String activeSegmentName = expectedSegmentNames.get(segmentIdxToMarkActive);
       log.setActiveSegment(activeSegmentName);
       // all segment files from segmentIdxToMarkActive + 1 to expectedSegmentNames.size() - 1 will be freed.
       List<String> prunedSegmentNames = expectedSegmentNames.subList(0, segmentIdxToMarkActive + 1);
-      checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, prunedSegmentNames);
+      checkLog(log, Math.min(logCapacity, segmentCapacity), prunedSegmentNames);
       List<String> allSegmentNames = getSegmentNames(numSegments, prunedSegmentNames);
       writeAndCheckLog(log, logCapacity, Math.min(logCapacity, segmentCapacity), numSegments - segmentIdxToMarkActive,
           writeSize, allSegmentNames, segmentIdxToMarkActive, appender);
       // log full - so all segments should be there
       assertEquals("Unexpected number of segments", numSegments, allSegmentNames.size());
-      checkLog(log, Math.min(logCapacity, segmentCapacity), numSegments, allSegmentNames);
+      checkLog(log, Math.min(logCapacity, segmentCapacity), allSegmentNames);
       flushCloseAndValidate(log);
       checkLogReload(logCapacity, Math.min(logCapacity, segmentCapacity), allSegmentNames);
     } finally {
@@ -548,12 +548,10 @@ public class LogTest {
    * Checks the log to ensure segment names, capacities and count.
    * @param log the {@link Log} instance to check.
    * @param expectedSegmentCapacity the expected capacity of each segment.
-   * @param numFinalSegments the max number of segments of the log.
    * @param expectedSegmentNames the expected names of all segments that should have been created in the {@code log}.
    * @throws IOException
    */
-  private void checkLog(Log log, long expectedSegmentCapacity, long numFinalSegments, List<String> expectedSegmentNames)
-      throws IOException {
+  private void checkLog(Log log, long expectedSegmentCapacity, List<String> expectedSegmentNames) throws IOException {
     LogSegment nextSegment = log.getFirstSegment();
     assertNull("Prev segment should be null", log.getPrevSegment(nextSegment));
     for (String segmentName : expectedSegmentNames) {
@@ -675,7 +673,7 @@ public class LogTest {
       Log log = new Log(tempDir.getAbsolutePath(), originalLogCapacity, newConfig, metrics);
       try {
         // the new config should be ignored.
-        checkLog(log, originalSegmentCapacity, allSegmentNames.size(), allSegmentNames);
+        checkLog(log, originalSegmentCapacity, allSegmentNames);
       } finally {
         log.close();
       }
