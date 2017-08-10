@@ -19,6 +19,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import com.google.common.collect.Sets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -565,6 +566,81 @@ public class HelixAccountServiceTest {
     assertFalse(accountService.updateAccounts(accounts));
     assertEquals("Number of account is wrong.", 1, accountService.getAllAccounts().size());
     assertAccountInAccountService(account1, accountService);
+  }
+
+  /**
+   * Tests {@link AccountUpdateListener}.
+   * @throws Exception
+   */
+  @Test
+  public void testAccountUpdateListener() throws Exception {
+    // pre-populate account metadata in ZK.
+    writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    assertAccountsInHelixAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT);
+
+    // subscribe listeners
+    int numOfListeners = 10;
+    List<Collection<Account>> updatedAccountsReceivedByListeners = new ArrayList<>();
+    List<AccountUpdateListener> listeners = new ArrayList<>();
+    for (int i = 0; i < numOfListeners; i++) {
+      AccountUpdateListener listener = updatedAccounts -> {
+        updatedAccountsReceivedByListeners.add(updatedAccounts);
+      };
+      accountService.addListener(listener);
+      listeners.add(listener);
+    }
+
+    // listen to adding a new account
+    Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    Set<Account> accountsToUpdate = Sets.newHashSet(newAccount);
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateListeners(Collections.singleton(newAccount), numOfListeners, updatedAccountsReceivedByListeners);
+
+    // listen to modification of existing accounts. Only updated accounts will be received by listeners.
+    updatedAccountsReceivedByListeners.clear();
+    accountsToUpdate = new HashSet<>();
+    for (Account account : idToRefAccountMap.values()) {
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      accountBuilder.setName(account.getName() + "-extra");
+      accountsToUpdate.add(accountBuilder.build());
+    }
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateListeners(accountsToUpdate, numOfListeners, updatedAccountsReceivedByListeners);
+
+    // removes the listener so the listener will not be informed.
+    updatedAccountsReceivedByListeners.clear();
+    for (AccountUpdateListener listener : listeners) {
+      accountService.removeListener(listener);
+    }
+    newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    accountsToUpdate = Sets.newHashSet(newAccount);
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateListeners(Collections.emptySet(), 0, updatedAccountsReceivedByListeners);
+  }
+
+  /**
+   * Asserts the {@link Account}s received by the {@link AccountUpdateListener} are as expected.
+   * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link AccountUpdateListener}s.
+   * @param expectedNumberOfListeners The expected number of {@link AccountUpdateListener}s.
+   * @param accountsInListeners A list of collection of {@link Account}s, where each collection of {@link Account}s are
+   *                            received by one {@link AccountUpdateListener}.
+   */
+  private void assertAccountUpdateListeners(Set<Account> expectedAccounts, int expectedNumberOfListeners,
+      List<Collection<Account>> accountsInListeners) {
+    assertEquals("Wrong number of listeners", expectedNumberOfListeners, accountsInListeners.size());
+    for (Collection<Account> accounts : accountsInListeners) {
+      assertEquals("Wrong number of updated accounts received by listener", expectedAccounts.size(), accounts.size());
+      for (Account account : accounts) {
+        assertTrue("Account should be received by the listener but not.", expectedAccounts.contains(account));
+      }
+      try {
+        accounts.add(Account.UNKNOWN_ACCOUNT);
+        fail("Should have thrown");
+      } catch (UnsupportedOperationException e) {
+        // expected
+      }
+    }
   }
 
   /**

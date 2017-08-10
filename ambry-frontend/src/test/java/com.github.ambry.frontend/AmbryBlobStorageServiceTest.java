@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountUpdateListener;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.clustermap.ClusterMap;
@@ -2173,6 +2174,16 @@ class FrontendTestAccountService implements AccountService {
       nameToAccountMap.put(account.getName(), account);
     }
     return true;
+  }
+
+  @Override
+  public boolean addListener(AccountUpdateListener listener) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
+  public boolean removeListener(AccountUpdateListener listener) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

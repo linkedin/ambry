@@ -15,13 +15,12 @@ package com.github.ambry.account;
 
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.helix.AccessOption;
@@ -81,8 +80,9 @@ class HelixAccountService implements AccountService {
   private final TopicListener<String> listener;
   private final Notifier<String> notifier;
   private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
-  private volatile boolean isOpen = false;
   private final ReentrantLock lock = new ReentrantLock();
+  private final CopyOnWriteArraySet<AccountUpdateListener> accountUpdateListeners = new CopyOnWriteArraySet<>();
+  private volatile boolean isOpen = false;
 
   /**
    * Constructor. It fetches the full account metadata set and caches locally.
@@ -144,6 +144,20 @@ class HelixAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     checkOpen();
     return accountInfoMapRef.get().getAccounts();
+  }
+
+  @Override
+  public boolean addListener(AccountUpdateListener listener) {
+    checkOpen();
+    Objects.requireNonNull(listener, "listener to subscribe cannot be null");
+    return accountUpdateListeners.add(listener);
+  }
+
+  @Override
+  public boolean removeListener(AccountUpdateListener listener) {
+    checkOpen();
+    Objects.requireNonNull(listener, "listener to unsubscribe cannot be null");
+    return accountUpdateListeners.remove(listener);
   }
 
   /**
@@ -278,15 +292,32 @@ class HelixAccountService implements AccountService {
           logger.trace("Start parsing remote account data.");
           AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
           Map<Short, Account> oldIdToAccountMap = accountInfoMapRef.get().idToAccountMap;
-          List<Short> idsOfUpdatedAccounts = new ArrayList<>();
+          accountInfoMapRef.set(newAccountInfoMap);
+          Map<Short, Account> idToUpdatedAccounts = new HashMap<>();
           for (Account newAccount : newAccountInfoMap.getAccounts()) {
             if (!newAccount.equals(oldIdToAccountMap.get(newAccount.getId()))) {
-              idsOfUpdatedAccounts.add(newAccount.getId());
+              idToUpdatedAccounts.put(newAccount.getId(), newAccount);
             }
           }
-          accountInfoMapRef.set(newAccountInfoMap);
-          logger.info("Received updates for {} accounts. Account IDs={}", idsOfUpdatedAccounts.size(),
-              idsOfUpdatedAccounts);
+          if (idToUpdatedAccounts.size() > 0) {
+            logger.info("Received updates for {} accounts. Account IDs={}", idToUpdatedAccounts.size(),
+                idToUpdatedAccounts.keySet());
+            for (AccountUpdateListener listener : accountUpdateListeners) {
+              long startTime = System.currentTimeMillis();
+              try {
+                listener.onUpdate(Collections.unmodifiableCollection(idToUpdatedAccounts.values()));
+                long listenerExecutionTimeInMs = System.currentTimeMillis() - startTime;
+                logger.trace("AccountUpdateListener={} has been notified for account change, took {} ms", listener,
+                    listenerExecutionTimeInMs);
+                accountServiceMetrics.accountUpdateListenerTimeInMs.update(listenerExecutionTimeInMs);
+              } catch (Exception e) {
+                logger.error("Exception occurred when notifying account updates to accountUpdateListener={}", listener,
+                    e);
+              }
+            }
+          } else {
+            logger.debug("HelixAccountService is updated with 0 updated account");
+          }
         }
       }
     } finally {

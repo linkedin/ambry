@@ -87,4 +87,19 @@ public interface AccountService extends Closeable {
    * @return A collection of {@link Account}s.
    */
   public Collection<Account> getAllAccounts();
+
+  /**
+   * Adds an {@link AccountUpdateListener} for newly created or updated {@link Account}s.
+   * @param listener The {@link AccountUpdateListener} to add.
+   * @return {@code true} if the specified {@link AccountUpdateListener} has already been added, {@code false}
+   *                      otherwise.
+   */
+  public boolean addListener(AccountUpdateListener listener);
+
+  /**
+   * Removes an {@link AccountUpdateListener} from the {@link AccountService}.
+   * @param listener The {@link AccountUpdateListener} to remove.
+   * @return {@code true} if the {@link AccountUpdateListener} exists and removed, {@code false} otherwise.
+   */
+  public boolean removeListener(AccountUpdateListener listener);
 }

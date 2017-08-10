@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 
 /**
@@ -26,12 +27,27 @@ import java.util.Objects;
 class InMemoryUnknownAccountService implements AccountService {
   private static final Collection<Account> accounts =
       Collections.unmodifiableCollection(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
+  private final CopyOnWriteArraySet<AccountUpdateListener> accountUpdateListeners = new CopyOnWriteArraySet<>();
   private volatile boolean isOpen = true;
 
   @Override
   public Account getAccountById(short accountId) {
     checkOpen();
     return accountId == Account.UNKNOWN_ACCOUNT_ID ? Account.UNKNOWN_ACCOUNT : null;
+  }
+
+  @Override
+  public boolean addListener(AccountUpdateListener listener) {
+    checkOpen();
+    Objects.requireNonNull(listener, "listener to subscribe cannot be null");
+    return accountUpdateListeners.add(listener);
+  }
+
+  @Override
+  public boolean removeListener(AccountUpdateListener listener) {
+    checkOpen();
+    Objects.requireNonNull(listener, "listener to unsubscribe cannot be null");
+    return accountUpdateListeners.remove(listener);
   }
 
   @Override
