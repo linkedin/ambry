@@ -81,7 +81,7 @@ public class Account {
   /**
    * The name of {@link #UNKNOWN_ACCOUNT}.
    */
-  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account-name";
+  public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
 
   /**
    * The status of {@link #UNKNOWN_ACCOUNT}.
@@ -95,8 +95,8 @@ public class Account {
    */
   public static final Account UNKNOWN_ACCOUNT =
       new Account(UNKNOWN_ACCOUNT_ID, UNKNOWN_ACCOUNT_NAME, UNKNOWN_ACCOUNT_STATUS,
-          Arrays.asList(Container.UNKNOWN_CONTAINER, Container.UNKNOWN_PUBLIC_CONTAINER,
-              Container.UNKNOWN_PRIVATE_CONTAINER));
+          Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
+              Container.DEFAULT_PRIVATE_CONTAINER));
 
   // static variables
   static final String JSON_VERSION_KEY = "version";

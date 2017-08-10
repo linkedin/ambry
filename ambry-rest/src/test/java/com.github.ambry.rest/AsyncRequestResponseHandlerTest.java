@@ -908,6 +908,11 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  public Object setArg(String key, Object value) {
+    return null;
+  }
+
+  @Override
   public SSLSession getSSLSession() {
     return null;
   }

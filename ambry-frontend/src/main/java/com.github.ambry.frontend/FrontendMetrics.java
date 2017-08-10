@@ -142,6 +142,15 @@ class FrontendMetrics {
   public final Histogram blobStorageServiceStartupTimeInMs;
   public final Histogram blobStorageServiceShutdownTimeInMs;
 
+  // Account
+  public final Counter unrecognizedServiceIdCount;
+  public final Counter unrecognizedAccountNameCount;
+  public final Counter unrecognizedContainerNameCount;
+  public final Counter getHeadDeleteUnrecognizedAccountCount;
+  public final Counter getHeadDeleteUnrecognizedContainerCount;
+  public final Meter putWithServiceIdForAccountNameRate;
+  public final Meter putWithAccountAndContainerHeaderRate;
+
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
@@ -319,5 +328,21 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "StartupTimeInMs"));
     blobStorageServiceShutdownTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "ShutdownTimeInMs"));
+
+    // Account and container
+    unrecognizedServiceIdCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedServiceIdCount"));
+    unrecognizedAccountNameCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedAccountNameCount"));
+    unrecognizedContainerNameCount =
+        metricRegistry.counter(MetricRegistry.name(AmbryBlobStorageService.class, "UnrecognizedContainerNameCount"));
+    getHeadDeleteUnrecognizedAccountCount = metricRegistry.counter(
+        MetricRegistry.name(AmbryBlobStorageService.class, "GetHeadDeleteUnrecognizedAccountCount"));
+    getHeadDeleteUnrecognizedContainerCount = metricRegistry.counter(
+        MetricRegistry.name(AmbryBlobStorageService.class, "GetHeadDeleteUnrecognizedContainerCount"));
+    putWithServiceIdForAccountNameRate =
+        metricRegistry.meter(MetricRegistry.name(AmbryBlobStorageService.class, "PutWithServiceIdForAccountNameRate"));
+    putWithAccountAndContainerHeaderRate = metricRegistry.meter(
+        MetricRegistry.name(AmbryBlobStorageService.class, "PutWithAccountAndContainerHeaderRate"));
   }
 }

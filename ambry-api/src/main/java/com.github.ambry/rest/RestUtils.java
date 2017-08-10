@@ -13,6 +13,8 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -29,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -98,6 +101,14 @@ public class RestUtils {
      */
     public final static String SERVICE_ID = "x-ambry-service-id";
     /**
+     * for put request; string; name of target account
+     */
+    public final static String TARGET_ACCOUNT_NAME = "x-ambry-target-account-name";
+    /**
+     * for put request; string; name of the target container
+     */
+    public final static String TARGET_CONTAINER_NAME = "x-ambry-target-container-name";
+    /**
      * optional in request; date string; default unset ("infinite ttl")
      */
     public final static String TTL = "x-ambry-ttl";
@@ -141,6 +152,22 @@ public class RestUtils {
   }
 
   /**
+   * Ambry specific keys used internally in a {@link RestRequest}.
+   */
+  public static final class InternalKeys {
+
+    /**
+     * The key for the target {@link com.github.ambry.account.Account} indicated by the request.
+     */
+    public final static String TARGET_ACCOUNT_KEY = "ambry-internal-key-target-account";
+
+    /**
+     * The key for the target {@link com.github.ambry.account.Container} indicated by the request.
+     */
+    public final static String TARGET_CONTAINER_KEY = "ambry-internal-key-target-container";
+  }
+
+  /**
    * Permitted sub-resources of a blob.
    */
   public enum SubResource {
@@ -177,12 +204,18 @@ public class RestUtils {
 
   /**
    * Builds {@link BlobProperties} given the arguments associated with a request.
-   * @param args the arguments associated with the request.
+   * @param args the arguments associated with the request. Cannot be {@code null}.
    * @return the {@link BlobProperties} extracted from the arguments.
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format or number
    *                                    expected.
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
+    Account account = (Account) args.get(InternalKeys.TARGET_ACCOUNT_KEY);
+    Container container = (Container) args.get(InternalKeys.TARGET_CONTAINER_KEY);
+    String serviceId = getHeader(args, Headers.SERVICE_ID, true);
+    String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
+    String ownerId = getHeader(args, Headers.OWNER_ID, false);
+
     long ttl = Utils.Infinite_Time;
     String ttlStr = getHeader(args, Headers.TTL, false);
     if (ttlStr != null) {
@@ -198,23 +231,8 @@ public class RestUtils {
       }
     }
 
-    boolean isPrivate;
-    String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
-    if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
-      isPrivate = false;
-    } else if (isPrivateStr.toLowerCase().equals("true")) {
-      isPrivate = true;
-    } else {
-      throw new RestServiceException(
-          Headers.PRIVATE + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
-          RestServiceErrorCode.InvalidArgs);
-    }
-
-    String serviceId = getHeader(args, Headers.SERVICE_ID, true);
-    String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
-    String ownerId = getHeader(args, Headers.OWNER_ID, false);
-
-    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl);
+    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate(args), ttl, account.getId(),
+        container.getId());
   }
 
   /**
@@ -510,13 +528,38 @@ public class RestUtils {
   }
 
   /**
-   * Get the service ID from a {@link RestRequest}.
-   * @param restRequest the representation of the request.
-   * @return the service ID, or {@code null} if no service ID was set in the request.
-   * @throws RestServiceException
+   * Gets the isPrivate setting from the args.
+   * @param args The args where to include the isPrivate setting.
+   * @return A boolean to indicate the value of the isPrivate flag.
+   * @throws RestServiceException if exception occurs during parsing the arg.
    */
-  public static String getServiceId(RestRequest restRequest) throws RestServiceException {
-    return getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
+  public static boolean isPrivate(Map<String, Object> args) throws RestServiceException {
+    boolean isPrivate;
+    String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
+    if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
+      isPrivate = false;
+    } else if (isPrivateStr.toLowerCase().equals("true")) {
+      isPrivate = true;
+    } else {
+      throw new RestServiceException(
+          Headers.PRIVATE + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return isPrivate;
+  }
+
+  /**
+   * Ensures the required headers are present.
+   * @param restRequest The {@link RestRequest} to ensure header presence. Cannot be {@code null}.
+   * @param requiredHeaders A set of headers to check presence. Cannot be {@code null}.
+   * @throws RestServiceException if any of the headers is missing.
+   */
+  public static void ensureRequiredHeadersOrThrow(RestRequest restRequest, Set<String> requiredHeaders)
+      throws RestServiceException {
+    Map<String, Object> args = restRequest.getArgs();
+    for (String header : requiredHeaders) {
+      getHeader(args, header, true);
+    }
   }
 
   /**
@@ -531,7 +574,7 @@ public class RestUtils {
    *                                    {@code args} or if there is more than one value for {@code header} in
    *                                    {@code args}.
    */
-  private static String getHeader(Map<String, Object> args, String header, boolean required)
+  public static String getHeader(Map<String, Object> args, String header, boolean required)
       throws RestServiceException {
     String value = null;
     if (args.containsKey(header)) {

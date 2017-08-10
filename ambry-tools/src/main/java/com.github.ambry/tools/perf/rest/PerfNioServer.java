@@ -256,6 +256,11 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
+    public Object setArg(String key, Object value) {
+      return args.put(key, value);
+    }
+
+    @Override
     public SSLSession getSSLSession() {
       return null;
     }

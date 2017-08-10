@@ -38,7 +38,7 @@ public class InMemoryUnknownAccountServiceTest {
   @Test
   public void testAllMethods() throws Exception {
     accountService = new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
-    assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById(Utils.getRandomShort(random)));
+    assertEquals("Wrong account", null, accountService.getAccountById(Utils.getRandomShort(random)));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById((short) -1));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT,
         accountService.getAccountByName(UtilsTest.getRandomString(10)));

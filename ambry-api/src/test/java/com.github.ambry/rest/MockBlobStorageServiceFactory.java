@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 
@@ -30,7 +31,7 @@ public class MockBlobStorageServiceFactory implements BlobStorageServiceFactory 
   private final Router router;
 
   public MockBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler restResponseHandler, Router router) {
+      RestResponseHandler restResponseHandler, Router router, Notifier notifier) {
     this.verifiableProperties = verifiableProperties;
     this.restResponseHandler = restResponseHandler;
     this.router = router;
