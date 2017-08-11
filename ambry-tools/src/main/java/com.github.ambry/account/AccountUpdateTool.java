@@ -13,12 +13,26 @@
  */
 package com.github.ambry.account;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.HelixNotifier;
+import com.github.ambry.commons.Notifier;
+import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import static com.github.ambry.account.AccountUtils.*;
 
 
 /**
@@ -87,6 +101,8 @@ import joptsimple.OptionSpec;
  * </p>
  */
 public class AccountUpdateTool {
+  private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 5000;
+  private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
 
   /**
    * @param args takes in three mandatory arguments: the path of the json file for the accounts to create/update,
@@ -98,7 +114,6 @@ public class AccountUpdateTool {
    *             to the {@code ZooKeeper} (default value is 20000).
    */
   public static void main(String args[]) throws Exception {
-    long startTime = System.currentTimeMillis();
     OptionParser parser = new OptionParser();
 
     ArgumentAcceptingOptionSpec<String> accountJsonFilePathOpt = parser.accepts("accountJsonPath",
@@ -126,14 +141,16 @@ public class AccountUpdateTool {
             + "and the default value is 5000.")
         .withRequiredArg()
         .describedAs("zk_connection_timeout")
-        .ofType(Integer.class);
+        .ofType(Integer.class)
+        .defaultsTo(ZK_CLIENT_CONNECTION_TIMEOUT_MS);
 
     ArgumentAcceptingOptionSpec<Integer> zkSessionTimeoutMsOpt = parser.accepts("zkSessionTimeout",
         "Optional timeout in millisecond for session to the ZooKeeper server. This option is not required, "
             + "and the default value is 20000.")
         .withRequiredArg()
         .describedAs("zk_session_timeout")
-        .ofType(Integer.class);
+        .ofType(Integer.class)
+        .defaultsTo(ZK_CLIENT_SESSION_TIMEOUT_MS);
 
     parser.accepts("help", "print this help message.");
 
@@ -152,20 +169,81 @@ public class AccountUpdateTool {
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(accountJsonFilePathOpt);
     listOpt.add(zkServerOpt);
+    ToolUtils.ensureOrExit(listOpt, options, parser);
     try {
-      ToolUtils.ensureOrExit(listOpt, options, parser);
-      int numOfAccountsSuccessfullyUpdated =
-          AccountUpdater.createOrUpdate(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs,
-              zkSessionTimeoutMs);
-      if (numOfAccountsSuccessfullyUpdated == -1) {
-        throw new Exception("Update failed with unknown reason.");
-      } else {
-        System.out.println(
-            numOfAccountsSuccessfullyUpdated + " accounts have been successfully created or updated, took " + (
-                System.currentTimeMillis() - startTime) + " ms");
-      }
+      updateAccount(accountJsonFilePath, storePath, zkServer, zkConnectionTimeoutMs, zkSessionTimeoutMs);
     } catch (Exception e) {
-      System.err.println("Operation is failed with exception: " + e);
+      System.err.println("Updating accounts failed with exception: " + e);
+      e.printStackTrace();
     }
+  }
+
+  /**
+   * Performs the updating accounts operation.
+   * @param accountJsonFilePath The path to the json file.
+   * @param zkServer The {@code ZooKeeper} server address to connect.
+   * @param storePath The root path on the {@code ZooKeeper} for account data.
+   * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @throws Exception
+   */
+  static void updateAccount(String accountJsonFilePath, String zkServer, String storePath, int zkConnectionTimeoutMs,
+      int zkSessionTimeoutMs) throws Exception {
+    long startTime = System.currentTimeMillis();
+    Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonFilePath);
+    if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
+      AccountService accountService =
+          getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
+      if (accountService.updateAccounts(accountsToUpdate)) {
+        System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
+            System.currentTimeMillis() - startTime) + " ms");
+      } else {
+        throw new Exception("Updating accounts failed with unknown reason.");
+      }
+    } else {
+      throw new IllegalArgumentException("Duplicate id or name exists in the accounts to update");
+    }
+  }
+
+  /**
+   * Constructor.
+   * @param zkServer The {@code ZooKeeper} server address to connect.
+   * @param storePath The path for {@link org.apache.helix.store.HelixPropertyStore}, which will be used as the
+   *                  root path for both {@link HelixAccountService} and {@link HelixNotifier}.
+   * @param zkConnectionTimeoutMs The timeout in millisecond to connect to the {@code ZooKeeper} server.
+   * @param zkSessionTimeoutMs The timeout in millisecond for a session to the {@code ZooKeeper} server.
+   */
+  private static AccountService getHelixAccountService(String zkServer, String storePath, int zkConnectionTimeoutMs,
+      int zkSessionTimeoutMs) {
+    Properties helixConfigProps = new Properties();
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
+        String.valueOf(zkConnectionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms",
+        String.valueOf(zkSessionTimeoutMs));
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
+        zkServer);
+    helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", storePath);
+    VerifiableProperties vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    HelixPropertyStoreConfig storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    Notifier notifier = new HelixNotifier(storeConfig);
+    return new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+  }
+
+  /**
+   * Gets a collection of {@link Account}s from a json file.
+   * @param accountJsonFilePath The path to the json file.
+   * @return The collection of {@link Account}s parsed from the given json file.
+   * @throws IOException
+   * @throws JSONException
+   */
+  private static Collection<Account> getAccountsFromJson(String accountJsonFilePath) throws IOException, JSONException {
+    JSONArray accountArray = new JSONArray(Utils.readStringFromFile(accountJsonFilePath));
+    Collection<Account> accounts = new ArrayList<>();
+    for (int i = 0; i < accountArray.length(); i++) {
+      JSONObject accountJson = accountArray.getJSONObject(i);
+      accounts.add(Account.fromJson(accountJson));
+    }
+    return accounts;
   }
 }

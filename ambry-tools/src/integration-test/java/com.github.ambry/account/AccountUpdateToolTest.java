@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.junit.AfterClass;
 import org.junit.Test;
 
@@ -112,7 +111,7 @@ public class AccountUpdateToolTest {
   @Test
   public void testCreateAccount() throws Exception {
     assertEquals("Wrong number of accounts", 0, accountService.getAllAccounts().size());
-    assertNotNull(createOrUpdateAccountsAndWait(idToRefAccountMap.values()));
+    createOrUpdateAccountsAndWait(idToRefAccountMap.values());
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
   }
 
@@ -138,7 +137,7 @@ public class AccountUpdateToolTest {
       }
       updatedAccounts.add(accountBuilder.build());
     }
-    assertNotNull(createOrUpdateAccountsAndWait(updatedAccounts));
+    createOrUpdateAccountsAndWait(updatedAccounts);
     assertAccountsInAccountService(updatedAccounts, NUM_REF_ACCOUNT, accountService);
   }
 
@@ -184,9 +183,9 @@ public class AccountUpdateToolTest {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
     try {
-      AccountUpdater.createOrUpdate(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, null, null);
+      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000);
       fail("Should have thrown.");
-    } catch (JSONException e) {
+    } catch (Exception e) {
       // expected
     }
     Thread.sleep(100);
@@ -211,18 +210,15 @@ public class AccountUpdateToolTest {
   /**
    * Creates or updates a collection of {@link Account}s to {@code ZooKeeper} server.
    * @param accounts The collection of {@link Account}s to create or update.
-   * @return The file name if the operation is successful; {@code null} otherwise.
    * @throws Exception Any unexpected exception.
    */
-  private static String createOrUpdateAccountsAndWait(Collection<Account> accounts) throws Exception {
+  private static void createOrUpdateAccountsAndWait(Collection<Account> accounts) throws Exception {
     String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
     writeAccountsToFile(accounts, jsonFilePath);
-    int numOfAccounts =
-        AccountUpdater.createOrUpdate(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, null, null);
+    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000);
     // @todo for now it is hard to know when the accounts in an accountService gets updated, so we just blindly
     // @todo sleep for some time until the update happens. There is a planned work to add support into AccountService,
     // @todo so that callback can be registered for account updates.
     Thread.sleep(100);
-    return numOfAccounts == -1 ? null : jsonFilePath;
   }
 }
