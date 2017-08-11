@@ -664,7 +664,7 @@ class MockIndexSegmentV0 extends IndexSegment {
 }
 
 /**
- * Mock {@link IndexSegment} that uses version {@link PersistentIndex#VERSION_0}
+ * Mock {@link IndexSegment} that uses version {@link PersistentIndex#VERSION_1}
  */
 class MockIndexSegmentV1 extends IndexSegment {
   private final int persistedEntrySizeV1;
