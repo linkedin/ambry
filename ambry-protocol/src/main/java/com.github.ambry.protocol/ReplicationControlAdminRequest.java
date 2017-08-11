@@ -36,7 +36,7 @@ public class ReplicationControlAdminRequest extends AdminRequest {
    * @param stream the stream to read from
    * @param adminRequest the {@link AdminRequest} that contains some necessary headers.
    * @return the {@link ReplicationControlAdminRequest} constructed from the {@code stream}.
-   * @throws IOException
+   * @throws IOException if there is any problem reading from the stream
    */
   public static ReplicationControlAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)
       throws IOException {
@@ -57,7 +57,7 @@ public class ReplicationControlAdminRequest extends AdminRequest {
    * Construct a ReplicationControlAdminRequest
    * @param origins the list of datacenters from which replication should be enabled/disabled.
    * @param enable enable/disable flag ({@code true} to enable).
-   * @param adminRequest the {@link AdminRequest} that contains common admin request releated information.
+   * @param adminRequest the {@link AdminRequest} that contains common admin request related information.
    */
   public ReplicationControlAdminRequest(List<String> origins, boolean enable, AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.ReplicationControl, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
