@@ -16,6 +16,7 @@ package com.github.ambry.tools.perf.rest;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
@@ -41,7 +42,7 @@ public class PerfRouterFactory implements RouterFactory {
    * @param verifiableProperties the in-memory properties for constructing configurations.
    * @param clusterMap the {@link ClusterMap} whose {@link MetricRegistry} needs to be used.
    * @param notificationSystem the {@link NotificationSystem} to use (can be {@code null}).
-   * @param sslFactory the {@link SSLFactory} to use (can be {@code null}).
+   * @param sslFactory the {@link JdkSslFactory} to use (can be {@code null}).
    *@throws IllegalArgumentException if any of the required arguments are null.
    */
   public PerfRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,

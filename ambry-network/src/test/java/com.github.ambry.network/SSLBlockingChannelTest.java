@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
@@ -54,12 +55,12 @@ public class SSLBlockingChannelTest {
     clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
 
-    sslFactory = new SSLFactory(sslConfig);
+    sslFactory = new JdkSslFactory(sslConfig);
     sslEchoServer = new EchoServer(sslFactory, sslPort);
     sslEchoServer.start();
 
     //client
-    sslFactory = new SSLFactory(clientSSLConfig);
+    sslFactory = new JdkSslFactory(clientSSLConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }

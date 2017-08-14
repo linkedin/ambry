@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -189,7 +190,7 @@ public class BlobValidator implements Closeable {
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
     List<BlobId> blobIds = getBlobIds(config, clusterMap);
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new SSLFactory(
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new JdkSslFactory(
         new SSLConfig(verifiableProperties)) : null;
     StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
     BlobValidator validator = new BlobValidator(config.replicasToContactPerSec, sslFactory, verifiableProperties);
@@ -277,7 +278,7 @@ public class BlobValidator implements Closeable {
   /**
    * Constructs a BlobValidator
    * @param replicasToContactPerSec the number of replicas to contact in a second.
-   * @param sslFactory the {@link SSLFactory} to use.
+   * @param sslFactory the {@link JdkSslFactory} to use.
    * @param verifiableProperties the {@link VerifiableProperties} to use to construct configs.
    * @throws Exception
    */

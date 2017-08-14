@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
@@ -78,7 +79,7 @@ public class NettyClient implements Closeable {
    * Create a NettyClient.
    * @param hostname the host to connect to.
    * @param port the port to connect to.
-   * @param sslFactory the {@link SSLFactory} to use if SSL is enabled.
+   * @param sslFactory the {@link JdkSslFactory} to use if SSL is enabled.
    */
   public NettyClient(final String hostname, final int port, final SSLFactory sslFactory) throws InterruptedException {
     this.hostname = hostname;

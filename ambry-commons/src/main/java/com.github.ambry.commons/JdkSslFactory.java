@@ -34,10 +34,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Factory to create SSLContext and SSLEngine
  */
-public class SSLFactory {
-  public enum Mode {CLIENT, SERVER}
+public class JdkSslFactory implements SSLFactory {
 
-  protected static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+  protected static final Logger logger = LoggerFactory.getLogger(JdkSslFactory.class);
 
   private String protocol;
   private String provider;
@@ -54,12 +53,12 @@ public class SSLFactory {
   private boolean wantClientAuth;
 
   /**
-   * Construct an {@link SSLFactory}.
+   * Construct an {@link JdkSslFactory}.
    * @param sslConfig the {@link SSLConfig} to use.
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  public SSLFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
+  public JdkSslFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
     if (sslConfig.sslContextProvider.length() > 0) {
@@ -145,6 +144,7 @@ public class SSLFactory {
    * @param mode The local SSL mode, Client or Server
    * @return SSLEngine
    */
+  @Override
   public SSLEngine createSSLEngine(String peerHost, int peerPort, Mode mode) {
     SSLEngine sslEngine = sslContext.createSSLEngine(peerHost, peerPort);
     if (cipherSuites != null) {
@@ -175,6 +175,7 @@ public class SSLFactory {
    * truststore and keystore. An {@link SSLEngine} must be created for each connection.
    * @return SSLContext.
    */
+  @Override
   public SSLContext getSSLContext() {
     return sslContext;
   }

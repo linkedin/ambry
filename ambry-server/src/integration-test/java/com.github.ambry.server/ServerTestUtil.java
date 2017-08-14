@@ -27,6 +27,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -1961,15 +1962,15 @@ public final class ServerTestUtil {
   }
 
   /**
-   * Create an {@link SSLFactory} if there are SSL enabled datacenters in the properties
+   * Create an {@link JdkSslFactory} if there are SSL enabled datacenters in the properties
    * @param verifiableProperties the {@link VerifiableProperties} to use.
-   * @return an {@link SSLFactory}, or {@code null}, if no {@link SSLFactory} is required.
+   * @return an {@link JdkSslFactory}, or {@code null}, if no {@link JdkSslFactory} is required.
    * @throws GeneralSecurityException
    * @throws IOException
    */
   static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
       throws GeneralSecurityException, IOException {
     boolean requiresSSL = new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    return requiresSSL ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
+    return requiresSSL ? new JdkSslFactory(new SSLConfig(verifiableProperties)) : null;
   }
 }

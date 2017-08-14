@@ -731,10 +731,7 @@ public class Utils {
     if (data == null) {
       throw new IllegalArgumentException("Passed in string is null ");
     }
-    ArrayList<String> toReturn = new ArrayList<String>();
-    String[] slices = data.split(delimiter);
-    toReturn.addAll(Arrays.asList(slices));
-    return toReturn;
+    return new ArrayList<>(Arrays.asList(data.split(delimiter)));
   }
 
   /**
@@ -748,7 +745,8 @@ public class Utils {
       throw new IllegalArgumentException("Passed in List is null ");
     }
     StringBuilder sb = new StringBuilder();
-    if (data.size() > 1) {
+    String.join(delimiter, data);
+    if (data.size() >= 1) {
       for (int i = 0; i < data.size() - 1; i++) {
         sb.append(data.get(i)).append(delimiter);
       }

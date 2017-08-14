@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -44,7 +45,7 @@ public class NettyServerFactory implements NioServerFactory {
    * @param publicAccessLogger the {@link PublicAccessLogger} that can be used for public access logging
    * @param restServerState the {@link RestServerState} that can be used to check the health of the system
    *                              to respond to health check requests
-   * @param sslFactory the {@link SSLFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for handling
+   * @param sslFactory the {@link JdkSslFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for handling
    *                   SSL requests.
    * @throws IllegalArgumentException if any of the arguments are null.
    */

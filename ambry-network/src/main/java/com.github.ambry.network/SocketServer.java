@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
@@ -100,7 +101,7 @@ public class SocketServer implements NetworkServer {
   private void initializeSSLFactory(SSLConfig sslConfig) {
     if (ports.get(PortType.SSL) != null) {
       try {
-        this.sslFactory = new SSLFactory(sslConfig);
+        this.sslFactory = new JdkSslFactory(sslConfig);
         metrics.sslFactoryInitializationCount.inc();
       } catch (Exception e) {
         metrics.sslFactoryInitializationErrorCount.inc();

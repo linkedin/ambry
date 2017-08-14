@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
@@ -81,13 +82,13 @@ public class RestTestUtils {
   }
 
   /**
-   * @return an {@link SSLFactory} for use in rest unit tests.
+   * @return an {@link JdkSslFactory} for use in rest unit tests.
    */
   static SSLFactory getTestSSLFactory() {
     try {
       File trustStoreFile = File.createTempFile("truststore", ".jks");
       trustStoreFile.deleteOnExit();
-      return new SSLFactory(
+      return new JdkSslFactory(
           new SSLConfig(TestSSLUtils.createSslProps("", SSLFactory.Mode.SERVER, trustStoreFile, "frontend")));
     } catch (IOException | GeneralSecurityException e) {
       throw new IllegalStateException(e);

@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
@@ -151,11 +152,11 @@ public class FrontendIntegrationTest {
   @BeforeClass
   public static void setup() throws Exception {
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        new SSLFactory(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
+        new JdkSslFactory(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
     sslNettyClient =
-        new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactory(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
+        new NettyClient("localhost", SSL_SERVER_PORT, new JdkSslFactory(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
   }
 
   /**

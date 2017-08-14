@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -24,6 +25,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.security.GeneralSecurityException;
 import java.util.Properties;
 import org.slf4j.Logger;
@@ -53,12 +55,10 @@ public class RestServerMain {
       logger.info("Bootstrapping RestServer");
       restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory);
       // attach shutdown handler to catch control-c
-      Runtime.getRuntime().addShutdownHook(new Thread() {
-        public void run() {
-          logger.info("Received shutdown signal. Shutting down RestServer");
-          restServer.shutdown();
-        }
-      });
+      Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        logger.info("Received shutdown signal. Shutting down RestServer");
+        restServer.shutdown();
+      }));
       restServer.start();
       restServer.awaitShutdown();
     } catch (Exception e) {
@@ -74,17 +74,23 @@ public class RestServerMain {
   }
 
   /**
-   * Instantiate an {@link SSLFactory} if any components require it.
+   * Instantiate an {@link JdkSslFactory} if any components require it.
    * @param verifiableProperties The {@link VerifiableProperties} to check if any components require it.
-   * @return the {@link SSLFactory}, or {@code null} if no components require it.
+   * @return the {@link JdkSslFactory}, or {@code null} if no components require it.
    * @throws GeneralSecurityException
    * @throws IOException
    */
   private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
-      throws GeneralSecurityException, IOException {
+      throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
+             IllegalAccessException {
     boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
         || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    return sslRequired ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
+    SSLFactory sslFactory = null;
+    if (sslRequired) {
+      SSLConfig sslConfig = new SSLConfig(verifiableProperties);
+      sslFactory = Utils.getObj(sslConfig.sslFactory, sslConfig);
+    }
+    return sslFactory;
   }
 }
 

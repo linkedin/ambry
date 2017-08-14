@@ -14,6 +14,7 @@
 
 package com.github.ambry.rest;
 
+import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import io.netty.channel.ChannelInitializer;
@@ -30,7 +31,7 @@ import java.net.InetSocketAddress;
  * A {@link ChannelInitializer} to be used with {@link NettyServer}. Calling {@link #initChannel(SocketChannel)} adds
  * the necessary handlers to a channel's pipeline so that it may handle requests.
  */
-class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
+public class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   private final ConnectionStatsHandler connectionStatsHandler;
@@ -47,7 +48,7 @@ class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
    * @param requestHandler the {@link RestRequestHandler} to handle requests on this pipeline.
    * @param publicAccessLogger the {@link PublicAccessLogger} to use.
    * @param restServerState the {@link RestServerState} object to use.
-   * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
+   * @param sslFactory the {@link JdkSslFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
   public NettyServerChannelInitializer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
@@ -73,8 +74,10 @@ class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
     // if SSL is enabled, add an SslHandler before the HTTP codec
     if (sslFactory != null) {
       InetSocketAddress peerAddress = ch.remoteAddress();
-      pipeline.addLast("sslHandler", new SslHandler(
-          sslFactory.createSSLEngine(peerAddress.getHostName(), peerAddress.getPort(), SSLFactory.Mode.SERVER)));
+      String peerHost = peerAddress.getHostName();
+      int peerPort = peerAddress.getPort();
+      SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
+      pipeline.addLast("sslHandler", sslHandler);
     }
     pipeline
         // for http encoding/decoding.
