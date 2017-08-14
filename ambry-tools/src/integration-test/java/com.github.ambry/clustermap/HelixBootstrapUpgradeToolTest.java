@@ -16,13 +16,10 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.utils.Utils;
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Random;
 import java.util.Set;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.json.JSONException;
@@ -34,6 +31,7 @@ import org.junit.Test;
 
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
 import static com.github.ambry.clustermap.TestUtils.*;
+import static com.github.ambry.utils.TestUtils.*;
 
 
 public class HelixBootstrapUpgradeToolTest {
@@ -62,10 +60,7 @@ public class HelixBootstrapUpgradeToolTest {
 
   @BeforeClass
   public static void initialize() throws IOException {
-    Random random = new Random();
-    File tempDir = Files.createTempDirectory("helixBootstrapUpgrade-" + random.nextInt(1000)).toFile();
-    tempDirPath = tempDir.getAbsolutePath();
-    tempDir.deleteOnExit();
+    tempDirPath = getTempDir("helixBootstrapUpgrade-");
     int port = 2200;
     for (String dcName : dcs) {
       dcsToZkInfo.put(dcName, new ZkInfo(tempDirPath, dcName, port++, true));
@@ -92,9 +87,9 @@ public class HelixBootstrapUpgradeToolTest {
     if (testHardwareLayout.getDatacenterCount() > 1) {
       JSONObject partialZkJson =
           constructZkLayoutJSON(Collections.singleton(dcsToZkInfo.entrySet().iterator().next().getValue()));
-      Utils.writeJsonToFile(partialZkJson, zkLayoutPath);
-      Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
-      Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+      Utils.writeJsonObjectToFile(partialZkJson, zkLayoutPath);
+      Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+      Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, "DC1", DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
@@ -167,9 +162,9 @@ public class HelixBootstrapUpgradeToolTest {
    * @throws JSONException if a JSON parse error is encountered.
    */
   private void writeBootstrapOrUpgrade(long expectedResourceCount) throws Exception {
-    Utils.writeJsonToFile(zkJson, zkLayoutPath);
-    Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
-    Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, "DC1", DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
@@ -184,7 +179,7 @@ public class HelixBootstrapUpgradeToolTest {
   private void verifyResourceCount(HardwareLayout hardwareLayout, long expectedResourceCount) {
     for (Datacenter dc : hardwareLayout.getDatacenters()) {
       ZkInfo zkInfo = dcsToZkInfo.get(dc.getName());
-      ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.port);
+      ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
       Assert.assertEquals("Resource count mismatch", expectedResourceCount,
           admin.getResourcesInCluster(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP).size());
     }

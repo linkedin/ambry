@@ -52,7 +52,7 @@ public class HelixStoreOperator {
    * A constructor that gets a {@link HelixStoreOperator} based on the {@link HelixPropertyStoreConfig}.
    * @param storeConfig A {@link HelixPropertyStore} used to instantiate a {@link HelixStoreOperator}.
    */
-  HelixStoreOperator(HelixPropertyStoreConfig storeConfig) {
+  public HelixStoreOperator(HelixPropertyStoreConfig storeConfig) {
     if (storeConfig == null) {
       throw new IllegalArgumentException("storeConfig cannot be null");
     }

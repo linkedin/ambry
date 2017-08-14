@@ -51,7 +51,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class HelixClusterManagerTest {
-  private final HashMap<String, ZkInfo> dcsToZkInfo = new HashMap<>();
+  private final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
   private final String dcs[] = new String[]{"DC0", "DC1"};
   private final TestUtils.TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
@@ -85,7 +85,7 @@ public class HelixClusterManagerTest {
     tempDir.deleteOnExit();
     int port = 2200;
     for (String dcName : dcs) {
-      dcsToZkInfo.put(dcName, new ZkInfo(tempDirPath, dcName, port++, false));
+      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, port++, false));
     }
     String hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
@@ -98,9 +98,9 @@ public class HelixClusterManagerTest {
     testPartitionLayout.addNewPartitions(3);
     testPartitionLayout.partitionState = PartitionState.READ_WRITE;
 
-    Utils.writeJsonToFile(zkJson, zkLayoutPath);
-    Utils.writeJsonToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
-    Utils.writeJsonToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
@@ -152,8 +152,8 @@ public class HelixClusterManagerTest {
         metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
 
     // Bad test
-    Set<ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
-    zkInfos.iterator().next().port = 0;
+    Set<com.github.ambry.utils.TestUtils.ZkInfo> zkInfos = new HashSet<>(dcsToZkInfo.values());
+    zkInfos.iterator().next().setPort(0);
     JSONObject invalidZkJson = constructZkLayoutJSON(zkInfos);
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);

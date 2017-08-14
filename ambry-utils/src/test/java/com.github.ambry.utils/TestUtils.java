@@ -13,11 +13,16 @@
  */
 package com.github.ambry.utils;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import org.I0Itec.zkclient.IDefaultNameSpace;
+import org.I0Itec.zkclient.ZkServer;
 import org.junit.Assert;
 
 
@@ -108,6 +113,18 @@ public class TestUtils {
   }
 
   /**
+   * Gets a temporary directory with the given prefix. The directory will be deleted when the virtual machine terminates.
+   * @param prefix The prefix for the name of the temporary directory.
+   * @return The absolute path of the generated temporary directory.
+   * @throws IOException
+   */
+  public static String getTempDir(String prefix) throws IOException {
+    File tempDir = Files.createTempDirectory(prefix + RANDOM.nextInt(1000)).toFile();
+    tempDir.deleteOnExit();
+    return tempDir.getAbsolutePath();
+  }
+
+  /**
    * Similar to {@link Runnable}, but able to throw checked exceptions.
    */
   public interface ThrowingRunnable {
@@ -117,6 +134,59 @@ public class TestUtils {
      * @throws Exception
      */
     void run() throws Exception;
+  }
+
+  /**
+   * A class to initialize and hold information about each Zk Server.
+   */
+  public static class ZkInfo {
+    private String dcName;
+    private int port;
+    private String dataDir;
+    private String logDir;
+    private ZkServer zkServer;
+
+    /**
+     * Instantiate by starting a Zk server.
+     * @param tempDirPath the temporary directory string to use.
+     * @param dcName the name of the datacenter.
+     * @param port the port at which this Zk server should run on localhost.
+     */
+    public ZkInfo(String tempDirPath, String dcName, int port, boolean start) throws IOException {
+      this.dcName = dcName;
+      this.port = port;
+      this.dataDir = tempDirPath + "/dataDir";
+      this.logDir = tempDirPath + "/logDir";
+      if (start) {
+        startZkServer(port, dataDir, logDir);
+      }
+    }
+
+    private void startZkServer(int port, String dataDir, String logDir) {
+      IDefaultNameSpace defaultNameSpace = zkClient -> {
+      };
+      // start zookeeper
+      zkServer = new ZkServer(dataDir, logDir, defaultNameSpace, port);
+      zkServer.start();
+    }
+
+    public int getPort() {
+      return port;
+    }
+
+    public void setPort(int port) {
+      this.port = port;
+    }
+
+    public String getDcName() {
+      return dcName;
+    }
+
+    public void shutdown() {
+      if (zkServer != null) {
+        zkServer.shutdown();
+      }
+    }
   }
 
   /**

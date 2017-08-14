@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -25,9 +24,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
-import org.I0Itec.zkclient.IDefaultNameSpace;
-import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.ZkServer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -758,63 +754,16 @@ public class TestUtils {
   }
 
   /**
-   * A class to initialize and hold information about each Zk Server.
-   */
-  public static class ZkInfo {
-    String dcName;
-    int port;
-    String dataDir;
-    String logDir;
-    ZkServer zkServer;
-
-    /**
-     * Instantiate by starting a Zk server.
-     * @param tempDirPath the temporary directory string to use.
-     * @param dcName the name of the datacenter.
-     * @param port the port at which this Zk server should run on localhost.
-     */
-    public ZkInfo(String tempDirPath, String dcName, int port, boolean start) throws IOException {
-      this.dcName = dcName;
-      this.port = port;
-      this.dataDir = tempDirPath + "/dataDir";
-      this.logDir = tempDirPath + "/logDir";
-      if (start) {
-        startZkServer(port, dataDir, logDir);
-      }
-    }
-
-    private void startZkServer(int port, String dataDir, String logDir) {
-      IDefaultNameSpace defaultNameSpace = new IDefaultNameSpace() {
-        @Override
-        public void createDefaultNameSpace(ZkClient zkClient) {
-        }
-      };
-      // start zookeeper
-      zkServer = new ZkServer(dataDir, logDir, defaultNameSpace, port);
-      zkServer.start();
-    }
-
-    public int getPort() {
-      return this.port;
-    }
-
-    public void shutdown() {
-      if (zkServer != null) {
-        zkServer.shutdown();
-      }
-    }
-  }
-
-  /**
    * Construct a ZK layout JSON using predetermined information.
    * @return the constructed JSON.
    */
-  public static JSONObject constructZkLayoutJSON(Collection<ZkInfo> zkInfos) throws JSONException {
+  public static JSONObject constructZkLayoutJSON(Collection<com.github.ambry.utils.TestUtils.ZkInfo> zkInfos)
+      throws JSONException {
     JSONArray zkInfosJson = new JSONArray();
-    for (ZkInfo zkInfo : zkInfos) {
+    for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : zkInfos) {
       JSONObject zkInfoJson = new JSONObject();
-      zkInfoJson.put("datacenter", zkInfo.dcName);
-      zkInfoJson.put("zkConnectStr", "localhost:" + zkInfo.port);
+      zkInfoJson.put("datacenter", zkInfo.getDcName());
+      zkInfoJson.put("zkConnectStr", "localhost:" + zkInfo.getPort());
       zkInfosJson.put(zkInfoJson);
     }
     return new JSONObject().put("zkInfo", zkInfosJson);

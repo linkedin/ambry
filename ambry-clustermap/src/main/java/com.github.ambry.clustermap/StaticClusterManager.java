@@ -63,8 +63,8 @@ class StaticClusterManager implements ClusterMap {
 
   void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
     logger.trace("persist " + hardwareLayoutPath + ", " + partitionLayoutPath);
-    writeJsonToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
-    writeJsonToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
+    writeJsonObjectToFile(hardwareLayout.toJSONObject(), hardwareLayoutPath);
+    writeJsonObjectToFile(partitionLayout.toJSONObject(), partitionLayoutPath);
   }
 
   // Implementation of ClusterMap interface
