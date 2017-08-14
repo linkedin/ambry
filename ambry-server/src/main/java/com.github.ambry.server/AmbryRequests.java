@@ -628,10 +628,10 @@ public class AmbryRequests implements RequestAPI {
               partitionIds, replControlRequest.getOrigins(), replControlRequest.shouldEnable())) {
             error = ServerErrorCode.No_Error;
           } else {
-            logger.error("Could not set enable status for replication of {} from {} to {}. Origins list is empty or "
-                    + "contains an unknown datacenter", partitionIds, replControlRequest.getOrigins(),
+            logger.error("Could not set enable status for replication of {} from {} to {}. Check partition validity and"
+                    + " origins list", partitionIds, replControlRequest.getOrigins(),
                 replControlRequest.shouldEnable());
-            error = error == ServerErrorCode.No_Error ? ServerErrorCode.Unknown_Error : error;
+            error = error != ServerErrorCode.Partition_Unknown ? ServerErrorCode.Unknown_Error : error;
           }
           break;
       }

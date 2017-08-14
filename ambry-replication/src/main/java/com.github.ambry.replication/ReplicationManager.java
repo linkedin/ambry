@@ -377,10 +377,13 @@ public class ReplicationManager {
   }
 
   /**
-   * Enables/disables {@code types} of replication on the given {@code id}s.
+   * Enables/disables {@code types} of replication on the given {@code ids}. The disabling is in-memory and therefore
+   * is not valid across restarts.
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param origins the list of datacenters from which replication should be enabled/disabled.
    * @param enable whether to enable ({@code true}) or disable.
+   * @return {@code true} if disabling succeeded, {@code false} otherwise. Disabling fails if {@code origins} is empty
+   * or contains unrecognized datacenters.
    */
   public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
       boolean enable) {

@@ -134,7 +134,7 @@ class ReplicaThread implements Runnable {
   }
 
   /**
-   * Enables/disables replication on the given {@code id}.
+   * Enables/disables replication on the given {@code ids}.
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable.
    */

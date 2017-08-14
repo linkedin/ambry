@@ -532,12 +532,12 @@ public class ServerAdminTool implements Closeable {
   }
 
   /**
-   * Sends a {@link RequestControlAdminRequest} to set the enable state of {@code toControl} on {@code partitionIdStr}
-   * to {@code enable} in {@code dataNodeId}.
+   * Sends a {@link RequestControlAdminRequest} to enable/disable replication from {@code origins} for
+   * {@code partitionIdStr} in {@code dataNodeId}.
    * @param dataNodeId the {@link DataNodeId} to contact.
    * @param partitionIdStr the String representation of the {@link PartitionId} to compact. Can be {@code null}.
    * @param origins the names of the datacenters from which replication should be controlled.
-   * @param enable the enable (or disable) status required for {@code toControl}.
+   * @param enable the enable (or disable) status required for replication from {@code origins}.
    * @param clusterMap the {@link ClusterMap} to use.
    * @return the {@link ServerErrorCode} that is returned.
    * @throws IOException
