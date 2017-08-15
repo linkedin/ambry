@@ -347,7 +347,7 @@ public class ServerHardDeleteTest {
    * @throws IOException
    */
   void deleteBlob(BlobId blobId, BlockingChannel channel) throws IOException {
-    DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobId);
+    DeleteRequest deleteRequest = new DeleteRequest(1, "client1", blobId, time.milliseconds());
     channel.send(deleteRequest);
     InputStream deleteResponseStream = channel.receive().getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));

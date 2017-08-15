@@ -14,8 +14,6 @@
 package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -350,8 +348,9 @@ public class MessageSievingInputStreamTest {
     try {
       // create message stream for blob 1
       StoreKey key1 = new MockId("id1");
-      BlobProperties prop1 =
-          new BlobProperties(10, "servid1", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+      short accountId1 = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId1 = Utils.getRandomShort(TestUtils.RANDOM);
+      BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1);
       byte[] usermetadata1 = new byte[1000];
       new Random().nextBytes(usermetadata1);
       int blobContentSize = 2000;
@@ -385,8 +384,9 @@ public class MessageSievingInputStreamTest {
 
       // create message stream for blob 3
       StoreKey key3 = new MockId("id3");
-      BlobProperties prop3 =
-          new BlobProperties(10, "servid3", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+      short accountId3 = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId3 = Utils.getRandomShort(TestUtils.RANDOM);
+      BlobProperties prop3 = new BlobProperties(10, "servid3", accountId, containerId);
       byte[] usermetadata3 = new byte[1000];
       new Random().nextBytes(usermetadata3);
       blobContentSize = 2000;

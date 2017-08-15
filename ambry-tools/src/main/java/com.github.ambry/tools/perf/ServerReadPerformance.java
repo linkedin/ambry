@@ -327,7 +327,7 @@ public class ServerReadPerformance {
                 MessageFormatRecord.deserializeUserMetadata(getResponseUserMetadata.getInputStream());
             long endTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds() - startTimeGetBlobUserMetadata;
             // delete the blob
-            DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId);
+            DeleteRequest deleteRequest = new DeleteRequest(0, "perf", blobId, Utils.Infinite_Time);
             channel.send(deleteRequest);
             DeleteResponse deleteResponse =
                 DeleteResponse.readFrom(new DataInputStream(channel.receive().getInputStream()));

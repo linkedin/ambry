@@ -31,21 +31,10 @@ public class DeleteRequest extends RequestOrResponse {
   private final short version;
   static final short DELETE_REQUEST_VERSION_1 = 1;
   static final short DELETE_REQUEST_VERSION_2 = 2;
-  private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_1;
+  private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_2;
   protected static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
   private int sizeSent;
-
-  /**
-   * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_1}
-   * @param correlationId correlationId of the delete request
-   * @param clientId clientId of the delete request
-   * @param blobId blobId of the delete request
-   */
-  // @TODO: remove this constructor once DeleteRequest V2 is enabled
-  public DeleteRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, Utils.Infinite_Time, CURRENT_VERSION);
-  }
 
   /**
    * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
@@ -159,7 +148,7 @@ public class DeleteRequest extends RequestOrResponse {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       BlobId id = new BlobId(stream, map);
-      return new DeleteRequest(correlationId, clientId, id);
+      return new DeleteRequest(correlationId, clientId, id, Utils.Infinite_Time, DELETE_REQUEST_VERSION_1);
     }
   }
 

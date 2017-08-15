@@ -513,7 +513,7 @@ public final class ServerTestUtil {
           } else if (j == 2) {
             channel = channel3;
           }
-          DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIds.get(i));
+          DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIds.get(i), Utils.Infinite_Time);
           channel.send(deleteRequest);
           InputStream deleteResponseStream = channel.receive().getInputStream();
           DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -1071,7 +1071,7 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.Blob_Not_Found, resp4.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // delete a blob and ensure it is propagated
-      DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1);
+      DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1, Utils.Infinite_Time);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));

@@ -269,9 +269,9 @@ public class RequestResponseTest {
       int correlationId = random.nextInt();
       DeleteRequest deleteRequest;
       if (version == DeleteRequest.DELETE_REQUEST_VERSION_1) {
-        deleteRequest = new DeleteRequest(correlationId, "client", id1);
+        deleteRequest = new DeleteRequestV1(correlationId, "client", id1);
       } else {
-        deleteRequest = new DeleteRequestV2(correlationId, "client", id1, deletionTimeMs);
+        deleteRequest = new DeleteRequest(correlationId, "client", id1, deletionTimeMs);
       }
       DataInputStream requestStream = serAndPrepForRead(deleteRequest, -1, true);
       DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
@@ -500,18 +500,17 @@ public class RequestResponseTest {
   }
 
   /**
-   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#DELETE_REQUEST_VERSION_2}
+   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#DELETE_REQUEST_VERSION_1}
    */
-  private class DeleteRequestV2 extends DeleteRequest {
+  private class DeleteRequestV1 extends DeleteRequest {
     /**
-     * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
+     * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_1}
      * @param correlationId correlationId of the delete request
      * @param clientId clientId of the delete request
      * @param blobId blobId of the delete request
-     * @param deletionTimeInMs deletion time of the blob in ms
      */
-    private DeleteRequestV2(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs) {
-      super(correlationId, clientId, blobId, deletionTimeInMs, DeleteRequest.DELETE_REQUEST_VERSION_2);
+    private DeleteRequestV1(int correlationId, String clientId, BlobId blobId) {
+      super(correlationId, clientId, blobId, Utils.Infinite_Time, DeleteRequest.DELETE_REQUEST_VERSION_1);
     }
   }
 }
