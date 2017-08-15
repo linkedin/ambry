@@ -45,8 +45,8 @@ import org.slf4j.LoggerFactory;
  * Reformats all the stores on a given disk.
  */
 public class DiskReformatter {
-  private static final String TEMP_RELOCATION_DIR_NAME = "temp_relocated_store";
-  private static final String TEMP_COPY_DIR_NAME = "temp_copied_store";
+  private static final String RELOCATED_DIR_NAME_SUFFIX = "_relocated";
+  private static final String UNDER_REFORMAT_DIR_NAME_SUFFIX = "_under_reformat";
   private static final Logger logger = LoggerFactory.getLogger(DiskReformatter.class);
 
   private final DataNodeId dataNodeId;
@@ -216,8 +216,9 @@ public class DiskReformatter {
 
     // move the last replica id (the largest one) to scratch space
     ReplicaId toMove = replicasOnDisk.get(replicasOnDisk.size() - 1);
+    String partIdString = toMove.getPartitionId().toString();
     File scratchSrc = new File(toMove.getReplicaPath());
-    File scratchTgt = new File(scratch, TEMP_RELOCATION_DIR_NAME);
+    File scratchTgt = new File(scratch, partIdString + RELOCATED_DIR_NAME_SUFFIX);
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
     delete(scratchTgt);
     Files.move(scratchSrc.toPath(), scratchTgt.toPath());
@@ -225,10 +226,11 @@ public class DiskReformatter {
     // reformat each store, except the one moved, one by one
     for (int i = 0; i < replicasOnDisk.size() - 1; i++) {
       ReplicaId replicaId = replicasOnDisk.get(i);
+      partIdString = replicaId.getPartitionId().toString();
       File src = new File(replicaId.getReplicaPath());
-      File tgt = new File(replicaId.getMountPath(), TEMP_COPY_DIR_NAME);
+      File tgt = new File(replicaId.getMountPath(), partIdString + UNDER_REFORMAT_DIR_NAME_SUFFIX);
       logger.info("Copying {} to {}", src, tgt);
-      copy(src, tgt, replicaId.getCapacityInBytes());
+      copy(partIdString, src, tgt, replicaId.getCapacityInBytes());
       delete(src);
       if (!tgt.renameTo(src)) {
         throw new IllegalStateException("Could not rename " + tgt + " to " + src);
@@ -237,20 +239,21 @@ public class DiskReformatter {
     }
 
     // reformat the moved store
-    copy(scratchTgt, scratchSrc, toMove.getCapacityInBytes());
+    copy(toMove.getPartitionId().toString(), scratchTgt, scratchSrc, toMove.getCapacityInBytes());
     delete(scratchTgt);
     logger.info("Done reformatting {}", toMove);
   }
 
   /**
    * Copy the partition at {@code src} to {@code tgt} using a {@link StoreCopier}.
+   * @param storeId the name/id of the {@link Store}.
    * @param src the location of the partition to be copied
    * @param tgt the location where the partition has to be copied to
    * @param capacityInBytes the capacity of the partition.
    * @throws Exception
    */
-  private void copy(File src, File tgt, long capacityInBytes) throws Exception {
-    try (StoreCopier copier = new StoreCopier(src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig,
+  private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
+    try (StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig,
         new MetricRegistry(), storeKeyFactory, diskIOScheduler, Collections.EMPTY_LIST, time)) {
       copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
     }

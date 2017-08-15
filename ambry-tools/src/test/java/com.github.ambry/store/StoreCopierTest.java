@@ -89,9 +89,8 @@ public class StoreCopierTest {
     storeConfig = new StoreConfig(verifiableProperties);
     setupTestState();
     time.sleep(1000);
-    _storeCopier =
-        new StoreCopier(srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig, clusterMap.getMetricRegistry(),
-            STORE_KEY_FACTORY, DISK_IO_SCHEDULER, Collections.EMPTY_LIST, time);
+    _storeCopier = new StoreCopier("test_store", srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig,
+        clusterMap.getMetricRegistry(), STORE_KEY_FACTORY, DISK_IO_SCHEDULER, Collections.EMPTY_LIST, time);
   }
 
   /**

@@ -147,6 +147,7 @@ public class StoreCopier implements Closeable {
 
   private static final Logger logger = LoggerFactory.getLogger(StoreCopier.class);
 
+  private final String storeId;
   private final Store src;
   private final Store tgt;
   private final long fetchSizeInBytes;
@@ -163,15 +164,16 @@ public class StoreCopier implements Closeable {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       File srcDir = new File(config.srcStoreDirPath);
       File tgtDir = new File(config.tgtStoreDirPath);
-      try (StoreCopier storeCopier = new StoreCopier(srcDir, tgtDir, config.storeCapacity, config.fetchSizeInBytes,
-          storeConfig, clusterMap.getMetricRegistry(), storeKeyFactory, new DiskIOScheduler(null),
-          Collections.EMPTY_LIST, SystemTime.getInstance())) {
+      try (StoreCopier storeCopier = new StoreCopier("src", srcDir, tgtDir, config.storeCapacity,
+          config.fetchSizeInBytes, storeConfig, clusterMap.getMetricRegistry(), storeKeyFactory,
+          new DiskIOScheduler(null), Collections.EMPTY_LIST, SystemTime.getInstance())) {
         storeCopier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
       }
     }
   }
 
   /**
+   * @param storeId the name/id of the {@link Store}.
    * @param srcDir the directory of the {@link Store} to be copied from
    * @param tgtDir the directory of the {@link Store} to be copied to.
    * @param storeCapacity the capacity of the store.
@@ -184,18 +186,18 @@ public class StoreCopier implements Closeable {
    * @param time the {@link Time} instance to use.
    * @throws StoreException
    */
-  public StoreCopier(File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes, StoreConfig storeConfig,
-      MetricRegistry metricRegistry, StoreKeyFactory storeKeyFactory, DiskIOScheduler diskIOScheduler,
-      List<Transformer> transformers, Time time) throws StoreException {
+  public StoreCopier(String storeId, File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes,
+      StoreConfig storeConfig, MetricRegistry metricRegistry, StoreKeyFactory storeKeyFactory,
+      DiskIOScheduler diskIOScheduler, List<Transformer> transformers, Time time) throws StoreException {
+    this.storeId = storeId;
     this.fetchSizeInBytes = fetchSizeInBytes;
     this.transformers = transformers;
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    src =
-        new BlobStore("src", storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(), storeCapacity,
-            storeKeyFactory, recovery, null, time);
-    tgt = new BlobStore("tgt", storeConfig, scheduler, null, diskIOScheduler, metrics, tgtDir.getAbsolutePath(),
+    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(),
         storeCapacity, storeKeyFactory, recovery, null, time);
+    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, metrics,
+        tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     src.start();
     tgt.start();
   }
@@ -258,7 +260,7 @@ public class StoreCopier implements Closeable {
         }
       }
       token = findInfo.getFindToken();
-      logger.info("Checkpoint at {}", token);
+      logger.info("[{}] {}% copied", storeId, token.getBytesRead() * 100 / src.getSizeInBytes());
     } while (!token.equals(lastToken));
     return token;
   }
