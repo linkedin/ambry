@@ -171,7 +171,7 @@ public class AccountUpdateTool {
     listOpt.add(zkServerOpt);
     ToolUtils.ensureOrExit(listOpt, options, parser);
     try {
-      updateAccount(accountJsonFilePath, storePath, zkServer, zkConnectionTimeoutMs, zkSessionTimeoutMs);
+      updateAccount(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
     } catch (Exception e) {
       System.err.println("Updating accounts failed with exception: " + e);
       e.printStackTrace();
