@@ -112,6 +112,18 @@ class Verifier implements Runnable {
                             + propertyOutput.getBlobSize());
                     throw new IllegalStateException();
                   }
+                  if (propertyOutput.getAccountId() != payload.blobProperties.getAccountId()) {
+                    System.out.println(
+                        "accountid not matching " + " expected " + payload.blobProperties.getAccountId() + " actual "
+                            + propertyOutput.getAccountId());
+                    throw new IllegalStateException();
+                  }
+                  if (propertyOutput.getContainerId() != payload.blobProperties.getContainerId()) {
+                    System.out.println(
+                        "containerId not matching " + " expected " + payload.blobProperties.getContainerId()
+                            + " actual " + propertyOutput.getContainerId());
+                    throw new IllegalStateException();
+                  }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();

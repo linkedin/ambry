@@ -32,6 +32,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -61,6 +62,7 @@ class RouterServerTestFramework {
   static final int AWAIT_TIMEOUT = 20;
   static final int CHUNK_SIZE = 1024 * 1024;
   private static final double BALANCE_FACTOR = 3.0;
+  private static Random random = TestUtils.RANDOM;
 
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
@@ -146,9 +148,11 @@ class RouterServerTestFramework {
   OperationChain startOperationChain(int blobSize, int chainId, Queue<OperationType> operations) {
     byte[] userMetadata = new byte[1000];
     byte[] data = new byte[blobSize];
-    new Random().nextBytes(userMetadata);
-    new Random().nextBytes(data);
-    BlobProperties properties = new BlobProperties(blobSize, "serviceid1");
+    random.nextBytes(userMetadata);
+    random.nextBytes(data);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
+    BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
     return opChain;

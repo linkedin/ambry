@@ -40,7 +40,9 @@ public class MessageFormatInputStreamTest {
   private void messageFormatBlobPropertiesTest(short blobVersion, BlobType blobType)
       throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
-    BlobProperties prop = new BlobProperties(10, "servid");
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId);
     byte[] usermetadata = new byte[1000];
     new Random().nextBytes(usermetadata);
     int blobContentSize = 2000;
@@ -107,6 +109,8 @@ public class MessageFormatInputStreamTest {
         new DataInputStream(new ByteBufferInputStream(blobPropertiesBuf)));
     Assert.assertEquals(10, propOutput.getBlobSize());
     Assert.assertEquals("servid", propOutput.getServiceId());
+    Assert.assertEquals("AccountId mismatch", accountId, propOutput.getAccountId());
+    Assert.assertEquals("ContainerId mismatch", containerId, propOutput.getContainerId());
     crc = new Crc32();
     crc.update(blobPropertiesOutput, 0, blobPropertiesRecordSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), blobPropertiesBuf.getLong());

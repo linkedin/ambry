@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
@@ -146,7 +148,8 @@ public class NonBlockingRouterTest {
   }
 
   private void setOperationParams() {
-    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[PUT_CONTENT_SIZE];
@@ -457,7 +460,9 @@ public class NonBlockingRouterTest {
       if (i == 2) {
         // Create a clean cluster and put another blob that immediate expires.
         setOperationParams();
-        putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0);
+        putBlobProperties =
+            new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0, Account.UNKNOWN_ACCOUNT_ID,
+                Container.UNKNOWN_CONTAINER_ID);
         blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
         Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
         allBlobsInServer.removeAll(blobsToBeDeleted);

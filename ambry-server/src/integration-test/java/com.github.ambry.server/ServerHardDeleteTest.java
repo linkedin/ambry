@@ -45,6 +45,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -229,15 +230,26 @@ public class ServerHardDeleteTest {
     }
 
     properties = new ArrayList<>(9);
-    properties.add(new BlobProperties(31870, "serviceid1"));
-    properties.add(new BlobProperties(31871, "serviceid1"));
-    properties.add(new BlobProperties(31872, "serviceid1"));
-    properties.add(new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0));
-    properties.add(new BlobProperties(31874, "serviceid1"));
-    properties.add(new BlobProperties(31875, "serviceid1", "ownerid", "jpeg", false, 0));
-    properties.add(new BlobProperties(31876, "serviceid1"));
-    properties.add(new BlobProperties(31877, "serviceid1"));
-    properties.add(new BlobProperties(31878, "serviceid1"));
+    properties.add(new BlobProperties(31870, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(new BlobProperties(31871, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(new BlobProperties(31872, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(
+        new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(
+        new BlobProperties(31875, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(new BlobProperties(31876, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(new BlobProperties(31877, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
+    properties.add(new BlobProperties(31878, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM)));
 
     List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds();
     PartitionId chosenPartition = partitionIds.get(0);
@@ -273,7 +285,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198443);
+    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198467);
 
     getAndVerify(channel, 6);
 
@@ -303,7 +315,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 297923);
+    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 297959);
 
     getAndVerify(channel, 9);
   }
@@ -383,6 +395,9 @@ public class ServerHardDeleteTest {
           BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
           Assert.assertEquals(propertyOutput.getBlobSize(), properties.get(i).getBlobSize());
           Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+          Assert.assertEquals("AccountId mismatch", properties.get(i).getAccountId(), propertyOutput.getAccountId());
+          Assert.assertEquals("ContainerId mismatch", properties.get(i).getContainerId(),
+              propertyOutput.getContainerId());
         }
       } else if (flag == MessageFormatFlags.BlobUserMetadata) {
         for (int i = 0; i < blobsCount; i++) {

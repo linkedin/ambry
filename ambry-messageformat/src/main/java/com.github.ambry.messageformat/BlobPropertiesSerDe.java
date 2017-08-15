@@ -13,6 +13,8 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -26,7 +28,7 @@ public class BlobPropertiesSerDe {
 
   static final short Version1 = 1;
   static final short Version2 = 2;
-  private static final short currentVersion = Version1;
+  private static final short currentVersion = Version2;
   private static final int Version_Field_Size_In_Bytes = 2;
   private static final int TTL_Field_Size_In_Bytes = 8;
   private static final int Private_Field_Size_In_Bytes = 1;
@@ -39,7 +41,7 @@ public class BlobPropertiesSerDe {
         + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
         + Utils.getNullableStringLength(properties.getOwnerId()) + Variable_Field_Size_In_Bytes
-        + Utils.getNullableStringLength(properties.getServiceId());
+        + Utils.getNullableStringLength(properties.getServiceId()) + Short.BYTES + Short.BYTES;
   }
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
@@ -54,7 +56,8 @@ public class BlobPropertiesSerDe {
     String serviceId = Utils.readIntString(stream);
     switch (version) {
       case Version1:
-        toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime);
+        toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime,
+            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
         break;
       case Version2:
         short accountId = stream.readShort();
@@ -83,5 +86,7 @@ public class BlobPropertiesSerDe {
     Utils.serializeNullableString(outputBuffer, properties.getContentType());
     Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
   }
 }

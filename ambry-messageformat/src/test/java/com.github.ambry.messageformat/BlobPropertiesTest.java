@@ -13,6 +13,8 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -127,7 +129,7 @@ public class BlobPropertiesTest {
       short version) {
     if (version == BlobPropertiesSerDe.Version1) {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-          creationTimeMs);
+          creationTimeMs, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
     } else {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
           creationTimeMs, accountId, containerId);
@@ -150,7 +152,8 @@ public class BlobPropertiesTest {
   private BlobProperties getBlobProperties(long blobSize, String serviceId, String ownerId, String contentType,
       boolean isPrivate, long timeToLiveInSeconds, short accountId, short containerId, short version) {
     if (version == BlobPropertiesSerDe.Version1) {
-      return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds);
+      return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
+          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
     } else {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds, accountId,
           containerId);
@@ -169,7 +172,7 @@ public class BlobPropertiesTest {
   private BlobProperties getBlobProperties(long blobSize, String serviceId, short accountId, short containerId,
       short version) {
     if (version == BlobPropertiesSerDe.Version1) {
-      return new BlobProperties(blobSize, serviceId);
+      return new BlobProperties(blobSize, serviceId, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
     } else {
       return new BlobProperties(blobSize, serviceId, accountId, containerId);
     }
