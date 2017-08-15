@@ -290,7 +290,7 @@ class NonBlockingRouter implements Router {
       } else if (result.storeKeys != null) {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
         for (StoreKey storeKey : result.storeKeys) {
-          logger.trace("Initiating delete of chunk blob {}: ", storeKey);
+          logger.trace("Initiating delete of chunk blob: {}", storeKey);
           deleteRequests.add(new BackgroundDeleteRequest(storeKey, serviceId));
         }
         initiateBackgroundDeletes(deleteRequests);
