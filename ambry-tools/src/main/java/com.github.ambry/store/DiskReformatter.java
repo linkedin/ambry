@@ -29,7 +29,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -147,17 +146,16 @@ public class DiskReformatter {
         Runnable runnable = () -> {
           try {
             reformatter.reformat(config.diskMountPaths[finalI], new File(config.scratchPaths[finalI]));
-          } catch (Exception e) {
-            exitStatus.set(1);
-            throw new IllegalStateException(e);
-          } finally {
             latch.countDown();
+          } catch (Exception e) {
+            throw new IllegalStateException(e);
           }
         };
         Thread thread = Utils.newThread(config.diskMountPaths[finalI] + "-reformatter", runnable, true);
         thread.setUncaughtExceptionHandler((t, e) -> {
-          logger.error("Reformatting {} failed", config.diskMountPaths[finalI]);
           exitStatus.set(1);
+          logger.error("Reformatting {} failed", config.diskMountPaths[finalI], e);
+          latch.countDown();
         });
         thread.start();
       }
@@ -221,7 +219,7 @@ public class DiskReformatter {
     File scratchTgt = new File(scratch, partIdString + RELOCATED_DIR_NAME_SUFFIX);
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
     delete(scratchTgt);
-    Files.move(scratchSrc.toPath(), scratchTgt.toPath());
+    FileUtils.moveDirectory(scratchSrc, scratchTgt);
 
     // reformat each store, except the one moved, one by one
     for (int i = 0; i < replicasOnDisk.size() - 1; i++) {
