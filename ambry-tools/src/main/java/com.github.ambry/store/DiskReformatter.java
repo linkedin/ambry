@@ -14,10 +14,10 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.StaticClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
@@ -127,8 +127,11 @@ public class DiskReformatter {
     VerifiableProperties properties = ToolUtils.getVerifiableProperties(args);
     DiskReformatterConfig config = new DiskReformatterConfig(properties);
     StoreConfig storeConfig = new StoreConfig(properties);
-    try (ClusterMap clusterMap = new StaticClusterAgentsFactory(new ClusterMapConfig(properties),
-        config.hardwareLayoutFilePath, config.partitionLayoutFilePath).getClusterMap()) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+    ClusterAgentsFactory clusterAgentsFactory =
+        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
+            config.partitionLayoutFilePath);
+    try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       DataNodeId dataNodeId = clusterMap.getDataNodeId(config.datanodeHostname, config.datanodePort);
       if (dataNodeId == null) {

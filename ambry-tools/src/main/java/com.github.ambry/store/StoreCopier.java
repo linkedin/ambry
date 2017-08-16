@@ -14,8 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.StaticClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
@@ -159,8 +159,11 @@ public class StoreCopier implements Closeable {
     VerifiableProperties properties = ToolUtils.getVerifiableProperties(args);
     CopierConfig config = new CopierConfig(properties);
     StoreConfig storeConfig = new StoreConfig(properties);
-    try (ClusterMap clusterMap = new StaticClusterAgentsFactory(new ClusterMapConfig(properties),
-        config.hardwareLayoutFilePath, config.partitionLayoutFilePath).getClusterMap()) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+    ClusterAgentsFactory clusterAgentsFactory =
+        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
+            config.partitionLayoutFilePath);
+    try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       File srcDir = new File(config.srcStoreDirPath);
       File tgtDir = new File(config.tgtStoreDirPath);
