@@ -112,7 +112,7 @@ public class ReplicationTest {
     Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
     Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
 
-    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds();
     for (PartitionId partitionId : partitionIds) {
       // add  10 messages to the remote host only
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 10);
@@ -157,9 +157,13 @@ public class ReplicationTest {
     Thread thread = Utils.newThread(replicaThread, false);
     thread.start();
 
+    assertEquals("There should be no disabled partitions", 0, replicaThread.getReplicationDisabledPartitions().size());
     // wait to pause replication
     readyToPause.await(10, TimeUnit.SECONDS);
     replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), false);
+    Set<PartitionId> expectedPaused = new HashSet<>(clusterMap.getAllPartitionIds());
+    assertEquals("Disabled partitions sets do not match", expectedPaused,
+        replicaThread.getReplicationDisabledPartitions());
     // signal the replica thread to move forward
     readyToProceed.countDown();
     // wait for the thread to go into waiting state
@@ -167,12 +171,16 @@ public class ReplicationTest {
         TestUtils.waitUntilExpectedState(thread, Thread.State.WAITING, 10000));
     // unpause one partition
     replicaThread.controlReplicationForPartitions(Collections.singletonList(partitionIds.get(0)), true);
+    expectedPaused.remove(partitionIds.get(0));
+    assertEquals("Disabled partitions sets do not match", expectedPaused,
+        replicaThread.getReplicationDisabledPartitions());
     // wait for it to catch up
     reachedLimitLatch.get().await(10, TimeUnit.SECONDS);
     // reset limit
     reachedLimitLatch.set(new CountDownLatch(partitionIds.size() - 1));
     // unpause all partitions
     replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), true);
+    assertEquals("There should be no disabled partitions", 0, replicaThread.getReplicationDisabledPartitions().size());
     // wait until all catch up
     reachedLimitLatch.get().await(10, TimeUnit.SECONDS);
     // shutdown
@@ -200,7 +208,7 @@ public class ReplicationTest {
     Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
     Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
 
-    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds();
     for (PartitionId partitionId : partitionIds) {
       // add  10 messages to the remote host only
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 10);
@@ -231,6 +239,9 @@ public class ReplicationTest {
     boolean allStopped = false;
     boolean onlyOneResumed = false;
     boolean allReenabled = false;
+    Set<PartitionId> expectedPaused = new HashSet<>();
+    assertEquals("There should be no disabled partitions", expectedPaused,
+        replicaThread.getReplicationDisabledPartitions());
     while (true) {
       replicaThread.replicate(new ArrayList<>(replicasToReplicate.values()));
       boolean replicationDone = true;
@@ -250,10 +261,16 @@ public class ReplicationTest {
       }
       if (!allStopped && !onlyOneResumed && !allReenabled) {
         replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), false);
+        expectedPaused.addAll(clusterMap.getAllPartitionIds());
+        assertEquals("Disabled partitions sets do not match", expectedPaused,
+            replicaThread.getReplicationDisabledPartitions());
         allStopped = true;
       } else if (!onlyOneResumed && !allReenabled) {
         // resume replication for first partition
         replicaThread.controlReplicationForPartitions(Collections.singletonList(partitionIds.get(0)), true);
+        expectedPaused.remove(partitionIds.get(0));
+        assertEquals("Disabled partitions sets do not match", expectedPaused,
+            replicaThread.getReplicationDisabledPartitions());
         allStopped = false;
         onlyOneResumed = true;
       } else if (!allReenabled) {
@@ -262,6 +279,9 @@ public class ReplicationTest {
         replicaThread.controlReplicationForPartitions(idsToEnable, true);
         onlyOneResumed = false;
         allReenabled = true;
+        expectedPaused.clear();
+        assertEquals("Disabled partitions sets do not match", expectedPaused,
+            replicaThread.getReplicationDisabledPartitions());
       }
       if (replicationDone) {
         break;

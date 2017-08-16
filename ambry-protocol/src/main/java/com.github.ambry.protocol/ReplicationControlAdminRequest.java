@@ -23,6 +23,9 @@ import java.util.List;
 
 /**
  * An admin request used to control replication behavior (enable/disable)
+ * <p/>
+ * This request can be used to control replication (at a single storage node) of particular partitions from particular
+ * datacenters (i.e. replication that adds data locally on the given storage node).
  */
 public class ReplicationControlAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;

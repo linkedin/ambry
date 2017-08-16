@@ -43,6 +43,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -357,6 +358,7 @@ public class ReplicationManager {
       // number of nodes. Otherwise, assign one thread to one node.
       assignReplicasToThreadPool();
       replicationMetrics.trackLiveThreadsCount(replicaThreadPools, dataNodeId.getDatacenterName());
+      replicationMetrics.trackReplicationDisabledPartitions(replicaThreadPools);
 
       // start all replica threads
       for (List<ReplicaThread> replicaThreads : replicaThreadPools.values()) {
@@ -487,7 +489,7 @@ public class ReplicationManager {
     if (dataNodeRemoteReplicaInfos != null) {
       dataNodeRemoteReplicaInfos.addRemoteReplica(remoteReplicaInfo);
     } else {
-      dataNodeRemoteReplicaInfos = new DataNodeRemoteReplicaInfos(datacenter, remoteReplicaInfo);
+      dataNodeRemoteReplicaInfos = new DataNodeRemoteReplicaInfos(remoteReplicaInfo);
       // update numberOfReplicaThreads
       if (datacenter.equals(dataNodeId.getDatacenterName())) {
         this.numberOfReplicaThreads.put(datacenter, replicationConfig.replicationNumOfIntraDCReplicaThreads);
@@ -762,31 +764,29 @@ public class ReplicationManager {
    * Also contains the mapping of {@link RemoteReplicaInfo} list for every {@link DataNodeId}
    */
   class DataNodeRemoteReplicaInfos {
-    private final String datacenter;
     private Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToReplicaLists;
 
-    public DataNodeRemoteReplicaInfos(String datacenter, RemoteReplicaInfo remoteReplicaInfo) {
-      this.datacenter = datacenter;
-      this.dataNodeToReplicaLists = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+    DataNodeRemoteReplicaInfos(RemoteReplicaInfo remoteReplicaInfo) {
+      this.dataNodeToReplicaLists = new HashMap<>();
       this.dataNodeToReplicaLists.put(remoteReplicaInfo.getReplicaId().getDataNodeId(),
-          new ArrayList<RemoteReplicaInfo>(Arrays.asList(remoteReplicaInfo)));
+          new ArrayList<>(Collections.singletonList(remoteReplicaInfo)));
     }
 
-    public void addRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
+    void addRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
       DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
       List<RemoteReplicaInfo> replicaInfos = dataNodeToReplicaLists.get(dataNodeIdToReplicate);
       if (replicaInfos == null) {
-        replicaInfos = new ArrayList<RemoteReplicaInfo>();
+        replicaInfos = new ArrayList<>();
       }
       replicaInfos.add(remoteReplicaInfo);
       dataNodeToReplicaLists.put(dataNodeIdToReplicate, replicaInfos);
     }
 
-    public Set<DataNodeId> getDataNodeIds() {
+    Set<DataNodeId> getDataNodeIds() {
       return this.dataNodeToReplicaLists.keySet();
     }
 
-    public List<RemoteReplicaInfo> getRemoteReplicaListForDataNode(DataNodeId dataNodeId) {
+    List<RemoteReplicaInfo> getRemoteReplicaListForDataNode(DataNodeId dataNodeId) {
       return dataNodeToReplicaLists.get(dataNodeId);
     }
   }

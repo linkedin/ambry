@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -366,6 +367,27 @@ public class ReplicationMetrics {
     };
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
+  }
+
+  /**
+   * Tracks the number of partitions for which replication is disabled.
+   * @param replicaThreadPools A map of datacenter names to {@link ReplicaThread}s handling replication from that
+   *                           datacenter
+   */
+  public void trackReplicationDisabledPartitions(final Map<String, List<ReplicaThread>> replicaThreadPools) {
+    for (Map.Entry<String, List<ReplicaThread>> entry : replicaThreadPools.entrySet()) {
+      String datacenter = entry.getKey();
+      List<ReplicaThread> pool = entry.getValue();
+      Gauge<Integer> disabledCount = () -> {
+        Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
+        for (ReplicaThread replicaThread : pool) {
+          replicationDisabledPartitions.addAll(replicaThread.getReplicationDisabledPartitions());
+        }
+        return replicationDisabledPartitions.size();
+      };
+      registry.register(MetricRegistry.name(ReplicaThread.class, "ReplicationDisabledPartitions-" + datacenter),
+          disabledCount);
+    }
   }
 
   public void populateInvalidMessageMetricForReplicas(List<? extends ReplicaId> replicaIds) {

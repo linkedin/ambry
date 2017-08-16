@@ -144,9 +144,10 @@ class ReplicaThread implements Runnable {
       for (PartitionId id : ids) {
         if (replicatedPartitions.contains(id)) {
           if (enable) {
-            replicationDisabledPartitions.remove(id);
-            allDisabled = false;
-            pauseCondition.signal();
+            if (replicationDisabledPartitions.remove(id)) {
+              allDisabled = false;
+              pauseCondition.signal();
+            }
           } else {
             replicationDisabledPartitions.add(id);
             allDisabled = replicatedPartitions.size() == replicationDisabledPartitions.size();
@@ -158,6 +159,13 @@ class ReplicaThread implements Runnable {
     } finally {
       lock.unlock();
     }
+  }
+
+  /**
+   * @return {@link Set} of {@link PartitionId}s for which replication is disabled.
+   */
+  Set<PartitionId> getReplicationDisabledPartitions() {
+    return replicationDisabledPartitions;
   }
 
   String getName() {
