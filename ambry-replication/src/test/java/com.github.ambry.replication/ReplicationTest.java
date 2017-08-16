@@ -177,14 +177,24 @@ public class ReplicationTest {
             storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
             new ResponseHandler(clusterMap));
 
+    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      if (partitionIds.indexOf(entry.getKey()) % 2 == 0) {
+        assertEquals("Missing buffers count mismatch", 13, entry.getValue().size());
+      } else {
+        assertEquals("Missing buffers count mismatch", 14, entry.getValue().size());
+      }
+    }
+
     // 1st and 2nd iterations - no keys missing because all data is in both hosts
     // 3rd iteration - 3 missing keys (one expired)
     // 4th iteration - 3 missing keys (one expired) - the corrupt key also shows up as missing but is ignored later
     // 5th iteration - 1 missing key (1 key from prev cycle, 1 deleted key, 1 never present key but deleted in remote)
     // 6th iteration - 2 missing keys (2 entries i.e put,delete of never present key)
     int[] missingKeysCounts = {0, 0, 3, 3, 1, 2};
+    int[] missingBuffersCount = {12, 12, 9, 7, 6, 4};
     int expectedIndex = 0;
-
+    int missingBuffersIndex = 0;
     for (int missingKeysCount : missingKeysCounts) {
       expectedIndex += (batchSize - 1);
       List<ReplicaThread.ExchangeMetadataResponse> response =
@@ -203,6 +213,17 @@ public class ReplicationTest {
         assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
             replicasToReplicate.get(remoteHost.dataNodeId).get(i).getToken());
       }
+      missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+      for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+        if (partitionIds.indexOf(entry.getKey()) % 2 == 0) {
+          assertEquals("Missing buffers count mismatch", missingBuffersCount[missingBuffersIndex],
+              entry.getValue().size());
+        } else {
+          assertEquals("Missing buffers count mismatch", missingBuffersCount[missingBuffersIndex] + 1,
+              entry.getValue().size());
+        }
+      }
+      missingBuffersIndex++;
     }
 
     // Test the case where some partitions have missing keys, but not all.
@@ -259,7 +280,7 @@ public class ReplicationTest {
         assertTrue(stateInfo.getKey() + " should have been ignored", stateInfo.getValue());
       }
     }
-    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
       // 1 expired + 1 corrupt + 1 put (never present) + 1 deleted (never present)
       assertEquals(4, entry.getValue().size());
@@ -395,7 +416,7 @@ public class ReplicationTest {
   private ByteBuffer getDeleteMessage(StoreKey id) throws MessageFormatException, IOException {
     MessageFormatInputStream stream =
         new DeleteMessageFormatInputStream(id, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-            SystemTime.getInstance().milliseconds());
+            Utils.Infinite_Time);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return ByteBuffer.wrap(message);
   }
