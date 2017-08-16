@@ -220,6 +220,9 @@ public class DiskReformatter {
     String partIdString = toMove.getPartitionId().toString();
     File scratchSrc = new File(toMove.getReplicaPath());
     File scratchTgt = new File(scratch, partIdString + RELOCATED_DIR_NAME_SUFFIX);
+    if (scratchTgt.exists()) {
+      throw new IllegalStateException(scratchTgt + " already exists");
+    }
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
     delete(scratchTgt);
     FileUtils.moveDirectory(scratchSrc, scratchTgt);
