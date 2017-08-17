@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -258,16 +260,23 @@ class CuratedLogIndexState {
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.DELETE_RECORD_SIZE);
 
     boolean forcePut = false;
+    Offset startOffset = fileSpan.getStartOffset();
+    Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(startOffset);
+    if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
+      // rollover will occur
+      advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
+      referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
+    }
     IndexValue newValue;
     if (allKeys.containsKey(idToDelete)) {
       IndexValue value = getExpectedValue(idToDelete, true);
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          Utils.Infinite_Time);
+          time.milliseconds(), value.getServiceId(), value.getContainerId());
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
     } else {
-      newValue =
-          new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+      newValue = new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time,
+          time.milliseconds(), Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
       newValue.clearOriginalMessageOffset();
       indexSegmentStartOffsets.put(idToDelete, new Pair<Offset, Offset>(null, null));
       allKeys.put(idToDelete, new Pair<IndexValue, IndexValue>(null, null));
@@ -276,22 +285,16 @@ class CuratedLogIndexState {
     newValue.setFlag(IndexValue.Flags.Delete_Index);
 
     logOrder.put(fileSpan.getStartOffset(), new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
-    Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
     Pair<Offset, Offset> keyLocations = indexSegmentStartOffsets.get(idToDelete);
     indexSegmentStartOffsets.put(idToDelete, new Pair<>(keyLocations.getFirst(), indexSegmentStartOffset));
     Pair<IndexValue, IndexValue> keyValues = allKeys.get(idToDelete);
     allKeys.put(idToDelete, new Pair<>(keyValues.getFirst(), newValue));
-    if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
-      // rollover will occur
-      advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
-      referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
-    }
     referenceIndex.get(indexSegmentStartOffset).put(idToDelete, newValue);
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
     if (forcePut) {
       index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);
     } else {
-      index.markAsDeleted(idToDelete, fileSpan);
+      index.markAsDeleted(idToDelete, fileSpan, newValue.getOperationTimeInMs());
     }
     lastModifiedTimesInSecs.put(indexSegmentStartOffset, time.seconds());
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());

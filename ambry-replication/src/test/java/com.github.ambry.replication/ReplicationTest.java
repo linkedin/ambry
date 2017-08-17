@@ -154,7 +154,7 @@ public class ReplicationTest {
 
       // ensure that the first key is not deleted in the local host
       assertNull(toDeleteId + " should not be deleted in the local host",
-          getDeleteInfo(toDeleteId, localHost.infosByPartition.get(partitionId)));
+          getMessageInfo(toDeleteId, localHost.infosByPartition.get(partitionId), true));
     }
 
     Properties properties = new Properties();
@@ -216,11 +216,11 @@ public class ReplicationTest {
       missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
       for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
         if (partitionIds.indexOf(entry.getKey()) % 2 == 0) {
-          assertEquals("Missing buffers count mismatch", missingBuffersCount[missingBuffersIndex],
-              entry.getValue().size());
+          assertEquals("Missing buffers count mismatch for iteration count " + missingBuffersIndex,
+              missingBuffersCount[missingBuffersIndex], entry.getValue().size());
         } else {
-          assertEquals("Missing buffers count mismatch", missingBuffersCount[missingBuffersIndex] + 1,
-              entry.getValue().size());
+          assertEquals("Missing buffers count mismatch for iteration count " + missingBuffersIndex,
+              missingBuffersCount[missingBuffersIndex] + 1, entry.getValue().size());
         }
       }
       missingBuffersIndex++;
@@ -264,7 +264,7 @@ public class ReplicationTest {
       // test that the first key has been marked deleted
       List<MessageInfo> messageInfos = localHost.infosByPartition.get(entry.getKey());
       StoreKey deletedId = messageInfos.get(0).getStoreKey();
-      assertNotNull(deletedId + " should have been deleted", getDeleteInfo(deletedId, messageInfos));
+      assertNotNull(deletedId + " should have been deleted", getMessageInfo(deletedId, messageInfos, true));
       Map<StoreKey, Boolean> ignoreState = new HashMap<>();
       for (StoreKey toBeIgnored : idsToBeIgnoredByPartition.get(entry.getKey())) {
         ignoreState.put(toBeIgnored, false);
@@ -378,9 +378,14 @@ public class ReplicationTest {
    */
   private void addDeleteMessagesToReplicasOfPartition(PartitionId partitionId, StoreKey id, List<Host> hosts)
       throws MessageFormatException, IOException {
-    ByteBuffer buffer = getDeleteMessage(id);
+    MessageInfo putMsg = getMessageInfo(id, hosts.get(0).infosByPartition.get(partitionId), false);
+    // TODO: fix deletionTimeMs when MessageInfoList V3 is enabled
+    long deletionTimeMs = Utils.Infinite_Time;
+    ByteBuffer buffer = getDeleteMessage(id, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs);
     for (Host host : hosts) {
-      host.addMessage(partitionId, new MessageInfo(id, buffer.remaining(), true), buffer.duplicate());
+      host.addMessage(partitionId,
+          new MessageInfo(id, buffer.remaining(), true, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs),
+          buffer.duplicate());
     }
   }
 
@@ -413,26 +418,28 @@ public class ReplicationTest {
    * @throws MessageFormatException
    * @throws IOException
    */
-  private ByteBuffer getDeleteMessage(StoreKey id) throws MessageFormatException, IOException {
-    MessageFormatInputStream stream =
-        new DeleteMessageFormatInputStream(id, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-            Utils.Infinite_Time);
+  private ByteBuffer getDeleteMessage(StoreKey id, short accountId, short containerId, long deletionTimeMs)
+      throws MessageFormatException, IOException {
+    MessageFormatInputStream stream = new DeleteMessageFormatInputStream(id, accountId, containerId, deletionTimeMs);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return ByteBuffer.wrap(message);
   }
 
   /**
-   * Gets the delete {@link MessageInfo} for {@code id} if present.
+   * Gets the {@link MessageInfo} for {@code id} if present.
    * @param id the {@link StoreKey} to look for.
    * @param messageInfos the {@link MessageInfo} list.
+   * @param deleteMsg {@code true} if delete msg if requested. {@code false} otherwise
    * @return the delete {@link MessageInfo} if it exists in {@code messageInfos}. {@code null otherwise.}
    */
-  private static MessageInfo getDeleteInfo(StoreKey id, List<MessageInfo> messageInfos) {
+  private static MessageInfo getMessageInfo(StoreKey id, List<MessageInfo> messageInfos, boolean deleteMsg) {
     MessageInfo toRet = null;
     for (MessageInfo messageInfo : messageInfos) {
-      if (messageInfo.getStoreKey().equals(id) && messageInfo.isDeleted()) {
-        toRet = messageInfo;
-        break;
+      if (messageInfo.getStoreKey().equals(id)) {
+        if ((deleteMsg && messageInfo.isDeleted()) || (!deleteMsg && !messageInfo.isDeleted())) {
+          toRet = messageInfo;
+          break;
+        }
       }
     }
     return toRet;
@@ -740,7 +747,7 @@ public class ReplicationTest {
       int index = mockToken.getIndex();
       while (currentSizeOfEntriesInBytes < maxSizeOfEntries && index < messageInfos.size()) {
         MessageInfo messageInfo = messageInfos.get(index);
-        MessageInfo deleteInfo = getDeleteInfo(messageInfo.getStoreKey(), messageInfos);
+        MessageInfo deleteInfo = getMessageInfo(messageInfo.getStoreKey(), messageInfos, true);
         entriesToReturn.add(deleteInfo == null ? messageInfo : deleteInfo);
         // still use the size of the put (if the original picked up is the put.
         currentSizeOfEntriesInBytes += messageInfos.get(index).getSize();
@@ -783,7 +790,7 @@ public class ReplicationTest {
 
     @Override
     public boolean isKeyDeleted(StoreKey key) throws StoreException {
-      return getDeleteInfo(key, messageInfos) != null;
+      return getMessageInfo(key, messageInfos, true) != null;
     }
 
     @Override
@@ -894,7 +901,7 @@ public class ReplicationTest {
           int indexRequested = 0;
           for (int i = startIndex; i < endIndex; i++) {
             MessageInfo messageInfo = partitionInfos.get(i);
-            MessageInfo deleteInfo = getDeleteInfo(messageInfo.getStoreKey(), partitionInfos);
+            MessageInfo deleteInfo = getMessageInfo(messageInfo.getStoreKey(), partitionInfos, true);
             messageInfosToReturn.add(deleteInfo == null ? messageInfo : deleteInfo);
             indexRequested = i;
           }

@@ -325,7 +325,7 @@ class BlobStore implements Store {
         int correspondingPutIndex = 0;
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan);
+          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
         }
