@@ -285,26 +285,17 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a random number
-   * of invalid records. This is a NOT good {@link ZNRecord} format that should fail fetch or update, and none of the
-   * record should be read.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has an invalid account
+   * record and a good account records. This is a NOT good {@link ZNRecord} format that should fail fetch or update,
+   * and none of the record should be read.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase6() throws Exception {
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
-    List<Account> goodAccounts = new ArrayList<>();
-    List<Account> badAccounts = new ArrayList<>();
     Map<String, String> accountMap = new HashMap<>();
-    for (Account account : idToRefAccountMap.values()) {
-      if (random.nextDouble() < 0.3) {
-        accountMap.put(String.valueOf(account.getId()), BAD_ACCOUNT_METADATA_STRING);
-        badAccounts.add(account);
-      } else {
-        accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
-        goodAccounts.add(account);
-      }
-    }
+    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
+    accountMap.put(String.valueOf(refAccount.getId() + 1), BAD_ACCOUNT_METADATA_STRING);
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
     updateAndWriteZNRecord(zNRecord, false);
   }
@@ -702,8 +693,8 @@ public class HelixAccountServiceTest {
    *
    * If the {@link ZNRecord} is good, it should not affect updating operation.
    * @param zNRecord A {@link ZNRecord} to write to {@link HelixPropertyStore}.
-   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} should not affect updating operation; {@code false}
-   *                       otherwise.
+   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} is good, which should not affect updating
+   *                       operation; {@code false} otherwise.
    * @throws Exception Any unexpected exception.
    */
   private void updateAndWriteZNRecord(ZNRecord zNRecord, boolean isGoodZNRecord) throws Exception {
