@@ -64,5 +64,10 @@ public class AmbryStateModel extends StateModel {
   public void onBecomeOfflineFromLeader(Message message, NotificationContext context) {
     logger.info("Becoming OFFLINE from LEADER");
   }
+
+  @Override
+  public void reset() {
+    // no op
+  }
 }
 
