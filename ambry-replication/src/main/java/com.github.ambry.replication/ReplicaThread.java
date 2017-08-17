@@ -205,7 +205,7 @@ class ReplicaThread implements Runnable {
           if (checkoutConnectionTimeInMs == -1) {
             // throwable happened in checkout connection phase
             checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-            // throwable an exception for any replica on a node will record a node timeout failure
+            // recording an exception for any replica on a node will record a node timeout failure
             responseHandler.onEvent(activeReplicasPerNode.get(0).getReplicaId(), e);
           } else if (exchangeMetadataTimeInMs == -1) {
             // throwable happened in exchange metadata phase
@@ -704,7 +704,7 @@ class ReplicaThread implements Runnable {
           } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {
             replicationMetrics.blobDeletedOnGetCount.inc();
             logger.trace("One of the blobs to GET is deleted: Remote node: {} Thread name: {} Remote replica: {}",
-                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId());
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
