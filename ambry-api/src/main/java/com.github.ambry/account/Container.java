@@ -339,6 +339,9 @@ public class Container {
     if (status != container.status) {
       return false;
     }
+    if (description != null ? !description.equals(container.description) : container.description != null) {
+      return false;
+    }
     if (!isPrivate.equals(container.isPrivate)) {
       return false;
     }

@@ -275,7 +275,13 @@ public class Account {
     if (!name.equals(account.name)) {
       return false;
     }
-    return status == account.status;
+    if (status != account.status) {
+      return false;
+    }
+    if (!containerIdToContainerMap.equals(account.containerIdToContainerMap)) {
+      return false;
+    }
+    return containerNameToContainerMap.equals(account.containerNameToContainerMap);
   }
 
   @Override
