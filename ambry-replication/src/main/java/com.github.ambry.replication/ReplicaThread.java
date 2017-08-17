@@ -205,7 +205,6 @@ class ReplicaThread implements Runnable {
           if (checkoutConnectionTimeInMs == -1) {
             // throwable happened in checkout connection phase
             checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-            // recording an exception for any replica on a node will record a node timeout failure
             responseHandler.onEvent(activeReplicasPerNode.get(0).getReplicaId(), e);
           } else if (exchangeMetadataTimeInMs == -1) {
             // throwable happened in exchange metadata phase
