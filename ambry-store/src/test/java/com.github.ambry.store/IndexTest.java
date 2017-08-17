@@ -282,7 +282,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests error cases for {@link PersistentIndex#markAsDeleted(StoreKey, FileSpan)}.
+   * Tests error cases for {@link PersistentIndex#markAsDeleted(StoreKey, FileSpan, long)}.
    * Cases
    * 1. FileSpan end offset < currentIndexEndOffset
    * 2. FileSpan is across segments
@@ -296,7 +296,7 @@ public class IndexTest {
     // FileSpan end offset < currentIndexEndOffset
     FileSpan fileSpan = state.log.getFileSpanForMessage(state.index.getStartOffset(), 1);
     try {
-      state.index.markAsDeleted(state.liveKeys.iterator().next(), fileSpan);
+      state.index.markAsDeleted(state.liveKeys.iterator().next(), fileSpan, state.time.milliseconds());
       fail("Should have failed because filespan provided < currentIndexEndOffset");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -309,7 +309,7 @@ public class IndexTest {
       Offset endOffset = new Offset(nextLogSegmentName, 0);
       fileSpan = new FileSpan(startOffset, endOffset);
       try {
-        state.index.markAsDeleted(state.liveKeys.iterator().next(), fileSpan);
+        state.index.markAsDeleted(state.liveKeys.iterator().next(), fileSpan, state.time.milliseconds());
         fail("Should have failed because fileSpan provided spanned across segments");
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -320,7 +320,7 @@ public class IndexTest {
     fileSpan = state.log.getFileSpanForMessage(state.index.getCurrentEndOffset(), 5);
     // ID does not exist
     try {
-      state.index.markAsDeleted(state.getUniqueId(), fileSpan);
+      state.index.markAsDeleted(state.getUniqueId(), fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for delete does not exist");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Not_Found, e.getErrorCode());
@@ -328,7 +328,7 @@ public class IndexTest {
 
     // ID already deleted
     try {
-      state.index.markAsDeleted(state.deletedKeys.iterator().next(), fileSpan);
+      state.index.markAsDeleted(state.deletedKeys.iterator().next(), fileSpan, state.time.milliseconds());
       fail("Should have failed because ID provided for delete is already deleted");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
@@ -2215,7 +2215,7 @@ public class IndexTest {
       IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
       state.appendToLog(state.DELETE_RECORD_SIZE);
       fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.DELETE_RECORD_SIZE);
-      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan);
+      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan, state.time.milliseconds());
       // remove entryToDelete from indexEntries as it will be part of latest index segment
       indexEntries.remove(entryToDelete);
     }

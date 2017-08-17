@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -71,7 +73,8 @@ public class HardDeleterTest {
     void add(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
       IndexValue indexValue =
-          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, Utils.Infinite_Time);
+          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, Utils.Infinite_Time,
+              Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
       index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
@@ -82,7 +85,8 @@ public class HardDeleterTest {
 
     void delete(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
-      index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
+      index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)),
+          time.milliseconds());
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
       nextOffset += sizeOfEntry;

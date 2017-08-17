@@ -720,7 +720,7 @@ class BlobStoreCompactor {
           if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
             IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
             if (putValue != null) {
-              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan);
+              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
             } else {
               IndexValue tgtValue =
                   new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),

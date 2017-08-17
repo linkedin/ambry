@@ -300,7 +300,8 @@ class PersistentIndex {
         Offset infoEndOffset = new Offset(runningOffset.getName(), runningOffset.getOffset() + info.getSize());
         IndexValue value = findKey(info.getStoreKey());
         if (info.isDeleted()) {
-          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info);
+          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
+              info.getOperationTimeMs());
           logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
         } else if (value != null) {
@@ -570,11 +571,12 @@ class PersistentIndex {
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
+   * @param deletionTimeMs Deletion time of the blob in ms
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
-    return markAsDeleted(id, fileSpan, null);
+  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, long deletionTimeMs) throws StoreException {
+    return markAsDeleted(id, fileSpan, null, deletionTimeMs);
   }
 
   /**
@@ -582,10 +584,12 @@ class PersistentIndex {
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise.
+   * @param deletionTimeMs deletion time of the blob. In-case of recovery, deletion time is obtained from {@code info}.
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info) throws StoreException {
+  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs)
+      throws StoreException {
     validateFileSpan(fileSpan, true);
     IndexValue value = findKey(id);
     if (value == null && info == null) {
@@ -600,10 +604,12 @@ class PersistentIndex {
       // delete record in the map in IndexSegment but not written yet because the safe end point hadn't been reached
       // SEE: NOTE in IndexSegment::writeIndexSegmentToFile()
       // TODO: change service ID and container ID once the MessageInfo has that info.
-      newValue = new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+      newValue =
+          new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+              info.getAccountId(), info.getContainerId());
       newValue.clearOriginalMessageOffset();
     } else {
-      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
+      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), deletionTimeMs,
           value.getServiceId(), value.getContainerId());
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
