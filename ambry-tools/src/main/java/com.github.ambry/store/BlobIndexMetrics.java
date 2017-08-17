@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
@@ -56,8 +58,9 @@ class BlobIndexMetrics extends PersistentIndex {
     synchronized (lock) {
       long startTimeInMs = System.currentTimeMillis();
       long size = new Random().nextInt(10000);
-      IndexEntry entry = new IndexEntry(id, new IndexValue(size, new Offset("", lastOffsetUsed.get()), (byte) 1, 1000,
-          SystemTime.getInstance().seconds()));
+      IndexEntry entry = new IndexEntry(id,
+          new IndexValue(size, new Offset("", lastOffsetUsed.get()), (byte) 1, 1000, SystemTime.getInstance().seconds(),
+              Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID));
       lastOffsetUsed.addAndGet(size);
       long offset = getCurrentEndOffset().getOffset();
       addToIndex(entry, new FileSpan(new Offset("", offset), new Offset("", offset + entry.getValue().getSize())));

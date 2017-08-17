@@ -206,6 +206,25 @@ class CuratedLogIndexState {
    */
   List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs)
       throws InterruptedException, IOException, StoreException {
+    return addPutEntries(count, size, expiresAtMs, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM));
+  }
+
+  /**
+   * Adds {@code count} number of put entries each of size {@code size} and that expire at {@code expiresAtMs} to the
+   * index (both real and reference).
+   * @param count the number of PUT entries to add.
+   * @param size the size of each PUT entry.
+   * @param expiresAtMs the time at which each of the PUT entries expires.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @return the list of the added entries.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs, short accountId, short containerId)
+      throws InterruptedException, IOException, StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -215,19 +234,20 @@ class CuratedLogIndexState {
     for (int i = 0; i < count; i++) {
       byte[] dataWritten = appendToLog(size);
       FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, size);
-      IndexValue value = new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs);
-      MockId id = getUniqueId();
-      IndexEntry entry = new IndexEntry(id, value);
-      indexEntries.add(entry);
-      logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(dataWritten, value)));
       Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
-      indexSegmentStartOffsets.put(id, new Pair<Offset, Offset>(indexSegmentStartOffset, null));
-      allKeys.put(id, new Pair<IndexValue, IndexValue>(value, null));
       if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
         // rollover will occur
         advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
         referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
       }
+      IndexValue value =
+          new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs, time.milliseconds(), accountId, containerId);
+      MockId id = getUniqueId(10, accountId, containerId);
+      IndexEntry entry = new IndexEntry(id, value);
+      indexEntries.add(entry);
+      logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(dataWritten, value)));
+      indexSegmentStartOffsets.put(id, new Pair<Offset, Offset>(indexSegmentStartOffset, null));
+      allKeys.put(id, new Pair<IndexValue, IndexValue>(value, null));
       referenceIndex.get(indexSegmentStartOffset).put(id, value);
       if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
         expiredKeys.add(id);
@@ -258,44 +278,46 @@ class CuratedLogIndexState {
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.DELETE_RECORD_SIZE);
 
     boolean forcePut = false;
+    Offset startOffset = fileSpan.getStartOffset();
+    Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(startOffset);
+    if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
+      // rollover will occur
+      advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
+      referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
+    }
     IndexValue newValue;
     if (allKeys.containsKey(idToDelete)) {
       IndexValue value = getExpectedValue(idToDelete, true);
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          Utils.Infinite_Time);
-      newValue.setNewOffset(fileSpan.getStartOffset());
+          time.milliseconds(), value.getServiceId(), value.getContainerId());
+      newValue.setNewOffset(startOffset);
       newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
     } else {
       newValue =
-          new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, fileSpan.getStartOffset(), Utils.Infinite_Time);
+          new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, Utils.Infinite_Time, time.milliseconds(),
+              idToDelete.getAccountId(), idToDelete.getContainerId());
       newValue.clearOriginalMessageOffset();
       indexSegmentStartOffsets.put(idToDelete, new Pair<Offset, Offset>(null, null));
       allKeys.put(idToDelete, new Pair<IndexValue, IndexValue>(null, null));
       forcePut = true;
     }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
-
-    logOrder.put(fileSpan.getStartOffset(), new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
-    Offset indexSegmentStartOffset = generateReferenceIndexSegmentStartOffset(fileSpan.getStartOffset());
+    logOrder.put(startOffset, new Pair<>(idToDelete, new LogEntry(dataWritten, newValue)));
     Pair<Offset, Offset> keyLocations = indexSegmentStartOffsets.get(idToDelete);
     indexSegmentStartOffsets.put(idToDelete, new Pair<>(keyLocations.getFirst(), indexSegmentStartOffset));
     Pair<IndexValue, IndexValue> keyValues = allKeys.get(idToDelete);
     allKeys.put(idToDelete, new Pair<>(keyValues.getFirst(), newValue));
-    if (!referenceIndex.containsKey(indexSegmentStartOffset)) {
-      // rollover will occur
-      advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
-      referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
-    }
     referenceIndex.get(indexSegmentStartOffset).put(idToDelete, newValue);
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
     if (forcePut) {
       index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);
     } else {
-      index.markAsDeleted(idToDelete, fileSpan);
+      index.markAsDeleted(idToDelete, fileSpan, newValue.getOperationTimeInMs());
     }
+
     lastModifiedTimesInSecs.put(indexSegmentStartOffset, time.seconds());
     assertEquals("End Offset of index not as expected", endOffsetOfPrevMsg, index.getCurrentEndOffset());
-    assertEquals("Journal's last offset not as expected", fileSpan.getStartOffset(), index.journal.getLastOffset());
+    assertEquals("Journal's last offset not as expected", startOffset, index.journal.getLastOffset());
     if (!deletedKeys.contains(idToDelete)) {
       markAsDeleted(idToDelete);
     }
@@ -353,9 +375,16 @@ class CuratedLogIndexState {
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
   MockId getUniqueId(int length) {
+    return getUniqueId(length, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+  }
+
+  /**
+   * @return a {@link MockId} that is unique and has not been generated before in this run.
+   */
+  MockId getUniqueId(int length, short accountId, short containerId) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(length));
+      id = new MockId(UtilsTest.getRandomString(length), accountId, containerId);
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;
@@ -1014,7 +1043,8 @@ class CuratedLogIndexState {
       String segmentName = ((LogSegment) read).getName();
       Pair<MockId, LogEntry> idAndValue = logOrder.get(new Offset(segmentName, offset));
       IndexValue value = idAndValue.getSecond().indexValue;
-      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs());
+      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs(), value.getServiceId(),
+          value.getContainerId(), value.getOperationTimeInMs());
     }
   }
 

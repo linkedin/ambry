@@ -15,6 +15,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
@@ -89,7 +91,7 @@ public class BlobStoreStatsTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
+    return Arrays.asList(new Object[][]{{false, false}, {true, false}});
   }
 
   /**
@@ -1037,7 +1039,8 @@ public class BlobStoreStatsTest {
     private final CountDownLatch latch;
 
     MockIndexValue(CountDownLatch latch, Offset offset) {
-      super(0, offset, Utils.Infinite_Time);
+      super(0, offset, Utils.Infinite_Time, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID);
       this.latch = latch;
     }
 

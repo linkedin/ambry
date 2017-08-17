@@ -80,7 +80,8 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
               != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
             BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
             return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()));
+                Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
+                properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
           } else {
             DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);
             return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,

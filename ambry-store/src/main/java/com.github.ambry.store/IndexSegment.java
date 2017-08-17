@@ -838,7 +838,7 @@ class IndexSegment {
       IndexValue value = indexEntry.getValue();
       MessageInfo info =
           new MessageInfo(indexEntry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-              value.getExpiresAtMs());
+              value.getExpiresAtMs(), value.getServiceId(), value.getContainerId(), value.getOperationTimeInMs());
       entries.add(info);
     }
     return isNewEntriesAdded;

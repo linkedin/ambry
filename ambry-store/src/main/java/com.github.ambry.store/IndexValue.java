@@ -127,30 +127,6 @@ class IndexValue {
    * @param size the size of the blob that this index value refers to
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
    * @param expiresAtMs the expiration time in ms at which the blob expires
-   */
-  IndexValue(long size, Offset offset, long expiresAtMs) {
-    this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), (int) Utils.Infinite_Time,
-        UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param flags the {@link Flags} that needs to be set for the Index Value
-   * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param operationTimeInMs operation time ins ms of the entry in secs
-   */
-  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, UNKNOWN_ACCOUNT_ID,
-        UNKNOWN_CONTAINER_ID);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param operationTimeInMs operation time in ms of the entry
    * @param serviceId the serviceId that this blob belongs to
    * @param containerId the containerId that this blob belongs to

@@ -187,8 +187,6 @@ class Tracker {
     creationNotificationsReceived.incrementAndGet();
     if (creationSrcHosts.putIfAbsent(getKey(srcHost, srcPort), true) == null) {
       totalReplicasCreated.countDown();
-      System.out.println(creationSrcHosts.size());
-      System.out.println(numberOfReplicas - totalReplicasCreated.getCount());
     }
   }
 

@@ -356,7 +356,7 @@ public class RequestResponseTest {
     Assert.assertEquals("MsgInfo size mismatch ", 1000, msgInfo.getSize());
     Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
     Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
-    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+    if (ReplicaMetadataResponse.getCurrentVersion() == ReplicaMetadataResponse.Replica_Metadata_Response_Version_V3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ContainerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());

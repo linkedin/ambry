@@ -301,7 +301,8 @@ class PersistentIndex {
         Offset infoEndOffset = new Offset(runningOffset.getName(), runningOffset.getOffset() + info.getSize());
         IndexValue value = findKey(info.getStoreKey());
         if (info.isDeleted()) {
-          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info);
+          markAsDeleted(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
+              info.getOperationTimeMs());
           logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
         } else if (value != null) {
@@ -309,7 +310,9 @@ class PersistentIndex {
               StoreErrorCodes.Initialization_Error);
         } else {
           // create a new entry in the index
-          IndexValue newValue = new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs());
+          IndexValue newValue =
+              new IndexValue(info.getSize(), runningOffset, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+                  info.getAccountId(), info.getContainerId());
           addToIndex(new IndexEntry(info.getStoreKey(), newValue, null), new FileSpan(runningOffset, infoEndOffset));
           logger.info("Index : {} adding new message to index with key {} size {} ttl {} deleted {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs(), info.isDeleted());
@@ -579,11 +582,12 @@ class PersistentIndex {
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
+   * @param deletionTimeMs deletion time of the entry in ms
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan) throws StoreException {
-    return markAsDeleted(id, fileSpan, null);
+  IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, long deletionTimeMs) throws StoreException {
+    return markAsDeleted(id, fileSpan, null, deletionTimeMs);
   }
 
   /**
@@ -591,10 +595,12 @@ class PersistentIndex {
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
    * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise.
+   * @param deletionTimeMs deletion time of the blob. In-case of recovery, deletion time is obtained from {@code info}.
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
    */
-  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info) throws StoreException {
+  private IndexValue markAsDeleted(StoreKey id, FileSpan fileSpan, MessageInfo info, long deletionTimeMs)
+      throws StoreException {
     validateFileSpan(fileSpan, true);
     IndexValue value = findKey(id);
     if (value == null && info == null) {
@@ -609,10 +615,12 @@ class PersistentIndex {
       // delete record in the map in IndexSegment but not written yet because the safe end point hadn't been reached
       // SEE: NOTE in IndexSegment::writeIndexSegmentToFile()
       // TODO: change service ID and container ID once the MessageInfo has that info.
-      newValue = new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+      newValue =
+          new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+              info.getAccountId(), info.getContainerId());
       newValue.clearOriginalMessageOffset();
     } else {
-      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), Utils.Infinite_Time,
+      newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), deletionTimeMs,
           value.getServiceId(), value.getContainerId());
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
@@ -786,7 +794,8 @@ class PersistentIndex {
                     IndexEntryType.ANY, indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                    value.getExpiresAtMs()));
+                    value.getExpiresAtMs(), value.getServiceId(), value.getContainerId(),
+                    value.getOperationTimeInMs()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
             if (currentTotalSizeOfEntries >= maxTotalSizeOfEntries) {
@@ -1089,7 +1098,7 @@ class PersistentIndex {
                   indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                  value.getExpiresAtMs()));
+                  value.getExpiresAtMs(), value.getServiceId(), value.getContainerId(), value.getOperationTimeInMs()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
@@ -1178,7 +1187,8 @@ class PersistentIndex {
         // ok to use most recent ref to filter out deleted records.
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
         messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs());
+            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs(),
+            indexValue.getServiceId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
         messageEntriesIterator.set(messageInfo);
       }
     }
@@ -1341,7 +1351,9 @@ class PersistentIndex {
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     IndexEntryType.ANY, indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-              messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs()));
+              messageEntries.add(
+                  new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs(), value.getServiceId(),
+                      value.getContainerId(), value.getOperationTimeInMs()));
             }
             offsetEnd = entry.getOffset();
             currentTotalSizeOfEntries += value.getSize();

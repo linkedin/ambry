@@ -243,8 +243,8 @@ class BlobStore implements Store {
             ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
             for (MessageInfo info : messageInfo) {
               FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-              IndexValue value =
-                  new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs());
+              IndexValue value = new IndexValue(info.getSize(), fileSpan.getStartOffset(), info.getExpirationTimeInMs(),
+                  info.getOperationTimeMs(), info.getAccountId(), info.getContainerId());
               IndexEntry entry = new IndexEntry(info.getStoreKey(), value, info.getCrc());
               indexEntries.add(entry);
               endOffsetOfLastMessage = fileSpan.getEndOffset();
@@ -325,7 +325,7 @@ class BlobStore implements Store {
         int correspondingPutIndex = 0;
         for (MessageInfo info : infoList) {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
-          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan);
+          IndexValue deleteIndexValue = index.markAsDeleted(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
           blobStoreStats.handleNewDeleteEntry(deleteIndexValue, indexValuesToDelete.get(correspondingPutIndex++));
         }

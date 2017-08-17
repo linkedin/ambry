@@ -289,22 +289,6 @@ public class IndexValueTest {
   }
 
   /**
-   * Constructs IndexValue based on the args passed and for the given version
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param operationTimeInMs operation time of the entry in ms
-   * @param version the version with which to construct the {@link IndexValue}
-   * @return the {@link IndexValue} thus constructed
-   */
-  static IndexValue getIndexValue(long size, Offset offset, long operationTimeInMs, short version) {
-    if (version == PersistentIndex.VERSION_0) {
-      return getIndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, offset.getOffset());
-    } else {
-      return new IndexValue(size, offset, IndexValue.FLAGS_DEFAULT_VALUE, Utils.Infinite_Time, operationTimeInMs);
-    }
-  }
-
-  /**
    * Constructs IndexValue based on another {@link IndexValue}
    * @param value the {@link IndexValue} using which to create another {@link IndexValue}
    * @param version the version with which to construct the {@link IndexValue}

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
@@ -297,7 +299,9 @@ class MockServer {
       ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
       List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(1);
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
-      messageInfoList.add(new MessageInfo(key, byteBufferSize));
+      messageInfoList.add(
+          new MessageInfo(key, byteBufferSize, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+              Utils.Infinite_Time));
       PartitionResponseInfo partitionResponseInfo =
           partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
               getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList)

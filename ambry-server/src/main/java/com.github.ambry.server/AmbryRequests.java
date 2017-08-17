@@ -177,7 +177,9 @@ public class AmbryRequests implements RequestAPI {
                 receivedRequest.getBlobType());
         MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), false,
             Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
-                receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc());
+                receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc(),
+            receivedRequest.getBlobProperties().getAccountId(), receivedRequest.getBlobProperties().getContainerId(),
+            receivedRequest.getBlobProperties().getCreationTimeInMs());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
@@ -375,7 +377,8 @@ public class AmbryRequests implements RequestAPI {
         MessageFormatInputStream stream =
             new DeleteMessageFormatInputStream(deleteRequest.getBlobId(), deleteRequest.getAccountId(),
                 deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
-        MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize());
+        MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize(), deleteRequest.getAccountId(),
+            deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);

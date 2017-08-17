@@ -13,7 +13,10 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.File;
@@ -93,7 +96,8 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   MessageInfo getMessageInfo() {
-    return new MessageInfo(storeKey, size, isDeleted, expiresAtMs, crc);
+    return new MessageInfo(storeKey, size, isDeleted, expiresAtMs, crc, Account.UNKNOWN_ACCOUNT_ID,
+        Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
   }
 
   File getFile() {
