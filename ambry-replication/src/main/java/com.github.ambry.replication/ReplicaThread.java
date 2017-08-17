@@ -201,43 +201,23 @@ class ReplicaThread implements Runnable {
           startTimeInMs = SystemTime.getInstance().milliseconds();
           fixMissingStoreKeys(connectedChannel, activeReplicasPerNode, exchangeMetadataResponseList);
           fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-        } catch (Exception e) {
+        } catch (Throwable e) {
           if (checkoutConnectionTimeInMs == -1) {
-            // exception happened in checkout connection phase
+            // throwable happened in checkout connection phase
             checkoutConnectionTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
-            // recording an exception for any replica on a node will record a node timeout failure
+            // throwable an exception for any replica on a node will record a node timeout failure
             responseHandler.onEvent(activeReplicasPerNode.get(0).getReplicaId(), e);
           } else if (exchangeMetadataTimeInMs == -1) {
-            // exception happened in exchange metadata phase
+            // throwable happened in exchange metadata phase
             exchangeMetadataTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
           } else if (fixMissingStoreKeysTimeInMs == -1) {
-            // exception happened in fix missing store phase
+            // throwable happened in fix missing store phase
             fixMissingStoreKeysTimeInMs = SystemTime.getInstance().milliseconds() - startTimeInMs;
           }
-          StringBuilder strBuilder = new StringBuilder();
-          strBuilder.append("Remote node: ").append(remoteNode);
-          strBuilder.append(" Thread name: ").append(threadName);
-          strBuilder.append(" Remote replicas: ").append(replicasToReplicatePerNode);
-          strBuilder.append(" Active remote replicas: ").append(activeReplicasPerNode);
-          strBuilder.append(" Error while replicating with remote replica ");
-          strBuilder.append(" Checkout connection time: ").append(checkoutConnectionTimeInMs);
-          strBuilder.append(" Exchange metadata time: ").append(exchangeMetadataTimeInMs);
-          strBuilder.append(" Fix missing store key time: ").append(fixMissingStoreKeysTimeInMs);
-
-          if (logger.isTraceEnabled()) {
-            logger.trace(strBuilder.toString(), e);
-          } else {
-            logger.error(strBuilder.toString() + e);
-          }
-          replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
-          if (connectedChannel != null) {
-            connectionPool.destroyConnection(connectedChannel);
-            connectedChannel = null;
-          }
-        } catch (Throwable e) {
-          logger.error("Remote node: " + remoteNode + " Thread name: " + threadName + " Remote replicas: "
-              + replicasToReplicatePerNode + " Active remote replicas: " + activeReplicasPerNode
-              + " Throwable exception while replicating with remote replica ", e);
+          logger.error("Error while talking to peer: Remote node: {}, Thread name: {}, Remote replicas: {}, Active "
+                  + "remote replicas: {}, Checkout connection time: {}, Exchange metadata time: {}, Fix missing store key "
+                  + "time {}", remoteNode, threadName, replicasToReplicatePerNode, activeReplicasPerNode,
+              checkoutConnectionTimeInMs, exchangeMetadataTimeInMs, fixMissingStoreKeysTimeInMs, e);
           replicationMetrics.incrementReplicationErrors(replicatingOverSsl);
           if (connectedChannel != null) {
             connectionPool.destroyConnection(connectedChannel);
@@ -721,6 +701,10 @@ class ReplicaThread implements Runnable {
                     + remoteReplicaInfo.getReplicaId(), e);
               }
             }
+          } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {
+            replicationMetrics.blobDeletedOnGetCount.inc();
+            logger.trace("One of the blobs to GET is deleted: Remote node: {} Thread name: {} Remote replica: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
           } else {
             replicationMetrics.updateGetRequestError(remoteReplicaInfo.getReplicaId());
             logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
