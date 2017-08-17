@@ -654,7 +654,8 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     } else {
       readOptions = new BlobReadOptions(log, value.getOffset(), value.getSize(), value.getExpiresAtMs(), id,
-          value.isFlagSet(IndexValue.Flags.Delete_Index), journal.getCrcOfKey(id));
+          value.isFlagSet(IndexValue.Flags.Delete_Index), journal.getCrcOfKey(id), value.getServiceId(),
+          value.getContainerId(), value.getOperationTimeInMs());
     }
     return readOptions;
   }
@@ -707,11 +708,12 @@ class PersistentIndex {
         Offset offset = new Offset(logSegmentName, value.getOriginalMessageOffset());
         readOptions =
             new BlobReadOptions(log, offset, deletedBlobInfo.getSize(), deletedBlobInfo.getExpirationTimeInMs(),
-                deletedBlobInfo.getStoreKey());
+                deletedBlobInfo.getStoreKey(), deletedBlobInfo.getAccountId(), deletedBlobInfo.getContainerId(),
+                deletedBlobInfo.getOperationTimeMs());
       } else if (putValue != null) {
         // PUT record in a different log segment.
-        readOptions =
-            new BlobReadOptions(log, putValue.getOffset(), putValue.getSize(), putValue.getExpiresAtMs(), key);
+        readOptions = new BlobReadOptions(log, putValue.getOffset(), putValue.getSize(), putValue.getExpiresAtMs(), key,
+            putValue.getServiceId(), putValue.getContainerId(), putValue.getOperationTimeInMs());
       } else {
         // PUT record no longer available.
         throw new StoreException("Did not find PUT index entry for key [" + key

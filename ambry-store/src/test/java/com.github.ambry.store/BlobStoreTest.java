@@ -361,7 +361,7 @@ public class BlobStoreTest {
    * @throws IOException
    * @throws StoreException
    */
-  // @Test
+  @Test
   public void basicTest() throws InterruptedException, IOException, StoreException {
     // PUT a key that is slated to expire when time advances by 1s
     MockId addedId = put(1, PUT_RECORD_SIZE, time.seconds() + 1).get(0);
@@ -414,7 +414,7 @@ public class BlobStoreTest {
    * Tests the case where there are many concurrent PUTs.
    * @throws Exception
    */
-  // @Test
+  @Test
   public void concurrentPutTest() throws Exception {
     int blobCount = 4000 / PUT_RECORD_SIZE + 1;
     List<Putter> putters = new ArrayList<>(blobCount);
@@ -430,7 +430,7 @@ public class BlobStoreTest {
    * Tests the case where there are many concurrent GETs.
    * @throws Exception
    */
-  // @Test
+  @Test
   public void concurrentGetTest() throws Exception {
     int extraBlobCount = 4000 / PUT_RECORD_SIZE + 1;
     put(extraBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -464,7 +464,7 @@ public class BlobStoreTest {
    * Tests the case where there are concurrent PUTs, GETs and DELETEs.
    * @throws Exception
    */
-  // @Test
+  @Test
   public void concurrentAllTest() throws Exception {
     int putBlobCount = 1500 / PUT_RECORD_SIZE + 1;
     List<Putter> putters = new ArrayList<>(putBlobCount);
