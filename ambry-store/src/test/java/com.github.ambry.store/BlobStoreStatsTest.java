@@ -91,7 +91,7 @@ public class BlobStoreStatsTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false, false}, {true, false}});
+    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
   }
 
   /**
@@ -887,9 +887,18 @@ public class BlobStoreStatsTest {
       }
       assertEquals("Mismatch in number of containerIds in serviceId: " + serviceId, innerMap.size(),
           actualContainerValidSizeMap.get(serviceId).size());
+      actualContainerValidSizeMap.remove(serviceId);
     }
-    assertEquals("Mismatch in number of serviceIds", expectedContainerValidSizeMap.size(),
-        actualContainerValidSizeMap.size());
+    for (Map.Entry<String, Map<String, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
+      if (actualContainerValidSizeEntry.getValue().size() != 0) {
+        assertEquals("Additional values found in actual container valid data size map ", 1,
+            actualContainerValidSizeEntry.getValue().size());
+        for (Map.Entry<String, Long> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
+          assertEquals("Additional values found in actual container valid size map ", 0,
+              mapEntry.getValue().longValue());
+        }
+      }
+    }
 
     return totalValidSize;
   }

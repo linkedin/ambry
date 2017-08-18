@@ -102,30 +102,30 @@ public class StoreMessageReadSetTest {
       List<MockId> mockIdList = new ArrayList<>();
       MockId mockId = new MockId("id1");
       mockIdList.add(mockId);
-      BlobReadOptions ro1 = new BlobReadOptions(log, firstSegOffset2, availableSegCapacity / 3, 1, mockId,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-          System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000));
+      BlobReadOptions ro1 = new BlobReadOptions(log, firstSegOffset2,
+          new MessageInfo(mockId, availableSegCapacity / 3, 1, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       mockId = new MockId("id2");
       mockIdList.add(mockId);
-      BlobReadOptions ro2 = new BlobReadOptions(log, secondSegOffset1, availableSegCapacity / 4, 1, mockId,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-          System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000));
+      BlobReadOptions ro2 = new BlobReadOptions(log, secondSegOffset1,
+          new MessageInfo(mockId, availableSegCapacity / 4, 1, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       mockId = new MockId("id3");
       mockIdList.add(mockId);
-      BlobReadOptions ro3 = new BlobReadOptions(log, secondSegOffset2, availableSegCapacity / 2, 1, mockId,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-          System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000));
+      BlobReadOptions ro3 = new BlobReadOptions(log, secondSegOffset2,
+          new MessageInfo(mockId, availableSegCapacity / 2, 1, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       mockId = new MockId("id4");
       mockIdList.add(mockId);
-      BlobReadOptions ro4 = new BlobReadOptions(log, firstSegOffset1, availableSegCapacity / 5, 1, mockId,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-          System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000));
+      BlobReadOptions ro4 = new BlobReadOptions(log, firstSegOffset1,
+          new MessageInfo(mockId, availableSegCapacity / 5, 1, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       // to test equality in the compareTo() of BlobReadOptions
       mockId = new MockId("id5");
       mockIdList.add(mockId);
-      BlobReadOptions ro5 = new BlobReadOptions(log, firstSegOffset2, availableSegCapacity / 6, 1, mockId,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-          System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000));
+      BlobReadOptions ro5 = new BlobReadOptions(log, firstSegOffset2,
+          new MessageInfo(mockId, availableSegCapacity / 6, 1, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       List<BlobReadOptions> options = new ArrayList<>(Arrays.asList(ro1, ro2, ro3, ro4, ro5));
       MessageReadSet readSet = new StoreMessageReadSet(options);
 
@@ -233,16 +233,17 @@ public class StoreMessageReadSetTest {
         long size = Utils.getRandomLong(TestUtils.RANDOM, firstSegment.getEndOffset() - offset);
         long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         long operationTimeMs = System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000);
+        long crc = TestUtils.RANDOM.nextLong();
         MockId id = new MockId("id1");
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+        boolean deleted = TestUtils.RANDOM.nextBoolean();
         // basic test
-        BlobReadOptions options =
-            new BlobReadOptions(log, new Offset(firstSegment.getName(), offset), size, expiresAtMs, id, accountId,
-                containerId, operationTimeMs);
+        MessageInfo info =
+            new MessageInfo(id, size, deleted, expiresAtMs, crc, accountId, containerId, operationTimeMs);
+        BlobReadOptions options = new BlobReadOptions(log, new Offset(firstSegment.getName(), offset), info);
         assertEquals("Ref count of log segment should have increased", 1, firstSegment.refCount());
-        verifyGetters(options, firstSegment, offset, size, expiresAtMs, id, true, accountId, containerId,
-            operationTimeMs);
+        verifyGetters(options, firstSegment, offset, true, info);
         options.close();
         assertEquals("Ref count of log segment should have decreased", 0, firstSegment.refCount());
 
@@ -252,9 +253,7 @@ public class StoreMessageReadSetTest {
         if (count > 1) {
           // toBytes() and back test for the second segment
           LogSegment secondSegment = log.getNextSegment(firstSegment);
-          options =
-              new BlobReadOptions(log, new Offset(secondSegment.getName(), offset), size, expiresAtMs, id, accountId,
-                  containerId, operationTimeMs);
+          options = new BlobReadOptions(log, new Offset(secondSegment.getName(), offset), info);
           assertEquals("Ref count of log segment should have increased", 1, secondSegment.refCount());
           options.close();
           assertEquals("Ref count of log segment should have decreased", 0, secondSegment.refCount());
@@ -262,8 +261,9 @@ public class StoreMessageReadSetTest {
         }
 
         try {
-          new BlobReadOptions(log, new Offset(firstSegment.getName(), firstSegment.getEndOffset()), 1, 1, null,
-              Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
+          new BlobReadOptions(log, new Offset(firstSegment.getName(), firstSegment.getEndOffset()),
+              new MessageInfo(null, 1, 1, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                  Utils.Infinite_Time));
           fail("Construction should have failed because offset + size > endOffset");
         } catch (IllegalArgumentException e) {
           // expected. Nothing to do.
@@ -283,38 +283,35 @@ public class StoreMessageReadSetTest {
    * @param options the {@link BlobReadOptions} to check.
    * @param logSegment the expected {@link LogSegment} which {@code options} should refer to.
    * @param offset the expected offset inside {@code logSegment} which {@code options} should refer to.
-   * @param size the expected size in {@code options}.
-   * @param expiresAtMs the expected expiration time in {@code options}.
-   * @param id the expected {@link MockId} in {@code options}.
    * @param verifyInMemFields {@code true} when in memory fields needs to be verified. {@code false} otherwise
-   * @param accountId accountId which {@code options} should refer to
-   * @param containerId containerId which {@code options} should refer to
-   * @param operationTimeMs operation time in ms which {@code options} should refer to
+   * @param msgInfo {@link MessageInfo} from which values need to be verified against
    */
-  private void verifyGetters(BlobReadOptions options, LogSegment logSegment, long offset, long size, long expiresAtMs,
-      MockId id, boolean verifyInMemFields, short accountId, short containerId, long operationTimeMs) {
+  private void verifyGetters(BlobReadOptions options, LogSegment logSegment, long offset, boolean verifyInMemFields,
+      MessageInfo msgInfo) {
     assertEquals("LogSegment name not as expected", logSegment.getName(), options.getLogSegmentName());
     assertEquals("Offset not as expected", offset, options.getOffset());
-    assertEquals("Size not as expected", size, options.getSize());
-    assertEquals("ExpiresAtMs not as expected", expiresAtMs, options.getExpiresAtMs());
-    assertEquals("StoreKey not as expected", id, options.getStoreKey());
+    assertEquals("Size not as expected", msgInfo.getSize(), options.getSize());
+    assertEquals("ExpiresAtMs not as expected", msgInfo.getExpirationTimeInMs(), options.getExpiresAtMs());
+    assertEquals("StoreKey not as expected", msgInfo.getStoreKey(), options.getStoreKey());
     if (verifyInMemFields) {
-      assertEquals("AccountId not as expected", accountId, options.getAccountId());
-      assertEquals("ContainerId not as expected", containerId, options.getContainerId());
-      assertEquals("OperationTimeMs not as expected", operationTimeMs, options.getOperationTimeMs());
+      assertEquals("Crc not as expected ", msgInfo.getCrc().longValue(), options.getCrc());
+      assertEquals("AccountId not as expected", msgInfo.getAccountId(), options.getAccountId());
+      assertEquals("ContainerId not as expected", msgInfo.getContainerId(), options.getContainerId());
+      assertEquals("OperationTimeMs not as expected", msgInfo.getOperationTimeMs(), options.getOperationTimeMs());
     } else {
       assertEquals("AccountId not as expected", Account.UNKNOWN_ACCOUNT_ID, options.getAccountId());
       assertEquals("ContainerId not as expected", Container.UNKNOWN_CONTAINER_ID, options.getContainerId());
       assertEquals("OperationTimeMs not as expected", Utils.Infinite_Time, options.getOperationTimeMs());
     }
     MessageInfo messageInfo = options.getMessageInfo();
-    assertEquals("Size not as expected", size, messageInfo.getSize());
-    assertEquals("ExpiresAtMs not as expected", expiresAtMs, messageInfo.getExpirationTimeInMs());
-    assertEquals("StoreKey not as expected", id, messageInfo.getStoreKey());
+    assertEquals("Size not as expected", msgInfo.getSize(), messageInfo.getSize());
+    assertEquals("ExpiresAtMs not as expected", msgInfo.getExpirationTimeInMs(), messageInfo.getExpirationTimeInMs());
+    assertEquals("StoreKey not as expected", msgInfo.getStoreKey(), messageInfo.getStoreKey());
     if (verifyInMemFields) {
-      assertEquals("AccountId not as expected", accountId, messageInfo.getAccountId());
-      assertEquals("ContainerId not as expected", containerId, messageInfo.getContainerId());
-      assertEquals("OperationTimeMs not as expected", operationTimeMs, messageInfo.getOperationTimeMs());
+      assertEquals("Crc not as expected ", msgInfo.getCrc(), messageInfo.getCrc());
+      assertEquals("AccountId not as expected", msgInfo.getAccountId(), messageInfo.getAccountId());
+      assertEquals("ContainerId not as expected", msgInfo.getContainerId(), messageInfo.getContainerId());
+      assertEquals("OperationTimeMs not as expected", msgInfo.getOperationTimeMs(), messageInfo.getOperationTimeMs());
     } else {
       assertEquals("AccountId not as expected", Account.UNKNOWN_ACCOUNT_ID, messageInfo.getAccountId());
       assertEquals("ContainerId not as expected", Container.UNKNOWN_CONTAINER_ID, messageInfo.getContainerId());
@@ -339,9 +336,9 @@ public class StoreMessageReadSetTest {
       DataInputStream stream = getSerializedStream(readOptions, i);
       BlobReadOptions deSerReadOptions = BlobReadOptions.fromBytes(stream, STORE_KEY_FACTORY, log);
       assertEquals("Ref count of log segment should have increased", 1, segment.refCount());
-      verifyGetters(deSerReadOptions, segment, readOptions.getOffset(), readOptions.getSize(),
-          readOptions.getExpiresAtMs(), (MockId) readOptions.getStoreKey(), false, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
+      verifyGetters(deSerReadOptions, segment, readOptions.getOffset(), false,
+          new MessageInfo(readOptions.getStoreKey(), readOptions.getSize(), readOptions.getExpiresAtMs(),
+              Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time));
       deSerReadOptions.close();
       assertEquals("Ref count of log segment should have decreased", 0, segment.refCount());
     }

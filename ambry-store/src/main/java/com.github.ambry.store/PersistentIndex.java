@@ -653,9 +653,9 @@ class PersistentIndex {
     } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     } else {
-      readOptions = new BlobReadOptions(log, value.getOffset(), value.getSize(), value.getExpiresAtMs(), id,
-          value.isFlagSet(IndexValue.Flags.Delete_Index), journal.getCrcOfKey(id), value.getServiceId(),
-          value.getContainerId(), value.getOperationTimeInMs());
+      readOptions = new BlobReadOptions(log, value.getOffset(),
+          new MessageInfo(id, value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), value.getExpiresAtMs(),
+              journal.getCrcOfKey(id), value.getServiceId(), value.getContainerId(), value.getOperationTimeInMs()));
     }
     return readOptions;
   }
@@ -706,14 +706,15 @@ class PersistentIndex {
           }
         }
         Offset offset = new Offset(logSegmentName, value.getOriginalMessageOffset());
-        readOptions =
-            new BlobReadOptions(log, offset, deletedBlobInfo.getSize(), deletedBlobInfo.getExpirationTimeInMs(),
-                deletedBlobInfo.getStoreKey(), deletedBlobInfo.getAccountId(), deletedBlobInfo.getContainerId(),
-                deletedBlobInfo.getOperationTimeMs());
+        readOptions = new BlobReadOptions(log, offset,
+            new MessageInfo(deletedBlobInfo.getStoreKey(), deletedBlobInfo.getSize(),
+                deletedBlobInfo.getExpirationTimeInMs(), deletedBlobInfo.getAccountId(),
+                deletedBlobInfo.getContainerId(), deletedBlobInfo.getOperationTimeMs()));
       } else if (putValue != null) {
         // PUT record in a different log segment.
-        readOptions = new BlobReadOptions(log, putValue.getOffset(), putValue.getSize(), putValue.getExpiresAtMs(), key,
-            putValue.getServiceId(), putValue.getContainerId(), putValue.getOperationTimeInMs());
+        readOptions = new BlobReadOptions(log, putValue.getOffset(),
+            new MessageInfo(key, putValue.getSize(), putValue.getExpiresAtMs(), putValue.getServiceId(),
+                putValue.getContainerId(), putValue.getOperationTimeInMs()));
       } else {
         // PUT record no longer available.
         throw new StoreException("Did not find PUT index entry for key [" + key

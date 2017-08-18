@@ -38,14 +38,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final LogSegment segment;
   private final Pair<File, FileChannel> segmentView;
   private final Offset offset;
-  private final Long size;
-  private final boolean isDeleted;
-  private final Long expiresAtMs;
-  private final Long crc;
-  private final short accountId;
-  private final short containerId;
-  private final long operationTimeMs;
-  private final StoreKey storeKey;
+  private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -56,32 +49,20 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private static final short SIZE_LENGTH = 8;
   private static final short EXPIRES_AT_MS_LENGTH = 8;
 
-  BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey, short accountId,
-      short containerId, long operationTimeMs) {
-    this(log, offset, size, expiresAtMs, storeKey, false, null, accountId, containerId, operationTimeMs);
-  }
-
-  BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey, boolean isDeleted, Long crc,
-      short accountId, short containerId, long operationTimeMs) {
+  BlobReadOptions(Log log, Offset offset, MessageInfo info) {
     segment = log.getSegment(offset.getName());
-    if (offset.getOffset() + size > segment.getEndOffset()) {
+    if (offset.getOffset() + info.getSize() > segment.getEndOffset()) {
       throw new IllegalArgumentException(
-          "Invalid offset [" + offset + "] and size [" + size + "]. Segment end offset: " + "[" + segment.getEndOffset()
-              + "]");
+          "Invalid offset [" + offset + "] and size [" + info.getSize() + "]. Segment end offset: " + "["
+              + segment.getEndOffset() + "]");
     }
     segmentView = segment.getView();
     this.offset = offset;
-    this.size = size;
-    this.expiresAtMs = expiresAtMs;
-    this.storeKey = storeKey;
-    this.isDeleted = isDeleted;
-    this.crc = crc;
-    this.accountId = accountId;
-    this.containerId = containerId;
-    this.operationTimeMs = operationTimeMs;
+    this.info = info;
     logger.trace("BlobReadOption offset {} size {} expiresAtMs {} storeKey {} isDeleted {} crc {} accountId {} "
-            + "containerId {} operationTimeMs {} ", offset, size, expiresAtMs, storeKey, isDeleted, crc, accountId,
-        containerId, operationTimeMs);
+            + "containerId {} operationTimeMs {} ", offset, info.getSize(), info.getExpirationTimeInMs(),
+        info.getStoreKey(), info.isDeleted(), info.getCrc(), info.getAccountId(), info.getContainerId(),
+        info.getOperationTimeMs());
   }
 
   String getLogSegmentName() {
@@ -93,31 +74,35 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   long getSize() {
-    return size;
+    return info.getSize();
   }
 
   long getExpiresAtMs() {
-    return expiresAtMs;
+    return info.getExpirationTimeInMs();
   }
 
   StoreKey getStoreKey() {
-    return storeKey;
+    return info.getStoreKey();
   }
 
   short getAccountId() {
-    return accountId;
+    return info.getAccountId();
   }
 
   short getContainerId() {
-    return containerId;
+    return info.getContainerId();
   }
 
   long getOperationTimeMs() {
-    return operationTimeMs;
+    return info.getOperationTimeMs();
+  }
+
+  long getCrc() {
+    return info.getCrc();
   }
 
   MessageInfo getMessageInfo() {
-    return new MessageInfo(storeKey, size, isDeleted, expiresAtMs, crc, accountId, containerId, operationTimeMs);
+    return info;
   }
 
   File getFile() {
@@ -135,14 +120,14 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
 
   byte[] toBytes() {
     byte[] offsetBytes = offset.toBytes();
-    byte[] buf =
-        new byte[VERSION_LENGTH + offsetBytes.length + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + storeKey.sizeInBytes()];
+    byte[] buf = new byte[VERSION_LENGTH + offsetBytes.length + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + info.getStoreKey()
+        .sizeInBytes()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     bufWrap.putShort(VERSION_1);
     bufWrap.put(offsetBytes);
-    bufWrap.putLong(size);
-    bufWrap.putLong(expiresAtMs);
-    bufWrap.put(storeKey.toBytes());
+    bufWrap.putLong(info.getSize());
+    bufWrap.putLong(info.getExpirationTimeInMs());
+    bufWrap.put(info.getStoreKey().toBytes());
     return buf;
   }
 
@@ -155,15 +140,17 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
         long size = stream.readLong();
         long expiresAtMs = stream.readLong();
         StoreKey key = factory.getStoreKey(stream);
-        return new BlobReadOptions(log, offset, size, expiresAtMs, key, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
+        return new BlobReadOptions(log, offset,
+            new MessageInfo(key, size, expiresAtMs, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                Utils.Infinite_Time));
       case VERSION_1:
         offset = Offset.fromBytes(stream);
         size = stream.readLong();
         expiresAtMs = stream.readLong();
         key = factory.getStoreKey(stream);
-        return new BlobReadOptions(log, offset, size, expiresAtMs, key, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
+        return new BlobReadOptions(log, offset,
+            new MessageInfo(key, size, expiresAtMs, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                Utils.Infinite_Time));
       default:
         throw new IOException("Unknown version encountered for BlobReadOptions");
     }
