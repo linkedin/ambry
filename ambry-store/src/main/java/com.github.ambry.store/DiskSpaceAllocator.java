@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * runtime if the current pool does not include a segment of the correct size.
  */
 class DiskSpaceAllocator {
-  private static final Logger LOGGER = LoggerFactory.getLogger(DiskSpaceAllocator.class);
+  private static final Logger logger = LoggerFactory.getLogger(DiskSpaceAllocator.class);
   private static final String RESERVE_FILE_PREFIX = "reserve_";
   private static final String FILE_SIZE_DIR_PREFIX = "reserve_size_";
   private static final FileFilter RESERVE_FILE_FILTER =
@@ -124,7 +124,7 @@ class DiskSpaceAllocator {
           StoreErrorCodes.Initialization_Error);
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
-      LOGGER.info("initializePool took {} ms", elapsedTime);
+      logger.info("initializePool took {} ms", elapsedTime);
       metrics.diskSpaceAllocatorStartTimeMs.update(elapsedTime);
     }
   }
@@ -138,12 +138,16 @@ class DiskSpaceAllocator {
    */
   void allocate(File destinationFile, long sizeInBytes) throws IOException {
     if (!poolInitialized) {
-      LOGGER.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
+      logger.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
           destinationFile.getAbsolutePath());
+      metrics.diskSpaceAllocatorAllocBeforeInitCount.inc();
+    }
+    if (destinationFile.exists()) {
+      throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
     }
     File reserveFile = reserveFiles.remove(sizeInBytes);
     if (reserveFile == null) {
-      LOGGER.info("Segment of size {} not found in pool; attempting to create a new preallocated file", sizeInBytes);
+      logger.info("Segment of size {} not found in pool; attempting to create a new preallocated file", sizeInBytes);
       metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
       reserveFile = createReserveFile(sizeInBytes);
     }
@@ -162,8 +166,9 @@ class DiskSpaceAllocator {
    */
   void free(File fileToReturn, long sizeInBytes) throws IOException {
     if (!poolInitialized) {
-      LOGGER.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
+      logger.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
           fileToReturn.getAbsolutePath());
+      metrics.diskSpaceAllocatorFreeBeforeInitCount.inc();
     }
     // For now, we delete the file and create a new one. Newer linux kernel versions support
     // additional fallocate flags, which will be useful for cleaning up returned files.
@@ -327,6 +332,9 @@ class DiskSpaceAllocator {
     return sizeInBytes;
   }
 
+  /**
+   * This is a thread safe data structure that is used to keep track of the files in the reserve pool.
+   */
   private static class ReserveFileMap {
     private final ConcurrentMap<Long, Queue<File>> internalMap = new ConcurrentHashMap<>();
 

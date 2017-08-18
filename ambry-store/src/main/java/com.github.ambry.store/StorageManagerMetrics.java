@@ -37,6 +37,8 @@ public class StorageManagerMetrics {
   public final Histogram diskSpaceAllocatorStartTimeMs;
   public final Counter diskSpaceAllocatorInitFailureCount;
   public final Counter diskSpaceAllocatorSegmentNotFoundCount;
+  public final Counter diskSpaceAllocatorAllocBeforeInitCount;
+  public final Counter diskSpaceAllocatorFreeBeforeInitCount;
 
   // CompactionManager related metrics
   public final Counter compactionManagerTerminateErrorCount;
@@ -67,6 +69,10 @@ public class StorageManagerMetrics {
         registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorInitFailureCount"));
     diskSpaceAllocatorSegmentNotFoundCount =
         registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorSegmentNotFoundCount"));
+    diskSpaceAllocatorAllocBeforeInitCount =
+        registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorAllocBeforeInitCount"));
+    diskSpaceAllocatorFreeBeforeInitCount =
+        registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorFreeBeforeInitCount"));
     compactionCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionCount"));
     compactionManagerTerminateErrorCount =
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionManagerTerminateErrorCount"));

@@ -26,7 +26,7 @@ class DiskSpaceRequirements {
   /**
    * @param segmentSizeInBytes the size of each segment needed, in bytes.
    * @param segmentsNeeded the number of additional segments needed in the disk space pool.
-   * @param swapSegmentsInUse the number of swap segments currently in use by this in entity.
+   * @param swapSegmentsInUse the number of swap segments currently in use by this entity.
    */
   DiskSpaceRequirements(long segmentSizeInBytes, long segmentsNeeded, long swapSegmentsInUse) {
     if (segmentSizeInBytes <= 0 || segmentsNeeded < 0 || swapSegmentsInUse < 0) {
