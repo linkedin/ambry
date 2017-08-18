@@ -39,12 +39,12 @@ public class BlobPropertiesTest {
   private final short version;
 
   /**
-   * Running for {@link BlobPropertiesSerDe#Version1} and {@link BlobPropertiesSerDe#Version2}
-   * @return an array with both the versions ({@link BlobPropertiesSerDe#Version1} and {@link BlobPropertiesSerDe#Version2}).
+   * Running for {@link BlobPropertiesSerDe#VERSION_1} and {@link BlobPropertiesSerDe#VERSION_2}
+   * @return an array with both the versions ({@link BlobPropertiesSerDe#VERSION_1} and {@link BlobPropertiesSerDe#VERSION_2}).
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{BlobPropertiesSerDe.Version1}, {BlobPropertiesSerDe.Version2}});
+    return Arrays.asList(new Object[][]{{BlobPropertiesSerDe.VERSION_1}, {BlobPropertiesSerDe.VERSION_2}});
   }
 
   public BlobPropertiesTest(short version) {
@@ -61,7 +61,7 @@ public class BlobPropertiesTest {
 
     short accountId = UNKNOWN_ACCOUNT_ID;
     short containerId = UNKNOWN_CONTAINER_ID;
-    if (version == BlobPropertiesSerDe.Version2) {
+    if (version == BlobPropertiesSerDe.VERSION_2) {
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
     }
@@ -127,7 +127,7 @@ public class BlobPropertiesTest {
   private BlobProperties getBlobProperties(long blobSize, String serviceId, String ownerId, String contentType,
       boolean isPrivate, long timeToLiveInSeconds, long creationTimeMs, short accountId, short containerId,
       short version) {
-    if (version == BlobPropertiesSerDe.Version1) {
+    if (version == BlobPropertiesSerDe.VERSION_1) {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
           creationTimeMs, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
     } else {
@@ -151,7 +151,7 @@ public class BlobPropertiesTest {
    */
   private BlobProperties getBlobProperties(long blobSize, String serviceId, String ownerId, String contentType,
       boolean isPrivate, long timeToLiveInSeconds, short accountId, short containerId, short version) {
-    if (version == BlobPropertiesSerDe.Version1) {
+    if (version == BlobPropertiesSerDe.VERSION_1) {
       return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
           Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
     } else {
@@ -171,7 +171,7 @@ public class BlobPropertiesTest {
    */
   private BlobProperties getBlobProperties(long blobSize, String serviceId, short accountId, short containerId,
       short version) {
-    if (version == BlobPropertiesSerDe.Version1) {
+    if (version == BlobPropertiesSerDe.VERSION_1) {
       return new BlobProperties(blobSize, serviceId, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
     } else {
       return new BlobProperties(blobSize, serviceId, accountId, containerId);

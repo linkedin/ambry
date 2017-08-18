@@ -126,13 +126,13 @@ public class MessageFormatRecordTest {
    */
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
-    // Test Blob property Format V1 for both versions of BlobPropertiesMsgFormat
-    short[] versions = new short[]{Version1, Version2};
+    // Test Blob property Format V1 for both versions of BlobPropertiesSerDe
+    short[] versions = new short[]{VERSION_1, VERSION_2};
     for (short version : versions) {
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
       long ttl = TestUtils.RANDOM.nextInt();
-      if (version == Version1) {
+      if (version == VERSION_1) {
         properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl, Account.UNKNOWN_ACCOUNT_ID,
             Container.UNKNOWN_CONTAINER_ID);
       } else {
@@ -141,7 +141,7 @@ public class MessageFormatRecordTest {
         properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId);
       }
       ByteBuffer stream;
-      if (version == Version1) {
+      if (version == VERSION_1) {
         stream = ByteBuffer.allocate(getBlobPropertiesV1RecordSize(properties));
         serializeBlobPropertiesV1Record(stream, properties);
       } else {
@@ -168,10 +168,21 @@ public class MessageFormatRecordTest {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
     }
+
+    // failure case
+    BlobProperties properties =
+        new BlobProperties(1000, "id", "member", "test", true, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
+            Container.UNKNOWN_CONTAINER_ID);
+    ByteBuffer stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties) - 10);
+    try {
+      MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
+      Assert.fail("Serialization of BlobProperties should have failed since the buffer does not have sufficient space");
+    } catch (IllegalArgumentException e) {
+    }
   }
 
   /**
-   * Serialize {@link BlobProperties} in version {@link BlobPropertiesSerDe#Version1}
+   * Serialize {@link BlobProperties} in version {@link BlobPropertiesSerDe#VERSION_1}
    * @param outputBuffer {@link ByteBuffer} to serialize the {@link BlobProperties}
    * @param properties {@link BlobProperties} to be serialized
    */
@@ -185,23 +196,9 @@ public class MessageFormatRecordTest {
   }
 
   /**
-   * Serialize {@link BlobProperties} in version {@link BlobPropertiesSerDe#Version2}
-   * @param outputBuffer {@link ByteBuffer} to serialize the {@link BlobProperties}
-   * @param properties {@link BlobProperties} to be serialized
-   */
-  private void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
-    int startOffset = outputBuffer.position();
-    outputBuffer.putShort(BlobProperties_Version_V1);
-    putBlobPropertiesToBufferV2(outputBuffer, properties);
-    Crc32 crc = new Crc32();
-    crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV2RecordSize(properties) - Crc_Size);
-    outputBuffer.putLong(crc.getValue());
-  }
-
-  /**
    * Returns {@link BlobProperties} record size in version1
    * @param properties {@link BlobProperties} for which size is requested
-   * @return
+   * @return the size of the {@link BlobPropertiesSerDe} in version {@link BlobPropertiesSerDe#VERSION_1}
    */
   private int getBlobPropertiesV1RecordSize(BlobProperties properties) {
     int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
@@ -211,43 +208,12 @@ public class MessageFormatRecordTest {
   }
 
   /**
-   * Returns {@link BlobProperties} record size in version2
-   * @param properties {@link BlobProperties} for which size is requested
-   * @return
-   */
-  private int getBlobPropertiesV2RecordSize(BlobProperties properties) {
-    int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
-        + Utils.getNullableStringLength(properties.getContentType()) + Integer.BYTES + Utils.getNullableStringLength(
-        properties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(properties.getServiceId())
-        + Short.BYTES + Short.BYTES;
-    return Version_Field_Size_In_Bytes + size + Crc_Size;
-  }
-
-  /**
-   * Serialize {@link BlobProperties} to buffer in version {@link BlobPropertiesSerDe#Version2}
-   * @param outputBuffer the {@link ByteBuffer} to write the {@link BlobProperties}
-   * @param properties the {@link BlobProperties} to be serialized
-   */
-  private void putBlobPropertiesToBufferV2(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(Version2);
-    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
-    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
-    outputBuffer.putLong(properties.getCreationTimeInMs());
-    outputBuffer.putLong(properties.getBlobSize());
-    Utils.serializeNullableString(outputBuffer, properties.getContentType());
-    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
-    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
-    outputBuffer.putShort(properties.getAccountId());
-    outputBuffer.putShort(properties.getContainerId());
-  }
-
-  /**
-   * Serialize {@link BlobProperties} to buffer in the {@link BlobPropertiesSerDe#Version1}
+   * Serialize {@link BlobProperties} to buffer in the {@link BlobPropertiesSerDe#VERSION_1}
    * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
    * @param properties the {@link BlobProperties} that needs to be serialized
    */
   private static void putBlobPropertiesToBufferV1(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(Version1);
+    outputBuffer.putShort(VERSION_1);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
     outputBuffer.putLong(properties.getCreationTimeInMs());

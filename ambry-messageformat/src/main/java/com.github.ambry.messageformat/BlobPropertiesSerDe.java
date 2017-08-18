@@ -26,21 +26,21 @@ import java.nio.ByteBuffer;
  */
 public class BlobPropertiesSerDe {
 
-  static final short Version1 = 1;
-  static final short Version2 = 2;
-  private static final short currentVersion = Version2;
-  private static final int Version_Field_Size_In_Bytes = 2;
-  private static final int TTL_Field_Size_In_Bytes = 8;
-  private static final int Private_Field_Size_In_Bytes = 1;
-  private static final int CreationTime_Field_Size_In_Bytes = 8;
-  private static final int Variable_Field_Size_In_Bytes = 4;
-  private static final int BlobSize_Field_Size_In_Bytes = 8;
+  static final short VERSION_1 = 1;
+  static final short VERSION_2 = 2;
+  private static final short CURRENT_VERSION = VERSION_2;
+  private static final int VERSION_FIELD_SIZE_IN_BYTES = Short.BYTES;
+  private static final int TTL_FIELD_SIZE_IN_BYTES = Long.BYTES;
+  private static final int PRIVATE_FIELD_SIZE_IN_BYTES = Byte.BYTES;
+  private static final int CREATION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
+  private static final int VARIABLE_FIELD_SIZE_IN_BYTES = Integer.BYTES;
+  private static final int BLOB_SIZE_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
-    return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
-        + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
-        + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
-        + Utils.getNullableStringLength(properties.getOwnerId()) + Variable_Field_Size_In_Bytes
+    return VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
+        + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + VARIABLE_FIELD_SIZE_IN_BYTES
+        + Utils.getNullableStringLength(properties.getContentType()) + VARIABLE_FIELD_SIZE_IN_BYTES
+        + Utils.getNullableStringLength(properties.getOwnerId()) + VARIABLE_FIELD_SIZE_IN_BYTES
         + Utils.getNullableStringLength(properties.getServiceId()) + Short.BYTES + Short.BYTES;
   }
 
@@ -55,11 +55,11 @@ public class BlobPropertiesSerDe {
     String ownerId = Utils.readIntString(stream);
     String serviceId = Utils.readIntString(stream);
     switch (version) {
-      case Version1:
+      case VERSION_1:
         toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime,
             Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
         break;
-      case Version2:
+      case VERSION_2:
         short accountId = stream.readShort();
         short containerId = stream.readShort();
         toReturn =
@@ -73,12 +73,15 @@ public class BlobPropertiesSerDe {
   }
 
   /**
-   * Serialize {@link BlobProperties} to buffer in the {@link #currentVersion}
+   * Serialize {@link BlobProperties} to buffer in the {@link #CURRENT_VERSION}
    * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
    * @param properties the {@link BlobProperties} that needs to be serialized
    */
   public static void serializeBlobProperties(ByteBuffer outputBuffer, BlobProperties properties) {
-    outputBuffer.putShort(currentVersion);
+    if (outputBuffer.remaining() < getBlobPropertiesSerDeSize(properties)) {
+      throw new IllegalArgumentException("Outut buffer does not have sufficient space to serialize blob properties");
+    }
+    outputBuffer.putShort(CURRENT_VERSION);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
     outputBuffer.putLong(properties.getCreationTimeInMs());

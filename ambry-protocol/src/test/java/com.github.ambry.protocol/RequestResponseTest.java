@@ -30,6 +30,7 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -101,7 +102,7 @@ class InvalidVersionPutRequest extends PutRequest {
 }
 
 public class RequestResponseTest {
-  private static final Random random = new Random();
+  private static final Random random = TestUtils.RANDOM;
 
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
