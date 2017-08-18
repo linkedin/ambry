@@ -40,12 +40,15 @@ public class IndexValueTest {
   private final short version;
 
   /**
-   * Running for {@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}
-   * @return an array with both the versions ({@link PersistentIndex#VERSION_0} and {@link PersistentIndex#VERSION_1}).
+   * Running for {@link PersistentIndex#VERSION_0}, {@link PersistentIndex#VERSION_1} and
+   * {@link PersistentIndex#VERSION_2}
+   * @return an array with versions ({@link PersistentIndex#VERSION_0}, {@link PersistentIndex#VERSION_1} and
+   * {@link PersistentIndex#VERSION_2}).
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{PersistentIndex.VERSION_0}, {PersistentIndex.VERSION_1}});
+    return Arrays.asList(
+        new Object[][]{{PersistentIndex.VERSION_0}, {PersistentIndex.VERSION_1}, {PersistentIndex.VERSION_2}});
   }
 
   /**
@@ -104,6 +107,7 @@ public class IndexValueTest {
               UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
           break;
         case PersistentIndex.VERSION_1:
+        case PersistentIndex.VERSION_2:
           verifyIndexValue(value, logSegmentName, size, offset, false, expirationTime.getValue(), offset,
               expectedOperationTimeV1, serviceId, containerId);
           break;
@@ -144,6 +148,7 @@ public class IndexValueTest {
             Utils.Infinite_Time, UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, oldOffset,
             expectedOperationTimeV1, serviceId, containerId);
         break;
@@ -157,6 +162,7 @@ public class IndexValueTest {
             UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
         verifyIndexValue(newValue, logSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, -1,
             expectedOperationTimeV1, serviceId, containerId);
         break;
@@ -175,6 +181,7 @@ public class IndexValueTest {
             UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
         break;
       case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
         verifyIndexValue(newValue, newLogSegmentName, newSize, newOffset, true, expectedExpirationTimeV1, -1,
             expectedOperationTimeV1, serviceId, containerId);
         break;
@@ -208,6 +215,7 @@ public class IndexValueTest {
         expectedExpiryValue = expiresAtMs;
         break;
       case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
         expectedExpiryValue = expiresAtMs >= 0 ? expiresAtMs : Utils.Infinite_Time;
         break;
     }
@@ -323,7 +331,7 @@ public class IndexValueTest {
    *                              in the same log segment. Set to -1 otherwise.
    * @return the {@link IndexValue} thus constructed
    */
-  private static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
+  static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs,
       long originalMessageOffset) {
     ByteBuffer value = ByteBuffer.allocate(IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0);
     value.putLong(size);

@@ -101,6 +101,7 @@ class IndexValue {
         containerId = UNKNOWN_CONTAINER_ID;
         break;
       case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
         if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V1) {
           throw new IllegalArgumentException("Invalid buffer size for version 1");
         }
@@ -314,6 +315,7 @@ class IndexValue {
         value.position(0);
         break;
       case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
         value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V1);
         value.putLong(size);
         value.putLong(offset.getOffset());
@@ -336,7 +338,7 @@ class IndexValue {
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
         + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
-        version == PersistentIndex.VERSION_1 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", ServiceId "
+        version != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", ServiceId "
             + getServiceId() + ", ContainerId " + getContainerId()) : "");
   }
 }
