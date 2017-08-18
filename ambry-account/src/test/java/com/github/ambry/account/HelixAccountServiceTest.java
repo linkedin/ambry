@@ -31,6 +31,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
@@ -569,36 +570,36 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests {@link AccountUpdateListener}.
+   * Tests adding/removing {@link Consumer}.
    * @throws Exception
    */
   @Test
-  public void testAccountUpdateListener() throws Exception {
+  public void testAccountUpdateConsumer() throws Exception {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    assertAccountsInHelixAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
 
-    // subscribe listeners
-    int numOfListeners = 10;
-    List<Collection<Account>> updatedAccountsReceivedByListeners = new ArrayList<>();
-    List<AccountUpdateListener> listeners = new ArrayList<>();
-    for (int i = 0; i < numOfListeners; i++) {
-      AccountUpdateListener listener = updatedAccounts -> {
-        updatedAccountsReceivedByListeners.add(updatedAccounts);
+    // add consumer
+    int numOfConsumers = 10;
+    List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
+    List<Consumer<Collection<Account>>> accountUpdateConsumers = new ArrayList<>();
+    for (int i = 0; i < numOfConsumers; i++) {
+      Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {
+        updatedAccountsReceivedByConsumers.add(updatedAccounts);
       };
-      accountService.addListener(listener);
-      listeners.add(listener);
+      accountService.addAccountUpdateConsumer(accountUpdateConsumer);
+      accountUpdateConsumers.add(accountUpdateConsumer);
     }
 
     // listen to adding a new account
     Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
     Set<Account> accountsToUpdate = Sets.newHashSet(newAccount);
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
-    assertAccountUpdateListeners(Collections.singleton(newAccount), numOfListeners, updatedAccountsReceivedByListeners);
+    assertAccountUpdateConsumers(Collections.singleton(newAccount), numOfConsumers, updatedAccountsReceivedByConsumers);
 
-    // listen to modification of existing accounts. Only updated accounts will be received by listeners.
-    updatedAccountsReceivedByListeners.clear();
+    // listen to modification of existing accounts. Only updated accounts will be received by consumers.
+    updatedAccountsReceivedByConsumers.clear();
     accountsToUpdate = new HashSet<>();
     for (Account account : idToRefAccountMap.values()) {
       AccountBuilder accountBuilder = new AccountBuilder(account);
@@ -606,33 +607,33 @@ public class HelixAccountServiceTest {
       accountsToUpdate.add(accountBuilder.build());
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
-    assertAccountUpdateListeners(accountsToUpdate, numOfListeners, updatedAccountsReceivedByListeners);
+    assertAccountUpdateConsumers(accountsToUpdate, numOfConsumers, updatedAccountsReceivedByConsumers);
 
-    // removes the listener so the listener will not be informed.
-    updatedAccountsReceivedByListeners.clear();
-    for (AccountUpdateListener listener : listeners) {
-      accountService.removeListener(listener);
+    // removes the consumers so the consumers will not be informed.
+    updatedAccountsReceivedByConsumers.clear();
+    for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+      accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
     }
     newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
     accountsToUpdate = Sets.newHashSet(newAccount);
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
-    assertAccountUpdateListeners(Collections.emptySet(), 0, updatedAccountsReceivedByListeners);
+    assertAccountUpdateConsumers(Collections.emptySet(), 0, updatedAccountsReceivedByConsumers);
   }
 
   /**
-   * Asserts the {@link Account}s received by the {@link AccountUpdateListener} are as expected.
-   * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link AccountUpdateListener}s.
-   * @param expectedNumberOfListeners The expected number of {@link AccountUpdateListener}s.
-   * @param accountsInListeners A list of collection of {@link Account}s, where each collection of {@link Account}s are
-   *                            received by one {@link AccountUpdateListener}.
+   * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
+   * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
+   * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.
+   * @param accountsInConsumers A list of collection of {@link Account}s, where each collection of {@link Account}s are
+   *                            received by one {@link Consumer}.
    */
-  private void assertAccountUpdateListeners(Set<Account> expectedAccounts, int expectedNumberOfListeners,
-      List<Collection<Account>> accountsInListeners) {
-    assertEquals("Wrong number of listeners", expectedNumberOfListeners, accountsInListeners.size());
-    for (Collection<Account> accounts : accountsInListeners) {
-      assertEquals("Wrong number of updated accounts received by listener", expectedAccounts.size(), accounts.size());
+  private void assertAccountUpdateConsumers(Set<Account> expectedAccounts, int expectedNumberOfConsumers,
+      List<Collection<Account>> accountsInConsumers) {
+    assertEquals("Wrong number of consumers", expectedNumberOfConsumers, accountsInConsumers.size());
+    for (Collection<Account> accounts : accountsInConsumers) {
+      assertEquals("Wrong number of updated accounts received by consumers", expectedAccounts.size(), accounts.size());
       for (Account account : accounts) {
-        assertTrue("Account should be received by the listener but not.", expectedAccounts.contains(account));
+        assertTrue("Account should be received by the consumers but not.", expectedAccounts.contains(account));
       }
       try {
         accounts.add(Account.UNKNOWN_ACCOUNT);

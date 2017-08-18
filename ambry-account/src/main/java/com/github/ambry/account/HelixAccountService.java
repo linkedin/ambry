@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
@@ -81,7 +82,7 @@ class HelixAccountService implements AccountService {
   private final Notifier<String> notifier;
   private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
   private final ReentrantLock lock = new ReentrantLock();
-  private final CopyOnWriteArraySet<AccountUpdateListener> accountUpdateListeners = new CopyOnWriteArraySet<>();
+  private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
   private volatile boolean isOpen = false;
 
   /**
@@ -147,17 +148,17 @@ class HelixAccountService implements AccountService {
   }
 
   @Override
-  public boolean addListener(AccountUpdateListener listener) {
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     checkOpen();
-    Objects.requireNonNull(listener, "listener to subscribe cannot be null");
-    return accountUpdateListeners.add(listener);
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
+    return accountUpdateConsumers.add(accountUpdateConsumer);
   }
 
   @Override
-  public boolean removeListener(AccountUpdateListener listener) {
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     checkOpen();
-    Objects.requireNonNull(listener, "listener to unsubscribe cannot be null");
-    return accountUpdateListeners.remove(listener);
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
+    return accountUpdateConsumers.remove(accountUpdateConsumer);
   }
 
   /**
@@ -302,17 +303,16 @@ class HelixAccountService implements AccountService {
           if (idToUpdatedAccounts.size() > 0) {
             logger.info("Received updates for {} accounts. Account IDs={}", idToUpdatedAccounts.size(),
                 idToUpdatedAccounts.keySet());
-            for (AccountUpdateListener listener : accountUpdateListeners) {
+            for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
               long startTime = System.currentTimeMillis();
               try {
-                listener.onUpdate(Collections.unmodifiableCollection(idToUpdatedAccounts.values()));
-                long listenerExecutionTimeInMs = System.currentTimeMillis() - startTime;
-                logger.trace("AccountUpdateListener={} has been notified for account change, took {} ms", listener,
-                    listenerExecutionTimeInMs);
-                accountServiceMetrics.accountUpdateListenerTimeInMs.update(listenerExecutionTimeInMs);
+                accountUpdateConsumer.accept(Collections.unmodifiableCollection(idToUpdatedAccounts.values()));
+                long consumerExecutionTimeInMs = System.currentTimeMillis() - startTime;
+                logger.trace("Consumer={} has been notified for account change, took {} ms", accountUpdateConsumer,
+                    consumerExecutionTimeInMs);
+                accountServiceMetrics.accountUpdateConsumerTimeInMs.update(consumerExecutionTimeInMs);
               } catch (Exception e) {
-                logger.error("Exception occurred when notifying account updates to accountUpdateListener={}", listener,
-                    e);
+                logger.error("Exception occurred when notifying accountUpdateConsumer={}", accountUpdateConsumer, e);
               }
             }
           } else {

@@ -15,6 +15,7 @@ package com.github.ambry.account;
 
 import java.io.Closeable;
 import java.util.Collection;
+import java.util.function.Consumer;
 
 
 /**
@@ -89,17 +90,17 @@ public interface AccountService extends Closeable {
   public Collection<Account> getAllAccounts();
 
   /**
-   * Adds an {@link AccountUpdateListener} for newly created or updated {@link Account}s.
-   * @param listener The {@link AccountUpdateListener} to add.
-   * @return {@code true} if the specified {@link AccountUpdateListener} has already been added, {@code false}
+   * Adds a {@link Consumer} for newly created or updated {@link Account}s.
+   * @param accountUpdateConsumer The {@link Consumer} to add.
+   * @return {@code true} if the specified {@link Consumer} has already been added, {@code false}
    *                      otherwise.
    */
-  public boolean addListener(AccountUpdateListener listener);
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
-   * Removes an {@link AccountUpdateListener} from the {@link AccountService}.
-   * @param listener The {@link AccountUpdateListener} to remove.
-   * @return {@code true} if the {@link AccountUpdateListener} exists and removed, {@code false} otherwise.
+   * Removes a previously-added {@link Consumer} from the {@link AccountService}.
+   * @param accountUpdateConsumer The {@link Consumer} to remove.
+   * @return {@code true} if the {@link Consumer} exists and removed, {@code false} otherwise.
    */
-  public boolean removeListener(AccountUpdateListener listener);
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 }

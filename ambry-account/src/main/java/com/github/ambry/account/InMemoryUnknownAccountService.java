@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.function.Consumer;
 
 
 /**
@@ -27,7 +28,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 class InMemoryUnknownAccountService implements AccountService {
   private static final Collection<Account> accounts =
       Collections.unmodifiableCollection(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
-  private final CopyOnWriteArraySet<AccountUpdateListener> accountUpdateListeners = new CopyOnWriteArraySet<>();
+  private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
   private volatile boolean isOpen = true;
 
   @Override
@@ -37,17 +38,17 @@ class InMemoryUnknownAccountService implements AccountService {
   }
 
   @Override
-  public boolean addListener(AccountUpdateListener listener) {
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     checkOpen();
-    Objects.requireNonNull(listener, "listener to subscribe cannot be null");
-    return accountUpdateListeners.add(listener);
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
+    return accountUpdateConsumers.add(accountUpdateConsumer);
   }
 
   @Override
-  public boolean removeListener(AccountUpdateListener listener) {
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     checkOpen();
-    Objects.requireNonNull(listener, "listener to unsubscribe cannot be null");
-    return accountUpdateListeners.remove(listener);
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
+    return accountUpdateConsumers.remove(accountUpdateConsumer);
   }
 
   @Override

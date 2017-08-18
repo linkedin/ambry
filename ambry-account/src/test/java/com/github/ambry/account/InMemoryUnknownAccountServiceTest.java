@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 import org.junit.After;
 import org.junit.Test;
 
@@ -80,22 +81,24 @@ public class InMemoryUnknownAccountServiceTest {
   }
 
   /**
-   * Tests adding/removing {@link AccountUpdateListener}.
+   * Tests adding/removing {@link Consumer}.
    */
   @Test
-  public void testListener() {
-    List<Collection<Account>> updatedAccountsReceivedByListener = new ArrayList<>();
-    // subscribe listeners
-    AccountUpdateListener listener = updatedAccounts -> {
-      updatedAccountsReceivedByListener.add(updatedAccounts);
+  public void testAddRemoveConsumer() {
+    List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
+    // add consumers
+    Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {
+      updatedAccountsReceivedByConsumers.add(updatedAccounts);
     };
-    accountService.addListener(listener);
+    accountService.addAccountUpdateConsumer(accountUpdateConsumer);
     Account updatedAccount = new AccountBuilder(Account.UNKNOWN_ACCOUNT).setName("newName").build();
     accountService.updateAccounts(Collections.singletonList(updatedAccount));
-    assertEquals("Wrong number of updated accounts received by listener.", 0, updatedAccountsReceivedByListener.size());
+    assertEquals("Wrong number of updated accounts received by consumer.", 0,
+        updatedAccountsReceivedByConsumers.size());
     Account newAccount = new AccountBuilder((short) 1, "newAccount", Account.AccountStatus.ACTIVE, null).build();
     accountService.updateAccounts(Collections.singletonList(newAccount));
-    assertEquals("Wrong number of updated accounts received by listener.", 0, updatedAccountsReceivedByListener.size());
-    accountService.removeListener(listener);
+    assertEquals("Wrong number of updated accounts received by consumer.", 0,
+        updatedAccountsReceivedByConsumers.size());
+    accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
   }
 }

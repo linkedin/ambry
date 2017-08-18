@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountUpdateListener;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.clustermap.ClusterMap;
@@ -90,6 +89,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -2177,13 +2177,13 @@ class FrontendTestAccountService implements AccountService {
   }
 
   @Override
-  public boolean addListener(AccountUpdateListener listener) {
-    throw new IllegalStateException("Not implemented");
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
-  public boolean removeListener(AccountUpdateListener listener) {
-    throw new IllegalStateException("Not implemented");
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override
