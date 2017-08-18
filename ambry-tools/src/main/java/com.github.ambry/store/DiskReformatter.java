@@ -42,6 +42,25 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Reformats all the stores on a given disk.
+ *
+ * Guide to using this tool:
+ * 1. Make sure that the Ambry server is completely shut down before using this tool (i.e there should be no else using
+ * those directories).
+ * 2. Make sure that the scratch space provided has enough space for the largest partition on the disk. If the same
+ * scratch space is used for multiple disks, ensure that it has enough space for all.
+ *
+ * On failures:
+ * The tool does not lose any data but may leave things in an inconsistent state after failures.
+ * - If the tool fails before a partition is moved to scratch space, then there is nothing to do
+ * - If the tool fails after a partition is moved to scratch space but before a copy is started, move the relocated
+ * partition back to the disk to go to a consistent state
+ * - If the tool fails during a copy, delete the target directory (usually *_under_reformat except for the last
+ * partition that is copied back from the scratch space at the end) and move the relocated partition back to
+ * the disk (if required) to go to a consistent state
+ * - If the tool fails after the source directory of the copy is deleted but before the target is renamed (this can
+ * be detected easily by looking at the directories), rename the target, move the relocated partition back to disk (if
+ * required) to go to a consistent state (this will not happen for the very last partition which is copied back from
+ * the scratch space because there is no rename step).
  */
 public class DiskReformatter {
   private static final String RELOCATED_DIR_NAME_SUFFIX = "_relocated";
@@ -49,6 +68,7 @@ public class DiskReformatter {
   private static final Logger logger = LoggerFactory.getLogger(DiskReformatter.class);
 
   private final DataNodeId dataNodeId;
+  private final List<StoreCopier.Transformer> transformers;
   private final long fetchSizeInBytes;
   private final StoreConfig storeConfig;
   private final StoreKeyFactory storeKeyFactory;
@@ -140,8 +160,8 @@ public class DiskReformatter {
                 + config.datanodePort);
       }
       DiskReformatter reformatter =
-          new DiskReformatter(dataNodeId, config.fetchSizeInBytes, storeConfig, storeKeyFactory, clusterMap,
-              SystemTime.getInstance());
+          new DiskReformatter(dataNodeId, Collections.EMPTY_LIST, config.fetchSizeInBytes, storeConfig, storeKeyFactory,
+              clusterMap, SystemTime.getInstance());
       AtomicInteger exitStatus = new AtomicInteger(0);
       CountDownLatch latch = new CountDownLatch(config.diskMountPaths.length);
       for (int i = 0; i < config.diskMountPaths.length; i++) {
@@ -169,15 +189,17 @@ public class DiskReformatter {
 
   /**
    * @param dataNodeId the {@link DataNodeId} on which {@code diskMountPath} exists.
+   * @param transformers the list of the {@link StoreCopier.Transformer} to use (in order).
    * @param fetchSizeInBytes the size of each fetch from the source store during copy
    * @param storeConfig the config for the stores
    * @param storeKeyFactory the {@link StoreKeyFactory} to use.
    * @param clusterMap the {@link ClusterMap} to use get details of replicas and partitions.
    * @param time the {@link Time} instance to use.
    */
-  public DiskReformatter(DataNodeId dataNodeId, long fetchSizeInBytes, StoreConfig storeConfig,
-      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time) {
+  public DiskReformatter(DataNodeId dataNodeId, List<StoreCopier.Transformer> transformers, long fetchSizeInBytes,
+      StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time) {
     this.dataNodeId = dataNodeId;
+    this.transformers = transformers;
     this.fetchSizeInBytes = fetchSizeInBytes;
     this.storeConfig = storeConfig;
     this.storeKeyFactory = storeKeyFactory;
@@ -188,10 +210,11 @@ public class DiskReformatter {
   }
 
   /**
-   * Performs a reformat of the disk.
-   * 1. Copies one partition on the disk to a scratch space
-   * 2. Performs local copies of all other partitions on the disk using {@link StoreCopier} and deletes the source.
-   * 3. Copies the partition in the scratch space back on to the disk
+   * Uses {@link StoreCopier} to convert all the partitions on the given disk (D).
+   * 1. Copies one partition on D to a scratch space
+   * 2. Using {@link StoreCopier}, performs copies of all other partitions on D using D as a staging area. When a
+   * partition is completely copied and verified, the original is replaced by the copy.
+   * 3. Copies the partition in the scratch space back onto D.
    * 4. Deletes the folder in the scratch space
    * @param diskMountPath the mount path of the disk to reformat
    * @param scratch the scratch space to use
@@ -224,7 +247,6 @@ public class DiskReformatter {
       throw new IllegalStateException(scratchTgt + " already exists");
     }
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
-    delete(scratchTgt);
     FileUtils.moveDirectory(scratchSrc, scratchTgt);
 
     // reformat each store, except the one moved, one by one
@@ -235,7 +257,9 @@ public class DiskReformatter {
       File tgt = new File(replicaId.getMountPath(), partIdString + UNDER_REFORMAT_DIR_NAME_SUFFIX);
       logger.info("Copying {} to {}", src, tgt);
       copy(partIdString, src, tgt, replicaId.getCapacityInBytes());
+      logger.info("Deleting {}", src);
       delete(src);
+      logger.info("Renaming {} to {}", tgt, src);
       if (!tgt.renameTo(src)) {
         throw new IllegalStateException("Could not rename " + tgt + " to " + src);
       }
@@ -243,7 +267,9 @@ public class DiskReformatter {
     }
 
     // reformat the moved store
+    logger.info("Copying {} to {}", scratchTgt, scratchSrc);
     copy(toMove.getPartitionId().toString(), scratchTgt, scratchSrc, toMove.getCapacityInBytes());
+    logger.info("Deleting {}", scratchTgt);
     delete(scratchTgt);
     logger.info("Done reformatting {}", toMove);
   }
@@ -258,7 +284,7 @@ public class DiskReformatter {
    */
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
     try (StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig,
-        new MetricRegistry(), storeKeyFactory, diskIOScheduler, Collections.EMPTY_LIST, time)) {
+        new MetricRegistry(), storeKeyFactory, diskIOScheduler, transformers, time)) {
       copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
     }
     // verify that the stores are equivalent

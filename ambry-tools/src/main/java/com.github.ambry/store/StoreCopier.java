@@ -88,8 +88,15 @@ public class StoreCopier implements Closeable {
 
   /**
    * An interface for a transformation function. Transformations can modify any data in the message (including keys).
+   * Needs to be thread safe.
    */
   public interface Transformer {
+
+    /**
+     * Transforms the input {@link Message} into an output {@link Message}.
+     * @param message the input {@link Message} to change.
+     * @return the output {@link Message}.
+     */
     Message transform(Message message);
   }
 
