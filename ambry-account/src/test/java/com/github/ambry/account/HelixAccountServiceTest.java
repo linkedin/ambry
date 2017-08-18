@@ -286,8 +286,8 @@ public class HelixAccountServiceTest {
 
   /**
    * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has an invalid account
-   * record and a good account records. This is a NOT good {@link ZNRecord} format that should fail fetch or update,
-   * and none of the record should be read.
+   * record and a valid account record. This is a NOT good {@link ZNRecord} format and it should fail fetch or update
+   * operations, with none of the record should be read.
    * @throws Exception Any unexpected exception.
    */
   @Test
