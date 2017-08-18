@@ -2304,14 +2304,16 @@ public class IndexTest {
     Offset currentEndOffset = state.index.getCurrentEndOffset();
 
     List<IndexEntry> indexEntries = new ArrayList<>();
-    MockId newId = state.getUniqueId();
-    IndexEntry entry = new IndexEntry(newId,
+    // create an index entry in older version.
+    IndexEntry entry = new IndexEntry(state.getUniqueId(),
         IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, Utils.Infinite_Time,
-            state.time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-            PersistentIndex.VERSION_0));
-    // create Index Segment in PersistentIndex.Version_0
-    IndexSegment indexSegment = generateIndexSegmentV0(entry.getValue().getOffset(), entry.getKey().sizeInBytes(),
-        entry.getValue().getBytes().capacity());
+            state.time.milliseconds(), Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, indexVersion));
+    Offset startOffset = entry.getValue().getOffset();
+    int entrySize = entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity();
+    int valueSize = entry.getValue().getBytes().capacity();
+    IndexSegment indexSegment =
+        indexVersion == PersistentIndex.VERSION_0 ? generateIndexSegmentV0(startOffset, entrySize, valueSize)
+            : generateIndexSegmentV1(startOffset, entrySize, valueSize);
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
     FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
     indexSegment.addEntry(entry, fileSpan.getEndOffset());
@@ -2348,6 +2350,68 @@ public class IndexTest {
     // verify index values
     verifyIndexValues(indexEntries);
   }
+
+  /**
+   * Tests that the index segment rolls over when there is a version change in the index value or index segment
+   * @param indexVersion the version of the index segment that will get rolled over.
+   * @param rollOverWithPutRecord {@code true} if the entry that causes rollover should be a put record,
+   *                              {@code false} if the entry that causes rollover should be a delete record
+   * @throws StoreException
+   * @throws IOException
+   */
+  /*private void indexSegmentRollOverTest(short indexVersion, boolean rollOverWithPutRecord)
+      throws StoreException, IOException {
+    state.closeAndClearIndex();
+    Offset currentEndOffset = state.index.getCurrentEndOffset();
+
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    // create an index entry in older version.
+    IndexEntry entry = new IndexEntry(state.getUniqueId(),
+        IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, Utils.Infinite_Time,
+            state.time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+            indexVersion));
+    Offset startOffset = entry.getValue().getOffset();
+    int entrySize = entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity();
+    int valueSize = entry.getValue().getBytes().capacity();
+    IndexSegment indexSegment =
+        indexVersion == PersistentIndex.VERSION_0 ? generateIndexSegmentV0(startOffset, entrySize, valueSize)
+            : generateIndexSegmentV1(startOffset, entrySize, valueSize);
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
+    indexSegment.addEntry(entry, fileSpan.getEndOffset());
+    indexEntries.add(entry);
+    // add more entries to the segment
+    indexEntries.addAll(addPutEntries(fileSpan.getEndOffset(), indexSegment, 2, CuratedLogIndexState.PUT_RECORD_SIZE,
+        Utils.Infinite_Time, 10, false));
+    // persist the index segment of older version.
+    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+
+    state.reloadIndex(false, false);
+    assertEquals("Reloaded index segments should have the same version they were created in", indexVersion,
+        state.index.getIndexSegments().lastEntry().getValue().getVersion());
+    int indexCount = state.index.getIndexSegments().size();
+    // add an entry and verify if roll over happened
+    currentEndOffset = state.index.getCurrentEndOffset();
+    if (rollOverWithPutRecord) {
+      indexEntries.addAll(
+          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10,
+              false));
+    } else {
+      IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
+      state.appendToLog(state.DELETE_RECORD_SIZE);
+      fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.DELETE_RECORD_SIZE);
+      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan, state.time.milliseconds());
+      // remove entryToDelete from indexEntries as it will be part of latest index segment
+      indexEntries.remove(entryToDelete);
+    }
+    assertEquals("Index roll over should have happened ", indexCount + 1, state.index.getIndexSegments().size());
+    currentEndOffset = state.index.getCurrentEndOffset();
+    indexEntries.addAll(
+        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10, false));
+    assertEquals("Index roll over should not have happened ", indexCount + 1, state.index.getIndexSegments().size());
+    // verify index values
+    verifyIndexValues(indexEntries);
+  } */
 
   /**
    * Adds entries to the index and asserts that the number of index segments and the persistedEntrySizes of the latest
@@ -2441,8 +2505,8 @@ public class IndexTest {
           state.index.addToIndex(entry, fileSpan);
         } else {
           entry = new IndexEntry(state.getUniqueId(idLength),
-              new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds(),
-                  accountId, containerId));
+              new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds(), accountId,
+                  containerId));
           state.index.addToIndex(entry, fileSpan);
         }
       }
