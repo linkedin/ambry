@@ -510,10 +510,13 @@ public class BlobStoreCompactorTest {
     MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
     state.addDeleteEntry(idFromAnotherSegment);
 
-    // 9. Delete entry for an Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
+    // 9. Delete entry for a Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
     // cleanup
     // the delete record itself won't be cleaned up
-    state.addDeleteEntry(state.getUniqueId());
+    MockId uniqueId = state.getUniqueId();
+    state.addDeleteEntry(uniqueId,
+        new MessageInfo(uniqueId, Integer.MAX_VALUE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
 
     // fill up the rest of the segment + one more
     writeDataToMeetRequiredSegmentCount(numFinalSegmentsCount, null);

@@ -206,25 +206,6 @@ class CuratedLogIndexState {
    */
   List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs)
       throws InterruptedException, IOException, StoreException {
-    return addPutEntries(count, size, expiresAtMs, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM));
-  }
-
-  /**
-   * Adds {@code count} number of put entries each of size {@code size} and that expire at {@code expiresAtMs} to the
-   * index (both real and reference).
-   * @param count the number of PUT entries to add.
-   * @param size the size of each PUT entry.
-   * @param expiresAtMs the time at which each of the PUT entries expires.
-   * @param accountId accountId of the blob
-   * @param containerId containerId of the blob
-   * @return the list of the added entries.
-   * @throws InterruptedException
-   * @throws IOException
-   * @throws StoreException
-   */
-  List<IndexEntry> addPutEntries(int count, long size, long expiresAtMs, short accountId, short containerId)
-      throws InterruptedException, IOException, StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -240,9 +221,9 @@ class CuratedLogIndexState {
         advanceTime(DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS);
         referenceIndex.put(indexSegmentStartOffset, new TreeMap<MockId, IndexValue>());
       }
-      IndexValue value =
-          new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs, time.milliseconds(), accountId, containerId);
-      MockId id = getUniqueId(10, accountId, containerId);
+      IndexValue value = new IndexValue(size, fileSpan.getStartOffset(), expiresAtMs, time.milliseconds(),
+          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+      MockId id = getUniqueId();
       IndexEntry entry = new IndexEntry(id, value);
       indexEntries.add(entry);
       logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(dataWritten, value)));
@@ -273,6 +254,19 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   FileSpan addDeleteEntry(MockId idToDelete) throws InterruptedException, IOException, StoreException {
+    return addDeleteEntry(idToDelete, null);
+  }
+
+  /**
+   * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
+   * @param idToDelete the id to be deleted.
+   * @return the {@link FileSpan} of the added entries.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  FileSpan addDeleteEntry(MockId idToDelete, MessageInfo info)
+      throws InterruptedException, IOException, StoreException {
     byte[] dataWritten = appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     Offset endOffsetOfPrevMsg = index.getCurrentEndOffset();
     FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfPrevMsg, CuratedLogIndexState.DELETE_RECORD_SIZE);
@@ -293,9 +287,8 @@ class CuratedLogIndexState {
       newValue.setNewOffset(startOffset);
       newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
     } else {
-      newValue =
-          new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, Utils.Infinite_Time, time.milliseconds(),
-              idToDelete.getAccountId(), idToDelete.getContainerId());
+      newValue = new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, Utils.Infinite_Time,
+          info.getOperationTimeMs(), info.getAccountId(), info.getContainerId());
       newValue.clearOriginalMessageOffset();
       indexSegmentStartOffsets.put(idToDelete, new Pair<Offset, Offset>(null, null));
       allKeys.put(idToDelete, new Pair<IndexValue, IndexValue>(null, null));
@@ -375,16 +368,9 @@ class CuratedLogIndexState {
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
   MockId getUniqueId(int length) {
-    return getUniqueId(length, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
-  }
-
-  /**
-   * @return a {@link MockId} that is unique and has not been generated before in this run.
-   */
-  MockId getUniqueId(int length, short accountId, short containerId) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(length), accountId, containerId);
+      id = new MockId(UtilsTest.getRandomString(length));
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;
@@ -854,7 +840,10 @@ class CuratedLogIndexState {
     idToDelete = getIdToDeleteFromIndexSegment(referenceIndex.lastKey());
     addDeleteEntry(idToDelete);
     // 1 DELETE for a PUT entry that does not exist
-    addDeleteEntry(getUniqueId());
+    MockId uniqueId = getUniqueId();
+    addDeleteEntry(uniqueId,
+        new MessageInfo(uniqueId, Integer.MAX_VALUE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), time.milliseconds()));
     // 1 PUT entry that spans the rest of the data in the segment
     long size = sizeToMakeIndexEntriesFor - index.getCurrentEndOffset().getOffset();
     addPutEntries(1, size, Utils.Infinite_Time);

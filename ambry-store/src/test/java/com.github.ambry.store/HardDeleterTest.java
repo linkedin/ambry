@@ -19,6 +19,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -70,15 +71,16 @@ public class HardDeleterTest {
 
     void add(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
+      short acccountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       IndexValue indexValue =
-          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, time.milliseconds(),
-              id.getAccountId(), id.getContainerId());
+          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, time.milliseconds(), acccountId,
+              containerId);
       index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
-      offsetMap.put(nextOffset,
-          new MessageInfo(id, sizeOfEntry, id.getAccountId(), id.getContainerId(), time.milliseconds()));
+      offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry, acccountId, containerId, time.milliseconds()));
       nextOffset += sizeOfEntry;
     }
 

@@ -679,16 +679,9 @@ public class BlobStoreTest {
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
   private MockId getUniqueId() {
-    return getUniqueId(Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
-  }
-
-  /**
-   * @return a {@link MockId} that is unique and has not been generated before in this run.
-   */
-  private MockId getUniqueId(short accountId, short containerId) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(10), accountId, containerId);
+      id = new MockId(UtilsTest.getRandomString(10));
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;
@@ -712,8 +705,8 @@ public class BlobStoreTest {
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId();
       long crc = random.nextLong();
-      MessageInfo info = new MessageInfo(id, size, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
-          Utils.Infinite_Time);
+      MessageInfo info = new MessageInfo(id, size, false, expiresAtMs, crc, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);
@@ -736,8 +729,9 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private MessageInfo delete(MockId idToDelete) throws StoreException {
+    MessageInfo putMsgInfo = allKeys.get(idToDelete).getFirst();
     MessageInfo info =
-        new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
+        new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
             Utils.Infinite_Time);
     ByteBuffer buffer = ByteBuffer.allocate(DELETE_RECORD_SIZE);
     store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
@@ -1088,8 +1082,8 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyPutFailure(MockId idToPut, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info = new MessageInfo(idToPut, PUT_RECORD_SIZE, idToPut.getAccountId(), idToPut.getContainerId(),
-        Utils.Infinite_Time);
+    MessageInfo info = new MessageInfo(idToPut, PUT_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
@@ -1108,9 +1102,8 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
-    MessageInfo info =
-        new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
-            Utils.Infinite_Time);
+    MessageInfo info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
@@ -1189,9 +1182,8 @@ public class BlobStoreTest {
     for (int i = 0; i < mockIdList.size(); i++) {
       bufferList.add(ByteBuffer.allocate(PUT_RECORD_SIZE));
       MockId mockId = (MockId) mockIdList.get(i);
-      messageInfoList.add(
-          new MessageInfo(mockId, PUT_RECORD_SIZE, false, Utils.Infinite_Time, crcList.get(i), mockId.getAccountId(),
-              mockId.getContainerId(), Utils.Infinite_Time));
+      messageInfoList.add(new MessageInfo(mockId, PUT_RECORD_SIZE, false, Utils.Infinite_Time, crcList.get(i),
+          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
     }
     MessageWriteSet writeSet = new MockMessageWriteSet(messageInfoList, bufferList);
     // Put the initial two messages.
