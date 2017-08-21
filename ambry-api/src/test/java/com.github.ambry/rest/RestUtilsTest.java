@@ -114,15 +114,15 @@ public class RestUtilsTest {
     // no internal keys for account and container
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
-    verifyBlobPropertiesConstructionFailure(headers, false, false, RestServiceErrorCode.MissingArgs);
+    verifyBlobPropertiesConstructionFailure(headers, false, false, RestServiceErrorCode.InternalServerError);
     // no internal keys for account
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
-    verifyBlobPropertiesConstructionFailure(headers, false, true, RestServiceErrorCode.MissingArgs);
+    verifyBlobPropertiesConstructionFailure(headers, false, true, RestServiceErrorCode.InternalServerError);
     // no internal keys for container
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
-    verifyBlobPropertiesConstructionFailure(headers, true, false, RestServiceErrorCode.MissingArgs);
+    verifyBlobPropertiesConstructionFailure(headers, true, false, RestServiceErrorCode.InternalServerError);
 
     // no failures.
     // ttl missing. Should be infinite time by default.
