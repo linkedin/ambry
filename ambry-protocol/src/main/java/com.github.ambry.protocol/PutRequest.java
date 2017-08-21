@@ -330,6 +330,7 @@ public class PutRequest extends RequestOrResponse {
       StringBuilder sb = new StringBuilder();
       sb.append("ReceivedPutRequest[");
       sb.append("BlobID=").append(blobId.getID());
+      sb.append("PartitionId=").append(blobId.getPartition());
       sb.append(", ").append("ClientId=").append(clientId);
       sb.append(", ").append("CorrelationId=").append(correlationId);
       if (blobProperties != null) {
