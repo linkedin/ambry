@@ -346,7 +346,7 @@ public class HelixAccountServiceTest {
       new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier,
           shouldUseMockHelixStore).getAccountService();
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
 
@@ -354,17 +354,12 @@ public class HelixAccountServiceTest {
       new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier,
           shouldUseMockHelixStore).getAccountService();
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
 
-    try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
-          shouldUseMockHelixStore).getAccountService();
-      fail("should have thrown");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
+    new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
+        shouldUseMockHelixStore).getAccountService();
 
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {

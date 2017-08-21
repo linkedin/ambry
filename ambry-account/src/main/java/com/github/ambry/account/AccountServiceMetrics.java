@@ -35,6 +35,7 @@ public class AccountServiceMetrics {
   public final Counter updateAccountErrorCount;
   public final Counter fetchRemoteAccountErrorCount;
   public final Counter remoteDataCorruptionErrorCount;
+  public final Counter nullNotifierCount;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
@@ -55,5 +56,7 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
     remoteDataCorruptionErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "RemoteDataCorruptionErrorCount"));
+    nullNotifierCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NullNotifierCount"));
   }
 }
