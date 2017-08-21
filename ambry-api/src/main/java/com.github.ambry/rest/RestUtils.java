@@ -211,7 +211,14 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
     Account account = (Account) args.get(InternalKeys.TARGET_ACCOUNT_KEY);
+    if (account == null) {
+      throw new RestServiceException(InternalKeys.TARGET_ACCOUNT_KEY + " is not set", RestServiceErrorCode.MissingArgs);
+    }
     Container container = (Container) args.get(InternalKeys.TARGET_CONTAINER_KEY);
+    if (container == null) {
+      throw new RestServiceException(InternalKeys.TARGET_CONTAINER_KEY + " is not set",
+          RestServiceErrorCode.MissingArgs);
+    }
     String serviceId = getHeader(args, Headers.SERVICE_ID, true);
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);

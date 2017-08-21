@@ -111,6 +111,18 @@ public class RestUtilsTest {
     setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
     tooManyValuesTest(headers, RestUtils.Headers.TTL);
     tooManyValuesTest(headers, RestUtils.Headers.PRIVATE);
+    // no internal keys for account and container
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
+    verifyBlobPropertiesConstructionFailure(headers, false, false, RestServiceErrorCode.MissingArgs);
+    // no internal keys for account
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
+    verifyBlobPropertiesConstructionFailure(headers, false, true, RestServiceErrorCode.MissingArgs);
+    // no internal keys for container
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
+    verifyBlobPropertiesConstructionFailure(headers, true, false, RestServiceErrorCode.MissingArgs);
 
     // no failures.
     // ttl missing. Should be infinite time by default.
@@ -720,10 +732,33 @@ public class RestUtilsTest {
    */
   private void verifyBlobPropertiesConstructionFailure(JSONObject headers, RestServiceErrorCode expectedCode)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    verifyBlobPropertiesConstructionFailure(headers, true, true, expectedCode);
+  }
+
+  /**
+   * Verifies that {@link RestUtils#buildBlobProperties(Map<String,Object>)} fails if given a request with bad
+   * arguments.
+   * @param headers the headers that were provided to the request.
+   * @param shouldInsertAccount {@code true} to insert {@link Account#UNKNOWN_ACCOUNT} object into the {@link RestRequest},
+   *                                        {@code false} otherwise.
+   * @param shouldInsertContainer {@code true} to insert {@link Container#UNKNOWN_CONTAINER} object into the {@link RestRequest},
+   *                                        {@code false} otherwise.
+   * @param expectedCode the expected {@link RestServiceErrorCode} because of the failure.
+   * @throws JSONException
+   * @throws UnsupportedEncodingException
+   * @throws URISyntaxException
+   */
+  private void verifyBlobPropertiesConstructionFailure(JSONObject headers, boolean shouldInsertAccount,
+      boolean shouldInsertContainer, RestServiceErrorCode expectedCode)
+      throws JSONException, UnsupportedEncodingException, URISyntaxException {
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
-      restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
+      if (shouldInsertAccount) {
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+      }
+      if (shouldInsertContainer) {
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
+      }
       RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {
