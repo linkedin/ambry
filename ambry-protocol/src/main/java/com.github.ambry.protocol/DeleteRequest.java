@@ -142,7 +142,7 @@ public class DeleteRequest extends RequestOrResponse {
     StringBuilder sb = new StringBuilder();
     sb.append("DeleteRequest[");
     sb.append("BlobID=").append(blobId);
-    sb.append("PartitionId=").append(blobId.getPartition());
+    sb.append(", ").append("PartitionId=").append(blobId.getPartition());
     sb.append(", ").append("ClientId=").append(clientId);
     sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append(", ").append("AccountId=").append(blobId.getAccountId());
