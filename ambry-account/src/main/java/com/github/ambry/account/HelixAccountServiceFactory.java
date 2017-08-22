@@ -17,8 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.util.Collections;
-import java.util.List;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
@@ -62,13 +60,11 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     logger.info("Starting a HelixAccountService");
     ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
         storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-    List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
     HelixPropertyStore<ZNRecord> helixStore =
-        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
+        new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, null);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
-            + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", storeConfig.zkClientConnectString,
-        storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
-        subscribedPaths);
+            + "zkClientConnectionTimeoutMs={}, rootPath={}", storeConfig.zkClientConnectString,
+        storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);
     HelixAccountService helixAccountService = new HelixAccountService(helixStore, accountServiceMetrics, notifier);
     long spentTimeMs = System.currentTimeMillis() - startTimeMs;
     logger.info("HelixAccountService started, took {} ms", spentTimeMs);
@@ -76,4 +72,3 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     return helixAccountService;
   }
 }
-
