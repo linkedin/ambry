@@ -163,7 +163,6 @@ public class MessageFormatInputStreamTest {
               : MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
       Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
-      // @TODO: fix verifier once we start to serialize in DeleteMsgFormat V2
       // check header
       byte[] headerOutput = new byte[headerSize];
       messageFormatStream.read(headerOutput);

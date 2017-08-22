@@ -290,18 +290,22 @@ public class StoreMessageReadSetTest {
       MessageInfo msgInfo) {
     assertEquals("LogSegment name not as expected", logSegment.getName(), options.getLogSegmentName());
     assertEquals("Offset not as expected", offset, options.getOffset());
-    assertEquals("Size not as expected", msgInfo.getSize(), options.getSize());
-    assertEquals("ExpiresAtMs not as expected", msgInfo.getExpirationTimeInMs(), options.getExpiresAtMs());
-    assertEquals("StoreKey not as expected", msgInfo.getStoreKey(), options.getStoreKey());
+    assertEquals("Size not as expected", msgInfo.getSize(), options.getMessageInfo().getSize());
+    assertEquals("ExpiresAtMs not as expected", msgInfo.getExpirationTimeInMs(),
+        options.getMessageInfo().getExpirationTimeInMs());
+    assertEquals("StoreKey not as expected", msgInfo.getStoreKey(), options.getMessageInfo().getStoreKey());
     if (verifyInMemFields) {
-      assertEquals("Crc not as expected ", msgInfo.getCrc().longValue(), options.getCrc());
-      assertEquals("AccountId not as expected", msgInfo.getAccountId(), options.getAccountId());
-      assertEquals("ContainerId not as expected", msgInfo.getContainerId(), options.getContainerId());
-      assertEquals("OperationTimeMs not as expected", msgInfo.getOperationTimeMs(), options.getOperationTimeMs());
+      assertEquals("Crc not as expected ", msgInfo.getCrc().longValue(), options.getMessageInfo().getCrc().longValue());
+      assertEquals("AccountId not as expected", msgInfo.getAccountId(), options.getMessageInfo().getAccountId());
+      assertEquals("ContainerId not as expected", msgInfo.getContainerId(), options.getMessageInfo().getContainerId());
+      assertEquals("OperationTimeMs not as expected", msgInfo.getOperationTimeMs(),
+          options.getMessageInfo().getOperationTimeMs());
     } else {
-      assertEquals("AccountId not as expected", Account.UNKNOWN_ACCOUNT_ID, options.getAccountId());
-      assertEquals("ContainerId not as expected", Container.UNKNOWN_CONTAINER_ID, options.getContainerId());
-      assertEquals("OperationTimeMs not as expected", Utils.Infinite_Time, options.getOperationTimeMs());
+      assertEquals("AccountId not as expected", Account.UNKNOWN_ACCOUNT_ID, options.getMessageInfo().getAccountId());
+      assertEquals("ContainerId not as expected", Container.UNKNOWN_CONTAINER_ID,
+          options.getMessageInfo().getContainerId());
+      assertEquals("OperationTimeMs not as expected", Utils.Infinite_Time,
+          options.getMessageInfo().getOperationTimeMs());
     }
     MessageInfo messageInfo = options.getMessageInfo();
     assertEquals("Size not as expected", msgInfo.getSize(), messageInfo.getSize());
@@ -337,8 +341,9 @@ public class StoreMessageReadSetTest {
       BlobReadOptions deSerReadOptions = BlobReadOptions.fromBytes(stream, STORE_KEY_FACTORY, log);
       assertEquals("Ref count of log segment should have increased", 1, segment.refCount());
       verifyGetters(deSerReadOptions, segment, readOptions.getOffset(), false,
-          new MessageInfo(readOptions.getStoreKey(), readOptions.getSize(), readOptions.getExpiresAtMs(),
-              Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time));
+          new MessageInfo(readOptions.getMessageInfo().getStoreKey(), readOptions.getMessageInfo().getSize(),
+              readOptions.getMessageInfo().getExpirationTimeInMs(), Account.UNKNOWN_ACCOUNT_ID,
+              Container.UNKNOWN_CONTAINER_ID, Utils.Infinite_Time));
       deSerReadOptions.close();
       assertEquals("Ref count of log segment should have decreased", 0, segment.refCount());
     }
@@ -355,13 +360,13 @@ public class StoreMessageReadSetTest {
     switch (version) {
       case BlobReadOptions.VERSION_0:
         // version length + offset length + size length + expires at length + key size
-        bytes = new byte[2 + 8 + 8 + 8 + readOptions.getStoreKey().sizeInBytes()];
+        bytes = new byte[2 + 8 + 8 + 8 + readOptions.getMessageInfo().getStoreKey().sizeInBytes()];
         ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
         bufWrap.putShort(BlobReadOptions.VERSION_0);
         bufWrap.putLong(readOptions.getOffset());
-        bufWrap.putLong(readOptions.getSize());
-        bufWrap.putLong(readOptions.getExpiresAtMs());
-        bufWrap.put(readOptions.getStoreKey().toBytes());
+        bufWrap.putLong(readOptions.getMessageInfo().getSize());
+        bufWrap.putLong(readOptions.getMessageInfo().getExpirationTimeInMs());
+        bufWrap.put(readOptions.getMessageInfo().getStoreKey().toBytes());
       case BlobReadOptions.VERSION_1:
         bytes = readOptions.toBytes();
         break;

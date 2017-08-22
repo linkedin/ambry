@@ -332,6 +332,8 @@ public class ReplicationTest {
       // add 3 messages to the remote host only
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 3);
 
+      accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      containerId = Utils.getRandomShort(TestUtils.RANDOM);
       // add a corrupt message to the remote host only
       id = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId);
       putMsgInfo = getPutMessage(id, accountId, containerId);
@@ -649,7 +651,7 @@ public class ReplicationTest {
     MessageInfo toRet = null;
     for (MessageInfo messageInfo : messageInfos) {
       if (messageInfo.getStoreKey().equals(id)) {
-        if ((deleteMsg && messageInfo.isDeleted()) || (!deleteMsg && !messageInfo.isDeleted())) {
+        if (deleteMsg == messageInfo.isDeleted()) {
           toRet = messageInfo;
           break;
         }

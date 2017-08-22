@@ -1474,9 +1474,10 @@ public class BlobStoreCompactorTest {
   private void checkRecord(MockId id, BlobReadOptions options) throws IOException {
     MessageReadSet readSet = new StoreMessageReadSet(Arrays.asList(options));
     IndexValue value = state.getExpectedValue(id, true);
-    assertEquals("Unexpected key in BlobReadOptions", id, options.getStoreKey());
-    assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getSize());
-    assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(), options.getExpiresAtMs());
+    assertEquals("Unexpected key in BlobReadOptions", id, options.getMessageInfo().getStoreKey());
+    assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getMessageInfo().getSize());
+    assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(),
+        options.getMessageInfo().getExpirationTimeInMs());
     if (state.index.hardDeleter.enabled.get() && !state.deletedKeys.contains(id)) {
       ByteBuffer readBuf = ByteBuffer.allocate((int) value.getSize());
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
@@ -1497,8 +1498,8 @@ public class BlobStoreCompactorTest {
     IndexValue valueFromStore = state.index.findKey(id);
     assertEquals("Unexpected size in IndexValue", value.getSize(), valueFromStore.getSize());
     assertEquals("Unexpected expiresAtMs in IndexValue", value.getExpiresAtMs(), valueFromStore.getExpiresAtMs());
-    assertEquals("Unexpected op time in IndexValue " + value + ", actual " + valueFromStore,
-        value.getOperationTimeInMs(), valueFromStore.getOperationTimeInMs());
+    assertEquals("Unexpected op time in IndexValue ", value.getOperationTimeInMs(),
+        valueFromStore.getOperationTimeInMs());
     assertEquals("Unexpected service ID in IndexValue", value.getServiceId(), valueFromStore.getServiceId());
     assertEquals("Unexpected container ID in IndexValue", value.getContainerId(), valueFromStore.getContainerId());
     assertEquals("Unexpected flags in IndexValue", value.getFlags(), valueFromStore.getFlags());

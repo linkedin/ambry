@@ -1293,12 +1293,13 @@ public class IndexTest {
         fail("Should have failed because a StoreException is expected");
       }
       IndexValue putEntryValue = state.getExpectedValue(id, true);
-      assertEquals("StoreKey not as expected", id, options.getStoreKey());
+      assertEquals("StoreKey not as expected", id, options.getMessageInfo().getStoreKey());
       assertEquals("Log Segment Name not as expected", putEntryValue.getOffset().getName(),
           options.getLogSegmentName());
       assertEquals("Offset not as expected", putEntryValue.getOffset().getOffset(), options.getOffset());
-      assertEquals("Size not as expected", putEntryValue.getSize(), options.getSize());
-      assertEquals("ExpiresAtMs not as expected", putEntryValue.getExpiresAtMs(), options.getExpiresAtMs());
+      assertEquals("Size not as expected", putEntryValue.getSize(), options.getMessageInfo().getSize());
+      assertEquals("ExpiresAtMs not as expected", putEntryValue.getExpiresAtMs(),
+          options.getMessageInfo().getExpirationTimeInMs());
     } catch (StoreException e) {
       if (expectedErrorCode == null) {
         throw e;

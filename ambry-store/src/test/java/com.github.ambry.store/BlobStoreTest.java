@@ -732,7 +732,7 @@ public class BlobStoreTest {
     MessageInfo putMsgInfo = allKeys.get(idToDelete).getFirst();
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
-            Utils.Infinite_Time);
+            time.milliseconds());
     ByteBuffer buffer = ByteBuffer.allocate(DELETE_RECORD_SIZE);
     store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
     deletedKeys.add(idToDelete);

@@ -260,6 +260,7 @@ class CuratedLogIndexState {
   /**
    * Adds a delete entry in the index (real and reference) for {@code idToDelete}.
    * @param idToDelete the id to be deleted.
+   * @param info the {@link MessageInfo} to use incase of recovery to fetch accountId, containerId and operationTime.
    * @return the {@link FileSpan} of the added entries.
    * @throws InterruptedException
    * @throws IOException

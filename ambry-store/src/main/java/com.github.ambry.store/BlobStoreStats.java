@@ -498,8 +498,9 @@ class BlobStoreStats implements StoreStats, Closeable {
   private IndexValue getPutRecordForDeletedKey(StoreKey key, IndexValue deleteIndexValue) throws StoreException {
     BlobReadOptions originalPut = index.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class));
     Offset originalPutOffset = new Offset(originalPut.getLogSegmentName(), originalPut.getOffset());
-    return new IndexValue(originalPut.getSize(), originalPutOffset, originalPut.getExpiresAtMs(),
-        deleteIndexValue.getOperationTimeInMs(), deleteIndexValue.getServiceId(), deleteIndexValue.getContainerId());
+    return new IndexValue(originalPut.getMessageInfo().getSize(), originalPutOffset,
+        originalPut.getMessageInfo().getExpirationTimeInMs(), deleteIndexValue.getOperationTimeInMs(),
+        deleteIndexValue.getServiceId(), deleteIndexValue.getContainerId());
   }
 
   /**

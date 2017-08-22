@@ -73,34 +73,6 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     return offset.getOffset();
   }
 
-  long getSize() {
-    return info.getSize();
-  }
-
-  long getExpiresAtMs() {
-    return info.getExpirationTimeInMs();
-  }
-
-  StoreKey getStoreKey() {
-    return info.getStoreKey();
-  }
-
-  short getAccountId() {
-    return info.getAccountId();
-  }
-
-  short getContainerId() {
-    return info.getContainerId();
-  }
-
-  long getOperationTimeMs() {
-    return info.getOperationTimeMs();
-  }
-
-  long getCrc() {
-    return info.getCrc();
-  }
-
   MessageInfo getMessageInfo() {
     return info;
   }
@@ -118,6 +90,11 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     return offset.compareTo(o.offset);
   }
 
+  /**
+   * Serializes this {@link BlobReadOptions} to bytes
+   * Note: This does not serialize some fields like accountId, containerId and crc
+   * @return the serialized form of this {@link BlobReadOptions} in bytes
+   */
   byte[] toBytes() {
     byte[] offsetBytes = offset.toBytes();
     byte[] buf = new byte[VERSION_LENGTH + offsetBytes.length + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + info.getStoreKey()
@@ -131,6 +108,16 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     return buf;
   }
 
+  /**
+   * Deserialized the stream to form {@link BlobReadOptions}
+   * Note: Some fields are not serialized like accountId, containerId and crc and hence will take up defaults or null
+   * after deserialization
+   * @param stream the {@link DataInputStream} to deserialize
+   * @param factory {@link StoreKeyFactory} to use
+   * @param log the {@link Log} to use
+   * @return the {@link BlobReadOptions} thus deserialized from the {@code stream}
+   * @throws IOException
+   */
   static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory, Log log) throws IOException {
     short version = stream.readShort();
     switch (version) {
@@ -185,7 +172,7 @@ class StoreMessageReadSet implements MessageReadSet {
     }
     BlobReadOptions options = readOptions.get(index);
     long startOffset = options.getOffset() + relativeOffset;
-    long sizeToRead = Math.min(maxSize, options.getSize() - relativeOffset);
+    long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
@@ -202,7 +189,7 @@ class StoreMessageReadSet implements MessageReadSet {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
-    return readOptions.get(index).getSize();
+    return readOptions.get(index).getMessageInfo().getSize();
   }
 
   @Override
@@ -210,6 +197,6 @@ class StoreMessageReadSet implements MessageReadSet {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
-    return readOptions.get(index).getStoreKey();
+    return readOptions.get(index).getMessageInfo().getStoreKey();
   }
 }

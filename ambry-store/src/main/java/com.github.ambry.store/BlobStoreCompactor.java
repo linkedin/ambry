@@ -644,9 +644,9 @@ class BlobStoreCompactor {
             try (BlobReadOptions options = srcIndex.getBlobReadInfo(indexEntry.getKey(),
                 EnumSet.allOf(StoreGetOptions.class))) {
               Offset offset = new Offset(indexSegmentStartOffset.getName(), options.getOffset());
-              IndexValue putValue =
-                  new IndexValue(options.getSize(), offset, options.getExpiresAtMs(), value.getOperationTimeInMs(),
-                      value.getServiceId(), value.getContainerId());
+              IndexValue putValue = new IndexValue(options.getMessageInfo().getSize(), offset,
+                  options.getMessageInfo().getExpirationTimeInMs(), options.getMessageInfo().getOperationTimeMs(),
+                  options.getMessageInfo().getAccountId(), options.getMessageInfo().getContainerId());
               validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
             } catch (StoreException e) {
               logger.error("Fetching PUT index entry of {} in {} failed", indexEntry.getKey(), indexSegmentStartOffset);
