@@ -246,8 +246,9 @@ public class CompactionVerifier implements Closeable {
     LOGGER.info("Delete ref time: {} ms", deleteRefTimeMs);
 
     MetricRegistry metricRegistry = new MetricRegistry();
-    StoreMetrics srcMetrics = new StoreMetrics(verifierConfig.storeId + "-src", metricRegistry);
-    StoreMetrics tgtMetrics = new StoreMetrics(verifierConfig.storeId + "-tgt", metricRegistry);
+    AggregatedStoreMetrics aggregatedStoreMetrics = new AggregatedStoreMetrics(metricRegistry);
+    StoreMetrics srcMetrics = new StoreMetrics(verifierConfig.storeId + "-src", metricRegistry, aggregatedStoreMetrics);
+    StoreMetrics tgtMetrics = new StoreMetrics(verifierConfig.storeId + "-tgt", metricRegistry, aggregatedStoreMetrics);
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
     MessageStoreRecovery recovery = new MessageStoreRecovery() {
