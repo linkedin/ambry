@@ -624,14 +624,17 @@ public class AmbryRequests implements RequestAPI {
           } else {
             partitionIds = clusterMap.getAllPartitionIds();
           }
-          if (!error.equals(ServerErrorCode.Partition_Unknown) && replicationManager.controlReplicationForPartitions(
-              partitionIds, replControlRequest.getOrigins(), replControlRequest.shouldEnable())) {
-            error = ServerErrorCode.No_Error;
-          } else {
-            logger.error("Could not set enable status for replication of {} from {} to {}. Check partition validity and"
-                    + " origins list", partitionIds, replControlRequest.getOrigins(),
-                replControlRequest.shouldEnable());
-            error = error != ServerErrorCode.Partition_Unknown ? ServerErrorCode.Unknown_Error : error;
+          if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+            if (replicationManager.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
+                replControlRequest.shouldEnable())) {
+              error = ServerErrorCode.No_Error;
+            } else {
+              logger.error(
+                  "Could not set enable status for replication of {} from {} to {}. Check partition validity and"
+                      + " origins list", partitionIds, replControlRequest.getOrigins(),
+                  replControlRequest.shouldEnable());
+              error = ServerErrorCode.Unknown_Error;
+            }
           }
           break;
       }

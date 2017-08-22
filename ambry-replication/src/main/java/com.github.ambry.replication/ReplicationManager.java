@@ -379,8 +379,8 @@ public class ReplicationManager {
   }
 
   /**
-   * Enables/disables {@code types} of replication on the given {@code ids}. The disabling is in-memory and therefore
-   * is not valid across restarts.
+   * Enables/disables replication of the given {@code ids} from {@code origins}. The disabling is in-memory and
+   * therefore is not valid across restarts.
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param origins the list of datacenters from which replication should be enabled/disabled.
    * @param enable whether to enable ({@code true}) or disable.

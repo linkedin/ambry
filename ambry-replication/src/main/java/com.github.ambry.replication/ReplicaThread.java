@@ -74,8 +74,10 @@ import org.slf4j.LoggerFactory;
 class ReplicaThread implements Runnable {
 
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
-  private final Set<PartitionId> replicatedPartitions = new HashSet<>();
   private final Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
+  private final Set<PartitionId> unmodifiableReplicationDisabledPartitions =
+      Collections.unmodifiableSet(replicationDisabledPartitions);
+  private final Set<PartitionId> allReplicatedPartitions;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
   private boolean waitEnabled;
@@ -126,11 +128,13 @@ class ReplicaThread implements Runnable {
     this.waitEnabled = !replicatingFromRemoteColo;
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
+    Set<PartitionId> partitions = new HashSet<>();
     for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : replicasToReplicateGroupedByNode.entrySet()) {
       for (RemoteReplicaInfo info : entry.getValue()) {
-        replicatedPartitions.add(info.getReplicaId().getPartitionId());
+        partitions.add(info.getReplicaId().getPartitionId());
       }
     }
+    allReplicatedPartitions = Collections.unmodifiableSet(partitions);
   }
 
   /**
@@ -142,7 +146,7 @@ class ReplicaThread implements Runnable {
     lock.lock();
     try {
       for (PartitionId id : ids) {
-        if (replicatedPartitions.contains(id)) {
+        if (allReplicatedPartitions.contains(id)) {
           if (enable) {
             if (replicationDisabledPartitions.remove(id)) {
               allDisabled = false;
@@ -150,7 +154,7 @@ class ReplicaThread implements Runnable {
             }
           } else {
             replicationDisabledPartitions.add(id);
-            allDisabled = replicatedPartitions.size() == replicationDisabledPartitions.size();
+            allDisabled = allReplicatedPartitions.size() == replicationDisabledPartitions.size();
           }
           logger.info("Enable status of replication of {} from {} is {}. allDisabled for {} is {}", id, datacenterName,
               replicationDisabledPartitions.contains(id), getName(), allDisabled);
@@ -165,7 +169,7 @@ class ReplicaThread implements Runnable {
    * @return {@link Set} of {@link PartitionId}s for which replication is disabled.
    */
   Set<PartitionId> getReplicationDisabledPartitions() {
-    return replicationDisabledPartitions;
+    return unmodifiableReplicationDisabledPartitions;
   }
 
   String getName() {
@@ -176,8 +180,7 @@ class ReplicaThread implements Runnable {
   public void run() {
     try {
       logger.trace("Starting replica thread on Local node: " + dataNodeId + " Thread name: " + threadName);
-      List<List<RemoteReplicaInfo>> replicasToReplicate =
-          new ArrayList<List<RemoteReplicaInfo>>(replicasToReplicateGroupedByNode.size());
+      List<List<RemoteReplicaInfo>> replicasToReplicate = new ArrayList<>(replicasToReplicateGroupedByNode.size());
       for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateEntry : replicasToReplicateGroupedByNode.entrySet()) {
         logger.info("Remote node: " + replicasToReplicateEntry.getKey() + " Thread name: " + threadName
             + " ReplicasToReplicate: " + replicasToReplicateEntry.getValue());
