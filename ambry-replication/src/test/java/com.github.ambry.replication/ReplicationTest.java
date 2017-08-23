@@ -640,6 +640,9 @@ public class ReplicationTest {
     }
   }
 
+  /**
+   * Interface to help perform actions on store events.
+   */
   interface StoreEventListener {
     void onPut(MockStore store, List<MessageInfo> messageInfos);
   }

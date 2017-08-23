@@ -415,7 +415,8 @@ public class AmbryRequestsTest {
   /**
    * Does the test for {@link AdminRequestOrResponseType#ReplicationControl} by checking that the request is correctly
    * deserialized in {@link AmbryRequests} and passed to the {@link ReplicationManager}.
-   * @param id the {@link PartitionId} to disable replication on. Can be {@code null}.
+   * @param id the {@link PartitionId} to disable replication on. Can be {@code null} in which case replication will
+   *           be enabled/disabled on all partitions.
    * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
    * @throws InterruptedException
    * @throws IOException
