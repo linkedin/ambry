@@ -303,10 +303,11 @@ class HelixAccountService implements AccountService {
           if (idToUpdatedAccounts.size() > 0) {
             logger.info("Received updates for {} accounts. Account IDs={}", idToUpdatedAccounts.size(),
                 idToUpdatedAccounts.keySet());
+            Collection<Account> updatedAccounts = Collections.unmodifiableCollection(idToUpdatedAccounts.values());
             for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
               long startTime = System.currentTimeMillis();
               try {
-                accountUpdateConsumer.accept(Collections.unmodifiableCollection(idToUpdatedAccounts.values()));
+                accountUpdateConsumer.accept(updatedAccounts);
                 long consumerExecutionTimeInMs = System.currentTimeMillis() - startTime;
                 logger.trace("Consumer={} has been notified for account change, took {} ms", accountUpdateConsumer,
                     consumerExecutionTimeInMs);

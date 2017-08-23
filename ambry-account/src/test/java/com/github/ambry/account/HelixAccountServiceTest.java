@@ -19,7 +19,6 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
-import com.google.common.collect.Sets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -594,7 +593,7 @@ public class HelixAccountServiceTest {
 
     // listen to adding a new account
     Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
-    Set<Account> accountsToUpdate = Sets.newHashSet(newAccount);
+    Set<Account> accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
     assertAccountUpdateConsumers(Collections.singleton(newAccount), numOfConsumers, updatedAccountsReceivedByConsumers);
 
@@ -615,7 +614,7 @@ public class HelixAccountServiceTest {
       accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
     }
     newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
-    accountsToUpdate = Sets.newHashSet(newAccount);
+    accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
     assertAccountUpdateConsumers(Collections.emptySet(), 0, updatedAccountsReceivedByConsumers);
   }

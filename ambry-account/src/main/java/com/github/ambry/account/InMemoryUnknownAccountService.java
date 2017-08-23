@@ -16,7 +16,6 @@ package com.github.ambry.account;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Consumer;
 
 
@@ -28,7 +27,6 @@ import java.util.function.Consumer;
 class InMemoryUnknownAccountService implements AccountService {
   private static final Collection<Account> accounts =
       Collections.unmodifiableCollection(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
-  private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
   private volatile boolean isOpen = true;
 
   @Override
@@ -41,14 +39,14 @@ class InMemoryUnknownAccountService implements AccountService {
   public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     checkOpen();
     Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
-    return accountUpdateConsumers.add(accountUpdateConsumer);
+    return true;
   }
 
   @Override
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     checkOpen();
     Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
-    return accountUpdateConsumers.remove(accountUpdateConsumer);
+    return true;
   }
 
   @Override
