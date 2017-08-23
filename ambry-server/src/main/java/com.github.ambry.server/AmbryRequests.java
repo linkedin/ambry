@@ -633,7 +633,7 @@ public class AmbryRequests implements RequestAPI {
                   "Could not set enable status for replication of {} from {} to {}. Check partition validity and"
                       + " origins list", partitionIds, replControlRequest.getOrigins(),
                   replControlRequest.shouldEnable());
-              error = ServerErrorCode.Unknown_Error;
+              error = ServerErrorCode.Bad_Request;
             }
           }
           break;

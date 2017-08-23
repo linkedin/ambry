@@ -232,7 +232,7 @@ public class AmbryRequestsTest {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
     sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false, clusterMap.getWritablePartitionIds().get(0),
-        ServerErrorCode.Unknown_Error);
+        ServerErrorCode.Bad_Request);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
 
