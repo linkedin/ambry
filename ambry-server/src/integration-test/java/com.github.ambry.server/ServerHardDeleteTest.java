@@ -393,8 +393,8 @@ public class ServerHardDeleteTest {
       if (flag == MessageFormatFlags.BlobProperties) {
         for (int i = 0; i < blobsCount; i++) {
           BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
-          Assert.assertEquals(propertyOutput.getBlobSize(), properties.get(i).getBlobSize());
-          Assert.assertEquals(propertyOutput.getServiceId(), "serviceid1");
+          Assert.assertEquals(properties.get(i).getBlobSize(), propertyOutput.getBlobSize());
+          Assert.assertEquals("serviceid1", propertyOutput.getServiceId());
           Assert.assertEquals("AccountId mismatch", properties.get(i).getAccountId(), propertyOutput.getAccountId());
           Assert.assertEquals("ContainerId mismatch", properties.get(i).getContainerId(),
               propertyOutput.getContainerId());

@@ -33,15 +33,13 @@ public class BlobPropertiesSerDe {
   private static final int TTL_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int PRIVATE_FIELD_SIZE_IN_BYTES = Byte.BYTES;
   private static final int CREATION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
-  private static final int VARIABLE_FIELD_SIZE_IN_BYTES = Integer.BYTES;
   private static final int BLOB_SIZE_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     return VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
-        + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + VARIABLE_FIELD_SIZE_IN_BYTES
-        + Utils.getNullableStringLength(properties.getContentType()) + VARIABLE_FIELD_SIZE_IN_BYTES
-        + Utils.getNullableStringLength(properties.getOwnerId()) + VARIABLE_FIELD_SIZE_IN_BYTES
-        + Utils.getNullableStringLength(properties.getServiceId()) + Short.BYTES + Short.BYTES;
+        + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + Utils.getIntStringLength(
+        properties.getContentType()) + Utils.getIntStringLength(properties.getOwnerId()) + Utils.getIntStringLength(
+        properties.getServiceId()) + Short.BYTES + Short.BYTES;
   }
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {

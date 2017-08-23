@@ -101,6 +101,7 @@ public final class ServerTestUtil {
       byte[] data = new byte[31870];
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+
       BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId);
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
@@ -876,6 +877,7 @@ public final class ServerTestUtil {
       throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
+      int expectedTokenSize = 0;
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
       byte[] data = new byte[1000];
@@ -911,6 +913,8 @@ public final class ServerTestUtil {
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId1, ByteBuffer.wrap(usermetadata), data);
+
       BlockingChannel channel1 =
           getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
       BlockingChannel channel2 =
@@ -929,6 +933,8 @@ public final class ServerTestUtil {
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -937,6 +943,8 @@ public final class ServerTestUtil {
       PutRequest putRequest3 =
           new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -946,6 +954,8 @@ public final class ServerTestUtil {
       putRequest =
           new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId4, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel1.send(putRequest);
       putResponseStream = channel1.receive().getInputStream();
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -955,6 +965,8 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId5, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -964,6 +976,8 @@ public final class ServerTestUtil {
       putRequest3 =
           new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId6, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1072,6 +1086,8 @@ public final class ServerTestUtil {
 
       // delete a blob and ensure it is propagated
       DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1, Utils.Infinite_Time);
+      expectedTokenSize += getDeleteRecordSize(blobId1);
+      System.out.println("Expected size after first delete " + expectedTokenSize);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -1096,11 +1112,13 @@ public final class ServerTestUtil {
       // read the replica file and check correctness
       // The token offset value of 13098 was derived as followed:
       // - Up to this point we have done 6 puts and 1 delete
+
       // - Each put takes up 2183 bytes in the log (1000 data, 1000 user metadata, 183 ambry metadata)
       // - Each delete takes up 97 bytes in the log
       // - The offset stored in the token will be the position of the last entry in the log (the delete, in this case)
       // - Thus, it will be at the end of the 6 puts: 6 * 2183 = 13098
-      checkReplicaTokens(clusterMap, dataNodeId, 13098, "0");
+
+      checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobId1), "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();
@@ -1110,6 +1128,7 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId7, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1119,6 +1138,7 @@ public final class ServerTestUtil {
       putRequest3 =
           new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId8, ByteBuffer.wrap(usermetadata), data);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1128,6 +1148,7 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId9, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1137,6 +1158,7 @@ public final class ServerTestUtil {
       putRequest3 =
           new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId10, ByteBuffer.wrap(usermetadata), data);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1146,6 +1168,7 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId11, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1236,6 +1259,31 @@ public final class ServerTestUtil {
       e.printStackTrace();
       Assert.fail();
     }
+  }
+
+  /**
+   * Fetches the put record size in log
+   * @param properties {@link BlobProperties} associated with the put
+   * @param blobId {@link BlobId} associated with the put
+   * @param usermetadata Usermetadata associated with the put
+   * @param data actual data associated with the put
+   * @return the size of the put record in the log
+   */
+  private static long getPutRecordSize(BlobProperties properties, BlobId blobId, ByteBuffer usermetadata, byte[] data) {
+    return MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() + blobId.sizeInBytes()
+        + MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties)
+        + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
+        + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
+  }
+
+  /**
+   * Fetches the delete record size in log
+   * @param blobId {@link BlobId} associated with the delete
+   * @return the size of the put record in the log
+   */
+  private static long getDeleteRecordSize(BlobId blobId) {
+    return MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() + blobId.sizeInBytes()
+        + MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
   }
 
   /**
