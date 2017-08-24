@@ -91,14 +91,14 @@ public interface AccountService extends Closeable {
 
   /**
    * Adds a {@link Consumer} for newly created or updated {@link Account}s.
-   * @param accountUpdateConsumer The {@link Consumer} to add.
+   * @param accountUpdateConsumer The {@link Consumer} to add. Cannot be {@code null}.
    * @return {@code true} if the specified {@link Consumer} was not previously added, {@code false} otherwise.
    */
   public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 
   /**
    * Removes a previously-added {@link Consumer} from the {@link AccountService}.
-   * @param accountUpdateConsumer The {@link Consumer} to remove.
+   * @param accountUpdateConsumer The {@link Consumer} to remove. Cannot be {@code null}.
    * @return {@code true} if the {@link Consumer} exists and removed, {@code false} if the {@link Consumer} does not
    *          exist.
    */
