@@ -102,7 +102,6 @@ class InvalidVersionPutRequest extends PutRequest {
 }
 
 public class RequestResponseTest {
-  private static final Random random = TestUtils.RANDOM;
 
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
@@ -114,7 +113,7 @@ public class RequestResponseTest {
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
-        {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (random.nextInt(sizeInBytes - 1) + 1)};
+        {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (TestUtils.RANDOM.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     for (int allocationSize : channelWriteLimits) {
       PutRequest request =
@@ -153,44 +152,45 @@ public class RequestResponseTest {
 
     int correlationId = 5;
     String clientId = "client";
-    BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random),
-        Utils.getRandomShort(random), clusterMap.getWritablePartitionIds().get(0));
+    BlobId blobId =
+        new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), clusterMap.getWritablePartitionIds().get(0));
     byte[] userMetadata = new byte[50];
-    random.nextBytes(userMetadata);
+    TestUtils.RANDOM.nextBytes(userMetadata);
     ByteBuffer.wrap(userMetadata);
     int blobSize = 100;
     byte[] blob = new byte[blobSize];
-    random.nextBytes(blob);
+    TestUtils.RANDOM.nextBytes(blob);
 
     BlobProperties blobProperties =
         new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize);
 
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize);
 
     // Put Request with size in blob properties different from the data size and blob type: Metadata blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(random), Utils.getRandomShort(random));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
         blob, blobSize);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random));
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
         blob, blobSize);
 
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random));
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     // Ensure a Put Request with an invalid version does not get deserialized correctly.
     testPutRequestInvalidVersion(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
 
@@ -205,8 +205,8 @@ public class RequestResponseTest {
   @Test
   public void getRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds().get(0));
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
@@ -223,7 +223,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().size(), 1);
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().get(0), id1);
 
-    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
     ArrayList<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
@@ -260,14 +260,14 @@ public class RequestResponseTest {
   @Test
   public void deleteRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds().get(0));
     short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
     for (short version : versions) {
-      long deletionTimeMs = Utils.getRandomLong(random, Long.MAX_VALUE);
-      int correlationId = random.nextInt();
+      long deletionTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+      int correlationId = TestUtils.RANDOM.nextInt();
       DeleteRequest deleteRequest;
       if (version == DeleteRequest.DELETE_REQUEST_VERSION_1) {
         deleteRequest = new DeleteRequestV1(correlationId, "client", id1);
@@ -301,8 +301,8 @@ public class RequestResponseTest {
   @Test
   public void replicaMetadataRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds().get(0));
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -330,7 +330,7 @@ public class RequestResponseTest {
       Assert.assertTrue(true);
     }
 
-    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     MessageInfo messageInfo = new MessageInfo(id1, 1000, accountId, containerId, operationTimeMs);
     List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);

@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -62,7 +61,6 @@ class RouterServerTestFramework {
   static final int AWAIT_TIMEOUT = 20;
   static final int CHUNK_SIZE = 1024 * 1024;
   private static final double BALANCE_FACTOR = 3.0;
-  private static Random random = TestUtils.RANDOM;
 
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
@@ -148,10 +146,10 @@ class RouterServerTestFramework {
   OperationChain startOperationChain(int blobSize, int chainId, Queue<OperationType> operations) {
     byte[] userMetadata = new byte[1000];
     byte[] data = new byte[blobSize];
-    random.nextBytes(userMetadata);
-    random.nextBytes(data);
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
+    TestUtils.RANDOM.nextBytes(userMetadata);
+    TestUtils.RANDOM.nextBytes(data);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
