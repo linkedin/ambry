@@ -26,10 +26,10 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * DefaultCompactionPolicy calculates the cost benefit ratio for every potential candidate to compact and finds the
+ * StatsBasedCompactionPolicy calculates the cost benefit ratio for every potential candidate to compact and finds the
  * best one to be compacted to be returned for {@link #getCompactionDetails(long, long, long, long, List, BlobStoreStats)}
  */
-class DefaultCompactionPolicy implements CompactionPolicy {
+class StatsBasedCompactionPolicy implements CompactionPolicy {
 
   final static long ERROR_MARGIN_MS = 1000 * 60 * 60;
   private final Time time;
@@ -37,7 +37,7 @@ class DefaultCompactionPolicy implements CompactionPolicy {
   private final long messageRetentionTimeInMs;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  DefaultCompactionPolicy(StoreConfig storeConfig, Time time) {
+  StatsBasedCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
     this.messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(storeConfig.storeDeletedMessageRetentionDays);

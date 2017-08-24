@@ -206,7 +206,7 @@ public class StoreConfig {
     storeCompactionCheckFrequencyInHours =
         verifiableProperties.getIntInRange("store.compaction.check.frequency.in.hours", 7 * 24, 1, 365 * 24);
     storeCompactionPolicyFactory = verifiableProperties.getString("store.compaction.policy.factory",
-        "com.github.ambry.store.DefaultCompactionPolicyFactory");
+        "com.github.ambry.store.CompactAllPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
     storeStatsBucketCount = verifiableProperties.getIntInRange("store.stats.bucket.count", 0, 0, 10000);
