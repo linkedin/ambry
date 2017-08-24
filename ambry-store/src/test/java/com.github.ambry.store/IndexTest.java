@@ -1379,7 +1379,9 @@ public class IndexTest {
     // pause hard delete
     state.index.hardDeleter.pause();
     assertTrue("Hard deletes should have been paused ", state.index.hardDeleter.isPaused());
-    waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1, 10);
+    assertTrue("Hard delete thread did not go into waiting state",
+        TestUtils.waitUntilExpectedState(state.index.hardDeleteThread, Thread.State.WAITING,
+            HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1));
 
     // delete two entries
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1394,7 +1396,9 @@ public class IndexTest {
 
     if (reloadIndex) {
       state.reloadIndex(true, true);
-      waitUntilExpectedState(Thread.State.WAITING, HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1, 10);
+      assertTrue("Hard delete thread did not go into waiting state",
+          TestUtils.waitUntilExpectedState(state.index.hardDeleteThread, Thread.State.WAITING,
+              HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1));
       idsToDelete.clear();
       state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
       idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
@@ -2224,24 +2228,6 @@ public class IndexTest {
       }
       state.index.hardDeleter.preLogFlush();
       state.index.hardDeleter.postLogFlush();
-    }
-  }
-
-  /**
-   * Waits until the HardDeleter thread is in the {@code expectedState} for the specified {@code timeToCheckInMs} time.
-   * @param expectedState Expected HardDeleter thread state
-   * @param timeToCheckInMs time for which the state has to be checked for
-   * @param intervalToCheckInMs interval at which the check has to be done
-   */
-  private void waitUntilExpectedState(Thread.State expectedState, long timeToCheckInMs, long intervalToCheckInMs)
-      throws InterruptedException {
-    long timeSoFar = 0;
-    while (expectedState != state.index.hardDeleteThread.getState()) {
-      Thread.sleep(intervalToCheckInMs);
-      timeSoFar += intervalToCheckInMs;
-      if (timeSoFar >= timeToCheckInMs) {
-        fail("Hard Deleter thread state failed to move to " + Thread.State.WAITING + " in " + timeToCheckInMs);
-      }
     }
   }
 

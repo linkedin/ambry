@@ -30,7 +30,9 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -404,6 +406,16 @@ public class RequestResponseTest {
   }
 
   /**
+   * Tests the ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void replicationControlAdminRequestTest() throws IOException {
+    doReplicationControlAdminRequestTest(true);
+    doReplicationControlAdminRequestTest(false);
+  }
+
+  /**
    * Serializes a {@link RequestOrResponseType} and prepares it for reading.
    * @param requestOrResponse the {@link RequestOrResponseType} to serialize.
    * @param allocationSize the amount of data that the output channel should read in one iteration. Setting this to -1
@@ -492,6 +504,35 @@ public class RequestResponseTest {
     RequestControlAdminRequest deserializedControlRequest =
         RequestControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     Assert.assertEquals(requestOrResponseType, deserializedControlRequest.getRequestTypeToControl());
+    Assert.assertEquals(enable, deserializedControlRequest.shouldEnable());
+  }
+
+  /**
+   * Does the actual test of ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with
+   * reference data.
+   * @param enable the value for the enable field in {@link ReplicationControlAdminRequest}.
+   * @throws IOException
+   */
+  private void doReplicationControlAdminRequestTest(boolean enable) throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    int correlationId = 1234;
+    String clientId = "client";
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.ReplicationControl, id, correlationId, clientId);
+    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
+    List<String> origins = new ArrayList<>();
+    for (int i = 0; i < numOrigins; i++) {
+      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+    }
+    ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(controlRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.ReplicationControl, id);
+    ReplicationControlAdminRequest deserializedControlRequest =
+        ReplicationControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    Assert.assertEquals(origins, deserializedControlRequest.getOrigins());
     Assert.assertEquals(enable, deserializedControlRequest.shouldEnable());
   }
 
