@@ -323,10 +323,10 @@ public class ReplicationTest {
       // add an expired message to the remote host only
       StoreKey id =
           new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId);
-      Pair<ByteBuffer, BlobProperties> putMsgInfo = getPutMessage(id, accountId, containerId);
+      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
-              putMsgInfo.getSecond().getCreationTimeInMs()), putMsgInfo.getFirst());
+              putMsgInfo.getSecond().getOperationTimeMs()), putMsgInfo.getFirst());
       idsToBeIgnored.add(id);
 
       // add 3 messages to the remote host only
@@ -342,8 +342,7 @@ public class ReplicationTest {
       for (int j = 0; j < data.length; j++) {
         data[j] ^= 0xFF;
       }
-      remoteHost.addMessage(partitionId, new MessageInfo(id, putMsgInfo.getFirst().remaining(), accountId, containerId,
-          putMsgInfo.getSecond().getCreationTimeInMs()), putMsgInfo.getFirst());
+      remoteHost.addMessage(partitionId, putMsgInfo.getSecond(), putMsgInfo.getFirst());
       idsToBeIgnored.add(id);
 
       // add 3 messages to the remote host only
@@ -571,10 +570,9 @@ public class ReplicationTest {
       BlobId id =
           new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId);
       ids.add(id);
-      Pair<ByteBuffer, BlobProperties> putMsgInfo = getPutMessage(id, accountId, containerId);
+      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
       for (Host host : hosts) {
-        host.addMessage(partitionId, new MessageInfo(id, putMsgInfo.getFirst().remaining(), accountId, containerId,
-            putMsgInfo.getSecond().getCreationTimeInMs()), putMsgInfo.getFirst().duplicate());
+        host.addMessage(partitionId, putMsgInfo.getSecond(), putMsgInfo.getFirst().duplicate());
       }
     }
     return ids;
@@ -605,12 +603,12 @@ public class ReplicationTest {
    * @param id id for which the message has to be constructed.
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
-   * @return a {@link Pair} of {@link ByteBuffer} and {@link BlobProperties} representing the entire message and its
-   *         Blob properties
+   * @return a {@link Pair} of {@link ByteBuffer} and {@link MessageInfo} representing the entire message and the
+   *         associated {@link MessageInfo}
    * @throws MessageFormatException
    * @throws IOException
    */
-  private Pair<ByteBuffer, BlobProperties> getPutMessage(StoreKey id, short accountId, short containerId)
+  private Pair<ByteBuffer, MessageInfo> getPutMessage(StoreKey id, short accountId, short containerId)
       throws MessageFormatException, IOException {
     int blobSize = TestUtils.RANDOM.nextInt(500) + 501;
     int userMetadataSize = TestUtils.RANDOM.nextInt(blobSize / 2);
@@ -623,7 +621,9 @@ public class ReplicationTest {
     MessageFormatInputStream stream = new PutMessageFormatInputStream(id, blobProperties, ByteBuffer.wrap(usermetadata),
         new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
-    return new Pair(ByteBuffer.wrap(message), blobProperties);
+    return new Pair(ByteBuffer.wrap(message),
+        new MessageInfo(id, message.length, Utils.Infinite_Time, accountId, containerId,
+            blobProperties.getCreationTimeInMs()));
   }
 
   /**
