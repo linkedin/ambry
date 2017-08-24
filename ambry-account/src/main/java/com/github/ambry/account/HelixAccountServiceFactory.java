@@ -44,13 +44,10 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
    * Constructor.
    * @param verifiableProperties The properties to get a {@link HelixAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry The {@link MetricRegistry} for metrics tracking. Cannot be {@code null}.
-   * @param notifier The {@link Notifier} used to get a {@link HelixAccountService}. Cannot be {@code null}.
+   * @param notifier The {@link Notifier} used to get a {@link HelixAccountService}. Can be {@code null}.
    */
   public HelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Notifier<String> notifier) {
-    if (verifiableProperties == null || metricRegistry == null || notifier == null) {
-      throw new IllegalArgumentException("verifiableProperties or metricRegistry or notifier cannot be null");
-    }
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
     this.notifier = notifier;

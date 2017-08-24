@@ -85,18 +85,30 @@ class HelixAccountService implements AccountService {
   private final ReentrantLock lock = new ReentrantLock();
 
   /**
-   * Constructor. It fetches the full account metadata set and caches locally.
-   * This call is blocking until it fetches all the {@link Account} metadata from {@link HelixPropertyStore}.
+   * <p>
+   *   Constructor. It fetches the remote account data in {@code ZooKeeper} and caches locally during initialization,
+   *   and updates the remote account data during updating accounts. If a non-null {@link Notifier} is provided, it
+   *   will listen to the changes of the remote accounts, and reactively updates its local cache. It als sends message
+   *   to notify other listeners after each update made to the remote accounts.
+   * </p>
+   * <p>
+   *   This call is blocking until it fetches all the {@link Account} metadata from {@link HelixPropertyStore}.
+   * </p>
    * @param helixStore A {@link HelixPropertyStore} used by the {@code HelixAccountService}. Cannot be {@code null}.
    * @param accountServiceMetrics {@link AccountServiceMetrics} to report metrics. Cannot be {@code null}.
    * @param notifier A {@link Notifier} that will be used to publish message after updating {@link Account}s, and
-   *                 listen to {@link Account} change messages. Cannot be {@code null}.
+   *                 listen to {@link Account} change messages. Can be {@code null}.
    */
   HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
       Notifier<String> notifier) {
     this.helixStore = Objects.requireNonNull(helixStore, "helixStore cannot be null");
     this.accountServiceMetrics = Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null");
-    this.notifier = Objects.requireNonNull(notifier, "notifier cannot be null");
+    this.notifier = notifier;
+    if (notifier == null) {
+      logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
+          + "be in sync with remote account data.");
+      accountServiceMetrics.nullNotifierCount.inc();
+    }
     listener = (topic, message) -> {
       checkOpen();
       logger.trace("Start to process message={} for topic={}", message, topic);
@@ -117,7 +129,9 @@ class HelixAccountService implements AccountService {
         accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
       }
     };
-    notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, listener);
+    if (notifier != null) {
+      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, listener);
+    }
     try {
       readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH);
     } catch (Exception e) {
@@ -229,7 +243,9 @@ class HelixAccountService implements AccountService {
       logger.trace("Completed updating accounts, took time={} ms", timeForUpdate);
       accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
       // notify account changes after successfully update.
-      if (notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE)) {
+      if (notifier == null) {
+        logger.warn("Notifier is not provided. Cannot notify other entities interested in account data change.");
+      } else if (notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE)) {
         logger.trace("Successfully published message for account metadata change");
       } else {
         logger.error("Failed to send notification for account metadata change");
