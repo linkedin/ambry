@@ -59,10 +59,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     segmentView = segment.getView();
     this.offset = offset;
     this.info = info;
-    logger.trace("BlobReadOption offset {} size {} expiresAtMs {} storeKey {} isDeleted {} crc {} accountId {} "
-            + "containerId {} operationTimeMs {} ", offset, info.getSize(), info.getExpirationTimeInMs(),
-        info.getStoreKey(), info.isDeleted(), info.getCrc(), info.getAccountId(), info.getContainerId(),
-        info.getOperationTimeMs());
+    logger.trace("BlobReadOption offset {} size {} MessageInfo {} ", offset, info.getSize(), info);
   }
 
   String getLogSegmentName() {

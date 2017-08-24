@@ -891,8 +891,6 @@ public class BlobStoreStatsTest {
     }
     for (Map.Entry<String, Map<String, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
       if (actualContainerValidSizeEntry.getValue().size() != 0) {
-        assertEquals("Additional values found in actual container valid data size map ", 1,
-            actualContainerValidSizeEntry.getValue().size());
         for (Map.Entry<String, Long> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
           assertEquals("Additional values found in actual container valid size map ", 0,
               mapEntry.getValue().longValue());

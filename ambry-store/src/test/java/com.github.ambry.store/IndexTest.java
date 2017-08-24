@@ -745,16 +745,17 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long operationTimeMs = state.time.milliseconds();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
         new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
-            state.time.milliseconds(), accountId, containerId), null));
+            operationTimeMs, accountId, containerId), null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
         return Collections.singletonList(
-            new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, Utils.Infinite_Time));
+            new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, operationTimeMs));
       }
     };
     state.reloadIndex(true, true);
@@ -930,16 +931,18 @@ public class IndexTest {
     final MockId newId = state.getUniqueId();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long operationTimeMs = state.time.milliseconds();
+
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
     state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
         new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
-            state.time.milliseconds(), accountId, containerId), null));
+            operationTimeMs, accountId, containerId), null));
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
           throws IOException {
         return Collections.singletonList(
-            new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, Utils.Infinite_Time));
+            new MessageInfo(newId, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId, operationTimeMs));
       }
     };
     // change in incarnationId
@@ -1570,7 +1573,7 @@ public class IndexTest {
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
     activeSegmentInfos.add(
         new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId,
-            Utils.Infinite_Time));
+            state.time.milliseconds()));
     // 1 PUT record that will remain and covers almost the rest of the active segment.
     long size =
         activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() - (CuratedLogIndexState.DELETE_RECORD_SIZE
@@ -1674,7 +1677,7 @@ public class IndexTest {
         assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
         assertEquals("Incorrect accountId", info.getAccountId(), value.getServiceId());
         assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
-        assertEquals("Incorrect accountId", info.getOperationTimeMs(), value.getOperationTimeInMs());
+        assertEquals("Incorrect operationTimeMs", info.getOperationTimeMs(), value.getOperationTimeInMs());
       }
       currCheckOffset = expectedFileSpan.getEndOffset();
     }
@@ -1952,10 +1955,17 @@ public class IndexTest {
         assertEquals("Inconsistent size", value.getSize(), info.getSize());
       }
       long expiresAtMs = value != null ? value.getExpiresAtMs() : putDelete.getSecond().getExpiresAtMs();
+      short accountId = value != null ? value.getServiceId() : putDelete.getSecond().getServiceId();
+      short containerId = value != null ? value.getContainerId() : putDelete.getSecond().getContainerId();
+      long operationTimeMs =
+          putDelete.getSecond() != null ? putDelete.getSecond().getOperationTimeInMs() : value.getOperationTimeInMs();
       // if a key is deleted, it doesn't matter if we reached the delete record or not, the delete state will be
       // the one that is returned.
       assertEquals("Inconsistent delete state ", putDelete.getSecond() != null, info.isDeleted());
       assertEquals("Inconsistent expiresAtMs", expiresAtMs, info.getExpirationTimeInMs());
+      assertEquals("Inconsistent accountId", accountId, info.getAccountId());
+      assertEquals("Inconsistent containerId", containerId, info.getContainerId());
+      assertEquals("Inconsistent operationTimeMs", operationTimeMs, info.getOperationTimeMs());
       keysExamined.add(info.getStoreKey());
     }
     assertEquals("All keys should be present", expectedKeys, keysExamined);
@@ -2353,68 +2363,6 @@ public class IndexTest {
   }
 
   /**
-   * Tests that the index segment rolls over when there is a version change in the index value or index segment
-   * @param indexVersion the version of the index segment that will get rolled over.
-   * @param rollOverWithPutRecord {@code true} if the entry that causes rollover should be a put record,
-   *                              {@code false} if the entry that causes rollover should be a delete record
-   * @throws StoreException
-   * @throws IOException
-   */
-  /*private void indexSegmentRollOverTest(short indexVersion, boolean rollOverWithPutRecord)
-      throws StoreException, IOException {
-    state.closeAndClearIndex();
-    Offset currentEndOffset = state.index.getCurrentEndOffset();
-
-    List<IndexEntry> indexEntries = new ArrayList<>();
-    // create an index entry in older version.
-    IndexEntry entry = new IndexEntry(state.getUniqueId(),
-        IndexValueTest.getIndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, currentEndOffset, Utils.Infinite_Time,
-            state.time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-            indexVersion));
-    Offset startOffset = entry.getValue().getOffset();
-    int entrySize = entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity();
-    int valueSize = entry.getValue().getBytes().capacity();
-    IndexSegment indexSegment =
-        indexVersion == PersistentIndex.VERSION_0 ? generateIndexSegmentV0(startOffset, entrySize, valueSize)
-            : generateIndexSegmentV1(startOffset, entrySize, valueSize);
-    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
-    FileSpan fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.PUT_RECORD_SIZE);
-    indexSegment.addEntry(entry, fileSpan.getEndOffset());
-    indexEntries.add(entry);
-    // add more entries to the segment
-    indexEntries.addAll(addPutEntries(fileSpan.getEndOffset(), indexSegment, 2, CuratedLogIndexState.PUT_RECORD_SIZE,
-        Utils.Infinite_Time, 10, false));
-    // persist the index segment of older version.
-    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
-
-    state.reloadIndex(false, false);
-    assertEquals("Reloaded index segments should have the same version they were created in", indexVersion,
-        state.index.getIndexSegments().lastEntry().getValue().getVersion());
-    int indexCount = state.index.getIndexSegments().size();
-    // add an entry and verify if roll over happened
-    currentEndOffset = state.index.getCurrentEndOffset();
-    if (rollOverWithPutRecord) {
-      indexEntries.addAll(
-          addPutEntries(currentEndOffset, null, 1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10,
-              false));
-    } else {
-      IndexEntry entryToDelete = indexEntries.get(TestUtils.RANDOM.nextInt(indexEntries.size()));
-      state.appendToLog(state.DELETE_RECORD_SIZE);
-      fileSpan = state.log.getFileSpanForMessage(currentEndOffset, CuratedLogIndexState.DELETE_RECORD_SIZE);
-      state.index.markAsDeleted(entryToDelete.getKey(), fileSpan, state.time.milliseconds());
-      // remove entryToDelete from indexEntries as it will be part of latest index segment
-      indexEntries.remove(entryToDelete);
-    }
-    assertEquals("Index roll over should have happened ", indexCount + 1, state.index.getIndexSegments().size());
-    currentEndOffset = state.index.getCurrentEndOffset();
-    indexEntries.addAll(
-        addPutEntries(currentEndOffset, null, 2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time, 10, false));
-    assertEquals("Index roll over should not have happened ", indexCount + 1, state.index.getIndexSegments().size());
-    // verify index values
-    verifyIndexValues(indexEntries);
-  } */
-
-  /**
    * Adds entries to the index and asserts that the number of index segments and the persistedEntrySizes of the latest
    * segment are as expected.
    * @param indexEntries the list of {@link IndexEntry} to fill with the entries that are added to the index
@@ -2491,7 +2439,7 @@ public class IndexTest {
       state.appendToLog(size);
       FileSpan fileSpan = state.log.getFileSpanForMessage(prevEntryEndOffset, size);
       IndexEntry entry;
-      MockId putId = state.getUniqueId();
+      MockId putId = state.getUniqueId(idLength);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       if (indexSegment != null) {
@@ -2501,11 +2449,11 @@ public class IndexTest {
         indexSegment.addEntry(entry, fileSpan.getEndOffset());
       } else {
         if (createV0IndexValue) {
-          entry = new IndexEntry(state.getUniqueId(idLength),
-              IndexValueTest.getIndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, -1L));
+          entry =
+              new IndexEntry(putId, IndexValueTest.getIndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, -1L));
           state.index.addToIndex(entry, fileSpan);
         } else {
-          entry = new IndexEntry(state.getUniqueId(idLength),
+          entry = new IndexEntry(putId,
               new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds(), accountId,
                   containerId));
           state.index.addToIndex(entry, fileSpan);

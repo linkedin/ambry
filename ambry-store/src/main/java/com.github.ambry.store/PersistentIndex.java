@@ -614,7 +614,6 @@ class PersistentIndex {
       // it is possible that during recovery, the PUT record need not exist because it had been replaced by a
       // delete record in the map in IndexSegment but not written yet because the safe end point hadn't been reached
       // SEE: NOTE in IndexSegment::writeIndexSegmentToFile()
-      // TODO: change service ID and container ID once the MessageInfo has that info.
       newValue =
           new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
               info.getAccountId(), info.getContainerId());
