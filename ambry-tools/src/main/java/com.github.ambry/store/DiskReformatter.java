@@ -44,8 +44,8 @@ import org.slf4j.LoggerFactory;
  * Reformats all the stores on a given disk.
  *
  * Guide to using this tool:
- * 1. Make sure that the Ambry server is completely shut down before using this tool (i.e there should be no else using
- * those directories).
+ * 1. Make sure that the Ambry server is completely shut down before using this tool (i.e there should be nothing else
+ * using those directories).
  * 2. Make sure that the scratch space provided has enough space for the largest partition on the disk. If the same
  * scratch space is used for multiple disks, ensure that it has enough space for all.
  *
