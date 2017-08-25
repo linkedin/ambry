@@ -384,12 +384,15 @@ public class RequestResponseTest {
       requestStream = serAndPrepForRead(adminRequest, -1, true);
       deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId, type, null);
       // response
-      AdminResponse response = new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
+      ServerErrorCode[] values = ServerErrorCode.values();
+      int indexToPick = TestUtils.RANDOM.nextInt(values.length);
+      ServerErrorCode responseErrorCode = values[indexToPick];
+      AdminResponse response = new AdminResponse(correlationId, clientId, responseErrorCode);
       DataInputStream responseStream = serAndPrepForRead(response, -1, false);
       AdminResponse deserializedAdminResponse = AdminResponse.readFrom(responseStream);
       Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
       Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
-      Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(deserializedAdminResponse.getError(), responseErrorCode);
     }
   }
 
@@ -406,6 +409,43 @@ public class RequestResponseTest {
   }
 
   /**
+   * Tests the ser/de of {@link CatchupStatusAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void catchupStatusAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    int correlationId = 1234;
+    String clientId = "client";
+    // request
+    long acceptableLag = Utils.getRandomLong(TestUtils.RANDOM, 10000);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
+    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLag, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(catchupStatusRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.CatchupStatus, id);
+    CatchupStatusAdminRequest deserializedCatchupStatusRequest =
+        CatchupStatusAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    Assert.assertEquals("Acceptable lag not as set", acceptableLag,
+        deserializedCatchupStatusRequest.getAcceptableLagInBytes());
+    // response
+    boolean isCaughtUp = TestUtils.RANDOM.nextBoolean();
+    ServerErrorCode[] values = ServerErrorCode.values();
+    int indexToPick = TestUtils.RANDOM.nextInt(values.length);
+    ServerErrorCode responseErrorCode = values[indexToPick];
+    AdminResponse adminResponse = new AdminResponse(correlationId, clientId, responseErrorCode);
+    CatchupStatusAdminResponse catchupStatusResponse = new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
+    DataInputStream responseStream = serAndPrepForRead(catchupStatusResponse, -1, false);
+    CatchupStatusAdminResponse deserializedCatchupStatusResponse = CatchupStatusAdminResponse.readFrom(responseStream);
+    Assert.assertEquals(deserializedCatchupStatusResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedCatchupStatusResponse.getClientId(), clientId);
+    Assert.assertEquals(deserializedCatchupStatusResponse.getError(), responseErrorCode);
+    Assert.assertEquals(deserializedCatchupStatusResponse.isCaughtUp(), isCaughtUp);
+  }
+
+  /**
    * Tests the ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with reference data.
    * @throws IOException
    */
@@ -418,22 +458,22 @@ public class RequestResponseTest {
   /**
    * Serializes a {@link RequestOrResponseType} and prepares it for reading.
    * @param requestOrResponse the {@link RequestOrResponseType} to serialize.
-   * @param allocationSize the amount of data that the output channel should read in one iteration. Setting this to -1
+   * @param channelSize the amount of data that the output channel should read in one iteration. Setting this to -1
    *                       will set the size of the output channel buffer to 1/3rd the size of {@code requestOrResponse}
    * @param isRequest {@code true} if {@code requestOrResponse} is a request. {@code false} otherwise.
    * @return the serialized form of {@code requestOrResponse} as a {@link DataInputStream}.
    * @throws IOException
    */
-  private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse, int allocationSize, boolean isRequest)
+  private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse, int channelSize, boolean isRequest)
       throws IOException {
-    if (allocationSize == -1) {
-      allocationSize = (int) (requestOrResponse.sizeInBytes() / 3);
+    if (channelSize == -1) {
+      channelSize = (int) (requestOrResponse.sizeInBytes() / 3);
     }
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + allocationSize - 1) / allocationSize);
+    int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + channelSize - 1) / channelSize);
     int actualWriteToCount = 0;
     do {
-      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(allocationSize));
+      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(channelSize));
       requestOrResponse.writeTo(channel);
       ByteBuffer underlyingBuf = channel.getBuffer();
       underlyingBuf.flip();

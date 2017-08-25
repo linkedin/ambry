@@ -39,6 +39,8 @@ import com.github.ambry.network.SocketRequestResponseChannel;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.CatchupStatusAdminRequest;
+import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
@@ -84,7 +86,9 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import org.junit.Test;
@@ -233,7 +237,78 @@ public class AmbryRequestsTest {
     replicationManager.controlReplicationReturnVal = false;
     sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false, clusterMap.getWritablePartitionIds().get(0),
         ServerErrorCode.Bad_Request);
+    replicationManager.reset();
+    replicationManager.exceptionToThrow = new IllegalStateException();
+    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false, clusterMap.getWritablePartitionIds().get(0),
+        ServerErrorCode.Unknown_Error);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
+  }
+
+  /**
+   * Tests for the response received on a {@link CatchupStatusAdminRequest} for different cases
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void catchupStatusSuccessTest() throws InterruptedException, IOException {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    assertTrue("This test needs more than one partition to work", partitionIds.size() > 1);
+    PartitionId id = partitionIds.get(0);
+    ReplicaId thisPartRemoteRep = getRemoteReplicaId(id);
+    ReplicaId otherPartRemoteRep = getRemoteReplicaId(partitionIds.get(1));
+    List<? extends ReplicaId> replicaIds = id.getReplicaIds();
+    assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
+
+    long acceptableLagInBytes = 100;
+
+    // cases with a given partition id
+    // all replicas of given partition < acceptableLag
+    generateLagOverrides(0, acceptableLagInBytes - 1);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    // all replicas of given partition = acceptableLag
+    generateLagOverrides(acceptableLagInBytes, acceptableLagInBytes);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    // 1 replica of some other partition > acceptableLag
+    String key = MockReplicationManager.getPartitionLagKey(otherPartRemoteRep.getPartitionId(),
+        otherPartRemoteRep.getDataNodeId().getHostname(), otherPartRemoteRep.getReplicaPath());
+    replicationManager.lagOverrides.put(key, acceptableLagInBytes + 1);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    // 1 replica of this partition > acceptableLag
+    key = MockReplicationManager.getPartitionLagKey(id, thisPartRemoteRep.getDataNodeId().getHostname(),
+        thisPartRemoteRep.getReplicaPath());
+    replicationManager.lagOverrides.put(key, acceptableLagInBytes + 1);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+    // all replicas of this partition > acceptableLag
+    generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+
+    // cases with no partition id provided
+    // all replicas of all partitions < acceptableLag
+    generateLagOverrides(0, acceptableLagInBytes - 1);
+    doCatchupStatusTest(null, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    // all replicas of all partitions = acceptableLag
+    generateLagOverrides(acceptableLagInBytes, acceptableLagInBytes);
+    doCatchupStatusTest(null, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    // 1 replica of one partition > acceptableLag
+    key = MockReplicationManager.getPartitionLagKey(id, thisPartRemoteRep.getDataNodeId().getHostname(),
+        thisPartRemoteRep.getReplicaPath());
+    replicationManager.lagOverrides.put(key, acceptableLagInBytes + 1);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+    // all replicas of all partitions > acceptableLag
+    generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
+    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+  }
+
+  /**
+   * Tests that {@link AdminRequestOrResponseType#CatchupStatus} fails when bad input is provided (or when there is
+   * bad internal state).
+   */
+  @Test
+  public void catchupStatusFailureTest() throws InterruptedException, IOException {
+    // replication manager error
+    replicationManager.reset();
+    replicationManager.exceptionToThrow = new IllegalStateException();
+    doCatchupStatusTest(null, 0, ServerErrorCode.Unknown_Error, false);
   }
 
   // helpers
@@ -461,9 +536,74 @@ public class AmbryRequestsTest {
     } else {
       idsVal = Collections.singletonList(id);
     }
-    assertEquals("Origins not as provided in request", origins, replicationManager.originsVal);
-    assertEquals("Enable not as provided in request", enable, replicationManager.enableVal);
-    assertEquals("Ids not as provided in request", idsVal, replicationManager.idsVal);
+    if (!expectedServerErrorCode.equals(ServerErrorCode.Unknown_Error)) {
+      assertEquals("Origins not as provided in request", origins, replicationManager.originsVal);
+      assertEquals("Enable not as provided in request", enable, replicationManager.enableVal);
+      assertEquals("Ids not as provided in request", idsVal, replicationManager.idsVal);
+    }
+  }
+
+  // catchupStatusSuccessTest() helpers
+
+  /**
+   * Gets a "remote" replica for the given {@code partitionId}
+   * @param partitionId the {@link PartitionId} for which a remote replica is required.
+   * @return a "remote" replica for the given {@code partitionId}
+   */
+  private ReplicaId getRemoteReplicaId(PartitionId partitionId) {
+    ReplicaId replicaId = null;
+    for (ReplicaId id : partitionId.getReplicaIds()) {
+      if (!id.getDataNodeId().equals(dataNodeId)) {
+        replicaId = id;
+        break;
+      }
+    }
+    if (replicaId == null) {
+      throw new IllegalStateException("There is no remote replica for " + partitionId);
+    }
+    return replicaId;
+  }
+
+  /**
+   * Generates lag overrides in {@@code replicationManager} with each lag a number between {@code base} and
+   * {@code upperBound} both inclusive.
+   * @param base the minimum value of lag (inclusive)
+   * @param upperBound the maximum value of lag (inclusive)
+   */
+  private void generateLagOverrides(long base, long upperBound) {
+    replicationManager.lagOverrides = new HashMap<>();
+    for (PartitionId partitionId : clusterMap.getAllPartitionIds()) {
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        String key = MockReplicationManager.getPartitionLagKey(partitionId, replicaId.getDataNodeId().getHostname(),
+            replicaId.getReplicaPath());
+        Long value = base + Utils.getRandomLong(TestUtils.RANDOM, upperBound - base + 1);
+        replicationManager.lagOverrides.put(key, value);
+      }
+    }
+  }
+
+  // catchupStatusSuccessTest() and catchupStatusFailureTest() helpers
+
+  /**
+   * Does the test for {@link AdminRequestOrResponseType#CatchupStatus} by checking that the request is correctly
+   * deserialized in {@link AmbryRequests} and the necessary info obtained from {@link ReplicationManager}.
+   * @param id the {@link PartitionId} to disable replication on. Can be {@code null}.
+   * @param acceptableLagInBytes the value of acceptable lag to set in the {@link CatchupStatusAdminRequest}.
+   * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
+   * @param expectedIsCaughtUp the expected return from {@link CatchupStatusAdminResponse#isCaughtUp()}.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  private void doCatchupStatusTest(PartitionId id, long acceptableLagInBytes, ServerErrorCode expectedServerErrorCode,
+      boolean expectedIsCaughtUp) throws InterruptedException, IOException {
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
+    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLagInBytes, adminRequest);
+    Response response = sendRequestGetResponse(catchupStatusRequest, expectedServerErrorCode);
+    assertTrue("Response not of type CatchupStatusAdminResponse", response instanceof CatchupStatusAdminResponse);
+    CatchupStatusAdminResponse adminResponse = (CatchupStatusAdminResponse) response;
+    assertEquals("Catchup status not as expected", expectedIsCaughtUp, adminResponse.isCaughtUp());
   }
 
   /**
@@ -668,12 +808,18 @@ public class AmbryRequestsTest {
    * An extension of {@link ReplicationManager} to help with testing.
    */
   private static class MockReplicationManager extends ReplicationManager {
+    private final DataNodeId dataNodeId;
 
+    // General variables
+    RuntimeException exceptionToThrow = null;
     // Variables for controlling and examining the values provided to controlReplicationForPartitions()
     Boolean controlReplicationReturnVal;
     List<? extends PartitionId> idsVal;
     List<String> originsVal;
     Boolean enableVal;
+    // Variables for controlling getRemoteReplicaLagFromLocalInBytes()
+    // the key is partitionId:hostname:replicaPath
+    Map<String, Long> lagOverrides = null;
 
     /**
      * Static construction helper
@@ -708,12 +854,14 @@ public class AmbryRequestsTest {
         throws ReplicationException {
       super(replicationConfig, clusterMapConfig, storeConfig, storageManager, stream -> null, clusterMap, null,
           dataNodeId, null, clusterMap.getMetricRegistry(), null);
+      this.dataNodeId = dataNodeId;
       reset();
     }
 
     @Override
     public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
         boolean enable) {
+      failIfRequired();
       if (controlReplicationReturnVal == null) {
         throw new IllegalStateException("Return val not set. Don't know what to return");
       }
@@ -723,14 +871,49 @@ public class AmbryRequestsTest {
       return controlReplicationReturnVal;
     }
 
+    @Override
+    public long getRemoteReplicaLagFromLocalInBytes(PartitionId partitionId, String hostName, String replicaPath) {
+      failIfRequired();
+      long lag;
+      String key = getPartitionLagKey(partitionId, hostName, replicaPath);
+      if (lagOverrides == null || !lagOverrides.containsKey(key)) {
+        lag = super.getRemoteReplicaLagFromLocalInBytes(partitionId, hostName, replicaPath);
+      } else {
+        lag = lagOverrides.get(key);
+      }
+      return lag;
+    }
+
     /**
      * Resets all state
      */
     void reset() {
+      exceptionToThrow = null;
       controlReplicationReturnVal = null;
       idsVal = null;
       originsVal = null;
       enableVal = null;
+      lagOverrides = null;
+    }
+
+    /**
+     * Gets the key for the lag override in {@code lagOverrides} using the given parameters.
+     * @param partitionId the {@link PartitionId} whose replica {@code hostname} is.
+     * @param hostname the hostname of the replica whose lag override key is required.
+     * @param replicaPath the replica path of the replica whose lag override key is required.
+     * @return
+     */
+    static String getPartitionLagKey(PartitionId partitionId, String hostname, String replicaPath) {
+      return partitionId.toString() + ":" + hostname + ":" + replicaPath;
+    }
+
+    /**
+     * Throws a {@link RuntimeException} if the {@link MockReplicationManager} is required to.
+     */
+    private void failIfRequired() {
+      if (exceptionToThrow != null) {
+        throw exceptionToThrow;
+      }
     }
   }
 }

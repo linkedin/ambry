@@ -40,6 +40,8 @@ import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.CatchupStatusAdminRequest;
+import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetOption;
@@ -558,7 +560,8 @@ public class AmbryRequests implements RequestAPI {
     Histogram responseSendTimeHistogram = null;
     Histogram requestTotalTimeHistogram = null;
     AdminResponse response = null;
-    ServerErrorCode error = ServerErrorCode.Unknown_Error;
+    ServerErrorCode error;
+    List<? extends PartitionId> partitionIds;
     try {
       switch (adminRequest.getType()) {
         case TriggerCompaction:
@@ -576,6 +579,7 @@ public class AmbryRequests implements RequestAPI {
             logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
                 adminRequest);
           }
+          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
           break;
         case RequestControl:
           metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
@@ -591,7 +595,6 @@ public class AmbryRequests implements RequestAPI {
             error = ServerErrorCode.Bad_Request;
           } else {
             error = ServerErrorCode.No_Error;
-            List<? extends PartitionId> partitionIds;
             if (controlRequest.getPartitionId() != null) {
               error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
               partitionIds = Collections.singletonList(controlRequest.getPartitionId());
@@ -606,6 +609,7 @@ public class AmbryRequests implements RequestAPI {
               }
             }
           }
+          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
           break;
         case ReplicationControl:
           error = ServerErrorCode.No_Error;
@@ -617,7 +621,6 @@ public class AmbryRequests implements RequestAPI {
           requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
           ReplicationControlAdminRequest replControlRequest =
               ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
-          List<? extends PartitionId> partitionIds;
           if (replControlRequest.getPartitionId() != null) {
             error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
             partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
@@ -636,14 +639,44 @@ public class AmbryRequests implements RequestAPI {
               error = ServerErrorCode.Bad_Request;
             }
           }
+          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+          break;
+        case CatchupStatus:
+          error = ServerErrorCode.No_Error;
+          metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.catchupStatusRequestRate.mark();
+          processingTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
+          CatchupStatusAdminRequest catchupStatusRequest =
+              CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
+          if (catchupStatusRequest.getPartitionId() != null) {
+            error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+            partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
+          } else {
+            partitionIds = clusterMap.getAllPartitionIds();
+          }
+          boolean isCaughtUp = false;
+          if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+            error = ServerErrorCode.No_Error;
+            isCaughtUp = isAllRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes());
+          }
+          AdminResponse adminResponse =
+              new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+          response = new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
           break;
       }
-      response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
+      metrics.unExpectedAdminOperationError.inc();
       response =
           new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), ServerErrorCode.Unknown_Error);
-      metrics.unExpectedAdminOperationError.inc();
+      switch (adminRequest.getType()) {
+        case CatchupStatus:
+          response = new CatchupStatusAdminResponse(false, response);
+          break;
+      }
     } finally {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
@@ -791,5 +824,34 @@ public class AmbryRequests implements RequestAPI {
       return ServerErrorCode.Temporarily_Disabled;
     }
     return ServerErrorCode.No_Error;
+  }
+
+  /**
+   * Provides catch up status of all the remote replicas of {@code partitionIds}.
+   * @param partitionIds the {@link PartitionId}s for which lag has to be <= {@code acceptableLagInBytes}.
+   * @param acceptableLagInBytes the maximum lag in bytes that is considered "acceptable".
+   * @return {@code true} if the lag of each of the remote replicas of each of the {@link PartitionId} in
+   * {@code partitionIds} <= {@code acceptableLagInBytes}. {@code false} otherwise.
+   */
+  private boolean isAllRemoteLagLesserOrEqual(List<? extends PartitionId> partitionIds, long acceptableLagInBytes) {
+    boolean isAcceptable = true;
+    for (PartitionId partitionId : partitionIds) {
+      List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
+      for (ReplicaId replicaId : replicaIds) {
+        if (!replicaId.getDataNodeId().equals(currentNode)) {
+          long lagInBytes = replicationManager.getRemoteReplicaLagFromLocalInBytes(partitionId,
+              replicaId.getDataNodeId().getHostname(), replicaId.getReplicaPath());
+          logger.debug("Lag of {} is {}", replicaId, lagInBytes);
+          if (lagInBytes > acceptableLagInBytes) {
+            isAcceptable = false;
+            break;
+          }
+        }
+      }
+      if (!isAcceptable) {
+        break;
+      }
+    }
+    return isAcceptable;
   }
 }
