@@ -23,6 +23,7 @@ import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -246,6 +247,7 @@ public class DiskReformatter {
     if (scratchTgt.exists()) {
       throw new IllegalStateException(scratchTgt + " already exists");
     }
+    ensureNotInUse(scratchSrc, toMove.getCapacityInBytes(), clusterMap.getMetricRegistry());
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
     FileUtils.moveDirectory(scratchSrc, scratchTgt);
 
@@ -272,6 +274,24 @@ public class DiskReformatter {
     logger.info("Deleting {}", scratchTgt);
     delete(scratchTgt);
     logger.info("Done reformatting {}", toMove);
+  }
+
+  /**
+   * Ensures that the directory provided is not in use by starting and stopping a {@link BlobStore} at the given
+   * directory.
+   * @param srcDir the directory to use
+   * @param storeCapacity the capacity of the store
+   * @param metricRegistry the {@link MetricRegistry} to use.
+   * @throws StoreException if there are any problems starting or stopping the store.
+   */
+  private void ensureNotInUse(File srcDir, long storeCapacity, MetricRegistry metricRegistry) throws StoreException {
+    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    MessageStoreRecovery recovery = new BlobStoreRecovery();
+    Store store =
+        new BlobStore("move_check", storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(),
+            storeCapacity, storeKeyFactory, recovery, null, time);
+    store.start();
+    store.shutdown();
   }
 
   /**
