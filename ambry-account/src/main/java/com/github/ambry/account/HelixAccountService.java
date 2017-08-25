@@ -15,15 +15,15 @@ package com.github.ambry.account;
 
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
@@ -81,8 +81,9 @@ class HelixAccountService implements AccountService {
   private final TopicListener<String> listener;
   private final Notifier<String> notifier;
   private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
-  private volatile boolean isOpen = false;
   private final ReentrantLock lock = new ReentrantLock();
+  private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
+  private volatile boolean isOpen = false;
 
   /**
    * <p>
@@ -158,6 +159,20 @@ class HelixAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     checkOpen();
     return accountInfoMapRef.get().getAccounts();
+  }
+
+  @Override
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
+    return accountUpdateConsumers.add(accountUpdateConsumer);
+  }
+
+  @Override
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
+    return accountUpdateConsumers.remove(accountUpdateConsumer);
   }
 
   /**
@@ -294,15 +309,32 @@ class HelixAccountService implements AccountService {
           logger.trace("Start parsing remote account data.");
           AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
           Map<Short, Account> oldIdToAccountMap = accountInfoMapRef.get().idToAccountMap;
-          List<Short> idsOfUpdatedAccounts = new ArrayList<>();
+          accountInfoMapRef.set(newAccountInfoMap);
+          Map<Short, Account> idToUpdatedAccounts = new HashMap<>();
           for (Account newAccount : newAccountInfoMap.getAccounts()) {
             if (!newAccount.equals(oldIdToAccountMap.get(newAccount.getId()))) {
-              idsOfUpdatedAccounts.add(newAccount.getId());
+              idToUpdatedAccounts.put(newAccount.getId(), newAccount);
             }
           }
-          accountInfoMapRef.set(newAccountInfoMap);
-          logger.info("Received updates for {} accounts. Account IDs={}", idsOfUpdatedAccounts.size(),
-              idsOfUpdatedAccounts);
+          if (idToUpdatedAccounts.size() > 0) {
+            logger.info("Received updates for {} accounts. Account IDs={}", idToUpdatedAccounts.size(),
+                idToUpdatedAccounts.keySet());
+            Collection<Account> updatedAccounts = Collections.unmodifiableCollection(idToUpdatedAccounts.values());
+            for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+              long startTime = System.currentTimeMillis();
+              try {
+                accountUpdateConsumer.accept(updatedAccounts);
+                long consumerExecutionTimeInMs = System.currentTimeMillis() - startTime;
+                logger.trace("Consumer={} has been notified for account change, took {} ms", accountUpdateConsumer,
+                    consumerExecutionTimeInMs);
+                accountServiceMetrics.accountUpdateConsumerTimeInMs.update(consumerExecutionTimeInMs);
+              } catch (Exception e) {
+                logger.error("Exception occurred when notifying accountUpdateConsumer={}", accountUpdateConsumer, e);
+              }
+            }
+          } else {
+            logger.debug("HelixAccountService is updated with 0 updated account");
+          }
         }
       }
     } finally {

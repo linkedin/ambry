@@ -28,6 +28,7 @@ public class AccountServiceMetrics {
   public final Histogram startupTimeInMs;
   public final Histogram updateAccountTimeInMs;
   public final Histogram fetchRemoteAccountTimeInMs;
+  public final Histogram accountUpdateConsumerTimeInMs;
 
   // Counter
   public final Counter unrecognizedMessageErrorCount;
@@ -44,6 +45,8 @@ public class AccountServiceMetrics {
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "UpdateAccountTimeInMs"));
     fetchRemoteAccountTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
+    accountUpdateConsumerTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateConsumerTimeInMs"));
 
     // Counter
     unrecognizedMessageErrorCount =

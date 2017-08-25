@@ -15,6 +15,7 @@ package com.github.ambry.account;
 
 import java.io.Closeable;
 import java.util.Collection;
+import java.util.function.Consumer;
 
 
 /**
@@ -87,4 +88,19 @@ public interface AccountService extends Closeable {
    * @return A collection of {@link Account}s.
    */
   public Collection<Account> getAllAccounts();
+
+  /**
+   * Adds a {@link Consumer} for newly created or updated {@link Account}s.
+   * @param accountUpdateConsumer The {@link Consumer} to add. Cannot be {@code null}.
+   * @return {@code true} if the specified {@link Consumer} was not previously added, {@code false} otherwise.
+   */
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
+
+  /**
+   * Removes a previously-added {@link Consumer} from the {@link AccountService}.
+   * @param accountUpdateConsumer The {@link Consumer} to remove. Cannot be {@code null}.
+   * @return {@code true} if the {@link Consumer} exists and removed, {@code false} if the {@link Consumer} does not
+   *          exist.
+   */
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer);
 }
