@@ -157,12 +157,16 @@ public class StoreCopierTest {
     src.start();
     try {
       deletedId = new MockId("deletedId");
-      addMessage(src, deletedId, Utils.Infinite_Time, false);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      addMessage(src, deletedId, Utils.Infinite_Time, false, accountId, containerId, time.milliseconds());
       putId = new MockId("putId");
-      putData = addMessage(src, putId, Utils.Infinite_Time, false);
-      addMessage(src, deletedId, Utils.Infinite_Time, true);
+      putData = addMessage(src, putId, Utils.Infinite_Time, false, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), time.milliseconds());
+      addMessage(src, deletedId, Utils.Infinite_Time, true, accountId, containerId, time.milliseconds());
       expiredId = new MockId("expiredId");
-      addMessage(src, expiredId, 0, false);
+      addMessage(src, expiredId, 0, false, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), time.milliseconds());
     } finally {
       src.shutdown();
     }
@@ -174,14 +178,18 @@ public class StoreCopierTest {
    * @param key the {@link StoreKey} associated with the message.
    * @param expiryTimeMs the expiry time associated with the message.
    * @param isDelete {@code true} if this is a delete message, {@code false} otherwise.
+   * @param accountId accountId of the blob
+   * @param containerId containerId of the blob
+   * @param operationTimeMs operationTime in ms of put or delete
    * @return the message that was written.
    * @throws IOException
    * @throws StoreException
    */
-  private byte[] addMessage(Store store, StoreKey key, long expiryTimeMs, boolean isDelete)
-      throws IOException, StoreException {
+  private byte[] addMessage(Store store, StoreKey key, long expiryTimeMs, boolean isDelete, short accountId,
+      short containerId, long operationTimeMs) throws IOException, StoreException {
     int size = isDelete ? DELETE_RECORD_SIZE : PUT_RECORD_SIZE;
-    MessageInfo messageInfo = new MessageInfo(key, size, isDelete, expiryTimeMs);
+    MessageInfo messageInfo =
+        new MessageInfo(key, size, isDelete, expiryTimeMs, accountId, containerId, operationTimeMs);
     byte[] data = TestUtils.getRandomBytes(size);
     MessageFormatWriteSet writeSet =
         new MessageFormatWriteSet(new ByteArrayInputStream(data), Collections.singletonList(messageInfo), false);
