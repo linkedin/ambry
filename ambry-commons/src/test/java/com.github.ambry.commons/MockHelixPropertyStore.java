@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.I0Itec.zkclient.DataUpdater;
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
@@ -33,6 +34,7 @@ import org.apache.zookeeper.data.Stat;
 public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccessor<T> {
   private final Map<String, T> pathToRecords = new HashMap<>();
   private final Map<String, Set<HelixPropertyListener>> pathToListeners = new HashMap<>();
+  private final AtomicInteger readCount = new AtomicInteger(0);
   private boolean shouldFailSetOperation = false;
   private boolean shouldRemoveRecordBeforeNotify = false;
 
@@ -148,6 +150,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
 
   @Override
   public T get(String path, Stat stat, int options) {
+    readCount.addAndGet(1);
     return pathToRecords.get(path);
   }
 
@@ -212,6 +215,14 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   @Override
   public void reset() {
     throw new IllegalStateException("Not implemented");
+  }
+
+  /**
+   * Gets count for how many reads have been made to this store.
+   * @return The count of reads.
+   */
+  public int getReadCount() {
+    return readCount.get();
   }
 
   /**

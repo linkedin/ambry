@@ -48,7 +48,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
 
   @Override
   public AccountService getAccountService() {
-    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier);
+    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, storeConfig);
   }
 
   /**

@@ -24,7 +24,7 @@ public class HelixPropertyStoreConfig {
    * Time in ms to time out a connection to a ZooKeeper server.
    */
   @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms")
-  @Default("20000")
+  @Default("20 * 1000")
   public final int zkClientConnectionTimeoutMs;
 
   /**
@@ -32,7 +32,7 @@ public class HelixPropertyStoreConfig {
    * be considered as the same session.
    */
   @Config(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms")
-  @Default("20000")
+  @Default("20 * 1000")
   public final int zkClientSessionTimeoutMs;
 
   /**
@@ -51,16 +51,43 @@ public class HelixPropertyStoreConfig {
   @Default("/ambry/defaultCluster/helixPropertyStore")
   public final String rootPath;
 
+  /**
+   * The time interval in second between two consecutive account pulling for the background account updater of
+   * {@code HelixAccountService}. Setting to 0 to disable it.
+   */
+  @Config(HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms")
+  @Default("60 * 60 * 1000")
+  // @todo This config by its nature should not appear in HelixPropertyStoreConfig. An ultimate fix would require
+  // @todo separation between HelixAccount-related and Notifier-related configs, and this config should go to the
+  // @todo HelixAccountServiceConfig.
+  public final int accountServicePollingIntervalMs;
+
+  /**
+   * The timeout in ms to shut down the account updater of {@code HelixAccountService}.
+   */
+  @Config(HELIX_PROPERTY_STORE_PREFIX + "account.service.shut.down.timeout.ms")
+  @Default("60 * 1000")
+  // @todo This config by its nature should not appear in HelixPropertyStoreConfig. An ultimate fix would require
+  // @todo separation between HelixAccount-related and Notifier-related configs, and this config should go to the
+  // @todo HelixAccountServiceConfig.
+  public final int accountUpdaterShutDownTimeoutMs;
+
   public HelixPropertyStoreConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectionTimeoutMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms", 20000, 1,
-            Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms", 20 * 1000,
+            1, Integer.MAX_VALUE);
     zkClientSessionTimeoutMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms", 20000, 1,
+        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.session.timeout.ms", 20 * 1000, 1,
             Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
         INVALID_ZK_CLIENT_CONNECT_STRING);
     rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path",
         "/ambry/defaultCluster/helixPropertyStore");
+    accountServicePollingIntervalMs =
+        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms",
+            60 * 60 * 1000, 0, Integer.MAX_VALUE);
+    accountUpdaterShutDownTimeoutMs =
+        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.service.shut.down.timeout.ms",
+            60 * 1000, 1, Integer.MAX_VALUE);
   }
 }

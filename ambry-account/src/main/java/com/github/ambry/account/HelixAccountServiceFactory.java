@@ -62,7 +62,8 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}", storeConfig.zkClientConnectString,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);
-    HelixAccountService helixAccountService = new HelixAccountService(helixStore, accountServiceMetrics, notifier);
+    HelixAccountService helixAccountService =
+        new HelixAccountService(helixStore, accountServiceMetrics, notifier, storeConfig);
     long spentTimeMs = System.currentTimeMillis() - startTimeMs;
     logger.info("HelixAccountService started, took {} ms", spentTimeMs);
     accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
