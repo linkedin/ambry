@@ -89,6 +89,15 @@ public class Utils {
   }
 
   /**
+   * Gets the size of the string in serialized form
+   * @param value the string of interest to be serialized
+   * @return the size of the string in serialized form
+   */
+  public static int getIntStringLength(String value) {
+    return value == null ? Integer.BYTES : Integer.BYTES + value.length();
+  }
+
+  /**
    * Reads a String whose length is an int from the given input stream
    * @param input The input stream from which to read the String from
    * @return The String read from the stream

@@ -102,7 +102,7 @@ public class InMemoryRouter implements Router {
       this.blobProperties =
           new BlobProperties(blob.remaining(), blobProperties.getServiceId(), blobProperties.getOwnerId(),
               blobProperties.getContentType(), blobProperties.isPrivate(), blobProperties.getTimeToLiveInSeconds(),
-              blobProperties.getCreationTimeInMs());
+              blobProperties.getCreationTimeInMs(), blobProperties.getAccountId(), blobProperties.getContainerId());
       this.userMetadata = userMetadata;
       this.blob = blob;
     }

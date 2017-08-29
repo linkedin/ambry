@@ -50,6 +50,7 @@ class DeleteOperation {
   private final Time time;
   private final NonBlockingRouterMetrics routerMetrics;
   private final long submissionTimeMs;
+  private final long deletionTimeMs;
 
   // Parameters associated with the state.
 
@@ -91,6 +92,7 @@ class DeleteOperation {
     this.futureResult = futureResult;
     this.callback = callback;
     this.time = time;
+    this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
     this.operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
         routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
@@ -141,7 +143,7 @@ class DeleteOperation {
    */
   private DeleteRequest createDeleteRequest() {
     return new DeleteRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-        blobId);
+        blobId, deletionTimeMs);
   }
 
   /**

@@ -580,7 +580,9 @@ public class ReplicationTest {
     byte[] usermetadata = new byte[userMetadataSize];
     TestUtils.RANDOM.nextBytes(blob);
     TestUtils.RANDOM.nextBytes(usermetadata);
-    BlobProperties blobProperties = new BlobProperties(blobSize, "test");
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobProperties blobProperties = new BlobProperties(blobSize, "test", accountId, containerId);
 
     MessageFormatInputStream stream = new PutMessageFormatInputStream(id, blobProperties, ByteBuffer.wrap(usermetadata),
         new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);

@@ -132,7 +132,8 @@ public class BlobStoreRecoveryTest {
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       // 1st message
-      BlobProperties blobProperties = new BlobProperties(4000, "test", "mem1", "img", false, 9999);
+      BlobProperties blobProperties =
+          new BlobProperties(4000, "test", "mem1", "img", false, 9999, accountId, containerId);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 =
@@ -141,13 +142,13 @@ public class BlobStoreRecoveryTest {
 
       // 2nd message
       PutMessageFormatInputStream msg2 =
-          new PutMessageFormatInputStream(keys[1], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+          new PutMessageFormatInputStream(keys[1], new BlobProperties(4000, "test", accountId, containerId),
+              ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 3rd message
       PutMessageFormatInputStream msg3 =
-          new PutMessageFormatInputStream(keys[2], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+          new PutMessageFormatInputStream(keys[2], new BlobProperties(4000, "test", accountId, containerId),
+              ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
       DeleteMessageFormatInputStream msg4 =
@@ -155,8 +156,8 @@ public class BlobStoreRecoveryTest {
 
       // 5th message
       PutMessageFormatInputStream msg5 =
-          new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+          new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test", accountId, containerId),
+              ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       buffer = ByteBuffer.allocate(
           (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() / 2));
