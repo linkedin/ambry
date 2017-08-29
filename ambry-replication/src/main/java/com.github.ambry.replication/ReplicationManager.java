@@ -43,6 +43,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -246,7 +247,7 @@ final class PartitionInfo {
  * 2. Set up replica token persistor used to recover from shutdown/crash
  * 3. Initialize and shutdown all the components required to perform replication
  */
-public final class ReplicationManager {
+public class ReplicationManager {
 
   private final Map<PartitionId, PartitionInfo> partitionsToReplicate;
   private final Map<String, List<PartitionInfo>> partitionGroupedByMountPath;
@@ -264,8 +265,8 @@ public final class ReplicationManager {
   private final Map<String, DataNodeRemoteReplicaInfos> dataNodeRemoteReplicaInfosPerDC;
   private final StoreKeyFactory storeKeyFactory;
   private final MetricRegistry metricRegistry;
-  private final ArrayList<String> sslEnabledDatacenters;
-  private final Map<String, ArrayList<ReplicaThread>> replicaThreadPools;
+  private final List<String> sslEnabledDatacenters;
+  private final Map<String, List<ReplicaThread>> replicaThreadPools;
   private final Map<String, Integer> numberOfReplicaThreads;
 
   private static final String replicaTokenFileName = "replicaTokens";
@@ -281,10 +282,10 @@ public final class ReplicationManager {
       this.replicationConfig = replicationConfig;
       this.storeKeyFactory = storeKeyFactory;
       this.factory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      this.replicaThreadPools = new HashMap<String, ArrayList<ReplicaThread>>();
+      this.replicaThreadPools = new HashMap<>();
       this.replicationMetrics = new ReplicationMetrics(metricRegistry, clusterMap.getReplicaIds(dataNode));
-      this.partitionGroupedByMountPath = new HashMap<String, List<PartitionInfo>>();
-      this.partitionsToReplicate = new HashMap<PartitionId, PartitionInfo>();
+      this.partitionGroupedByMountPath = new HashMap<>();
+      this.partitionsToReplicate = new HashMap<>();
       this.clusterMap = clusterMap;
       this.scheduler = scheduler;
       this.persistor = new ReplicaTokenPersistor();
@@ -294,9 +295,9 @@ public final class ReplicationManager {
       this.connectionPool = connectionPool;
       this.notification = requestNotification;
       this.metricRegistry = metricRegistry;
-      this.dataNodeRemoteReplicaInfosPerDC = new HashMap<String, DataNodeRemoteReplicaInfos>();
+      this.dataNodeRemoteReplicaInfosPerDC = new HashMap<>();
       this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
-      this.numberOfReplicaThreads = new HashMap<String, Integer>();
+      this.numberOfReplicaThreads = new HashMap<>();
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -357,6 +358,7 @@ public final class ReplicationManager {
       // number of nodes. Otherwise, assign one thread to one node.
       assignReplicasToThreadPool();
       replicationMetrics.trackLiveThreadsCount(replicaThreadPools, dataNodeId.getDatacenterName());
+      replicationMetrics.trackReplicationDisabledPartitions(replicaThreadPools);
 
       // start all replica threads
       for (List<ReplicaThread> replicaThreads : replicaThreadPools.values()) {
@@ -374,6 +376,28 @@ public final class ReplicationManager {
     } catch (IOException e) {
       logger.error("IO error while starting replication");
     }
+  }
+
+  /**
+   * Enables/disables replication of the given {@code ids} from {@code origins}. The disabling is in-memory and
+   * therefore is not valid across restarts.
+   * @param ids the {@link PartitionId}s to enable/disable it on.
+   * @param origins the list of datacenters from which replication should be enabled/disabled.
+   * @param enable whether to enable ({@code true}) or disable.
+   * @return {@code true} if disabling succeeded, {@code false} otherwise. Disabling fails if {@code origins} is empty
+   * or contains unrecognized datacenters.
+   */
+  public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
+      boolean enable) {
+    if (origins.isEmpty() || !replicaThreadPools.keySet().containsAll(origins)) {
+      return false;
+    }
+    for (String origin : origins) {
+      for (ReplicaThread replicaThread : replicaThreadPools.get(origin)) {
+        replicaThread.controlReplicationForPartitions(ids, enable);
+      }
+    }
+    return true;
   }
 
   /**
@@ -440,21 +464,12 @@ public final class ReplicationManager {
   public void shutdown() throws ReplicationException {
     try {
       // stop all replica threads
-      for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
-        if (replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
-          for (ReplicaThread replicaThread : replicaThreads.getValue()) {
-            replicaThread.shutdown();
-          }
+      for (Map.Entry<String, List<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
+        for (ReplicaThread replicaThread : replicaThreads.getValue()) {
+          replicaThread.shutdown();
         }
       }
 
-      for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
-        if (!replicaThreads.getKey().equals(dataNodeId.getDatacenterName())) {
-          for (ReplicaThread replicaThread : replicaThreads.getValue()) {
-            replicaThread.shutdown();
-          }
-        }
-      }
       // persist replica tokens
       persistor.write(true);
     } catch (Exception e) {
@@ -474,7 +489,7 @@ public final class ReplicationManager {
     if (dataNodeRemoteReplicaInfos != null) {
       dataNodeRemoteReplicaInfos.addRemoteReplica(remoteReplicaInfo);
     } else {
-      dataNodeRemoteReplicaInfos = new DataNodeRemoteReplicaInfos(datacenter, remoteReplicaInfo);
+      dataNodeRemoteReplicaInfos = new DataNodeRemoteReplicaInfos(remoteReplicaInfo);
       // update numberOfReplicaThreads
       if (datacenter.equals(dataNodeId.getDatacenterName())) {
         this.numberOfReplicaThreads.put(datacenter, replicationConfig.replicationNumOfIntraDCReplicaThreads);
@@ -749,31 +764,29 @@ public final class ReplicationManager {
    * Also contains the mapping of {@link RemoteReplicaInfo} list for every {@link DataNodeId}
    */
   class DataNodeRemoteReplicaInfos {
-    private final String datacenter;
     private Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToReplicaLists;
 
-    public DataNodeRemoteReplicaInfos(String datacenter, RemoteReplicaInfo remoteReplicaInfo) {
-      this.datacenter = datacenter;
-      this.dataNodeToReplicaLists = new HashMap<DataNodeId, List<RemoteReplicaInfo>>();
+    DataNodeRemoteReplicaInfos(RemoteReplicaInfo remoteReplicaInfo) {
+      this.dataNodeToReplicaLists = new HashMap<>();
       this.dataNodeToReplicaLists.put(remoteReplicaInfo.getReplicaId().getDataNodeId(),
-          new ArrayList<RemoteReplicaInfo>(Arrays.asList(remoteReplicaInfo)));
+          new ArrayList<>(Collections.singletonList(remoteReplicaInfo)));
     }
 
-    public void addRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
+    void addRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
       DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
       List<RemoteReplicaInfo> replicaInfos = dataNodeToReplicaLists.get(dataNodeIdToReplicate);
       if (replicaInfos == null) {
-        replicaInfos = new ArrayList<RemoteReplicaInfo>();
+        replicaInfos = new ArrayList<>();
       }
       replicaInfos.add(remoteReplicaInfo);
       dataNodeToReplicaLists.put(dataNodeIdToReplicate, replicaInfos);
     }
 
-    public Set<DataNodeId> getDataNodeIds() {
+    Set<DataNodeId> getDataNodeIds() {
       return this.dataNodeToReplicaLists.keySet();
     }
 
-    public List<RemoteReplicaInfo> getRemoteReplicaListForDataNode(DataNodeId dataNodeId) {
+    List<RemoteReplicaInfo> getRemoteReplicaListForDataNode(DataNodeId dataNodeId) {
       return dataNodeToReplicaLists.get(dataNodeId);
     }
   }

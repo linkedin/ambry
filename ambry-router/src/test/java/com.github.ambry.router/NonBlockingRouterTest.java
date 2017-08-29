@@ -27,6 +27,8 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -194,6 +196,14 @@ public class NonBlockingRouterTest {
     router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
         .get();
     router.deleteBlob(blobId, null).get();
+    try {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+    }
+    router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
     router.close();
     assertExpectedThreadCounts(0, 0);
 
@@ -452,6 +462,7 @@ public class NonBlockingRouterTest {
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     String deleteServiceId = "delete-service";
     Set<String> blobsToBeDeleted = getBlobsInServers(mockServerLayout);
+    int getRequestCount = mockServerLayout.getCount(RequestOrResponseType.GetRequest);
     // The second iteration is to test the case where the blob was already deleted.
     // The third iteration is to test the case where the blob has expired.
     for (int i = 0; i < 3; i++) {
@@ -477,6 +488,11 @@ public class NonBlockingRouterTest {
             : BackgroundDeleteRequest.SERVICE_ID_PREFIX + deleteServiceId;
         Assert.assertEquals("Unexpected service ID for deleted blob", expectedServiceId, blobIdAndServiceId.getValue());
       }
+      // For 1 chunk deletion attempt, 1 background operation for Get is initiated which results in 2 Get Requests at
+      // the servers.
+      getRequestCount += 2;
+      Assert.assertEquals("Only one attempt of chunk deletion should have been done", getRequestCount,
+          mockServerLayout.getCount(RequestOrResponseType.GetRequest));
     }
 
     deletesDoneLatch.set(new CountDownLatch(5));

@@ -30,6 +30,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
@@ -285,26 +286,17 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a random number
-   * of invalid records. This is a NOT good {@link ZNRecord} format that should fail fetch or update, and none of the
-   * record should be read.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has an invalid account
+   * record and a valid account record. This is a NOT good {@link ZNRecord} format and it should fail fetch or update
+   * operations, with none of the record should be read.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase6() throws Exception {
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
-    List<Account> goodAccounts = new ArrayList<>();
-    List<Account> badAccounts = new ArrayList<>();
     Map<String, String> accountMap = new HashMap<>();
-    for (Account account : idToRefAccountMap.values()) {
-      if (random.nextDouble() < 0.3) {
-        accountMap.put(String.valueOf(account.getId()), BAD_ACCOUNT_METADATA_STRING);
-        badAccounts.add(account);
-      } else {
-        accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
-        goodAccounts.add(account);
-      }
-    }
+    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
+    accountMap.put(String.valueOf(refAccount.getId() + 1), BAD_ACCOUNT_METADATA_STRING);
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
     updateAndWriteZNRecord(zNRecord, false);
   }
@@ -346,7 +338,7 @@ public class HelixAccountServiceTest {
       new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier,
           shouldUseMockHelixStore).getAccountService();
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
 
@@ -354,17 +346,12 @@ public class HelixAccountServiceTest {
       new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier,
           shouldUseMockHelixStore).getAccountService();
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
 
-    try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
-          shouldUseMockHelixStore).getAccountService();
-      fail("should have thrown");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
+    new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
+        shouldUseMockHelixStore).getAccountService();
 
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
@@ -568,6 +555,81 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Tests adding/removing {@link Consumer}.
+   * @throws Exception
+   */
+  @Test
+  public void testAccountUpdateConsumer() throws Exception {
+    // pre-populate account metadata in ZK.
+    writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+
+    // add consumer
+    int numOfConsumers = 10;
+    List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
+    List<Consumer<Collection<Account>>> accountUpdateConsumers = new ArrayList<>();
+    for (int i = 0; i < numOfConsumers; i++) {
+      Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {
+        updatedAccountsReceivedByConsumers.add(updatedAccounts);
+      };
+      accountService.addAccountUpdateConsumer(accountUpdateConsumer);
+      accountUpdateConsumers.add(accountUpdateConsumer);
+    }
+
+    // listen to adding a new account
+    Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    Set<Account> accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateConsumers(Collections.singleton(newAccount), numOfConsumers, updatedAccountsReceivedByConsumers);
+
+    // listen to modification of existing accounts. Only updated accounts will be received by consumers.
+    updatedAccountsReceivedByConsumers.clear();
+    accountsToUpdate = new HashSet<>();
+    for (Account account : idToRefAccountMap.values()) {
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      accountBuilder.setName(account.getName() + "-extra");
+      accountsToUpdate.add(accountBuilder.build());
+    }
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateConsumers(accountsToUpdate, numOfConsumers, updatedAccountsReceivedByConsumers);
+
+    // removes the consumers so the consumers will not be informed.
+    updatedAccountsReceivedByConsumers.clear();
+    for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+      accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
+    }
+    newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateConsumers(Collections.emptySet(), 0, updatedAccountsReceivedByConsumers);
+  }
+
+  /**
+   * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
+   * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
+   * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.
+   * @param accountsInConsumers A list of collection of {@link Account}s, where each collection of {@link Account}s are
+   *                            received by one {@link Consumer}.
+   */
+  private void assertAccountUpdateConsumers(Set<Account> expectedAccounts, int expectedNumberOfConsumers,
+      List<Collection<Account>> accountsInConsumers) {
+    assertEquals("Wrong number of consumers", expectedNumberOfConsumers, accountsInConsumers.size());
+    for (Collection<Account> accounts : accountsInConsumers) {
+      assertEquals("Wrong number of updated accounts received by consumers", expectedAccounts.size(), accounts.size());
+      for (Account account : accounts) {
+        assertTrue("Account should be received by the consumers but not.", expectedAccounts.contains(account));
+      }
+      try {
+        accounts.add(Account.UNKNOWN_ACCOUNT);
+        fail("Should have thrown");
+      } catch (UnsupportedOperationException e) {
+        // expected
+      }
+    }
+  }
+
+  /**
    * Pre-populates two {@link Account}s: (id=1, name="a") and (id=2, name="b") in
    * {@link org.apache.helix.store.HelixPropertyStore}.
    * @throws Exception Any unexpected exception.
@@ -702,8 +764,8 @@ public class HelixAccountServiceTest {
    *
    * If the {@link ZNRecord} is good, it should not affect updating operation.
    * @param zNRecord A {@link ZNRecord} to write to {@link HelixPropertyStore}.
-   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} should not affect updating operation; {@code false}
-   *                       otherwise.
+   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} is good, which should not affect updating
+   *                       operation; {@code false} otherwise.
    * @throws Exception Any unexpected exception.
    */
   private void updateAndWriteZNRecord(ZNRecord zNRecord, boolean isGoodZNRecord) throws Exception {

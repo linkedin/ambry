@@ -89,6 +89,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -2178,6 +2179,16 @@ class FrontendTestAccountService implements AccountService {
       nameToAccountMap.put(account.getName(), account);
     }
     return true;
+  }
+
+  @Override
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+  @Override
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   @Override

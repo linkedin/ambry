@@ -40,7 +40,7 @@ import static org.junit.Assert.*;
  */
 public class AccountContainerTest {
   private static final Random random = new Random();
-  private static final int CONTAINER_COUNT = 100;
+  private static final int CONTAINER_COUNT = 10;
 
   // Reference Account fields
   private short refAccountId;
@@ -55,6 +55,7 @@ public class AccountContainerTest {
   private List<ContainerStatus> refContainerStatuses;
   private List<Boolean> refContainerPrivacyValues;
   private List<JSONObject> containerJsonLikeList;
+  private List<Container> refContainers;
 
   /**
    * Initialize the metadata in JsonObject for account and container.
@@ -88,13 +89,8 @@ public class AccountContainerTest {
    */
   @Test
   public void testConstructAccountAndContainerFromArguments() throws JSONException {
-    List<Container> containers = new ArrayList<>();
-    for (int i = 0; i < CONTAINER_COUNT; i++) {
-      containers.add(new ContainerBuilder(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
-          refContainerDescriptions.get(i), refContainerPrivacyValues.get(i), refAccountId).build());
-    }
     Account accountFromArguments =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, containers).build();
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, refContainers).build();
     assertAccountAgainstReference(accountFromArguments, true, true);
   }
 
@@ -528,6 +524,38 @@ public class AccountContainerTest {
   }
 
   /**
+   * Tests {@link Account#equals(Object)} that checks equality of {@link Container}s.
+   * @throws Exception
+   */
+  @Test
+  public void testAccountEqual() throws Exception {
+    // Check two accounts with same fields but no containers.
+    Account accountNoContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    Account accountNoContainerDuplicate =
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    assertTrue("Two accounts should be equal.", accountNoContainer.equals(accountNoContainerDuplicate));
+
+    // Check two accounts with same fields and containers.
+    Account accountWithContainers = Account.fromJson(accountJsonLike);
+    Account accountWithContainersDuplicate = Account.fromJson(accountJsonLike);
+    assertTrue("Two accounts should be equal.", accountWithContainers.equals(accountWithContainersDuplicate));
+
+    // Check two accounts with same fields but one has containers, the other one does not.
+    assertFalse("Two accounts should not be equal.", accountNoContainer.equals(accountWithContainers));
+
+    // Check two accounts with the same fields and the same number of containers. One container of one account has one
+    // field different from the other one.
+    Container updatedContainer =
+        new ContainerBuilder(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
+            "A changed container description", refContainerPrivacyValues.get(0), refAccountId).build();
+    refContainers.remove(0);
+    refContainers.add(updatedContainer);
+    Account accountWithModifiedContainers =
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, refContainers).build();
+    assertFalse("Two accounts should not be equal.", accountWithContainers.equals(accountWithModifiedContainers));
+  }
+
+  /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.
    * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson()}, and also
@@ -672,6 +700,7 @@ public class AccountContainerTest {
     refContainerDescriptions = new ArrayList<>();
     refContainerPrivacyValues = new ArrayList<>();
     containerJsonLikeList = new ArrayList<>();
+    refContainers = new ArrayList<>();
     JSONArray containerArray = new JSONArray();
     Set<Short> containerIdSet = new HashSet<>();
     Set<String> containerNameSet = new HashSet<>();
@@ -697,6 +726,9 @@ public class AccountContainerTest {
       containerJsonLike.put(PARENT_ACCOUNT_ID_KEY, refAccountId);
       containerJsonLikeList.add(containerJsonLike);
       containerArray.put(containerJsonLike);
+      refContainers.add(
+          new ContainerBuilder(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
+              refContainerDescriptions.get(i), refContainerPrivacyValues.get(i), refAccountId).build());
     }
     return containerArray;
   }

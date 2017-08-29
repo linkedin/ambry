@@ -322,7 +322,7 @@ class CuratedLogIndexState {
 
   /**
    * Appends random data of size {@code size} to the {@link #log}.
-   * @param size the size of data that needs to be appeneded.
+   * @param size the size of data that needs to be appended.
    * @return the data that was appended.
    * @throws IOException
    */
@@ -345,9 +345,17 @@ class CuratedLogIndexState {
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
   MockId getUniqueId() {
+    return getUniqueId(10);
+  }
+
+  /**
+   * @param length the length of the string to use to create the {@link MockId}.
+   * @return a {@link MockId} that is unique and has not been generated before in this run.
+   */
+  MockId getUniqueId(int length) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(10));
+      id = new MockId(UtilsTest.getRandomString(length));
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;

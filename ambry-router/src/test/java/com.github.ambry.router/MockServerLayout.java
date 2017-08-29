@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.protocol.RequestOrResponseType;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -57,6 +58,19 @@ class MockServerLayout {
    */
   public Collection<MockServer> getMockServers() {
     return mockServers.values();
+  }
+
+  /**
+   * Get the count of requests of the given type received within the servers in this layout.
+   * @param type the type of request
+   * @return the count of requests this server layout has received of the given type.
+   */
+  public int getCount(RequestOrResponseType type) {
+    int count = 0;
+    for (MockServer mockServer : mockServers.values()) {
+      count += mockServer.getCount(type);
+    }
+    return count;
   }
 }
 

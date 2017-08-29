@@ -57,7 +57,8 @@ class PersistentIndex {
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
-  static final short CURRENT_VERSION = VERSION_1;
+  static final short VERSION_2 = 2;
+  static final short CURRENT_VERSION = VERSION_2;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
   static final FilenameFilter INDEX_SEGMENT_FILE_FILTER = new FilenameFilter() {
@@ -402,8 +403,10 @@ class PersistentIndex {
   void addToIndex(IndexEntry entry, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
-      IndexSegment info = new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entry.getKey().sizeInBytes(),
-          entry.getValue().getBytes().capacity(), config, metrics, time);
+      int valueSize = entry.getValue().getBytes().capacity();
+      int entrySize = entry.getKey().sizeInBytes() + valueSize;
+      IndexSegment info =
+          new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entrySize, valueSize, config, metrics, time);
       info.addEntry(entry, fileSpan.getEndOffset());
       // always add to both valid and in-flux index segment map to account for the fact that changeIndexSegments()
       // might be in the process of updating the reference to validIndexSegments
@@ -437,33 +440,39 @@ class PersistentIndex {
    */
   private boolean needToRollOverIndex(IndexEntry entry) {
     Offset offset = entry.getValue().getOffset();
+    int thisValueSize = entry.getValue().getBytes().capacity();
+    int thisEntrySize = entry.getKey().sizeInBytes() + thisValueSize;
     if (validIndexSegments.size() == 0) {
       logger.info("Creating first segment with start offset {}", offset);
       return true;
     }
-
     IndexSegment lastSegment = validIndexSegments.lastEntry().getValue();
+    if (lastSegment.getVersion() != PersistentIndex.CURRENT_VERSION) {
+      logger.info("Index: {} Rolling over because the Index version has changed from {} to {}", dataDir,
+          lastSegment.getVersion(), PersistentIndex.CURRENT_VERSION);
+      return true;
+    }
     if (lastSegment.getSizeWritten() >= maxInMemoryIndexSizeInBytes) {
       logger.info("Index: {} Rolling over from {} to {} because the size written {} >= maxInMemoryIndexSizeInBytes {}",
           dataDir, lastSegment.getStartOffset(), offset, lastSegment.getSizeWritten(), maxInMemoryIndexSizeInBytes);
       return true;
     }
     if (lastSegment.getNumberOfItems() >= maxInMemoryNumElements) {
-      logger.info("Index: {} Rolling over from {} to {} because the number of items in the last segment: {} >= "
-              + "maxInMemoryNumElements {}", dataDir, lastSegment.getStartOffset(), offset, lastSegment.getNumberOfItems(),
-          maxInMemoryNumElements);
+      logger.info(
+          "Index: {} Rolling over from {} to {} because the number of items in the last segment: {} >= maxInMemoryNumElements {}",
+          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getNumberOfItems(), maxInMemoryNumElements);
       return true;
     }
-    if (lastSegment.getKeySize() != entry.getKey().sizeInBytes()) {
-      logger.info("Index: {} Rolling over from {} to {} because the segment keySize: {} != entry's keysize {}", dataDir,
-          lastSegment.getStartOffset(), offset, lastSegment.getKeySize(), entry.getKey().sizeInBytes());
+    if (lastSegment.getPersistedEntrySize() < thisEntrySize) {
+      logger.info(
+          "Index: {} Rolling over from {} to {} because the segment persisted entry size: {} is less than the size of this entry: {}",
+          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getPersistedEntrySize(), thisEntrySize);
       return true;
     }
-    if (lastSegment.getValueSize() != entry.getValue().getBytes().capacity()) {
+    if (lastSegment.getValueSize() != thisValueSize) {
       logger.info(
           "Index: {} Rolling over from {} to {} because the segment value size: {} != current entry value size: {}",
-          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getValueSize(),
-          entry.getValue().getBytes().capacity());
+          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getValueSize(), thisValueSize);
       return true;
     }
     if (!offset.getName().equals(lastSegment.getLogSegmentName())) {

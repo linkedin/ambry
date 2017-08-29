@@ -25,5 +25,5 @@ public interface Callback<T> {
    * @param result The result of the request. This would be non null when the request executed successfully
    * @param exception The exception that was reported on execution of the request
    */
-  public void onCompletion(T result, Exception exception);
+  void onCompletion(T result, Exception exception);
 }

@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 
 /**
@@ -32,6 +33,20 @@ class InMemoryUnknownAccountService implements AccountService {
   public Account getAccountById(short accountId) {
     checkOpen();
     return accountId == Account.UNKNOWN_ACCOUNT_ID ? Account.UNKNOWN_ACCOUNT : null;
+  }
+
+  @Override
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
+    return true;
+  }
+
+  @Override
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
+    return true;
   }
 
   @Override

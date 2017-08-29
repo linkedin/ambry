@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -110,6 +111,7 @@ public class ReplicationMetrics {
   public final Histogram plainTextIntraColoTotalReplicationTime;
   public final Map<String, Histogram> sslInterColoTotalReplicationTime = new HashMap<String, Histogram>();
   public final Histogram sslIntraColoTotalReplicationTime;
+  public final Counter blobDeletedOnGetCount;
 
   public List<Gauge<Long>> replicaLagInBytes;
   private MetricRegistry registry;
@@ -204,6 +206,7 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoTotalReplicationTime"));
+    blobDeletedOnGetCount = registry.counter(MetricRegistry.name(ReplicaThread.class, "BlobDeletedOnGetCount"));
     this.registry = registry;
     this.replicaLagInBytes = new ArrayList<Gauge<Long>>();
     populateInvalidMessageMetricForReplicas(replicaIds);
@@ -325,7 +328,7 @@ public class ReplicationMetrics {
    *                           datacenter
    * @param localDatacenter The datacenter on which the {@link ReplicationManager} is running
    */
-  void trackLiveThreadsCount(final Map<String, ArrayList<ReplicaThread>> replicaThreadPools, String localDatacenter) {
+  void trackLiveThreadsCount(final Map<String, List<ReplicaThread>> replicaThreadPools, String localDatacenter) {
     for (final String datacenter : replicaThreadPools.keySet()) {
       Gauge<Integer> liveThreadsPerDatacenter = new Gauge<Integer>() {
         @Override
@@ -366,6 +369,27 @@ public class ReplicationMetrics {
     };
     registry.register(MetricRegistry.name(ReplicationMetrics.class, metricName), replicaLag);
     replicaLagInBytes.add(replicaLag);
+  }
+
+  /**
+   * Tracks the number of partitions for which replication is disabled.
+   * @param replicaThreadPools A map of datacenter names to {@link ReplicaThread}s handling replication from that
+   *                           datacenter
+   */
+  public void trackReplicationDisabledPartitions(final Map<String, List<ReplicaThread>> replicaThreadPools) {
+    for (Map.Entry<String, List<ReplicaThread>> entry : replicaThreadPools.entrySet()) {
+      String datacenter = entry.getKey();
+      List<ReplicaThread> pool = entry.getValue();
+      Gauge<Integer> disabledCount = () -> {
+        Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
+        for (ReplicaThread replicaThread : pool) {
+          replicationDisabledPartitions.addAll(replicaThread.getReplicationDisabledPartitions());
+        }
+        return replicationDisabledPartitions.size();
+      };
+      registry.register(MetricRegistry.name(ReplicaThread.class, "ReplicationDisabledPartitions-" + datacenter),
+          disabledCount);
+    }
   }
 
   public void populateInvalidMessageMetricForReplicas(List<? extends ReplicaId> replicaIds) {

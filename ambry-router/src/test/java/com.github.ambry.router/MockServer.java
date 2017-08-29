@@ -49,6 +49,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 
 
 /**
@@ -63,6 +64,7 @@ class MockServer {
   private boolean getErrorOnDataBlobOnly = false;
   private final ClusterMap clusterMap;
   private final String dataCenter;
+  private final ConcurrentHashMap<RequestOrResponseType, LongAdder> requestCounts = new ConcurrentHashMap<>();
 
   MockServer(ClusterMap clusterMap, String dataCenter) {
     this.clusterMap = clusterMap;
@@ -84,6 +86,7 @@ class MockServer {
         hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : ServerErrorCode.No_Error;
     RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
     RequestOrResponse response;
+    requestCounts.computeIfAbsent(type, k -> new LongAdder()).increment();
     switch (type) {
       case PutRequest:
         response = makePutResponse((PutRequest) send, serverError);
@@ -427,6 +430,15 @@ class MockServer {
    */
   public void setBlobFormatVersion(short blobFormatVersion) {
     this.blobFormatVersion = blobFormatVersion;
+  }
+
+  /**
+   * Get the count of requests of the given type.
+   * @param type the type of request
+   * @return the count of requests this server has received of the given type.
+   */
+  public int getCount(RequestOrResponseType type) {
+    return requestCounts.getOrDefault(type, new LongAdder()).intValue();
   }
 }
 

@@ -28,6 +28,7 @@ public class AccountServiceMetrics {
   public final Histogram startupTimeInMs;
   public final Histogram updateAccountTimeInMs;
   public final Histogram fetchRemoteAccountTimeInMs;
+  public final Histogram accountUpdateConsumerTimeInMs;
 
   // Counter
   public final Counter unrecognizedMessageErrorCount;
@@ -35,6 +36,7 @@ public class AccountServiceMetrics {
   public final Counter updateAccountErrorCount;
   public final Counter fetchRemoteAccountErrorCount;
   public final Counter remoteDataCorruptionErrorCount;
+  public final Counter nullNotifierCount;
 
   public AccountServiceMetrics(MetricRegistry metricRegistry) {
     // Histogram
@@ -43,6 +45,8 @@ public class AccountServiceMetrics {
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "UpdateAccountTimeInMs"));
     fetchRemoteAccountTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountTimeInMs"));
+    accountUpdateConsumerTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, "AccountUpdateConsumerTimeInMs"));
 
     // Counter
     unrecognizedMessageErrorCount =
@@ -55,5 +59,7 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
     remoteDataCorruptionErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "RemoteDataCorruptionErrorCount"));
+    nullNotifierCount =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NullNotifierCount"));
   }
 }
