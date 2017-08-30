@@ -284,7 +284,7 @@ class CuratedLogIndexState {
     if (allKeys.containsKey(idToDelete)) {
       IndexValue value = getExpectedValue(idToDelete, true);
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-          time.milliseconds(), value.getServiceId(), value.getContainerId());
+          time.milliseconds(), value.getAccountId(), value.getContainerId());
       newValue.setNewOffset(startOffset);
       newValue.setNewSize(CuratedLogIndexState.DELETE_RECORD_SIZE);
     } else {
@@ -879,7 +879,7 @@ class CuratedLogIndexState {
         assertEquals("Offset does not match", referenceValue.getOffset(), value.getOffset());
         assertEquals("ExpiresAtMs does not match", referenceValue.getExpiresAtMs(), value.getExpiresAtMs());
         assertEquals("Size does not match", referenceValue.getSize(), value.getSize());
-        assertEquals("Service ID does not match", referenceValue.getServiceId(), value.getServiceId());
+        assertEquals("Account ID does not match", referenceValue.getAccountId(), value.getAccountId());
         assertEquals("Container ID does not match", referenceValue.getContainerId(), value.getContainerId());
         assertEquals("Original message offset does not match", referenceValue.getOriginalMessageOffset(),
             value.getOriginalMessageOffset());
@@ -1033,7 +1033,7 @@ class CuratedLogIndexState {
       String segmentName = ((LogSegment) read).getName();
       Pair<MockId, LogEntry> idAndValue = logOrder.get(new Offset(segmentName, offset));
       IndexValue value = idAndValue.getSecond().indexValue;
-      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs(), value.getServiceId(),
+      return new MessageInfo(idAndValue.getFirst(), value.getSize(), value.getExpiresAtMs(), value.getAccountId(),
           value.getContainerId(), value.getOperationTimeInMs());
     }
   }

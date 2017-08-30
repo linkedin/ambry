@@ -589,8 +589,8 @@ public class CompactionVerifier implements Closeable {
         tgtValue.getExpiresAtMs()) :
         errMsgId + ": ExpiresAt mismatch: old - " + srcValue.getExpiresAtMs() + ", new - " + tgtValue.getExpiresAtMs();
     assert
-        srcValue.getServiceId() == tgtValue.getServiceId() :
-        errMsgId + ": Service ID mismatch: old - " + srcValue.getServiceId() + ", new - " + tgtValue.getServiceId();
+        srcValue.getAccountId() == tgtValue.getAccountId() :
+        errMsgId + ": AccountId ID mismatch: old - " + srcValue.getAccountId() + ", new - " + tgtValue.getAccountId();
     assert
         srcValue.getContainerId() == tgtValue.getContainerId() :
         errMsgId + ": Container ID mismatch: old - " + srcValue.getContainerId() + ", new - "
@@ -671,7 +671,7 @@ public class CompactionVerifier implements Closeable {
                 EnumSet.allOf(StoreGetOptions.class))) {
               Offset putOffset = new Offset(indexSegment.getLogSegmentName(), options.getOffset());
               IndexValue putValue = new IndexValue(options.getMessageInfo().getSize(), putOffset,
-                  options.getMessageInfo().getExpirationTimeInMs(), value.getOperationTimeInMs(), value.getServiceId(),
+                  options.getMessageInfo().getExpirationTimeInMs(), value.getOperationTimeInMs(), value.getAccountId(),
                   value.getContainerId());
               entriesToAdd.add(new IndexEntry(indexEntry.getKey(), putValue));
             }

@@ -725,7 +725,7 @@ class BlobStoreCompactor {
             } else {
               IndexValue tgtValue =
                   new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                      srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+                      srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
               tgtValue.setFlag(IndexValue.Flags.Delete_Index);
               tgtValue.clearOriginalMessageOffset();
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
@@ -733,7 +733,7 @@ class BlobStoreCompactor {
           } else {
             IndexValue tgtValue =
                 new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                    srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+                    srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
             tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
           }
           long lastModifiedTimeSecsToSet =

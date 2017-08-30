@@ -197,7 +197,7 @@ public class IndexTest {
           throw new IllegalStateException("No ID was set before making a call to getBlobReadInfo()");
         }
         IndexValue value = state.getExpectedValue(id, true);
-        return new MessageInfo(id, value.getSize(), value.getExpiresAtMs(), value.getServiceId(),
+        return new MessageInfo(id, value.getSize(), value.getExpiresAtMs(), value.getAccountId(),
             value.getContainerId(), value.getOperationTimeInMs());
       }
     };
@@ -1633,7 +1633,7 @@ public class IndexTest {
     // 1 DELETE for a PUT not in the infos
     MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
     IndexValue putValue = state.getExpectedValue(idToDelete, true);
-    infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, putValue.getServiceId(),
+    infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, putValue.getAccountId(),
         putValue.getContainerId(), state.time.milliseconds()));
     // 3 PUT
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -1675,7 +1675,7 @@ public class IndexTest {
         assertEquals("Inconsistent size", info.getSize(), value.getSize());
         assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
         assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
-        assertEquals("Incorrect accountId", info.getAccountId(), value.getServiceId());
+        assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
         assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
         assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
             value.getOperationTimeInMs());
@@ -1956,7 +1956,7 @@ public class IndexTest {
         assertEquals("Inconsistent size", value.getSize(), info.getSize());
       }
       long expiresAtMs = value != null ? value.getExpiresAtMs() : putDelete.getSecond().getExpiresAtMs();
-      short accountId = value != null ? value.getServiceId() : putDelete.getSecond().getServiceId();
+      short accountId = value != null ? value.getAccountId() : putDelete.getSecond().getAccountId();
       short containerId = value != null ? value.getContainerId() : putDelete.getSecond().getContainerId();
       long operationTimeMs =
           putDelete.getSecond() != null ? putDelete.getSecond().getOperationTimeInMs() : value.getOperationTimeInMs();
@@ -2484,7 +2484,7 @@ public class IndexTest {
           value.getOriginalMessageOffset());
       assertEquals("OperationTime mismatch for " + entry.getKey(), expectedValue.getOperationTimeInMs(),
           value.getOperationTimeInMs());
-      assertEquals("ServiceId mismatch for " + entry.getKey(), expectedValue.getServiceId(), value.getServiceId());
+      assertEquals("AccountId mismatch for " + entry.getKey(), expectedValue.getAccountId(), value.getAccountId());
       assertEquals("ContainerId mismatch for " + entry.getKey(), expectedValue.getContainerId(),
           value.getContainerId());
     }

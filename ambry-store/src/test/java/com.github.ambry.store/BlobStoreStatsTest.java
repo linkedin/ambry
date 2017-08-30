@@ -965,7 +965,7 @@ public class BlobStoreStatsTest {
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-          updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getServiceId()),
+          updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getAccountId()),
               String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         }
       }

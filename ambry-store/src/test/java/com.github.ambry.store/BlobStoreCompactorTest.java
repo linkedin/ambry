@@ -1500,7 +1500,7 @@ public class BlobStoreCompactorTest {
     assertEquals("Unexpected expiresAtMs in IndexValue", value.getExpiresAtMs(), valueFromStore.getExpiresAtMs());
     assertEquals("Unexpected op time in IndexValue ", value.getOperationTimeInMs(),
         valueFromStore.getOperationTimeInMs());
-    assertEquals("Unexpected service ID in IndexValue", value.getServiceId(), valueFromStore.getServiceId());
+    assertEquals("Unexpected account ID in IndexValue", value.getAccountId(), valueFromStore.getAccountId());
     assertEquals("Unexpected container ID in IndexValue", value.getContainerId(), valueFromStore.getContainerId());
     assertEquals("Unexpected flags in IndexValue", value.getFlags(), valueFromStore.getFlags());
   }

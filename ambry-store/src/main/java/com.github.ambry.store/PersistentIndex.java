@@ -620,14 +620,14 @@ class PersistentIndex {
       newValue.clearOriginalMessageOffset();
     } else {
       newValue = new IndexValue(value.getSize(), value.getOffset(), value.getExpiresAtMs(), deletionTimeMs,
-          value.getServiceId(), value.getContainerId());
+          value.getAccountId(), value.getContainerId());
       newValue.setNewOffset(fileSpan.getStartOffset());
       newValue.setNewSize(size);
     }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
     return new IndexValue(newValue.getSize(), newValue.getOffset(), newValue.getFlags(), newValue.getExpiresAtMs(),
-        newValue.getOperationTimeInMs(), newValue.getServiceId(), newValue.getContainerId());
+        newValue.getOperationTimeInMs(), newValue.getAccountId(), newValue.getContainerId());
   }
 
   /**
@@ -654,7 +654,7 @@ class PersistentIndex {
     } else {
       readOptions = new BlobReadOptions(log, value.getOffset(),
           new MessageInfo(id, value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), value.getExpiresAtMs(),
-              journal.getCrcOfKey(id), value.getServiceId(), value.getContainerId(), value.getOperationTimeInMs()));
+              journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs()));
     }
     return readOptions;
   }
@@ -712,7 +712,7 @@ class PersistentIndex {
       } else if (putValue != null) {
         // PUT record in a different log segment.
         readOptions = new BlobReadOptions(log, putValue.getOffset(),
-            new MessageInfo(key, putValue.getSize(), putValue.getExpiresAtMs(), putValue.getServiceId(),
+            new MessageInfo(key, putValue.getSize(), putValue.getExpiresAtMs(), putValue.getAccountId(),
                 putValue.getContainerId(), putValue.getOperationTimeInMs()));
       } else {
         // PUT record no longer available.
@@ -796,7 +796,7 @@ class PersistentIndex {
                     IndexEntryType.ANY, indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                    value.getExpiresAtMs(), value.getServiceId(), value.getContainerId(),
+                    value.getExpiresAtMs(), value.getAccountId(), value.getContainerId(),
                     value.getOperationTimeInMs()));
             currentTotalSizeOfEntries += value.getSize();
             offsetEnd = entry.getOffset();
@@ -1100,7 +1100,7 @@ class PersistentIndex {
                   indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
-                  value.getExpiresAtMs(), value.getServiceId(), value.getContainerId(), value.getOperationTimeInMs()));
+                  value.getExpiresAtMs(), value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
               currentSegment.getLastModifiedTimeSecs())) {
@@ -1190,7 +1190,7 @@ class PersistentIndex {
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
         messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
             indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs(),
-            indexValue.getServiceId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
+            indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
         messageEntriesIterator.set(messageInfo);
       }
     }
@@ -1354,7 +1354,7 @@ class PersistentIndex {
                     IndexEntryType.ANY, indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               messageEntries.add(
-                  new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs(), value.getServiceId(),
+                  new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs(), value.getAccountId(),
                       value.getContainerId(), value.getOperationTimeInMs()));
             }
             offsetEnd = entry.getOffset();
