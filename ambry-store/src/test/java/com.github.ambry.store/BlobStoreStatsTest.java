@@ -15,6 +15,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
@@ -885,9 +887,16 @@ public class BlobStoreStatsTest {
       }
       assertEquals("Mismatch in number of containerIds in serviceId: " + serviceId, innerMap.size(),
           actualContainerValidSizeMap.get(serviceId).size());
+      actualContainerValidSizeMap.remove(serviceId);
     }
-    assertEquals("Mismatch in number of serviceIds", expectedContainerValidSizeMap.size(),
-        actualContainerValidSizeMap.size());
+    for (Map.Entry<String, Map<String, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
+      if (actualContainerValidSizeEntry.getValue().size() != 0) {
+        for (Map.Entry<String, Long> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
+          assertEquals("Additional values found in actual container valid size map ", 0,
+              mapEntry.getValue().longValue());
+        }
+      }
+    }
 
     return totalValidSize;
   }
@@ -956,7 +965,7 @@ public class BlobStoreStatsTest {
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-          updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getServiceId()),
+          updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getAccountId()),
               String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         }
       }
@@ -1037,7 +1046,8 @@ public class BlobStoreStatsTest {
     private final CountDownLatch latch;
 
     MockIndexValue(CountDownLatch latch, Offset offset) {
-      super(0, offset, Utils.Infinite_Time);
+      super(0, offset, Utils.Infinite_Time, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID);
       this.latch = latch;
     }
 

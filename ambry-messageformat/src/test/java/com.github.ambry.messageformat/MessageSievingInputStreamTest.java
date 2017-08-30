@@ -77,7 +77,8 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize());
+    MessageInfo msgInfo1 =
+        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs());
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -102,7 +103,8 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize());
+    MessageInfo msgInfo2 =
+        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
 
     // create message stream for blob 3
     StoreKey key3 = new MockId("id3");
@@ -127,7 +129,8 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize());
+    MessageInfo msgInfo3 =
+        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs());
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
@@ -226,7 +229,8 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize());
+    MessageInfo msgInfo1 =
+        new MessageInfo(key1, messageFormatStream1.getSize(), accountId1, containerId1, prop1.getCreationTimeInMs());
 
     // create message stream for blob 2
     StoreKey key2 = new MockId("id2");
@@ -251,7 +255,8 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo2 = new MessageInfo(key2, messageFormatStream2.getSize());
+    MessageInfo msgInfo2 =
+        new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
 
     // corrupt the message stream
     byte[] corruptMessageStream = new byte[(int) messageFormatStream2.getSize()];
@@ -282,7 +287,8 @@ public class MessageSievingInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
-    MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize());
+    MessageInfo msgInfo3 =
+        new MessageInfo(key3, messageFormatStream3.getSize(), accountId3, containerId3, prop3.getCreationTimeInMs());
 
     //create input stream for all blob messages together
     byte[] totalMessageStreamContent =
@@ -348,9 +354,9 @@ public class MessageSievingInputStreamTest {
     try {
       // create message stream for blob 1
       StoreKey key1 = new MockId("id1");
-      short accountId1 = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId1 = Utils.getRandomShort(TestUtils.RANDOM);
-      BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      BlobProperties prop1 = new BlobProperties(10, "servid1", accountId, containerId);
       byte[] usermetadata1 = new byte[1000];
       new Random().nextBytes(usermetadata1);
       int blobContentSize = 2000;
@@ -368,13 +374,13 @@ public class MessageSievingInputStreamTest {
               ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
               : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                   blobContentSize, blobType);
-
-      MessageInfo msgInfo1 = new MessageInfo(key1, messageFormatStream1.getSize());
+      MessageInfo msgInfo1 =
+          new MessageInfo(key1, messageFormatStream1.getSize(), accountId, containerId, prop1.getCreationTimeInMs());
 
       // create message stream for blob 2 and mark it as deleted
       StoreKey key2 = new MockId("id2");
-      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
       MessageFormatInputStream messageFormatStream2 =
           new DeleteMessageFormatInputStream(key2, accountId, containerId, deletionTimeMs);
@@ -384,8 +390,8 @@ public class MessageSievingInputStreamTest {
 
       // create message stream for blob 3
       StoreKey key3 = new MockId("id3");
-      short accountId3 = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId3 = Utils.getRandomShort(TestUtils.RANDOM);
+      accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      containerId = Utils.getRandomShort(TestUtils.RANDOM);
       BlobProperties prop3 = new BlobProperties(10, "servid3", accountId, containerId);
       byte[] usermetadata3 = new byte[1000];
       new Random().nextBytes(usermetadata3);
@@ -405,7 +411,8 @@ public class MessageSievingInputStreamTest {
               : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                   blobContentSize, blobType);
 
-      MessageInfo msgInfo3 = new MessageInfo(key3, messageFormatStream3.getSize());
+      MessageInfo msgInfo3 =
+          new MessageInfo(key3, messageFormatStream3.getSize(), accountId, containerId, prop3.getCreationTimeInMs());
 
       //create input stream for all blob messages together
       byte[] totalMessageContent = new byte[(int) messageFormatStream1.getSize() + (int) messageFormatStream2.getSize()

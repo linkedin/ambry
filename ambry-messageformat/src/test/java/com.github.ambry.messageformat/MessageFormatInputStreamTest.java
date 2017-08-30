@@ -145,47 +145,61 @@ public class MessageFormatInputStreamTest {
 
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
-    StoreKey key = new MockId("id1");
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    MessageFormatInputStream messageFormatStream =
-        new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
-    int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
-    int deleteRecordSize = MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize();
-    Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
+    short[] versions = {MessageFormatRecord.Delete_Version_V1, MessageFormatRecord.Delete_Version_V2};
+    for (short version : versions) {
+      StoreKey key = new MockId("id1");
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+      MessageFormatInputStream messageFormatStream;
+      if (version == MessageFormatRecord.Delete_Version_V1) {
+        messageFormatStream = new DeleteMessageFormatV1InputStream(key, accountId, containerId, deletionTimeMs);
+      } else {
+        messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
+      }
+      int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+      int deleteRecordSize =
+          version == MessageFormatRecord.Delete_Version_V1 ? MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize()
+              : MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
+      Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
-    // @TODO: fix verifier once we start to serialize in DeleteMsgFormat V2
-    // check header
-    byte[] headerOutput = new byte[headerSize];
-    messageFormatStream.read(headerOutput);
-    ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(1, headerBuf.getShort());
-    Assert.assertEquals(deleteRecordSize, headerBuf.getLong());
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    Crc32 crc = new Crc32();
-    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
-    Assert.assertEquals(crc.getValue(), headerBuf.getLong());
+      // check header
+      byte[] headerOutput = new byte[headerSize];
+      messageFormatStream.read(headerOutput);
+      ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
+      Assert.assertEquals(1, headerBuf.getShort());
+      Assert.assertEquals(deleteRecordSize, headerBuf.getLong());
+      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+      Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+      Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+      Crc32 crc = new Crc32();
+      crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
+      Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
-    // verify handle
-    byte[] handleOutput = new byte[key.sizeInBytes()];
-    ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
-    messageFormatStream.read(handleOutput);
-    byte[] dest = new byte[key.sizeInBytes()];
-    handleOutputBuf.get(dest);
-    Assert.assertArrayEquals(dest, key.toBytes());
+      // verify handle
+      byte[] handleOutput = new byte[key.sizeInBytes()];
+      ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
+      messageFormatStream.read(handleOutput);
+      byte[] dest = new byte[key.sizeInBytes()];
+      handleOutputBuf.get(dest);
+      Assert.assertArrayEquals(dest, key.toBytes());
 
-    // check delete record
-    byte[] deleteRecordOutput = new byte[deleteRecordSize];
-    ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
-    messageFormatStream.read(deleteRecordOutput);
-    Assert.assertEquals(deleteRecordBuf.getShort(), 1);
-    Assert.assertEquals(true, deleteRecordBuf.get() == 1 ? true : false);
-    crc = new Crc32();
-    crc.update(deleteRecordOutput, 0, deleteRecordSize - MessageFormatRecord.Crc_Size);
-    Assert.assertEquals(crc.getValue(), deleteRecordBuf.getLong());
+      // check delete record
+      byte[] deleteRecordOutput = new byte[deleteRecordSize];
+      ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
+      messageFormatStream.read(deleteRecordOutput);
+      Assert.assertEquals(deleteRecordBuf.getShort(), version);
+      if (version == MessageFormatRecord.Delete_Version_V1) {
+        Assert.assertEquals(true, deleteRecordBuf.get() == 1 ? true : false);
+      } else {
+        Assert.assertEquals("AccountId mismatch", accountId, deleteRecordBuf.getShort());
+        Assert.assertEquals("ContainerId mismatch", containerId, deleteRecordBuf.getShort());
+        Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, deleteRecordBuf.getLong());
+      }
+      crc = new Crc32();
+      crc.update(deleteRecordOutput, 0, deleteRecordSize - MessageFormatRecord.Crc_Size);
+      Assert.assertEquals(crc.getValue(), deleteRecordBuf.getLong());
+    }
   }
 }

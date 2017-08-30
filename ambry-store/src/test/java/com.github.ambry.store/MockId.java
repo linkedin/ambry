@@ -34,7 +34,7 @@ public class MockId extends StoreKey {
 
   @Override
   public byte[] toBytes() {
-    ByteBuffer idBuf = ByteBuffer.allocate(Id_Size_In_Bytes + id.length());
+    ByteBuffer idBuf = ByteBuffer.allocate(sizeInBytes());
     idBuf.putShort((short) id.length());
     idBuf.put(id.getBytes());
     return idBuf.array();

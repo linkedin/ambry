@@ -13,7 +13,10 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.File;
@@ -35,11 +38,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final LogSegment segment;
   private final Pair<File, FileChannel> segmentView;
   private final Offset offset;
-  private final Long size;
-  private final boolean isDeleted;
-  private final Long expiresAtMs;
-  private final Long crc;
-  private final StoreKey storeKey;
+  private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -50,26 +49,17 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private static final short SIZE_LENGTH = 8;
   private static final short EXPIRES_AT_MS_LENGTH = 8;
 
-  BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey) {
-    this(log, offset, size, expiresAtMs, storeKey, false, null);
-  }
-
-  BlobReadOptions(Log log, Offset offset, long size, long expiresAtMs, StoreKey storeKey, boolean isDeleted, Long crc) {
+  BlobReadOptions(Log log, Offset offset, MessageInfo info) {
     segment = log.getSegment(offset.getName());
-    if (offset.getOffset() + size > segment.getEndOffset()) {
+    if (offset.getOffset() + info.getSize() > segment.getEndOffset()) {
       throw new IllegalArgumentException(
-          "Invalid offset [" + offset + "] and size [" + size + "]. Segment end offset: " + "[" + segment.getEndOffset()
-              + "]");
+          "Invalid offset [" + offset + "] and size [" + info.getSize() + "]. Segment end offset: " + "["
+              + segment.getEndOffset() + "]");
     }
     segmentView = segment.getView();
     this.offset = offset;
-    this.size = size;
-    this.expiresAtMs = expiresAtMs;
-    this.storeKey = storeKey;
-    this.isDeleted = isDeleted;
-    this.crc = crc;
-    logger.trace("BlobReadOption offset {} size {} expiresAtMs {} storeKey {}", offset, size, expiresAtMs, storeKey,
-        isDeleted, crc);
+    this.info = info;
+    logger.trace("BlobReadOption offset {} size {} MessageInfo {} ", offset, info.getSize(), info);
   }
 
   String getLogSegmentName() {
@@ -80,20 +70,8 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     return offset.getOffset();
   }
 
-  long getSize() {
-    return size;
-  }
-
-  long getExpiresAtMs() {
-    return expiresAtMs;
-  }
-
-  StoreKey getStoreKey() {
-    return storeKey;
-  }
-
   MessageInfo getMessageInfo() {
-    return new MessageInfo(storeKey, size, isDeleted, expiresAtMs, crc);
+    return info;
   }
 
   File getFile() {
@@ -109,19 +87,34 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     return offset.compareTo(o.offset);
   }
 
+  /**
+   * Serializes this {@link BlobReadOptions} to bytes
+   * Note: This does not serialize some fields like accountId, containerId and crc
+   * @return the serialized form of this {@link BlobReadOptions} in bytes
+   */
   byte[] toBytes() {
     byte[] offsetBytes = offset.toBytes();
-    byte[] buf =
-        new byte[VERSION_LENGTH + offsetBytes.length + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + storeKey.sizeInBytes()];
+    byte[] buf = new byte[VERSION_LENGTH + offsetBytes.length + SIZE_LENGTH + EXPIRES_AT_MS_LENGTH + info.getStoreKey()
+        .sizeInBytes()];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);
     bufWrap.putShort(VERSION_1);
     bufWrap.put(offsetBytes);
-    bufWrap.putLong(size);
-    bufWrap.putLong(expiresAtMs);
-    bufWrap.put(storeKey.toBytes());
+    bufWrap.putLong(info.getSize());
+    bufWrap.putLong(info.getExpirationTimeInMs());
+    bufWrap.put(info.getStoreKey().toBytes());
     return buf;
   }
 
+  /**
+   * Deserialized the stream to form {@link BlobReadOptions}
+   * Note: Some fields are not serialized like accountId, containerId and crc and hence will take up defaults or null
+   * after deserialization
+   * @param stream the {@link DataInputStream} to deserialize
+   * @param factory {@link StoreKeyFactory} to use
+   * @param log the {@link Log} to use
+   * @return the {@link BlobReadOptions} thus deserialized from the {@code stream}
+   * @throws IOException
+   */
   static BlobReadOptions fromBytes(DataInputStream stream, StoreKeyFactory factory, Log log) throws IOException {
     short version = stream.readShort();
     switch (version) {
@@ -131,13 +124,17 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
         long size = stream.readLong();
         long expiresAtMs = stream.readLong();
         StoreKey key = factory.getStoreKey(stream);
-        return new BlobReadOptions(log, offset, size, expiresAtMs, key);
+        return new BlobReadOptions(log, offset,
+            new MessageInfo(key, size, expiresAtMs, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                Utils.Infinite_Time));
       case VERSION_1:
         offset = Offset.fromBytes(stream);
         size = stream.readLong();
         expiresAtMs = stream.readLong();
         key = factory.getStoreKey(stream);
-        return new BlobReadOptions(log, offset, size, expiresAtMs, key);
+        return new BlobReadOptions(log, offset,
+            new MessageInfo(key, size, expiresAtMs, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                Utils.Infinite_Time));
       default:
         throw new IOException("Unknown version encountered for BlobReadOptions");
     }
@@ -172,7 +169,7 @@ class StoreMessageReadSet implements MessageReadSet {
     }
     BlobReadOptions options = readOptions.get(index);
     long startOffset = options.getOffset() + relativeOffset;
-    long sizeToRead = Math.min(maxSize, options.getSize() - relativeOffset);
+    long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
@@ -189,7 +186,7 @@ class StoreMessageReadSet implements MessageReadSet {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
-    return readOptions.get(index).getSize();
+    return readOptions.get(index).getMessageInfo().getSize();
   }
 
   @Override
@@ -197,6 +194,6 @@ class StoreMessageReadSet implements MessageReadSet {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
-    return readOptions.get(index).getStoreKey();
+    return readOptions.get(index).getMessageInfo().getStoreKey();
   }
 }

@@ -247,7 +247,7 @@ public class RequestResponseTest {
     Assert.assertEquals(msgInfo.getSize(), 1000);
     Assert.assertEquals(msgInfo.getStoreKey(), id1);
     Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
-    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
@@ -356,7 +356,7 @@ public class RequestResponseTest {
     Assert.assertEquals("MsgInfo size mismatch ", 1000, msgInfo.getSize());
     Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
     Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
-    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+    if (ReplicaMetadataResponse.getCurrentVersion() == ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ContainerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());

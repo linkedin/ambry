@@ -14,8 +14,6 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
@@ -340,8 +338,9 @@ public class AmbryRequestsTest {
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = UtilsTest.getRandomString(10);
-      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, id);
+      BlobId blobId =
+          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), id);
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:

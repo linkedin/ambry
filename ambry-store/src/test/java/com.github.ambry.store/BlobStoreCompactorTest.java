@@ -510,10 +510,13 @@ public class BlobStoreCompactorTest {
     MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
     state.addDeleteEntry(idFromAnotherSegment);
 
-    // 9. Delete entry for an Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
+    // 9. Delete entry for a Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
     // cleanup
     // the delete record itself won't be cleaned up
-    state.addDeleteEntry(state.getUniqueId());
+    MockId uniqueId = state.getUniqueId();
+    state.addDeleteEntry(uniqueId,
+        new MessageInfo(uniqueId, Integer.MAX_VALUE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
 
     // fill up the rest of the segment + one more
     writeDataToMeetRequiredSegmentCount(numFinalSegmentsCount, null);
@@ -1471,9 +1474,10 @@ public class BlobStoreCompactorTest {
   private void checkRecord(MockId id, BlobReadOptions options) throws IOException {
     MessageReadSet readSet = new StoreMessageReadSet(Arrays.asList(options));
     IndexValue value = state.getExpectedValue(id, true);
-    assertEquals("Unexpected key in BlobReadOptions", id, options.getStoreKey());
-    assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getSize());
-    assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(), options.getExpiresAtMs());
+    assertEquals("Unexpected key in BlobReadOptions", id, options.getMessageInfo().getStoreKey());
+    assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getMessageInfo().getSize());
+    assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(),
+        options.getMessageInfo().getExpirationTimeInMs());
     if (state.index.hardDeleter.enabled.get() && !state.deletedKeys.contains(id)) {
       ByteBuffer readBuf = ByteBuffer.allocate((int) value.getSize());
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
@@ -1494,9 +1498,9 @@ public class BlobStoreCompactorTest {
     IndexValue valueFromStore = state.index.findKey(id);
     assertEquals("Unexpected size in IndexValue", value.getSize(), valueFromStore.getSize());
     assertEquals("Unexpected expiresAtMs in IndexValue", value.getExpiresAtMs(), valueFromStore.getExpiresAtMs());
-    assertEquals("Unexpected op time in IndexValue", value.getOperationTimeInMs(),
+    assertEquals("Unexpected op time in IndexValue ", value.getOperationTimeInMs(),
         valueFromStore.getOperationTimeInMs());
-    assertEquals("Unexpected service ID in IndexValue", value.getServiceId(), valueFromStore.getServiceId());
+    assertEquals("Unexpected account ID in IndexValue", value.getAccountId(), valueFromStore.getAccountId());
     assertEquals("Unexpected container ID in IndexValue", value.getContainerId(), valueFromStore.getContainerId());
     assertEquals("Unexpected flags in IndexValue", value.getFlags(), valueFromStore.getFlags());
   }
