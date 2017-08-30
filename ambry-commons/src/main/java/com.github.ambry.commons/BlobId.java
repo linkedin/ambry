@@ -71,7 +71,7 @@ public class BlobId extends StoreKey {
   static final short BLOB_ID_V1 = 1;
   // version 2 of the serialized format
   static final short BLOB_ID_V2 = 2;
-  private static final short CURRENT_VERSION = BLOB_ID_V1;
+  private static final short CURRENT_VERSION = BLOB_ID_V2;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;

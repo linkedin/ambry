@@ -13,8 +13,6 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -284,10 +282,8 @@ public class RequestResponseTest {
         Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedDeleteRequest.getContainerId());
         Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializedDeleteRequest.getDeletionTimeInMs());
       } else {
-        Assert.assertEquals("AccountId mismatch ", Account.UNKNOWN_ACCOUNT_ID,
-            deserializedDeleteRequest.getAccountId());
-        Assert.assertEquals("ContainerId mismatch ", Container.UNKNOWN_CONTAINER_ID,
-            deserializedDeleteRequest.getContainerId());
+        Assert.assertEquals("AccountId mismatch ", accountId, deserializedDeleteRequest.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", containerId, deserializedDeleteRequest.getContainerId());
         Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time,
             deserializedDeleteRequest.getDeletionTimeInMs());
       }

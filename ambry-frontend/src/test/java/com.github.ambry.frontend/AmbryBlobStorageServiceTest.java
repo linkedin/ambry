@@ -24,7 +24,7 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdV2;
+import com.github.ambry.commons.BlobIdV1;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -419,24 +419,23 @@ public class AmbryBlobStorageServiceTest {
     String blobId = postBlobAndVerify(headers, content, refAccount, refContainer);
 
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
-    getBlobAndVerify(blobId, null, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
-    getBlobAndVerify(blobId, null, GetOption.None, headers, content, Account.UNKNOWN_ACCOUNT,
-        Container.UNKNOWN_CONTAINER);
+    getBlobAndVerify(blobId, null, null, headers, content, refAccount, refContainer);
+    getBlobAndVerify(blobId, null, GetOption.None, headers, content, refAccount, refContainer);
     getHeadAndVerify(blobId, null, null, headers);
     getHeadAndVerify(blobId, null, GetOption.None, headers);
 
     ByteRange range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH));
-    getBlobAndVerify(blobId, range, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+    getBlobAndVerify(blobId, range, null, headers, content, refAccount, refContainer);
     getHeadAndVerify(blobId, range, null, headers);
 
     range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH + 1));
-    getBlobAndVerify(blobId, range, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+    getBlobAndVerify(blobId, range, null, headers, content, refAccount, refContainer);
     getHeadAndVerify(blobId, range, null, headers);
 
     long random1 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     long random2 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
-    getBlobAndVerify(blobId, range, null, headers, content, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
+    getBlobAndVerify(blobId, range, null, headers, content, refAccount, refContainer);
     getHeadAndVerify(blobId, range, null, headers);
 
     getNotModifiedBlobAndVerify(blobId, null);
@@ -491,8 +490,9 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE requests. The {@link AccountService}
-   * is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
+   * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE blobId string in {@link BlobId#BLOB_ID_V2}.
+   * The {@link AccountService} is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected
+   * behavior should be:
    *
    * <pre>
    *   AId in blobId    CId in blobId     expected Error      injected account      injected container
@@ -510,55 +510,75 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void injectionAccountAndContainerForGetHeadDeleteTest() throws Exception {
+  public void injectionAccountAndContainerForGetHeadDeleteBlobIdV2Test() throws Exception {
     populateAccountService();
 
     // aid=refAId, cid=refCId
-    String blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-        refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
+    String blobId =
+        new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), refContainer.getId(),
+            clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, refAccount, refContainer, RestServiceErrorCode.NotFound);
 
     // aid=refAId, cid=unknownCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
     // aid=refAId, cid=nonExistCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), (short) -1234,
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), (short) -1234,
         clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
     // aid=unknownAId, cid=refCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
         refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
     // aid=unknownAId, cid=unknownCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
         RestServiceErrorCode.NotFound);
 
     // aid=unknownAId, cid=nonExistCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
         (short) -1234, clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
     // aid=nonExistAId, cid=refCId
-    blobId =
-        new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, refContainer.getId(),
-            clusterMap.getWritablePartitionIds().get(0)).getID();
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, refContainer.getId(),
+        clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
     // aid=nonExistAId, cid=unknownCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
         Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
     // aid=nonExistAId, cid=nonExistCId
-    blobId = new BlobIdV2(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, (short) -11,
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, (short) -11,
         clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
+  }
+
+  /**
+   * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE blobId string in {@link BlobId#BLOB_ID_V1}.
+   * The {@link AccountService} is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected
+   * behavior should be:
+   * <pre>
+   *   AId in blobId    CId in blobId     expected Error      injected account      injected container
+   *    UNKNOWN           UNKNOWN          NotFound            UNKNOWN               UNKNOWN            This can succeed if the blob exists in backend.
+   * </pre>
+   * @throws Exception
+   */
+  @Test
+  public void injectionAccountAndContainerForGetHeadDeleteBlobIdV1Test() throws Exception {
+    populateAccountService();
+    // it does not matter what AID and CID are supplied when constructing blobId in v1.
+    String blobId = new BlobIdV1(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+        refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
+    verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
+        RestServiceErrorCode.NotFound);
   }
 
   /**
@@ -1278,8 +1298,7 @@ public class AmbryBlobStorageServiceTest {
 
     GetOption[] options = {GetOption.Include_Deleted_Blobs, GetOption.Include_All};
     for (GetOption option : options) {
-      getBlobAndVerify(blobId, null, option, expectedHeaders, expectedContent, Account.UNKNOWN_ACCOUNT,
-          Container.UNKNOWN_CONTAINER);
+      getBlobAndVerify(blobId, null, option, expectedHeaders, expectedContent, refAccount, refContainer);
       getNotModifiedBlobAndVerify(blobId, option);
       getUserMetadataAndVerify(blobId, option, expectedHeaders);
       getBlobInfoAndVerify(blobId, option, expectedHeaders);
@@ -1649,9 +1668,8 @@ public class AmbryBlobStorageServiceTest {
     String blobIdStr =
         postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId", isPrivate,
             refAccount, refContainer, null);
-    // The expected account and container embedded in blob id are UNKNOWN, because the blobId is deserialized into v1.
-    // @todo change the expected account and container to refAccount and refContainer when blobId v2 is enabled.
-    verifyAccountAndContainerFromBlobId(blobIdStr, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER, null);
+    // should succeed.
+    verifyAccountAndContainerFromBlobId(blobIdStr, refAccount, refContainer, null);
 
     // should fail, because containerName needs to be specified.
     postBlobAndVerifyWithAccountAndContainer("dummyAccountName", null, "serviceId", isPrivate, null, null,

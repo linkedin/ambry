@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.ByteBufferInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,8 +41,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link BlobId}. Using {@link BlobIdV2} builds a {@link BlobId}
- * in v2 equivalent to setting {@link BlobId#CURRENT_VERSION} to be {@link BlobId#BLOB_ID_V2}.
+ * Unit tests for {@link BlobId}.
  */
 @RunWith(Parameterized.class)
 public class BlobIdTest {
@@ -81,19 +81,13 @@ public class BlobIdTest {
   }
 
   /**
-   * Tests building blobId in both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2}. The expected values
-   * for {@code flag}, {@code datacenterId}, {@code accountId}, {@code containerId}, and {@code partitionId} are
-   * listed below:
-   * <pre>
-   * Version
-   * 1            always default values except partitionId
-   * 2            values passed in as arguments
-   * </pre>
+   * Tests building blobId in {@link BlobId#BLOB_ID_V2}, and verifies values for {@code flag}, {@code datacenterId},
+   * {@code accountId}, {@code containerId}, and {@code partitionId}.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testBuildBlobId() throws Exception {
-    buildBlobIdAndAssert(version, referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+    buildBlobIdAndAssert(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
         referencePartitionId);
   }
 
@@ -130,7 +124,7 @@ public class BlobIdTest {
    * Tests blobId long form in both v1 and v2.
    */
   @Test
-  public void testBlobIdLongForm() {
+  public void testBlobIdLongForm() throws IOException {
     assertBlobIdLongForm(version);
   }
 
@@ -172,11 +166,11 @@ public class BlobIdTest {
     String srcBlobIdStr;
     switch (version) {
       case BLOB_ID_V1:
-        srcBlobIdStr = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+        srcBlobIdStr = new BlobIdV1(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId).getID();
         break;
       case BLOB_ID_V2:
-        srcBlobIdStr = new BlobIdV2(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+        srcBlobIdStr = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId).getID();
         break;
       default:
@@ -307,7 +301,6 @@ public class BlobIdTest {
 
   /**
    * Builds a {@link BlobId} using the arguments and asserts against the argument values.
-   * @param version The version of blobId to build.
    * @param flag The expected {@code flag}. If {@code null}, the assertion will be run against
    * {@link BlobId#DEFAULT_FLAG}.
    * @param datacenterId The expected {@code datacenterId}. If {@code null}, the assertion will be run against
@@ -319,21 +312,11 @@ public class BlobIdTest {
    * @param partitionId The expected partitionId.
    * @throws Exception Any unexpected exception.
    */
-  private void buildBlobIdAndAssert(short version, byte flag, byte datacenterId, short accountId, short containerId,
+  private void buildBlobIdAndAssert(byte flag, byte datacenterId, short accountId, short containerId,
       PartitionId partitionId) throws Exception {
-    BlobId blobId;
-    switch (version) {
-      case BLOB_ID_V1:
-        blobId = new BlobId(flag, datacenterId, accountId, containerId, partitionId);
-        break;
-      case BLOB_ID_V2:
-        blobId = new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
-        break;
-      default:
-        throw new Exception("Invalid version number blob" + version);
-    }
-    assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
-    assertBlobIdFieldValues(version, blobId, flag, datacenterId, accountId, containerId, partitionId);
+    BlobId blobId = new BlobId(flag, datacenterId, accountId, containerId, partitionId);
+    assertEquals("Wrong blobId version", BLOB_ID_V2, getVersionFromBlobString(blobId.getID()));
+    assertBlobIdFieldValues(BLOB_ID_V2, blobId, flag, datacenterId, accountId, containerId, partitionId);
   }
 
   /**
@@ -397,15 +380,15 @@ public class BlobIdTest {
    * Asserts blobId long form.
    * @param version The version number of blobId.
    */
-  private void assertBlobIdLongForm(short version) {
+  private void assertBlobIdLongForm(short version) throws IOException {
     BlobId blobId;
     switch (version) {
       case BLOB_ID_V1:
-        blobId = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+        blobId = new BlobIdV1(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId);
         break;
       case BLOB_ID_V2:
-        blobId = new BlobIdV2(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
+        blobId = new BlobId(referenceFlag, referenceDatacenterId, referenceAccountId, referenceContainerId,
             referencePartitionId);
         break;
       default:
@@ -413,7 +396,8 @@ public class BlobIdTest {
         return;
     }
     String blobIdStr = blobId.getID();
-    String blobIdLongForm = blobId.getLongForm();
+    BlobId deserializedBlobId = new BlobId(blobIdStr, referenceClusterMap);
+    String blobIdLongForm = deserializedBlobId.getLongForm();
     String blobLongFormWithoutUuid = blobIdLongForm.substring(0, blobIdLongForm.lastIndexOf(':'));
     StringBuilder expectedBlobIdLongFormWithoutUuidSb =
         new StringBuilder().append("[").append(blobIdStr).append(":").append(version).append(":");
@@ -449,9 +433,9 @@ public class BlobIdTest {
     PartitionId partitionId = referenceClusterMap.getWritablePartitionIds().get(random.nextInt(3));
     switch (version) {
       case BLOB_ID_V1:
-        return new BlobId(flag, datacenterId, accountId, containerId, partitionId);
+        return new BlobIdV1(flag, datacenterId, accountId, containerId, partitionId);
       case BLOB_ID_V2:
-        return new BlobIdV2(flag, datacenterId, accountId, containerId, partitionId);
+        return new BlobId(flag, datacenterId, accountId, containerId, partitionId);
       default:
         throw new Exception("Unrecognized blobId version " + version);
     }
