@@ -262,8 +262,8 @@ public class StoreMessageReadSetTest {
 
         try {
           new BlobReadOptions(log, new Offset(firstSegment.getName(), firstSegment.getEndOffset()),
-              new MessageInfo(null, 1, 1, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-                  Utils.Infinite_Time));
+              new MessageInfo(null, 1, 1, Utils.getRandomShort(TestUtils.RANDOM),
+                  Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM)));
           fail("Construction should have failed because offset + size > endOffset");
         } catch (IllegalArgumentException e) {
           // expected. Nothing to do.

@@ -13,8 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -157,8 +155,8 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testInstantiation() throws Exception {
     String blobIdStr =
-        (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0))).getID();
+        (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random),
+            Utils.getRandomShort(random), mockClusterMap.getWritablePartitionIds().get(0))).getID();
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
       // no op.
     };

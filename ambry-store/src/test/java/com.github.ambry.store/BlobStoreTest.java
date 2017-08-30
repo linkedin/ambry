@@ -1103,7 +1103,7 @@ public class BlobStoreTest {
    */
   private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
     MessageInfo info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
+        Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis());
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
