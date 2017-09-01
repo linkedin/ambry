@@ -16,7 +16,6 @@ package com.github.ambry.account;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
 import com.github.ambry.config.HelixPropertyStoreConfig;
-import com.github.ambry.utils.Utils;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -88,7 +87,7 @@ class HelixAccountService implements AccountService {
   private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
   private final ReentrantLock lock = new ReentrantLock();
   private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
-  private final ScheduledExecutorService scheduler = Utils.newScheduler(1, "helix-account-updater", false);
+  private final ScheduledExecutorService scheduler;
   private final HelixPropertyStoreConfig storeConfig;
   private volatile boolean isOpen = false;
 
@@ -106,13 +105,16 @@ class HelixAccountService implements AccountService {
    * @param accountServiceMetrics {@link AccountServiceMetrics} to report metrics. Cannot be {@code null}.
    * @param notifier A {@link Notifier} that will be used to publish message after updating {@link Account}s, and
    *                 listen to {@link Account} change messages. Can be {@code null}.
+   * @param scheduler A {@link ScheduledExecutorService} that will run thread to update accounts in background.
+   *                  {@code null} to disable background updating.
    * @param storeConfig The configs for {@code HelixAccountService}.
    */
   HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
-      Notifier<String> notifier, HelixPropertyStoreConfig storeConfig) {
+      Notifier<String> notifier, ScheduledExecutorService scheduler, HelixPropertyStoreConfig storeConfig) {
     this.helixStore = Objects.requireNonNull(helixStore, "helixStore cannot be null");
     this.accountServiceMetrics = Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null");
     this.notifier = notifier;
+    this.scheduler = scheduler;
     this.storeConfig = storeConfig;
     if (notifier == null) {
       logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
@@ -151,12 +153,12 @@ class HelixAccountService implements AccountService {
       }
     };
     updater.run();
-    if (storeConfig.accountServicePollingIntervalMs > 0) {
+    if (scheduler != null) {
       int initialDelay = new Random().nextInt(storeConfig.accountServicePollingIntervalMs + 1);
       scheduler.scheduleAtFixedRate(updater, initialDelay, storeConfig.accountServicePollingIntervalMs,
           TimeUnit.MILLISECONDS);
       logger.info(
-          "Accounts are scheduled to be fetched from remote starting {} ms from now and repeated with interval={} ms",
+          "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
           initialDelay, storeConfig.accountServicePollingIntervalMs);
     }
     isOpen = true;
@@ -298,8 +300,10 @@ class HelixAccountService implements AccountService {
     if (isOpen) {
       try {
         isOpen = false;
-        scheduler.shutdown();
-        scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
+        if (scheduler != null) {
+          scheduler.shutdown();
+          scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
+        }
         helixStore.stop();
       } catch (Exception e) {
         logger.error("Exception occurred when closing HelixAccountService.", e);

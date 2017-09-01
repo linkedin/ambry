@@ -18,8 +18,10 @@ import com.github.ambry.commons.MockHelixPropertyStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import org.apache.helix.ZNRecord;
 
 
@@ -48,7 +50,10 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
 
   @Override
   public AccountService getAccountService() {
-    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, storeConfig);
+    ScheduledExecutorService scheduler =
+        storeConfig.accountServicePollingIntervalMs > 0 ? Utils.newScheduler(1, HELIX_ACCOUNT_UPDATER_PREFIX, false)
+            : null;
+    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler, storeConfig);
   }
 
   /**

@@ -18,7 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
 import org.I0Itec.zkclient.DataUpdater;
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
@@ -34,7 +34,7 @@ import org.apache.zookeeper.data.Stat;
 public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDataAccessor<T> {
   private final Map<String, T> pathToRecords = new HashMap<>();
   private final Map<String, Set<HelixPropertyListener>> pathToListeners = new HashMap<>();
-  private final AtomicInteger readCount = new AtomicInteger(0);
+  private CountDownLatch readLatch = null;
   private boolean shouldFailSetOperation = false;
   private boolean shouldRemoveRecordBeforeNotify = false;
 
@@ -148,9 +148,16 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
     throw new IllegalStateException("Not implemented");
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * This is not thread safe if some thread is setting {@link #readLatch}.
+   */
   @Override
   public T get(String path, Stat stat, int options) {
-    readCount.addAndGet(1);
+    if (readLatch != null) {
+      readLatch.countDown();
+    }
     return pathToRecords.get(path);
   }
 
@@ -218,11 +225,12 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
   }
 
   /**
-   * Gets count for how many reads have been made to this store.
+   * Sets the {@link CountDownLatch} for read, which will be counted down for each time {@link #get(String, Stat, int)}
+   * is called. This is not thread safe.
    * @return The count of reads.
    */
-  public int getReadCount() {
-    return readCount.get();
+  public void setReadLatch(CountDownLatch latch) {
+    readLatch = latch;
   }
 
   /**

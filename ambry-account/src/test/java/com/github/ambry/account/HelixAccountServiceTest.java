@@ -15,11 +15,11 @@ package com.github.ambry.account;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.HelixStoreOperator;
-import com.github.ambry.commons.MockHelixPropertyStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -31,16 +31,20 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
+import static com.github.ambry.account.HelixAccountServiceFactory.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -100,6 +104,14 @@ public class HelixAccountServiceTest {
         new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
+  }
+
+  /**
+   * Ensures no thread for background updating accounts.
+   */
+  @Before
+  public void preCheck() {
+    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
   }
 
   /**
@@ -326,7 +338,7 @@ public class HelixAccountServiceTest {
    * Tests a number of bad inputs.
    */
   @Test
-  public void testNullInputs() {
+  public void testNullInputs() throws IOException {
     try {
       new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier).getAccountService();
       fail("should have thrown");
@@ -340,9 +352,9 @@ public class HelixAccountServiceTest {
     } catch (NullPointerException e) {
       // expected
     }
-
-    new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null).getAccountService();
-
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null).getAccountService();
+    accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
       accountService.updateAccounts(null);
@@ -596,11 +608,11 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests the background updater for updating accounts from remote. Because of using the {@link MockHelixPropertyStore},
-   * everything is single-threaded except for the background updater, so after the {@link HelixAccountService} starts,
-   * it should have made at least one get call to the {@link MockHelixPropertyStore}, and then all the get calls should
-   * be made by the updater, not from the listener. This test sets the updating interval to 1ms, and ensures that after
-   * 2ms the get calls to the {@link MockHelixPropertyStore} is greater than one.
+   * Tests the background updater for updating accounts from remote. During the initialization of
+   * {@link HelixAccountService}, its internal {@link HelixPropertyStore} will be read to first time get account data.
+   * Because of the background account updater, it should continuously make get calls to the {@link HelixPropertyStore},
+   * even no notification for account updates is received. Therefore, there will be more than 1 get calls to the
+   * {@link HelixPropertyStore}.
    * @throws Exception
    */
   @Test
@@ -612,15 +624,16 @@ public class HelixAccountServiceTest {
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
         new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    Thread.sleep(2);
-    assertTrue("Wrong number of reads to the store.",
-        mockHelixAccountServiceFactory.getHelixStore(storeConfig).getReadCount() > 1);
+    CountDownLatch latch = new CountDownLatch(1);
+    mockHelixAccountServiceFactory.getHelixStore(storeConfig).setReadLatch(latch);
+    assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    awaitLatchOrTimeout(latch, 100);
   }
 
   /**
-   * Tests disabling the background thread. This test has a similar logic as the {@link #testBackgroundUpdater()} test.
-   * However, by setting the polling interval to 0ms, the accounts should not be fetched. Therefore, after the
-   * {@link HelixAccountService} starts, there should be a single read to the {@link MockHelixPropertyStore}.
+   * Tests disabling the background thread. By setting the polling interval to 0ms, the accounts should not be fetched.
+   * Therefore, after the {@link HelixAccountService} starts, there should be a single get call to the
+   * {@link HelixPropertyStore}.
    * @throws Exception
    */
   @Test
@@ -632,9 +645,7 @@ public class HelixAccountServiceTest {
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
         new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    Thread.sleep(2);
-    assertEquals("Wrong number of reads to the store.", 1,
-        mockHelixAccountServiceFactory.getHelixStore(storeConfig).getReadCount());
+    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
   }
 
   /**
