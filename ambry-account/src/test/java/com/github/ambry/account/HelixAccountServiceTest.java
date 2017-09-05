@@ -111,7 +111,14 @@ public class HelixAccountServiceTest {
    */
   @Before
   public void preCheck() {
-    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    System.out.println("Precheck the number of thread: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+    if (t != null) {
+      System.out.println(t.getState());
+      fail("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
+          + "thread stack trace: " + t.getStackTrace() + " thread is alive: " + t.isAlive() + " thread is daemon: "
+          + t.isDaemon() + " thread is interrupted: " + t.isInterrupted());
+    }
   }
 
   /**
@@ -120,8 +127,23 @@ public class HelixAccountServiceTest {
    */
   @After
   public void cleanUp() throws Exception {
+    System.out.println("Before cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+    if (t != null) {
+      System.out.println("Thread state: " + t.getState() + ", thread name: " + t.getName()
+          + "thread stack trace: " + t.getStackTrace() + " thread is alive: " + t.isAlive() + " thread is daemon: "
+          + t.isDaemon() + " thread is interrupted: " + t.isInterrupted());
+    }
     if (accountService != null) {
       accountService.close();
+    }
+    System.out.println("After cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+    if (t != null) {
+      System.out.println(t.getState());
+      fail("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
+          + "thread stack trace: " + t.getStackTrace() + " thread is alive: " + t.isAlive() + " thread is daemon: "
+          + t.isDaemon() + " thread is interrupted: " + t.isInterrupted());
     }
     deleteStoreIfExists();
   }
