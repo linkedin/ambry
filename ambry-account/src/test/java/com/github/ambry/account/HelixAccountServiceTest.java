@@ -153,7 +153,7 @@ public class HelixAccountServiceTest {
    * have any {@link ZNRecord} on it.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testStartUpWithoutMetadataExists() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // At time zero, no account metadata exists.
@@ -166,7 +166,7 @@ public class HelixAccountServiceTest {
    * already stored on it.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testStartUpWithMetadataExists() throws Exception {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
@@ -179,7 +179,7 @@ public class HelixAccountServiceTest {
    * Tests creating a number of new {@link Account} through {@link HelixAccountService}, where there is no {@link ZNRecord}
    * exists on the {@code ZooKeeper}.
    */
-//  @Test
+  @Test
   public void testCreateAccount() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
@@ -275,7 +275,7 @@ public class HelixAccountServiceTest {
    * is missing. This is a good {@link ZNRecord} format that should NOT fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
-//   @Test
+  @Test
   public void testReadBadZNRecordCase3() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
@@ -290,7 +290,7 @@ public class HelixAccountServiceTest {
    * fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testReadBadZNRecordCase4() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put("-1", refAccount.toJson().toString());
@@ -304,7 +304,7 @@ public class HelixAccountServiceTest {
    * ("accountId": badAccountJsonString). This is a NOT good {@link ZNRecord} format that should fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testReadBadZNRecordCase5() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put(String.valueOf(refAccount.getId()), BAD_ACCOUNT_METADATA_STRING);
@@ -318,7 +318,7 @@ public class HelixAccountServiceTest {
    * operations, with none of the record should be read.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testReadBadZNRecordCase6() throws Exception {
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
     Map<String, String> accountMap = new HashMap<>();
@@ -333,7 +333,7 @@ public class HelixAccountServiceTest {
    * crash the service.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void receiveBadMessage() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
@@ -347,7 +347,7 @@ public class HelixAccountServiceTest {
    * crash the service.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void receiveBadTopic() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     updateAccountsAndAssertAccountExistence(idToRefAccountMap.values(), NUM_REF_ACCOUNT, true);
@@ -359,7 +359,7 @@ public class HelixAccountServiceTest {
   /**
    * Tests a number of bad inputs.
    */
-//  @Test
+  @Test
   public void testNullInputs() throws IOException {
     try {
       new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier).getAccountService();
@@ -397,7 +397,7 @@ public class HelixAccountServiceTest {
    * in name.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testUpdateNameConflictingAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
@@ -411,7 +411,7 @@ public class HelixAccountServiceTest {
    * in id.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testUpdateIdConflictingAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
@@ -424,7 +424,7 @@ public class HelixAccountServiceTest {
    * Tests updating a collection of {@link Account}s, where there are duplicate {@link Account}s in id and name.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testUpdateDuplicateAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
@@ -438,7 +438,7 @@ public class HelixAccountServiceTest {
    * existing record. This test corresponds to case A specified in the JavaDoc of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testNonConflictingUpdateCaseA() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
@@ -454,7 +454,7 @@ public class HelixAccountServiceTest {
    * in the JavaDoc of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testNonConflictingUpdateCaseB() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
@@ -470,7 +470,7 @@ public class HelixAccountServiceTest {
    * {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testNonConflictingUpdateCaseC() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
@@ -485,7 +485,7 @@ public class HelixAccountServiceTest {
    * operation will fail. This test corresponds to case D specified in the JavaDoc of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testConflictingUpdateCaseD() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
@@ -503,7 +503,7 @@ public class HelixAccountServiceTest {
    * of {@link AccountService}.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testConflictingUpdateCaseE() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
@@ -522,7 +522,7 @@ public class HelixAccountServiceTest {
    * {@link Account}s.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase1() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
     Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
@@ -536,7 +536,7 @@ public class HelixAccountServiceTest {
    * Tests reading conflicting {@link Account} metadata from {@link org.apache.helix.store.HelixPropertyStore}.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase2() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
     Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
@@ -559,7 +559,7 @@ public class HelixAccountServiceTest {
    *    conflict with the remote copy;
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase3() throws Exception {
     Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
     List<Account> accounts = Collections.singletonList(account1);
@@ -582,7 +582,7 @@ public class HelixAccountServiceTest {
    * Tests adding/removing {@link Consumer}.
    * @throws Exception
    */
-//  @Test
+  @Test
   public void testAccountUpdateConsumer() throws Exception {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
@@ -637,7 +637,7 @@ public class HelixAccountServiceTest {
    * {@link HelixPropertyStore}.
    * @throws Exception
    */
-//  @Test
+  @Test
   public void testBackgroundUpdater() throws Exception {
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms", "1");
@@ -658,7 +658,7 @@ public class HelixAccountServiceTest {
    * {@link HelixPropertyStore}.
    * @throws Exception
    */
-//  @Test
+  @Test
   public void testDisableBackgroundUpdater() throws Exception {
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms", "0");
