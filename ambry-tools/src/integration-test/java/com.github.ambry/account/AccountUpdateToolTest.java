@@ -103,6 +103,7 @@ public class AccountUpdateToolTest {
   @After
   public void cleanUp() throws Exception {
     if (accountService != null) {
+      System.out.println("Cleaning up account service for AccountUpdateToolTest");
       accountService.close();
     }
   }
