@@ -153,7 +153,7 @@ public class HelixAccountServiceTest {
    * have any {@link ZNRecord} on it.
    * @throws Exception Any unexpected exception.
    */
-  @Test
+//  @Test
   public void testStartUpWithoutMetadataExists() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // At time zero, no account metadata exists.
@@ -198,7 +198,7 @@ public class HelixAccountServiceTest {
    * 4. update existing {@link Container}s of existing {@link Account}s.
    * @throws Exception Any unexpected exception.
    */
-  @Test
+//  @Test
   public void testUpdateAccount() throws Exception {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
