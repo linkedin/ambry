@@ -560,8 +560,6 @@ public class AmbryRequests implements RequestAPI {
     Histogram responseSendTimeHistogram = null;
     Histogram requestTotalTimeHistogram = null;
     AdminResponse response = null;
-    ServerErrorCode error;
-    List<? extends PartitionId> partitionIds;
     try {
       switch (adminRequest.getType()) {
         case TriggerCompaction:
@@ -571,15 +569,7 @@ public class AmbryRequests implements RequestAPI {
           responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
-          error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
-          if (error != ServerErrorCode.No_Error) {
-            logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
-          } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
-            error = ServerErrorCode.Unknown_Error;
-            logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
-                adminRequest);
-          }
-          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+          response = handleTriggerCompactionRequest(adminRequest);
           break;
         case RequestControl:
           metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
@@ -588,83 +578,25 @@ public class AmbryRequests implements RequestAPI {
           responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
-          RequestControlAdminRequest controlRequest = RequestControlAdminRequest.readFrom(requestStream, adminRequest);
-          RequestOrResponseType toControl = controlRequest.getRequestTypeToControl();
-          if (!requestsDisableInfo.containsKey(toControl)) {
-            metrics.badRequestError.inc();
-            error = ServerErrorCode.Bad_Request;
-          } else {
-            error = ServerErrorCode.No_Error;
-            if (controlRequest.getPartitionId() != null) {
-              error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
-              partitionIds = Collections.singletonList(controlRequest.getPartitionId());
-            } else {
-              partitionIds = clusterMap.getAllPartitionIds();
-            }
-            if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-              controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
-              for (PartitionId partitionId : partitionIds) {
-                logger.info("Enable state for {} on {} is {}", toControl, partitionId,
-                    isRequestEnabled(toControl, partitionId));
-              }
-            }
-          }
-          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+          response = handleRequestControlRequest(requestStream, adminRequest);
           break;
         case ReplicationControl:
-          error = ServerErrorCode.No_Error;
           metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
           metrics.replicationControlRequestRate.mark();
           processingTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
           responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
-          ReplicationControlAdminRequest replControlRequest =
-              ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
-          if (replControlRequest.getPartitionId() != null) {
-            error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
-            partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
-          } else {
-            partitionIds = clusterMap.getAllPartitionIds();
-          }
-          if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-            if (replicationManager.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
-                replControlRequest.shouldEnable())) {
-              error = ServerErrorCode.No_Error;
-            } else {
-              logger.error(
-                  "Could not set enable status for replication of {} from {} to {}. Check partition validity and"
-                      + " origins list", partitionIds, replControlRequest.getOrigins(),
-                  replControlRequest.shouldEnable());
-              error = ServerErrorCode.Bad_Request;
-            }
-          }
-          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+          response = handleReplicationControlRequest(requestStream, adminRequest);
           break;
         case CatchupStatus:
-          error = ServerErrorCode.No_Error;
           metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
           metrics.catchupStatusRequestRate.mark();
           processingTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
           responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
-          CatchupStatusAdminRequest catchupStatusRequest =
-              CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
-          if (catchupStatusRequest.getPartitionId() != null) {
-            error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
-            partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
-          } else {
-            partitionIds = clusterMap.getAllPartitionIds();
-          }
-          boolean isCaughtUp = false;
-          if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-            error = ServerErrorCode.No_Error;
-            isCaughtUp = isAllRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes());
-          }
-          AdminResponse adminResponse =
-              new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
-          response = new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
+          response = handleCatchupStatusRequest(requestStream, adminRequest);
           break;
       }
     } catch (Exception e) {
@@ -686,6 +618,117 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
             requestTotalTimeHistogram, null, null, totalTimeSpent));
+  }
+
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#TriggerCompaction}.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   */
+  private AdminResponse handleTriggerCompactionRequest(AdminRequest adminRequest) {
+    ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+    if (error != ServerErrorCode.No_Error) {
+      logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
+    } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
+      error = ServerErrorCode.Unknown_Error;
+      logger.error("Triggering compaction failed for {}. Check if admin trigger is enabled for compaction",
+          adminRequest);
+    }
+    return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+  }
+
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#RequestControl}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   * @throws IOException if there is any I/O error reading from the {@code requestStream}.
+   */
+  private AdminResponse handleRequestControlRequest(DataInputStream requestStream, AdminRequest adminRequest)
+      throws IOException {
+    RequestControlAdminRequest controlRequest = RequestControlAdminRequest.readFrom(requestStream, adminRequest);
+    RequestOrResponseType toControl = controlRequest.getRequestTypeToControl();
+    ServerErrorCode error;
+    List<? extends PartitionId> partitionIds;
+    if (!requestsDisableInfo.containsKey(toControl)) {
+      metrics.badRequestError.inc();
+      error = ServerErrorCode.Bad_Request;
+    } else {
+      error = ServerErrorCode.No_Error;
+      if (controlRequest.getPartitionId() != null) {
+        error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+        partitionIds = Collections.singletonList(controlRequest.getPartitionId());
+      } else {
+        partitionIds = clusterMap.getAllPartitionIds();
+      }
+      if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+        controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
+        for (PartitionId partitionId : partitionIds) {
+          logger.info("Enable state for {} on {} is {}", toControl, partitionId,
+              isRequestEnabled(toControl, partitionId));
+        }
+      }
+    }
+    return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+  }
+
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#ReplicationControl}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   * @throws IOException if there is any I/O error reading from the {@code requestStream}.
+   */
+  private AdminResponse handleReplicationControlRequest(DataInputStream requestStream, AdminRequest adminRequest)
+      throws IOException {
+    List<? extends PartitionId> partitionIds;
+    ServerErrorCode error = ServerErrorCode.No_Error;
+    ReplicationControlAdminRequest replControlRequest =
+        ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
+    if (replControlRequest.getPartitionId() != null) {
+      error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+      partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
+    } else {
+      partitionIds = clusterMap.getAllPartitionIds();
+    }
+    if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+      if (replicationManager.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
+          replControlRequest.shouldEnable())) {
+        error = ServerErrorCode.No_Error;
+      } else {
+        logger.error("Could not set enable status for replication of {} from {} to {}. Check partition validity and"
+            + " origins list", partitionIds, replControlRequest.getOrigins(), replControlRequest.shouldEnable());
+        error = ServerErrorCode.Bad_Request;
+      }
+    }
+    return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+  }
+
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#CatchupStatus}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   * @throws IOException if there is any I/O error reading from the {@code requestStream}.
+   */
+  private AdminResponse handleCatchupStatusRequest(DataInputStream requestStream, AdminRequest adminRequest)
+      throws IOException {
+    List<? extends PartitionId> partitionIds;
+    ServerErrorCode error = ServerErrorCode.No_Error;
+    CatchupStatusAdminRequest catchupStatusRequest = CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
+    if (catchupStatusRequest.getPartitionId() != null) {
+      error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+      partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
+    } else {
+      partitionIds = clusterMap.getAllPartitionIds();
+    }
+    boolean isCaughtUp = false;
+    if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+      error = ServerErrorCode.No_Error;
+      isCaughtUp = isAllRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes());
+    }
+    AdminResponse adminResponse = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
+    return new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
