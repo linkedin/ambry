@@ -22,8 +22,11 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
+import static com.github.ambry.account.HelixAccountServiceFactory.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -35,10 +38,47 @@ public class InMemoryUnknownAccountServiceTest {
   private AccountService accountService =
       new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
 
-  @After
-  public void close() throws Exception {
-    accountService.close();
+  /**
+   * Ensures no thread for background updating accounts.
+   */
+  @Before
+  public void preCheck() {
+    System.out.println("Precheck the number of thread: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+    if (t != null) {
+      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
+          + "thread stack trace: " + t.getStackTrace() + " thread is alive: " + t.isAlive() + " thread is daemon: "
+          + t.isDaemon() + " thread is interrupted: " + t.isInterrupted());
+      fail("Fails at precheck");
+    }
   }
+
+  /**
+   * Cleans up if the store already exists.
+   * @throws Exception Any unexpected exception.
+   */
+  @After
+  public void cleanUp() throws Exception {
+    System.out.println("Before cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+    if (t != null) {
+      System.out.println(
+          "Thread state: " + t.getState() + ", thread name: " + t.getName() + "thread stack trace: " + t.getStackTrace()
+              + " thread is alive: " + t.isAlive() + " thread is daemon: " + t.isDaemon() + " thread is interrupted: "
+              + t.isInterrupted());
+    }
+    if (accountService != null) {
+      accountService.close();
+    }
+    System.out.println("After cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+    if (t != null) {
+      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
+          + "thread stack trace: " + t.getStackTrace() + " thread is alive: " + t.isAlive() + " thread is daemon: "
+          + t.isDaemon() + " thread is interrupted: " + t.isInterrupted());
+    }
+  }
+
 
   @Test
   public void testAllMethods() throws Exception {
