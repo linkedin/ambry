@@ -198,7 +198,7 @@ public class HelixAccountServiceTest {
    * 4. update existing {@link Container}s of existing {@link Account}s.
    * @throws Exception Any unexpected exception.
    */
-//  @Test
+  @Test
   public void testUpdateAccount() throws Exception {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
