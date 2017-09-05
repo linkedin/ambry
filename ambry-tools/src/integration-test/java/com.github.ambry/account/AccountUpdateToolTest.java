@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import org.json.JSONArray;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Test;
 
@@ -97,6 +98,13 @@ public class AccountUpdateToolTest {
     notifier = new HelixNotifier(storeConfig);
     accountService =
         new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+  }
+
+  @After
+  public void cleanUp() throws Exception {
+    if (accountService != null) {
+      accountService.close();
+    }
   }
 
   @AfterClass
