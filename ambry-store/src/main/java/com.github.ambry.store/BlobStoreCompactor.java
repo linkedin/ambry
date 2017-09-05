@@ -110,7 +110,7 @@ class BlobStoreCompactor {
     this.storeKeyFactory = storeKeyFactory;
     this.config = config;
     this.srcMetrics = metrics;
-    tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
+    tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry(), metrics.aggregatedStoreMetrics);
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.time = time;
@@ -351,6 +351,14 @@ class BlobStoreCompactor {
 
     numSwapsUsed = tgtIndex.getLogSegmentCount();
     logger.debug("Swaps used to copy {} is {} for {}", compactionLog.getCompactionDetails(), numSwapsUsed, storeId);
+    if (isActive) {
+      // it is possible to double count based on the time at which shutdown occurs (if it occurs b/w this statement
+      // and before the subsequent commit can take effect)
+      long segmentCountDiff =
+          compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().size() - numSwapsUsed;
+      long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff;
+      srcMetrics.aggregatedStoreMetrics.compactionBytesReclaimedCount.inc(savedBytes);
+    }
     tgtIndex.close();
     tgtLog.close();
     // persist the bloom of the "latest" index segment if it exists

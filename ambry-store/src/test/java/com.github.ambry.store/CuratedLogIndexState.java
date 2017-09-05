@@ -131,6 +131,8 @@ class CuratedLogIndexState {
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = new HashSet<>();
 
+  private StoreMetrics metrics;
+
   /**
    * Creates state in order to make sure all cases are represented and log-index tests don't need to do any setup
    * individually. For understanding the created index, please read the source code which is annotated with comments.
@@ -166,15 +168,14 @@ class CuratedLogIndexState {
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
+    metrics = new StoreMetrics(tempDirStr, metricRegistry, new AggregatedStoreMetrics(metricRegistry));
     log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity, metrics);
-    metricRegistry = new MetricRegistry();
     properties.put("store.index.max.number.of.inmem.elements",
         Integer.toString(CuratedLogIndexState.MAX_IN_MEM_ELEMENTS));
     properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
     // not used but set anyway since this is a package private variable.
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
-    initIndex(metricRegistry);
+    initIndex();
     if (initState) {
       setupTestState(isLogSegmented, segmentCapacity);
     }
@@ -620,13 +621,13 @@ class CuratedLogIndexState {
 
   /**
    * Creates the index instance with the provided {@code metricRegistry}.
-   * @param metricRegistry the {@link MetricRegistry} to use to record metrics.
    * @throws StoreException
    */
-  void initIndex(MetricRegistry metricRegistry) throws StoreException {
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
+  void initIndex() throws StoreException {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     sessionId = UUID.randomUUID();
+    metricRegistry = new MetricRegistry();
+    metrics = new StoreMetrics(tempDirStr, metricRegistry, new AggregatedStoreMetrics(metricRegistry));
     index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
         hardDelete, DISK_IO_SCHEDULER, metrics, time, sessionId, incarnationId);
   }
@@ -648,14 +649,13 @@ class CuratedLogIndexState {
             new File(tempDir, PersistentIndex.CLEAN_SHUTDOWN_FILENAME).delete());
       }
     }
-    metricRegistry = new MetricRegistry();
-    initIndex(metricRegistry);
+    initIndex();
   }
 
   /**
    * Reloads the log and index by closing and recreating the class variables.
    * @param initIndex creates the index instance if {@code true}, if not, sets {@link #index} to {@code null} and it
-   *                  has to be initialized with a call to {@link #initIndex(MetricRegistry)}.
+   *                  has to be initialized with a call to {@link #initIndex()}.
    * @throws IOException
    * @throws StoreException
    */
@@ -663,12 +663,10 @@ class CuratedLogIndexState {
     long segmentCapacity = log.getSegmentCapacity();
     index.close();
     log.close();
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(tempDirStr, metricRegistry);
     log = new Log(tempDirStr, LOG_CAPACITY, segmentCapacity, metrics);
     index = null;
     if (initIndex) {
-      initIndex(metricRegistry);
+      initIndex();
     }
   }
 

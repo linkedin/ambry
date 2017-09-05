@@ -211,7 +211,9 @@ public class DumpDataTool {
       logger.info("Dumping index {}", indexFile.getAbsolutePath());
       StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
       StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-      StoreMetrics storeMetrics = new StoreMetrics(indexFile.getParent(), new MetricRegistry());
+      MetricRegistry metricRegistry = new MetricRegistry();
+      StoreMetrics storeMetrics =
+          new StoreMetrics(indexFile.getParent(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
       IndexSegment segment = new IndexSegment(indexFile, false, storeKeyFactory, config, storeMetrics,
           new Journal(indexFile.getParent(), 0, 0), time);
       Offset startOffset = segment.getStartOffset();

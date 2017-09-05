@@ -75,11 +75,14 @@ public class StoreMetrics {
   public final Histogram statsRecentEntryQueueSize;
   public final Histogram statsForwardScanEntryCount;
 
+  public final AggregatedStoreMetrics aggregatedStoreMetrics;
+
   private final MetricRegistry registry;
   private final String name;
 
-  public StoreMetrics(String storeId, MetricRegistry registry) {
+  public StoreMetrics(String storeId, MetricRegistry registry, AggregatedStoreMetrics aggregatedStoreMetrics) {
     this.registry = registry;
+    this.aggregatedStoreMetrics = aggregatedStoreMetrics;
     name = storeId + ".";
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
