@@ -153,7 +153,7 @@ public class HelixAccountServiceTest {
    * have any {@link ZNRecord} on it.
    * @throws Exception Any unexpected exception.
    */
-  //@Test
+  @Test
   public void testStartUpWithoutMetadataExists() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // At time zero, no account metadata exists.
@@ -166,7 +166,7 @@ public class HelixAccountServiceTest {
    * already stored on it.
    * @throws Exception Any unexpected exception.
    */
-  //@Test
+//  @Test
   public void testStartUpWithMetadataExists() throws Exception {
     // pre-populate account metadata in ZK.
     writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
@@ -179,7 +179,7 @@ public class HelixAccountServiceTest {
    * Tests creating a number of new {@link Account} through {@link HelixAccountService}, where there is no {@link ZNRecord}
    * exists on the {@code ZooKeeper}.
    */
-  //@Test
+//  @Test
   public void testCreateAccount() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
@@ -275,7 +275,7 @@ public class HelixAccountServiceTest {
    * is missing. This is a good {@link ZNRecord} format that should NOT fail fetch or update.
    * @throws Exception Any unexpected exception.
    */
-  // @Test
+//   @Test
   public void testReadBadZNRecordCase3() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
     mapValue.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
@@ -637,7 +637,7 @@ public class HelixAccountServiceTest {
    * {@link HelixPropertyStore}.
    * @throws Exception
    */
-  @Test
+//  @Test
   public void testBackgroundUpdater() throws Exception {
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms", "1");
@@ -658,7 +658,7 @@ public class HelixAccountServiceTest {
    * {@link HelixPropertyStore}.
    * @throws Exception
    */
-  @Test
+//  @Test
   public void testDisableBackgroundUpdater() throws Exception {
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms", "0");

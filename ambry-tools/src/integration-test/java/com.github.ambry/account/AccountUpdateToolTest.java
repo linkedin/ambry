@@ -117,7 +117,7 @@ public class AccountUpdateToolTest {
    * Tests creating {@link Account}s to {@code ZooKeeper}, where no {@link Account} exists.
    * @throws Exception Any unexpected exception.
    */
-  @Test
+//  @Test
   public void testCreateAccount() throws Exception {
     assertEquals("Wrong number of accounts", 0, accountService.getAllAccounts().size());
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
@@ -128,7 +128,7 @@ public class AccountUpdateToolTest {
    * Tests updating {@link Account}s to {@code ZooKeeper}, where the {@link Account}s to update already exist.
    * @throws Exception Any unexpected exception.
    */
-  @Test
+//  @Test
   public void testUpdateAccount() throws Exception {
     // first, create NUM_REF_ACCOUNT accounts through the tool
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
@@ -154,7 +154,7 @@ public class AccountUpdateToolTest {
    * Tests updating {@link Account}s that are conflicting.
    * @throws Exception Any unexpected exception.
    */
-  @Test
+//  @Test
   public void testUpdateConflictAccounts() throws Exception {
     Collection<Account> idConflictAccounts = new ArrayList<>();
     // id conflict
@@ -187,7 +187,7 @@ public class AccountUpdateToolTest {
    * Tests creating/updating {@link Account}s using bad file containing no valid json array.
    * @throws Exception Any unexpected exception.
    */
-  @Test
+//  @Test
   public void testBadJsonFile() throws Exception {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
