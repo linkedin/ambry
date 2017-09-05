@@ -319,12 +319,7 @@ public class BlobStoreCompactorTest {
       // there should be no temp files
       assertEquals("There are some temp log segments", 0,
           tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
-      long expectedSavedBytes =
-          state.log.getSegmentCapacity() * (logSegmentsBeforeCompaction - state.index.getLogSegmentCount());
-      long savedBytesReported = metricRegistry.getCounters()
-          .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
-          .getCount();
-      assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
+      verifySavedBytesCount(logSegmentsBeforeCompaction, 0);
     }
   }
 
@@ -602,12 +597,7 @@ public class BlobStoreCompactorTest {
     // there should be no temp files
     assertEquals("There are some temp log segments", 0,
         tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
-    long expectedSavedBytes =
-        state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - state.index.getLogSegmentCount());
-    long savedBytesReported = metricRegistry.getCounters()
-        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
-        .getCount();
-    assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
+    verifySavedBytesCount(logSegmentCountBeforeCompaction, 0);
   }
 
   /**
@@ -880,12 +870,7 @@ public class BlobStoreCompactorTest {
         // PUT record exists.
       }
     }
-    long expectedSavedBytes =
-        state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - state.index.getLogSegmentCount());
-    long savedBytesReported = metricRegistry.getCounters()
-        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
-        .getCount();
-    assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
+    verifySavedBytesCount(logSegmentCountBeforeCompaction, 0);
   }
 
   /**
@@ -1120,12 +1105,7 @@ public class BlobStoreCompactorTest {
         state.index.getIndexSegments().size());
     checkVitals(changeExpected, logSegmentSizeSumBeforeCompaction, logSegmentCountBeforeCompaction,
         indexSegmentCountBeforeCompaction);
-    long expectedSavedBytes =
-        state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - logSegmentCountAfterCompaction);
-    long savedBytesReported = metricRegistry.getCounters()
-        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
-        .getCount();
-    assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
+    verifySavedBytesCount(logSegmentCountBeforeCompaction, 0);
   }
 
   /**
@@ -1195,12 +1175,7 @@ public class BlobStoreCompactorTest {
     checkVitals(changeExpected, logSegmentSizeSumBeforeCompaction, logSegmentCountBeforeCompaction,
         indexSegmentCountBeforeCompaction);
     if (checkSavedBytesReported) {
-      long expectedSavedBytes =
-          state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - state.index.getLogSegmentCount());
-      savedBytesReported += metricRegistry.getCounters()
-          .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
-          .getCount();
-      assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
+      verifySavedBytesCount(logSegmentCountBeforeCompaction, savedBytesReported);
     }
   }
 
@@ -1544,6 +1519,21 @@ public class BlobStoreCompactorTest {
     assertEquals("Unexpected service ID in IndexValue", value.getServiceId(), valueFromStore.getServiceId());
     assertEquals("Unexpected container ID in IndexValue", value.getContainerId(), valueFromStore.getContainerId());
     assertEquals("Unexpected flags in IndexValue", value.getFlags(), valueFromStore.getFlags());
+  }
+
+  /**
+   * Verifies that the metric reporting the number of bytes saved after compaction is correct.
+   * @param logSegmentCountBeforeCompaction the number of log segments in the {@link Log} before compaction.
+   * @param alreadySavedBytes the number of bytes that have already been saved but won't show up in the metric registry
+   * (because it may have been re-inited).
+   */
+  private void verifySavedBytesCount(long logSegmentCountBeforeCompaction, long alreadySavedBytes) {
+    long expectedSavedBytes =
+        state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - state.index.getLogSegmentCount());
+    long savedBytesReported = alreadySavedBytes + metricRegistry.getCounters()
+        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
+        .getCount();
+    assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
   }
 
   // badInputTest() helpers
