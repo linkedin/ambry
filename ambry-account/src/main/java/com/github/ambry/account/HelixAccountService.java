@@ -301,8 +301,14 @@ class HelixAccountService implements AccountService {
       try {
         isOpen = false;
         if (scheduler != null) {
+          System.out.println("Schedule shutdown timeout: " + storeConfig.accountUpdaterShutDownTimeoutMs + " ms");
           scheduler.shutdown();
-          scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
+          if (!scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS)) {
+            scheduler.shutdownNow();
+            if (!scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS)) {
+              logger.error("ExecutorService for account updater is not shut down successfully");
+            }
+          }
         }
         helixStore.stop();
       } catch (Exception e) {
