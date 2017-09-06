@@ -20,9 +20,11 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.healthcheck.HealthReportProvider;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.task.Task;
@@ -36,7 +38,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * An implementation of {@link ClusterParticipant} that registers registers as a participant to a Helix cluster.
+ * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
  */
 class HelixParticipant implements ClusterParticipant {
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -44,7 +46,7 @@ class HelixParticipant implements ClusterParticipant {
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
   private HelixManager manager;
-
+  private String instanceName;
   /**
    * Instantiate a HelixParticipant.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
@@ -76,7 +78,7 @@ class HelixParticipant implements ClusterParticipant {
   @Override
   public void initialize(String hostName, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException {
     logger.info("Initializing participant");
-    String instanceName = ClusterMapUtils.getInstanceName(hostName, port);
+    instanceName = ClusterMapUtils.getInstanceName(hostName, port);
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
@@ -89,6 +91,21 @@ class HelixParticipant implements ClusterParticipant {
     for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
       manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
     }
+  }
+
+  @Override
+  public void setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    if (isSealed) {
+      sealedReplicas.add(replicaId.getPartitionId().toPathString());
+    } else {
+      sealedReplicas.remove(replicaId.getPartitionId().toPathString());
+    }
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    //Is this really necessary?
+    helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 
   /**

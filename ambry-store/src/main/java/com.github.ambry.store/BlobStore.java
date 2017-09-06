@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
@@ -45,8 +47,7 @@ class BlobStore implements Store {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  /* A lock that prevents concurrent writes to the log */
-  private final Object lock = new Object();
+  private final Object logWriteLock = new Object();
   private final StoreConfig config;
   private final long capacityInBytes;
   private final StoreKeyFactory factory;
@@ -56,6 +57,9 @@ class BlobStore implements Store {
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
 
+  private ReplicaId replicaId;
+  private ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
+  private WriteState writeState = WriteState.IDLE;
   private Log log;
   private BlobStoreCompactor compactor;
   private PersistentIndex index;
@@ -75,6 +79,22 @@ class BlobStore implements Store {
     COLLIDING, // At least one message in the write set has the same key as another, different message in the store.
     ALL_DUPLICATE, // The messages are all duplicates - every one of them already exist in the store.
     SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
+  }
+
+  private enum WriteState {
+    IDLE,
+    READ_ONLY,
+    READ_WRITE;
+  }
+
+  BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory,
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) {
+    this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, storageManagerMetrics,
+        replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory, recovery, hardDelete, time);
+    this.replicaId = replicaId;
+    this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
   }
 
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
@@ -97,7 +117,7 @@ class BlobStore implements Store {
 
   @Override
   public void start() throws StoreException {
-    synchronized (lock) {
+    synchronized (logWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
       }
@@ -215,6 +235,23 @@ class BlobStore implements Store {
     }
   }
 
+  private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity) {
+    if (clusterManagerWriteStatusDelegate != null) {
+      double percentFilled = (index.getLogUsedCapacity() / (double) log.getCapacityInBytes())*100;
+      if (percentFilled > config.storeDataReadOnlySizeThresholdPercentage && writeState != WriteState.READ_ONLY) {
+        clusterManagerWriteStatusDelegate.setToRO(replicaId);
+        writeState = WriteState.READ_ONLY;
+      } else if (percentFilled <= config.storeDataReadOnlySizeThresholdPercentage - config.storeDataReadWriteSizeThresholdPercentageDelta
+          && writeState != WriteState.READ_WRITE) {
+        clusterManagerWriteStatusDelegate.setToRW(replicaId);
+        writeState = WriteState.READ_WRITE;
+      }
+    }
+    else {
+      logger.warn("ClusterManagerWriteStatusDelegate not set, dynamic helix write status turned off");
+    }
+  }
+
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
@@ -226,7 +263,7 @@ class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
-        synchronized (lock) {
+        synchronized (logWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
           Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -239,6 +276,7 @@ class BlobStore implements Store {
             Offset endOffsetOfLastMessage = log.getEndOffset();
             messageSetToWrite.writeTo(log);
             logger.trace("Store : {} message set written to log", dataDir);
+
             List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
             ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
             for (MessageInfo info : messageInfo) {
@@ -255,6 +293,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
+            checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
           }
         }
       }
@@ -306,7 +345,7 @@ class BlobStore implements Store {
         }
         indexValuesToDelete.add(value);
       }
-      synchronized (lock) {
+      synchronized (logWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
@@ -408,7 +447,7 @@ class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     long startTimeInMs = time.milliseconds();
-    synchronized (lock) {
+    synchronized (logWriteLock) {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
@@ -448,6 +487,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details);
+    checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
   /**
@@ -459,6 +499,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
+      checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
     }
   }
 

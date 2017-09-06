@@ -232,7 +232,7 @@ public class StorageManagerTest {
     StorageManager storageManager =
         new StorageManager(new StoreConfig(new VerifiableProperties(properties)), Utils.newScheduler(1, false),
             metricRegistry, replicas, new MockIdFactory(), new DummyMessageStoreRecovery(),
-            new DummyMessageStoreHardDelete(), SystemTime.getInstance());
+            new DummyMessageStoreHardDelete(), null, SystemTime.getInstance());
     storageManager.start();
     return storageManager;
   }

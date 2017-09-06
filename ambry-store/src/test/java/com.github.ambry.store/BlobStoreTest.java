@@ -14,12 +14,16 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -52,6 +56,7 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -277,6 +282,61 @@ public class BlobStoreTest {
     scheduler.shutdown();
     assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+  }
+
+  /**
+   *
+   * @throws StoreException
+   */
+  @Test
+  public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
+    Properties props = new Properties();
+    props.setProperty(StoreConfig.storeDataReadOnlySizeThresholdPercentageName, "50");
+    props.setProperty(StoreConfig.storeDataReadWriteSizeThresholdPercentageDeltaName, "5");
+    props.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
+    props.put("store.segment.size.in.bytes", Long.toString(2000));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(props));
+    String file = new File(tempDir, UtilsTest.getRandomString(10)).getAbsolutePath();
+    MetricRegistry registry = new MetricRegistry();
+    StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
+
+    //create mock objects
+    PartitionId partitionId = Mockito.mock(PartitionId.class);
+    Mockito.when(partitionId.toString()).thenReturn(storeId);
+    ReplicaId replicaId = Mockito.mock(ReplicaId.class);
+    Mockito.when(replicaId.getPartitionId()).thenReturn(partitionId);
+    Mockito.when(replicaId.getCapacityInBytes()).thenReturn(10000L);
+    Mockito.when(replicaId.getReplicaPath()).thenReturn(file);
+    ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = Mockito.mock(ClusterManagerWriteStatusDelegate.class);
+    store.shutdown();
+    Time newTime = time;
+
+
+    BlobStore blobStore = new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics,
+        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, newTime);
+
+    blobStore.start();
+    List<MockId> addedIds = put(9, 900, Utils.Infinite_Time, blobStore);
+    Mockito.verify(clusterManagerWriteStatusDelegate).setToRO(replicaId);
+
+    for (MockId addedId : addedIds) {
+      delete(addedId, blobStore);
+    }
+    blobStore.shutdown();
+    registry = new MetricRegistry();
+    metrics = new StorageManagerMetrics(registry);
+    blobStore = new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics,
+        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, newTime);
+    blobStore.start();
+    newTime.sleep(TimeUnit.DAYS.toMillis(8));
+    blobStore.compact(blobStore.getCompactionDetails(new CompactAllPolicy(config, newTime)));
+    Mockito.verify(clusterManagerWriteStatusDelegate).setToRW(replicaId);
+
+    blobStore.shutdown();
+//
+//    BlobStore blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, nonExistentDir,
+//        LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+
   }
 
   /**
@@ -696,6 +756,19 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private List<MockId> put(int count, long size, long expiresAtMs) throws StoreException {
+    return put(count, size, expiresAtMs, store);
+  }
+
+  /**
+   * Puts some blobs into the {@link BlobStore}.
+   * @param count the number of blobs to PUT.
+   * @param size the size of each blob.
+   * @param expiresAtMs the expiry time (in ms) of each blob.
+   * @param blobStore the blob store that blob will be put into
+   * @return the {@link MockId}s of the blobs created.
+   * @throws StoreException
+   */
+  private List<MockId> put(int count, long size, long expiresAtMs, BlobStore blobStore) throws StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -717,7 +790,7 @@ public class BlobStoreTest {
         liveKeys.add(id);
       }
     }
-    store.put(new MockMessageWriteSet(infos, buffers));
+    blobStore.put(new MockMessageWriteSet(infos, buffers));
     return ids;
   }
 
@@ -728,9 +801,20 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private MessageInfo delete(MockId idToDelete) throws StoreException {
+    return delete(idToDelete, store);
+  }
+
+  /**
+   * Deletes a blob
+   * @param idToDelete the {@link MockId} of the blob to DELETE.
+   * @param blobStore the blob store that will perform the DELETE.
+   * @return the {@link MessageInfo} associated with the DELETE.
+   * @throws StoreException
+   */
+  private MessageInfo delete(MockId idToDelete, BlobStore blobStore) throws StoreException {
     MessageInfo info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE);
     ByteBuffer buffer = ByteBuffer.allocate(DELETE_RECORD_SIZE);
-    store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
+    blobStore.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
     deletedKeys.add(idToDelete);
     return info;
   }

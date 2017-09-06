@@ -105,6 +105,11 @@ public class MockPartitionId extends PartitionId {
     return partition.toString();
   }
 
+  @Override
+  public String toPathString() {
+    return String.valueOf(partition);
+  }
+
   public void cleanUp() {
     for (ReplicaId replicaId : replicaIds) {
       ((MockReplicaId) replicaId).cleanup();

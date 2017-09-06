@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -47,7 +48,7 @@ public class StorageManager {
    * @param config the settings for store configuration.
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param registry the {@link MetricRegistry} used for store-related metrics.
-   * @param replicas all the replicas on this disk.
+   * @param replicas all the replicas on this node.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
@@ -55,7 +56,7 @@ public class StorageManager {
    */
   public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
       List<? extends ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time) throws StoreException {
+      MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegateTime, Time time) throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
     this.time = time;
@@ -73,7 +74,7 @@ public class StorageManager {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager =
-          new DiskManager(disk, replicasForDisk, config, scheduler, metrics, keyFactory, recovery, hardDelete, time);
+          new DiskManager(disk, replicasForDisk, config, scheduler, metrics, keyFactory, recovery, hardDelete, clusterManagerWriteStatusDelegateTime, time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);

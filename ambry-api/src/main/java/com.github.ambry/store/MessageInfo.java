@@ -36,7 +36,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @todo: remove this constructor once MessageInfo V3 is enabled
    */
@@ -47,7 +47,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @todo: remove this constructor once MessageInfo V3 is enabled
    */
@@ -58,7 +58,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @todo: remove this constructor once MessageInfo V3 is enabled
@@ -70,7 +70,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @todo: remove this constructor once MessageInfo V3 is enabled
    */
   public MessageInfo(StoreKey key, long size) {
@@ -80,7 +80,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param crc the crc associated with this message. If unavailable, pass in null.
@@ -92,7 +92,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
@@ -106,7 +106,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
@@ -120,7 +120,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param accountId accountId of the blob
@@ -135,7 +135,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param containerId containerId of the blob
    * @param operationTimeMs operation time in ms
    */
@@ -146,7 +146,7 @@ public class MessageInfo {
   /**
    * Construct an instance of MessageInfo.
    * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message.
+   * @param size the size of this message in bytes.
    * @param deleted {@code true} if the message is deleted, {@code false} otherwise
    * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
    * @param crc the crc associated with this message. If unavailable, pass in null.
@@ -173,6 +173,10 @@ public class MessageInfo {
     return key;
   }
 
+  /**
+   * Get size of message in bytes
+   * @return size in bytes
+   */
   public long getSize() {
     return size;
   }

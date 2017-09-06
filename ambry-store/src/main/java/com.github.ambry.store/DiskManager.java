@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -63,7 +64,7 @@ class DiskManager {
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig config, ScheduledExecutorService scheduler,
       StorageManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time) {
+      MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
@@ -71,9 +72,8 @@ class DiskManager {
     longLivedTaskScheduler = Utils.newScheduler(1, true);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        String storeId = replica.getPartitionId().toString();
-        BlobStore store = new BlobStore(storeId, config, scheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
-            replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete, time);
+        BlobStore store = new BlobStore(replica, config, scheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
+             keyFactory, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
         stores.put(replica.getPartitionId(), store);
       }
     }
