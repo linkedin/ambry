@@ -565,7 +565,7 @@ public class AmbryRequestsTest {
   }
 
   /**
-   * Generates lag overrides in {@@code replicationManager} with each lag a number between {@code base} and
+   * Generates lag overrides in {@code replicationManager} with each lag a number between {@code base} and
    * {@code upperBound} both inclusive.
    * @param base the minimum value of lag (inclusive)
    * @param upperBound the maximum value of lag (inclusive)

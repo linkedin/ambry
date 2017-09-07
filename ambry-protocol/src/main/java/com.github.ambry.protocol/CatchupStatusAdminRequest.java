@@ -52,7 +52,7 @@ public class CatchupStatusAdminRequest extends AdminRequest {
     super(AdminRequestOrResponseType.CatchupStatus, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.acceptableLagInBytes = acceptableLagInBytes;
-    // parent size + version size + long size
+    // parent size + version size + acceptableLagInBytes size
     sizeInBytes = super.sizeInBytes() + Short.BYTES + Long.BYTES;
   }
 
