@@ -112,14 +112,14 @@ public class HelixAccountServiceTest {
    */
   @Before
   public void preCheck() {
-    System.out.println("Precheck the number of thread: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-    if (t != null) {
-      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
-          + ", thread stack trace: " + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: "
-          + t.isDaemon() + ", thread is interrupted: " + t.isInterrupted());
-      fail("Fails at precheck");
-    }
+//    System.out.println("Precheck the number of thread: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+//    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+//    if (t != null) {
+//      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
+//          + ", thread stack trace: " + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: "
+//          + t.isDaemon() + ", thread is interrupted: " + t.isInterrupted());
+//      fail("Fails at precheck");
+//    }
   }
 
   /**
@@ -128,26 +128,26 @@ public class HelixAccountServiceTest {
    */
   @After
   public void cleanUp() throws Exception {
-    System.out.println(
-        "AfterCheck before cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-    if (t != null) {
-      System.out.println("Thread state: " + t.getState() + ", thread name: " + t.getName() + ", thread stack trace: "
-          + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: " + t.isDaemon()
-          + ", thread is interrupted: " + t.isInterrupted());
-    }
+//    System.out.println(
+//        "AfterCheck before cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+//    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+//    if (t != null) {
+//      System.out.println("Thread state: " + t.getState() + ", thread name: " + t.getName() + ", thread stack trace: "
+//          + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: " + t.isDaemon()
+//          + ", thread is interrupted: " + t.isInterrupted());
+//    }
     if (accountService != null) {
       accountService.close();
       Thread.sleep(100);
     }
-    System.out.println(
-        "AfterCheck after cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-    t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-    if (t != null) {
-      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
-          + ", thread stack trace: " + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: "
-          + t.isDaemon() + ", thread is interrupted: " + t.isInterrupted());
-    }
+//    System.out.println(
+//        "AfterCheck after cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+//    t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
+//    if (t != null) {
+//      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
+//          + ", thread stack trace: " + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: "
+//          + t.isDaemon() + ", thread is interrupted: " + t.isInterrupted());
+//    }
     deleteStoreIfExists();
   }
 
@@ -159,6 +159,7 @@ public class HelixAccountServiceTest {
       System.out.println("Thread state: " + t.getState() + ", thread name: " + t.getName() + ", thread stack trace: "
           + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: " + t.isDaemon()
           + ", thread is interrupted: " + t.isInterrupted());
+      fail("After class fails");
     }
   }
 
