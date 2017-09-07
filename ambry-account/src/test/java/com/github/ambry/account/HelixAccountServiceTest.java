@@ -138,6 +138,7 @@ public class HelixAccountServiceTest {
     }
     if (accountService != null) {
       accountService.close();
+      Thread.sleep(100);
     }
     System.out.println(
         "AfterCheck after cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
