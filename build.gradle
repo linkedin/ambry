@@ -69,7 +69,6 @@ subprojects {
     task unitTest(type: Test) {
         testLogging {
             exceptionFormat = 'full'
-            showStandardStreams = true
         }
         testClassesDir = sourceSets.unitTest.output.classesDir
         classpath += sourceSets.unitTest.runtimeClasspath

@@ -60,7 +60,7 @@ public class HelixPropertyStoreConfig {
   // @todo This config by its nature should not appear in HelixPropertyStoreConfig. An ultimate fix would require
   // @todo separation between HelixAccount-related and Notifier-related configs, and this config should go to the
   // @todo HelixAccountServiceConfig.
-  public final int accountServicePollingIntervalMs;
+  public final int accountUpdaterPollingIntervalMs;
 
   /**
    * The timeout in ms to shut down the account updater of {@code HelixAccountService}.
@@ -83,11 +83,11 @@ public class HelixPropertyStoreConfig {
         INVALID_ZK_CLIENT_CONNECT_STRING);
     rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path",
         "/ambry/defaultCluster/helixPropertyStore");
-    accountServicePollingIntervalMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms",
+    accountUpdaterPollingIntervalMs =
+        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms",
             60 * 60 * 1000, 0, Integer.MAX_VALUE);
     accountUpdaterShutDownTimeoutMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.service.shut.down.timeout.ms",
+        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.updater.shut.down.timeout.ms",
             60 * 1000, 1, Integer.MAX_VALUE);
   }
 }

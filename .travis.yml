@@ -1,6 +1,6 @@
 language: java
 script:
-  - ./gradlew :ambry-account:build && ./gradlew codeCoverageReport
+  - ./gradlew build && ./gradlew codeCoverageReport
 sudo: required
 jdk:
   - oraclejdk8

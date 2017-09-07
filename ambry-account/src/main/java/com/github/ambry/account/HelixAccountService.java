@@ -154,12 +154,12 @@ class HelixAccountService implements AccountService {
     };
     updater.run();
     if (scheduler != null) {
-      int initialDelay = new Random().nextInt(storeConfig.accountServicePollingIntervalMs + 1);
-      scheduler.scheduleAtFixedRate(updater, initialDelay, storeConfig.accountServicePollingIntervalMs,
+      int initialDelay = new Random().nextInt(storeConfig.accountUpdaterPollingIntervalMs + 1);
+      scheduler.scheduleAtFixedRate(updater, initialDelay, storeConfig.accountUpdaterPollingIntervalMs,
           TimeUnit.MILLISECONDS);
       logger.info(
           "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
-          initialDelay, storeConfig.accountServicePollingIntervalMs);
+          initialDelay, storeConfig.accountUpdaterPollingIntervalMs);
     }
     isOpen = true;
   }
@@ -297,27 +297,25 @@ class HelixAccountService implements AccountService {
 
   @Override
   public void close() {
-    System.out.println("isOpen : "+ isOpen);
     if (isOpen) {
-      try {
-        isOpen = false;
-        if (scheduler != null) {
-          System.out.println("Schedule shutdown timeout: " + storeConfig.accountUpdaterShutDownTimeoutMs + " ms");
-          scheduler.shutdown();
+      isOpen = false;
+      if (scheduler != null) {
+        scheduler.shutdown();
+        try {
           if (!scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS)) {
-            System.err.println("ExecutorService for account updater is not shut down successfully");
+            logger.warn("Scheduler for account updater is not shut down successfully");
             scheduler.shutdownNow();
             if (!scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS)) {
-              logger.error("ExecutorService for account updater is not shut down successfully");
-              System.err.println("ExecutorService for account updater is not shut down successfully");
+              logger.error("Scheduler for account updater is not shut down successfully");
             }
-          } else {
-            System.out.println("Scheduler is successfully shut down.");
           }
+        } catch (InterruptedException e) {
+          scheduler.shutdownNow();
+          Thread.currentThread().interrupted();
+        } catch (Exception e) {
+          logger.error("Exception occurred when closing HelixAccountService.", e);
         }
         helixStore.stop();
-      } catch (Exception e) {
-        logger.error("Exception occurred when closing HelixAccountService.", e);
       }
     }
   }

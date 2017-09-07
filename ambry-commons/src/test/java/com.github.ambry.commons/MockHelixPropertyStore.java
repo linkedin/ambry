@@ -62,7 +62,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
 
   @Override
   public void stop() {
-    throw new IllegalStateException("Not implemented");
+    // no-op
   }
 
   @Override

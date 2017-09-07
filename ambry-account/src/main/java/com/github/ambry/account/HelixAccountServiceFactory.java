@@ -66,7 +66,7 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
             + "zkClientConnectionTimeoutMs={}, rootPath={}", storeConfig.zkClientConnectString,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);
     ScheduledExecutorService scheduler =
-        storeConfig.accountServicePollingIntervalMs > 0 ? Utils.newScheduler(1, HELIX_ACCOUNT_UPDATER_PREFIX, false)
+        storeConfig.accountUpdaterPollingIntervalMs > 0 ? Utils.newScheduler(1, HELIX_ACCOUNT_UPDATER_PREFIX, false)
             : null;
     HelixAccountService helixAccountService =
         new HelixAccountService(helixStore, accountServiceMetrics, notifier, scheduler, storeConfig);

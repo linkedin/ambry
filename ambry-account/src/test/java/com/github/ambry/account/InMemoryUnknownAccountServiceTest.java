@@ -22,11 +22,8 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
-import static com.github.ambry.account.HelixAccountServiceFactory.*;
-import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -49,8 +46,7 @@ public class InMemoryUnknownAccountServiceTest {
     }
   }
 
-
-//  @Test
+  @Test
   public void testAllMethods() throws Exception {
     assertEquals("Wrong account", null, accountService.getAccountById(Utils.getRandomShort(random)));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById((short) -1));
@@ -74,7 +70,7 @@ public class InMemoryUnknownAccountServiceTest {
   /**
    * Tests {@code null} inputs.
    */
-//  @Test
+  @Test
   public void testNullInputs() {
     try {
       accountService.updateAccounts(null);
@@ -93,7 +89,7 @@ public class InMemoryUnknownAccountServiceTest {
   /**
    * Tests adding/removing {@link Consumer}.
    */
-//  @Test
+  @Test
   public void testAddRemoveConsumer() {
     List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
     // add consumers

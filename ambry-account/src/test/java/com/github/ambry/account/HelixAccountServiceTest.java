@@ -36,15 +36,12 @@ import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
-import static com.github.ambry.account.HelixAccountServiceFactory.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
@@ -102,24 +99,9 @@ public class HelixAccountServiceTest {
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     notifier = new MockNotifier<>();
     mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
-  }
-
-  /**
-   * Ensures no thread for background updating accounts.
-   */
-  @Before
-  public void preCheck() {
-//    System.out.println("Precheck the number of thread: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-//    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-//    if (t != null) {
-//      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
-//          + ", thread stack trace: " + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: "
-//          + t.isDaemon() + ", thread is interrupted: " + t.isInterrupted());
-//      fail("Fails at precheck");
-//    }
   }
 
   /**
@@ -128,39 +110,10 @@ public class HelixAccountServiceTest {
    */
   @After
   public void cleanUp() throws Exception {
-//    System.out.println(
-//        "AfterCheck before cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-//    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-//    if (t != null) {
-//      System.out.println("Thread state: " + t.getState() + ", thread name: " + t.getName() + ", thread stack trace: "
-//          + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: " + t.isDaemon()
-//          + ", thread is interrupted: " + t.isInterrupted());
-//    }
     if (accountService != null) {
       accountService.close();
-      Thread.sleep(100);
     }
-//    System.out.println(
-//        "AfterCheck after cleaning up number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-//    t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-//    if (t != null) {
-//      System.out.println("Thread should not exist. Thread state: " + t.getState() + ", thread name: " + t.getName()
-//          + ", thread stack trace: " + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: "
-//          + t.isDaemon() + ", thread is interrupted: " + t.isInterrupted());
-//    }
     deleteStoreIfExists();
-  }
-
-  @AfterClass
-  public static void finalCheck() {
-    System.out.println("FinalCheck number of thread is: " + numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
-    Thread t = getThreadByThisName(HELIX_ACCOUNT_UPDATER_PREFIX);
-    if (t != null) {
-      System.out.println("Thread state: " + t.getState() + ", thread name: " + t.getName() + ", thread stack trace: "
-          + t.getStackTrace() + ", thread is alive: " + t.isAlive() + ", thread is daemon: " + t.isDaemon()
-          + ", thread is interrupted: " + t.isInterrupted());
-      fail("After class fails");
-    }
   }
 
   /**
@@ -374,23 +327,23 @@ public class HelixAccountServiceTest {
   /**
    * Tests a number of bad inputs.
    */
-//  @Test
+  @Test
   public void testNullInputs() throws IOException {
     try {
-      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier).getAccountService();
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
 
     try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier).getAccountService();
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
     accountService =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null).getAccountService();
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null).getAccountService();
     accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
@@ -655,15 +608,16 @@ public class HelixAccountServiceTest {
   @Test
   public void testBackgroundUpdater() throws Exception {
     helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms", "1");
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "1");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     CountDownLatch latch = new CountDownLatch(1);
     mockHelixAccountServiceFactory.getHelixStore(storeConfig).setReadLatch(latch);
-    assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(updaterThreadPrefix));
     awaitLatchOrTimeout(latch, 100);
   }
 
@@ -676,13 +630,14 @@ public class HelixAccountServiceTest {
   @Test
   public void testDisableBackgroundUpdater() throws Exception {
     helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms", "0");
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "0");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
     MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
     accountService = mockHelixAccountServiceFactory.getAccountService();
-    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(HELIX_ACCOUNT_UPDATER_PREFIX));
+    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(updaterThreadPrefix));
   }
 
   /**
