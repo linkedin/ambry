@@ -183,7 +183,7 @@ class NettyRequest implements RestRequest {
         }
         allArgs.put(e.getKey(), value);
       } else {
-        logger.info("Encountered blacklisted query parameter {} in request {}", e, request);
+        logger.debug("Encountered blacklisted query parameter {} in request {}", e, request);
       }
     }
 
