@@ -47,6 +47,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -865,7 +866,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void handleRequest(HttpRequest httpRequest) throws Exception {
     writeCallbacksToVerify.clear();
-    request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics);
+    request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet());
     restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics);
     restResponseChannel.setRequest(request);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");

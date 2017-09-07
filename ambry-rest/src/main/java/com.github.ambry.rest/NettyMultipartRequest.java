@@ -30,6 +30,7 @@ import io.netty.util.ReferenceCountUtil;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
@@ -57,13 +58,15 @@ class NettyMultipartRequest extends NettyRequest {
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param channel the {@link Channel} over which the {@code request} has been received.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
+   * @param blacklistedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
    * @throws IllegalArgumentException if {@code request} is null or if the HTTP method defined in {@code request} is
    *                                    anything other than POST.
    * @throws RestServiceException if the HTTP method defined in {@code request} is not recognized as a
    *                                {@link RestMethod}.
    */
-  NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics) throws RestServiceException {
-    super(request, channel, nettyMetrics);
+  NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
+    Set<String> blacklistedQueryParams) throws RestServiceException {
+    super(request, channel, nettyMetrics, blacklistedQueryParams);
     // reset auto read state.
     channel.config().setRecvByteBufAllocator(savedAllocator);
     setAutoRead(true);
