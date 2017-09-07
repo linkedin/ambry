@@ -297,6 +297,7 @@ class HelixAccountService implements AccountService {
 
   @Override
   public void close() {
+    System.out.println("isOpen : "+ isOpen);
     if (isOpen) {
       try {
         isOpen = false;
@@ -310,6 +311,8 @@ class HelixAccountService implements AccountService {
               logger.error("ExecutorService for account updater is not shut down successfully");
               System.err.println("ExecutorService for account updater is not shut down successfully");
             }
+          } else {
+            System.out.println("Scheduler is successfully shut down.");
           }
         }
         helixStore.stop();
