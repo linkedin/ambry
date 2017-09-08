@@ -103,8 +103,8 @@ public class NettyConfig {
   public final int nettyServerRequestBufferWatermark;
 
   /**
-   * A comma separated list of query parameters that should not be exposed as {@link com.github.ambry.rest.RestRequest}
-   * arguments.
+   * A comma separated list of query parameters that should not be honored when forwarded to the
+   * {@link com.github.ambry.rest.BlobStorageService} layer.
    */
   @Config("netty.server.blacklisted.query.params")
   @Default("")
