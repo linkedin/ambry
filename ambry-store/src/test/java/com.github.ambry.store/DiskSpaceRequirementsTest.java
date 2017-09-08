@@ -14,15 +14,17 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.util.Random;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
 
+/**
+ * Test {@link DiskSpaceRequirements} for expected behavior.
+ */
 public class DiskSpaceRequirementsTest {
-  public static final Random RANDOM = new Random();
 
   /**
    * Test invalid constructor arguments
@@ -39,9 +41,9 @@ public class DiskSpaceRequirementsTest {
    */
   @Test
   public void validArgumentsTest() {
-    long segmentSizeInBytes = Utils.getRandomLong(RANDOM, Long.MAX_VALUE) + 1;
-    long segmentsNeeded = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
-    long swapUsed = Utils.getRandomLong(RANDOM, Long.MAX_VALUE);
+    long segmentSizeInBytes = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE) + 1;
+    long segmentsNeeded = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    long swapUsed = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
     DiskSpaceRequirements requirements = new DiskSpaceRequirements(segmentSizeInBytes, segmentsNeeded, swapUsed);
     assertEquals("segment size doesn't match", segmentSizeInBytes, requirements.getSegmentSizeInBytes());
     assertEquals("segments needed doesn't match", segmentsNeeded, requirements.getSegmentsNeeded());

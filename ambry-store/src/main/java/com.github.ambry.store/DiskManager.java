@@ -67,15 +67,15 @@ class DiskManager {
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       StorageManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService scheduler) throws StoreException {
+      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService scheduler) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
-    diskSpaceAllocator =
-        new DiskSpaceAllocator(new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
-            diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
+    diskSpaceAllocator = diskManagerConfig.diskManagerEnableDiskSpaceAllocator ? new DiskSpaceAllocator(
+        new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
+        diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics) : null;
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
@@ -95,7 +95,7 @@ class DiskManager {
    */
   void start() throws InterruptedException {
     long startTimeMs = time.milliseconds();
-    final AtomicInteger numFailures = new AtomicInteger(0);
+    final AtomicInteger numStoreFailures = new AtomicInteger(0);
     try {
       checkMountPathAccessible();
 
@@ -105,7 +105,7 @@ class DiskManager {
           try {
             partitionAndStore.getValue().start();
           } catch (Exception e) {
-            numFailures.incrementAndGet();
+            numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the partition" + partitionAndStore.getKey(), e);
           }
         }, false);
@@ -115,23 +115,26 @@ class DiskManager {
       for (Thread startupThread : startupThreads) {
         startupThread.join();
       }
-      if (numFailures.get() > 0) {
+      if (numStoreFailures.get() > 0) {
         logger.error(
-            "Could not start " + numFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
+            "Could not start " + numStoreFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
 
-      // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
-      // from each store.
-      List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
-      for (BlobStore blobStore : stores.values()) {
-        if (blobStore.isStarted()) {
-          DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
-          if (requirements != null) {
-            requirementsList.add(requirements);
+      if (diskSpaceAllocator != null) {
+        // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
+        // from each store.
+        List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
+        for (BlobStore blobStore : stores.values()) {
+          if (blobStore.isStarted()) {
+            DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
+            if (requirements != null) {
+              requirementsList.add(requirements);
+            }
           }
         }
+        diskSpaceAllocator.initializePool(requirementsList);
       }
-      diskSpaceAllocator.initializePool(requirementsList);
+
       compactionManager.enable();
 
       running = true;
@@ -139,7 +142,12 @@ class DiskManager {
       logger.error("Error while starting the DiskManager for " + disk.getMountPath()
           + " ; no stores will be accessible on this disk.", e);
     } finally {
-      metrics.totalStoreStartFailures.inc(!running ? stores.size() : numFailures.get());
+      if (!running) {
+        metrics.totalStoreStartFailures.inc(stores.size());
+        metrics.diskDownCount.inc();
+      } else {
+        metrics.totalStoreStartFailures.inc(numStoreFailures.get());
+      }
       metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
     }
   }

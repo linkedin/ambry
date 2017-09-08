@@ -1079,7 +1079,7 @@ public class BlobStoreCompactorTest {
     }
 
     assertFalse("No compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
-    assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse());
+    assertEquals("Swap segments should not be found", 0, compactor.getSwapSegmentsInUse());
     long logSegmentSizeAfterCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
     long indexSegmentCountAfterCompaction = state.index.getIndexSegments().size();

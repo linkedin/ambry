@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -373,7 +374,11 @@ class Log implements Write {
   private File allocate(String filename, long size) throws IOException {
     File segmentFile = new File(dataDir, filename);
     if (!segmentFile.exists()) {
-      diskSpaceAllocator.allocate(segmentFile, size);
+      if (diskSpaceAllocator != null) {
+        diskSpaceAllocator.allocate(segmentFile, size);
+      } else {
+        Utils.preAllocateFileIfNeeded(segmentFile, size);
+      }
     }
     return segmentFile;
   }
@@ -386,7 +391,11 @@ class Log implements Write {
   private void free(LogSegment logSegment) throws IOException {
     File segmentFile = logSegment.getView().getFirst();
     logSegment.close();
-    diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
+    if (diskSpaceAllocator != null) {
+      diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
+    } else if (!segmentFile.delete()) {
+      throw new IOException("Could not delete segment file: " + segmentFile.getAbsolutePath());
+    }
   }
 
   /**

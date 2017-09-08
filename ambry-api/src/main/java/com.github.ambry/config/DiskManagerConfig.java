@@ -28,9 +28,15 @@ public class DiskManagerConfig {
   @Default("1")
   public final int diskManagerRequiredSwapSegmentsPerSize;
 
+  @Config("disk.manager.enable.disk.space.allocator")
+  @Default("true")
+  public final boolean diskManagerEnableDiskSpaceAllocator;
+
   public DiskManagerConfig(VerifiableProperties verifiableProperties) {
     diskManagerReserveFileDirName = verifiableProperties.getString("disk.reserve.file.dir.name", "reserve-pool");
     diskManagerRequiredSwapSegmentsPerSize =
         verifiableProperties.getIntInRange("disk.required.swap.segments.per.size", 1, 0, 1000);
+    diskManagerEnableDiskSpaceAllocator =
+        verifiableProperties.getBoolean("disk.manager.enable.disk.space.allocator", true);
   }
 }

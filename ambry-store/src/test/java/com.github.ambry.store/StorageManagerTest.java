@@ -44,6 +44,9 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 
+/**
+ * Test {@link StorageManager} and {@link DiskManager}
+ */
 public class StorageManagerTest {
   private static final Random RANDOM = new Random();
 
@@ -88,8 +91,8 @@ public class StorageManagerTest {
         downReplicaCount++;
       }
     }
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     Utils.deleteFileOrDirectory(new File(mountPathToDelete));
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(0,
@@ -194,7 +197,10 @@ public class StorageManagerTest {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<String> mountPaths = dataNode.getMountPaths();
-
+    // There should be 1 unallocated segment per replica on a mount path (each replica can have 2 segments) and the
+    // swap segments.
+    int expectedSegmentsInPool =
+        (replicas.size() / mountPaths.size()) + diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize;
     // Test that StorageManager starts correctly when segments are created in the reserve pool.
     // Startup/shutdown one more time to verify the restart scenario.
     for (int i = 0; i < 2; i++) {
@@ -209,7 +215,8 @@ public class StorageManagerTest {
       assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
       for (String mountPath : dataNode.getMountPaths()) {
         DiskSpaceAllocatorTest.verifyPoolState(new File(mountPath, diskManagerConfig.diskManagerReserveFileDirName),
-            new DiskSpaceAllocatorTest.ExpectedStateBuilder().add(storeConfig.storeSegmentSizeInBytes, 4).map);
+            new DiskSpaceAllocatorTest.ExpectedState().add(storeConfig.storeSegmentSizeInBytes,
+                expectedSegmentsInPool));
       }
       shutdownAndAssertStoresInaccessible(storageManager, replicas);
       assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
@@ -228,7 +235,7 @@ public class StorageManagerTest {
         new File(reservePoolDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
     Utils.deleteFileOrDirectory(fileSizeDir);
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
-    assertTrue("File already exists", fileSizeDir.createNewFile());
+    assertTrue("File creation should have succeeded", fileSizeDir.createNewFile());
     storageManager.start();
     checkStoreAccessibility(replicas, diskToFail, storageManager);
     Map<String, Counter> counters = metricRegistry.getCounters();

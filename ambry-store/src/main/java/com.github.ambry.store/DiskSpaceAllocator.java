@@ -18,6 +18,8 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.nio.file.CopyOption;
+import java.nio.file.Files;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -53,16 +55,16 @@ class DiskSpaceAllocator {
       pathname -> pathname.isFile() && pathname.getName().startsWith(RESERVE_FILE_PREFIX);
   private static final FileFilter FILE_SIZE_DIR_FILTER =
       pathname -> pathname.isDirectory() && getFileSizeForDirName(pathname.getName()) != null;
-  private final ReserveFileMap reserveFiles;
   private final File reserveDir;
   private final long requiredSwapSegmentsPerSize;
   private final StorageManagerMetrics metrics;
-  private volatile boolean poolInitialized = false;
+  private ReserveFileMap reserveFiles;
+  private PoolState poolState = PoolState.NOT_INVENTORIED;
 
   /**
-   * This constructor will create the reserve directory if it does not exist and inventory any existing reserve files
-   * in the pool (adding them to the in-memory map). Any files that already exist in the pool can be checked out prior
-   * to calling {@link #initializePool(Collection)}. If a file of the correct size does not yet exist, a new file
+   * This constructor will  inventory any existing reserve files in the pool (adding them to the in-memory map) but not
+   * create the reserve directory if it does not exist. Any files that already exist in the pool can be checked out
+   * prior to calling {@link #initializePool(Collection)}. If a file of the correct size does not yet exist, a new file
    * will be allocated at runtime.
    * @param reserveDir the directory where reserve files will reside. If this directory does not exist yet, it will
    *                   be created.
@@ -70,16 +72,17 @@ class DiskSpaceAllocator {
    * @param metrics a {@link StorageManagerMetrics} instance.
    * @throws StoreException
    */
-  DiskSpaceAllocator(File reserveDir, long requiredSwapSegmentsPerSize, StorageManagerMetrics metrics)
-      throws StoreException {
+  DiskSpaceAllocator(File reserveDir, long requiredSwapSegmentsPerSize, StorageManagerMetrics metrics) {
     this.reserveDir = reserveDir;
     this.requiredSwapSegmentsPerSize = requiredSwapSegmentsPerSize;
     this.metrics = metrics;
     try {
-      prepareDirectory(reserveDir);
-      reserveFiles = inventoryExistingReserveFiles();
+      if (reserveDir.isDirectory()) {
+        reserveFiles = inventoryExistingReserveFiles();
+        poolState = PoolState.INVENTORIED;
+      }
     } catch (Exception e) {
-      throw new StoreException("Could not load from reserve directory.", e, StoreErrorCodes.Initialization_Error);
+      logger.error("Could not inventory preexisting reserve directory", e);
     }
   }
 
@@ -106,6 +109,8 @@ class DiskSpaceAllocator {
    *     system, and the call fails, pool initialization will fail.
    *   </li>
    * </ol>
+   * WARNING: No calls to {@link #allocate(File, long)} and {@link #free(File, long)} may occur while this method is
+   *          being executed.
    * @param requirementsList a collection of {@link DiskSpaceRequirements}s objects that describe the number and
    *                         segment size needed by each store.
    * @throws StoreException if the pool could not be allocated to meet the provided requirements
@@ -113,13 +118,19 @@ class DiskSpaceAllocator {
   void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
     long startTime = System.currentTimeMillis();
     try {
+      if (poolState == PoolState.NOT_INVENTORIED) {
+        prepareDirectory(reserveDir);
+        reserveFiles = inventoryExistingReserveFiles();
+        poolState = PoolState.INVENTORIED;
+      }
       Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
       deleteExtraSegments(overallRequirements);
       addRequiredSegments(overallRequirements);
       // TODO fill the disk with additional swap segments
-      poolInitialized = true;
+      poolState = PoolState.INITIALIZED;
     } catch (Exception e) {
       metrics.diskSpaceAllocatorInitFailureCount.inc();
+      poolState = PoolState.NOT_INVENTORIED;
       throw new StoreException("Exception while initializing DiskSpaceAllocator pool", e,
           StoreErrorCodes.Initialization_Error);
     } finally {
@@ -137,7 +148,7 @@ class DiskSpaceAllocator {
    * @throws IOException if the file could not be moved to the destination.
    */
   void allocate(File destinationFile, long sizeInBytes) throws IOException {
-    if (!poolInitialized) {
+    if (poolState != PoolState.INITIALIZED) {
       logger.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
           destinationFile.getAbsolutePath());
       metrics.diskSpaceAllocatorAllocBeforeInitCount.inc();
@@ -145,16 +156,22 @@ class DiskSpaceAllocator {
     if (destinationFile.exists()) {
       throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
     }
-    File reserveFile = reserveFiles.remove(sizeInBytes);
-    if (reserveFile == null) {
-      logger.info("Segment of size {} not found in pool; attempting to create a new preallocated file", sizeInBytes);
-      metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
-      reserveFile = createReserveFile(sizeInBytes);
-    }
-    if (destinationFile.exists() || !reserveFile.renameTo(destinationFile)) {
-      reserveFiles.add(sizeInBytes, reserveFile);
-      throw new IOException("Error while moving reserve file: " + reserveFile.getAbsolutePath() + " to location: "
-          + destinationFile.getAbsolutePath());
+    if (poolState == PoolState.NOT_INVENTORIED) {
+      // If the pool is not yet created or otherwise unusable, just allocate the file at the destination location.
+      Utils.preAllocateFileIfNeeded(destinationFile, sizeInBytes);
+    } else {
+      File reserveFile = reserveFiles.remove(sizeInBytes);
+      if (reserveFile == null) {
+        logger.info("Segment of size {} not found in pool; attempting to create a new preallocated file", sizeInBytes);
+        metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
+        reserveFile = createReserveFile(sizeInBytes);
+      }
+      try {
+        Files.move(reserveFile.toPath(), destinationFile.toPath());
+      } catch (IOException e) {
+        reserveFiles.add(sizeInBytes, reserveFile);
+        throw e;
+      }
     }
   }
 
@@ -165,18 +182,18 @@ class DiskSpaceAllocator {
    * @throws IOException if the file to return does not exist or cannot be cleaned or recreated correctly.
    */
   void free(File fileToReturn, long sizeInBytes) throws IOException {
-    if (!poolInitialized) {
+    if (poolState != PoolState.INITIALIZED) {
       logger.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
           fileToReturn.getAbsolutePath());
       metrics.diskSpaceAllocatorFreeBeforeInitCount.inc();
     }
     // For now, we delete the file and create a new one. Newer linux kernel versions support
     // additional fallocate flags, which will be useful for cleaning up returned files.
-    if (!fileToReturn.delete()) {
-      throw new IOException("Error while cleaning up returned file: " + fileToReturn.getAbsolutePath());
+    Files.delete(fileToReturn.toPath());
+    if (poolState == PoolState.INITIALIZED) {
+      fileToReturn = createReserveFile(sizeInBytes);
+      reserveFiles.add(sizeInBytes, fileToReturn);
     }
-    fileToReturn = createReserveFile(sizeInBytes);
-    reserveFiles.add(sizeInBytes, fileToReturn);
   }
 
   /**
@@ -378,5 +395,25 @@ class DiskSpaceAllocator {
     Set<Long> getFileSizeSet() {
       return internalMap.keySet();
     }
+  }
+
+  /**
+   * Represents the state of pool initialization.
+   */
+  private enum PoolState {
+    /**
+     * If the pool is not yet created/inventoried or failed initialization.
+     */
+    NOT_INVENTORIED,
+
+    /**
+     * If the pool has been inventoried but not initialized to match new {@link DiskSpaceRequirements}.
+     */
+    INVENTORIED,
+
+    /**
+     * If the pool was successfully initialized.
+     */
+    INITIALIZED
   }
 }

@@ -64,12 +64,7 @@ public class StorageManager {
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
       DiskId disk = replica.getDiskId();
-      List<ReplicaId> replicasForDisk = diskToReplicaMap.get(disk);
-      if (replicasForDisk == null) {
-        replicasForDisk = new ArrayList<>();
-        diskToReplicaMap.put(disk, replicasForDisk);
-      }
-      replicasForDisk.add(replica);
+      diskToReplicaMap.computeIfAbsent(disk, key -> new ArrayList<>()).add(replica);
     }
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
