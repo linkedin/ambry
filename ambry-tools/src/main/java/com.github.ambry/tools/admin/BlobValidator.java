@@ -543,6 +543,12 @@ public class BlobValidator implements Closeable {
       } else if (blobProperties.getServiceId() == null || that.blobProperties.getServiceId() == null) {
         mismatchDetails =
             "Service ID mismatch: " + blobProperties.getServiceId() + " v/s " + that.blobProperties.getServiceId();
+      } else if (blobProperties.getAccountId() != that.blobProperties.getAccountId()) {
+        mismatchDetails =
+            "AccountId mismatch: " + blobProperties.getAccountId() + " v/s " + that.blobProperties.getAccountId();
+      } else if (blobProperties.getContainerId() != that.blobProperties.getContainerId()) {
+        mismatchDetails =
+            "ContainerId mismatch: " + blobProperties.getContainerId() + " v/s " + that.blobProperties.getContainerId();
       }
       return mismatchDetails;
     }
