@@ -86,7 +86,8 @@ class DumpDataHelper {
           expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
           isExpired = isExpired(expiresAtMs, currentTimeInMs);
           blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
-              + ", isExpired " + isExpired;
+              + ", isExpired " + isExpired + " accountId " + props.getAccountId() + " containerId "
+              + props.getContainerId();
           ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
           usermetadata = " Metadata - size " + metadata.capacity();
           BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
