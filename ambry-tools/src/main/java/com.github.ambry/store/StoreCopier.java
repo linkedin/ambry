@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -153,6 +154,7 @@ public class StoreCopier implements Closeable {
   }
 
   private static final Logger logger = LoggerFactory.getLogger(StoreCopier.class);
+  private static final DecimalFormat df = new DecimalFormat(".###");
 
   private final String storeId;
   private final Store src;
@@ -271,7 +273,7 @@ public class StoreCopier implements Closeable {
       }
       token = findInfo.getFindToken();
       logger.info("[{}] [{}] {}% copied", Thread.currentThread().getName(), storeId,
-          token.getBytesRead() * 100 / src.getSizeInBytes());
+          df.format(token.getBytesRead() * 100.0 / src.getSizeInBytes()));
     } while (!token.equals(lastToken));
     return token;
   }
