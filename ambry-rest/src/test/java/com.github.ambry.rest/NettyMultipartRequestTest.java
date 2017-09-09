@@ -46,6 +46,7 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -90,7 +91,8 @@ public class NettyMultipartRequestTest {
       HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
       MockChannel channel = new MockChannel();
       RecvByteBufAllocator expected = channel.config().getRecvByteBufAllocator();
-      NettyMultipartRequest request = new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS);
+      NettyMultipartRequest request =
+          new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS, Collections.emptySet());
       assertTrue("Auto-read should not have been changed", channel.config().isAutoRead());
       assertEquals("RecvByteBufAllocator should not have changed", expected,
           channel.config().getRecvByteBufAllocator());
@@ -102,7 +104,7 @@ public class NettyMultipartRequestTest {
     for (HttpMethod method : methods) {
       HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
       try {
-        new NettyMultipartRequest(httpRequest, new MockChannel(), NETTY_METRICS);
+        new NettyMultipartRequest(httpRequest, new MockChannel(), NETTY_METRICS, Collections.emptySet());
         fail("Creation of NettyMultipartRequest should have failed for " + method);
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -249,7 +251,7 @@ public class NettyMultipartRequestTest {
     HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, null);
     NettyMultipartRequest request =
-        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS);
+        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet());
     assertTrue("Request channel is not open", request.isOpen());
     // insert random data
     HttpContent httpContent = new DefaultHttpContent(Unpooled.wrappedBuffer(TestUtils.getRandomBytes(10)));
@@ -317,7 +319,8 @@ public class NettyMultipartRequestTest {
     files[0] = new InMemoryFile(RestUtils.MultipartPost.BLOB_PART, ByteBuffer.wrap(TestUtils.getRandomBytes(256)));
     encoder = createEncoder(httpRequest, files);
     encoder.addBodyAttribute("dummyKey", "dummyValue");
-    request = new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS);
+    request =
+        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet());
     assertTrue("Request channel is not open", request.isOpen());
     while (!encoder.isEndOfInput()) {
       // Sending null for ctx because the encoder is OK with that.
@@ -361,7 +364,7 @@ public class NettyMultipartRequestTest {
     }
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, parts);
     NettyMultipartRequest request =
-        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS);
+        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet());
     assertTrue("Request channel is not open", request.isOpen());
     while (!encoder.isEndOfInput()) {
       // Sending null for ctx because the encoder is OK with that.

@@ -60,6 +60,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -90,9 +91,10 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link NettyRequest}.
  */
 public class NettyRequestTest {
-
   private static final int GENERATED_CONTENT_SIZE = 10240;
   private static final int GENERATED_CONTENT_PART_COUNT = 10;
+  private static String BLACKLISTED_QUERY_PARAM = "paramBlacklisted";
+  private static final Set<String> BLACKLISTED_QUERY_PARAM_SET = Collections.singleton(BLACKLISTED_QUERY_PARAM);
   private static final int DEFAULT_WATERMARK;
 
   static {
@@ -128,6 +130,7 @@ public class NettyRequestTest {
     params.put("overLoadedKey", values);
     params.put("paramNoValue", null);
     params.put("paramNoValueInUriButValueInHeader", null);
+    params.put(BLACKLISTED_QUERY_PARAM, values);
 
     StringBuilder uriAttachmentBuilder = new StringBuilder("?");
     for (Map.Entry<String, List<String>> param : params.entrySet()) {
@@ -213,7 +216,7 @@ public class NettyRequestTest {
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "");
     // HttpRequest null.
     try {
-      new NettyRequest(null, new MockChannel(), new NettyMetrics(new MetricRegistry()));
+      new NettyRequest(null, new MockChannel(), new NettyMetrics(new MetricRegistry()), BLACKLISTED_QUERY_PARAM_SET);
       fail("Provided null HttpRequest to NettyRequest, yet it did not fail");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -221,7 +224,7 @@ public class NettyRequestTest {
 
     // Channel null.
     try {
-      new NettyRequest(httpRequest, null, new NettyMetrics(new MetricRegistry()));
+      new NettyRequest(httpRequest, null, new NettyMetrics(new MetricRegistry()), BLACKLISTED_QUERY_PARAM_SET);
       fail("Provided null Channel to NettyRequest, yet it did not fail");
     } catch (IllegalArgumentException e) {
       // expected. nothing to do.
@@ -628,7 +631,8 @@ public class NettyRequestTest {
     if (headers != null) {
       httpRequest.headers().set(headers);
     }
-    NettyRequest nettyRequest = new NettyRequest(httpRequest, channel, new NettyMetrics(metricRegistry));
+    NettyRequest nettyRequest =
+        new NettyRequest(httpRequest, channel, new NettyMetrics(metricRegistry), BLACKLISTED_QUERY_PARAM_SET);
     assertEquals("Auto-read is in an invalid state",
         (!httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT))
             || NettyRequest.bufferWatermark <= 0, channel.config().isAutoRead());
@@ -713,15 +717,20 @@ public class NettyRequestTest {
     }
     Map<String, Integer> keyValueCount = new HashMap<String, Integer>();
     for (Map.Entry<String, List<String>> param : params.entrySet()) {
-      assertTrue("Did not find key: " + param.getKey(), receivedArgs.containsKey(param.getKey()));
-      if (!keyValueCount.containsKey(param.getKey())) {
-        keyValueCount.put(param.getKey(), 0);
-      }
+      boolean containsKey = receivedArgs.containsKey(param.getKey());
+      if (BLACKLISTED_QUERY_PARAM_SET.contains(param.getKey())) {
+        assertFalse("Should not contain blacklisted key: " + param.getKey(), containsKey);
+      } else {
+        assertTrue("Did not find key: " + param.getKey(), containsKey);
+        if (!keyValueCount.containsKey(param.getKey())) {
+          keyValueCount.put(param.getKey(), 0);
+        }
 
-      if (param.getValue() != null) {
-        boolean containsAllValues = receivedArgs.get(param.getKey()).containsAll(param.getValue());
-        assertTrue("Did not find all values expected for key: " + param.getKey(), containsAllValues);
-        keyValueCount.put(param.getKey(), keyValueCount.get(param.getKey()) + param.getValue().size());
+        if (param.getValue() != null) {
+          boolean containsAllValues = receivedArgs.get(param.getKey()).containsAll(param.getValue());
+          assertTrue("Did not find all values expected for key: " + param.getKey(), containsAllValues);
+          keyValueCount.put(param.getKey(), keyValueCount.get(param.getKey()) + param.getValue().size());
+        }
       }
     }
 

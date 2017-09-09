@@ -109,11 +109,13 @@ class NettyRequest implements RestRequest {
    * @param request the {@link HttpRequest} that needs to be wrapped.
    * @param channel the {@link Channel} over which the {@code request} has been received.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
+   * @param blacklistedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
    * @throws IllegalArgumentException if {@code request} is null.
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
    *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
-  public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics) throws RestServiceException {
+  public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
+      Set<String> blacklistedQueryParams) throws RestServiceException {
     if (request == null || channel == null) {
       throw new IllegalArgumentException("Received null argument(s)");
     }
@@ -171,14 +173,18 @@ class NettyRequest implements RestRequest {
 
     // query params.
     for (Map.Entry<String, List<String>> e : query.parameters().entrySet()) {
-      StringBuilder value = null;
-      if (e.getValue() != null) {
-        StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
-        if (combinedValues.length() > 0) {
-          value = combinedValues;
+      if (!blacklistedQueryParams.contains(e.getKey())) {
+        StringBuilder value = null;
+        if (e.getValue() != null) {
+          StringBuilder combinedValues = combineVals(new StringBuilder(), e.getValue());
+          if (combinedValues.length() > 0) {
+            value = combinedValues;
+          }
         }
+        allArgs.put(e.getKey(), value);
+      } else {
+        logger.debug("Encountered blacklisted query parameter {} in request {}", e, request);
       }
-      allArgs.put(e.getKey(), value);
     }
 
     Set<io.netty.handler.codec.http.cookie.Cookie> nettyCookies = null;
