@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import java.io.Closeable;
+import java.security.GeneralSecurityException;
 
 
 /**
@@ -32,9 +33,9 @@ public interface KeyManagementService<T> extends Closeable {
    * Registers with KMS to create key for a unique pair of AccountId and ContainerId
    * @param accountId refers to the id of the {@link Account} to register
    * @param containerId refers to the id of the {@link Container} to register
-   * @throws KeyManagementServiceException on KMS unavailability or duplicate registration
+   * @throws {@link GeneralSecurityException} on KMS unavailability or duplicate registration
    */
-  void register(short accountId, short containerId) throws KeyManagementServiceException;
+  void register(short accountId, short containerId) throws GeneralSecurityException;
 
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. User is expected to have
@@ -42,7 +43,7 @@ public interface KeyManagementService<T> extends Closeable {
    * @param accountId refers to the id of the {@link Account} for which key is expected
    * @param containerId refers to the id of the {@link Container} for which key is expected
    * @return T the key associated with the accountId and containerId
-   * @throws KeyManagementServiceException on KMS unavailability
+   * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered
    */
-  T getKey(short accountId, short containerId) throws KeyManagementServiceException;
+  T getKey(short accountId, short containerId) throws GeneralSecurityException;
 }

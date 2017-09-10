@@ -13,16 +13,22 @@
  */
 package com.github.ambry.router;
 
-import java.nio.ByteBuffer;
+import java.security.SecureRandom;
 
 
-/**
- * Custom exception thrown by {@link CryptoService} on any exception during {@link CryptoService#encrypt(ByteBuffer, Object)}
- * or {@link CryptoService#decrypt(ByteBuffer, Object)}
- */
-class CryptoServiceException extends Exception {
+class CryptoUtils {
 
-  CryptoServiceException(String message, Throwable throwable) {
-    super(message, throwable);
+  /**
+   * Generates and returns a random Hex String of the specified size
+   * @param size expected key hex string size
+   * @return the hex string thus generated
+   */
+  static String getRandomKey(int size, SecureRandom random) {
+    StringBuilder sb = new StringBuilder();
+    while (sb.length() < size) {
+      sb.append(Integer.toHexString(random.nextInt()));
+    }
+    sb.setLength(size);
+    return sb.toString();
   }
 }

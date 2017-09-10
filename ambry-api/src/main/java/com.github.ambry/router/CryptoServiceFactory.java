@@ -15,7 +15,7 @@ package com.github.ambry.router;
 
 /**
  * CryptoService Factory to assist in fetching an instance of {@link CryptoService} which is capable of encrypting or decrypting
- * bytes for a given key of type T.
+ * bytes for a given key
  * Ensure that {@link KeyManagementService} implementation is compatible with the same key type.
  */
 public interface CryptoServiceFactory<T> {

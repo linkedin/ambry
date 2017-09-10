@@ -15,29 +15,24 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.KMSConfig;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
 
 
 /**
  * Default {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
- * {@link #getKey(short, short)} calls. Default key is fetched from {@link KMSConfig#kmsDefaultKey}
+ * {@link #getKey(short, short)} calls.
  */
 public class DefaultKeyManagementService implements KeyManagementService<SecretKeySpec> {
-  private final String clusterName;
   private final SecretKeySpec secretKeySpec;
   private volatile boolean enabled;
 
-  DefaultKeyManagementService(KMSConfig KMSConfig, ClusterMapConfig clusterMapConfig) {
-    if (KMSConfig.kmsDefaultKey.isEmpty()) {
-      throw new IllegalArgumentException("Default key cannot be null");
-    }
-    clusterName = clusterMapConfig.clusterMapClusterName;
-    byte[] key = Hex.decode(KMSConfig.kmsDefaultKey);
-    this.secretKeySpec = new SecretKeySpec(key, KMSConfig.kmsKeyGenAlgo);
+  DefaultKeyManagementService(KMSConfig KMSConfig, String defaultKey) {
+    byte[] key = Hex.decode(defaultKey);
+    secretKeySpec = new SecretKeySpec(key, KMSConfig.kmsKeyGenAlgo);
     enabled = true;
   }
 
@@ -45,28 +40,25 @@ public class DefaultKeyManagementService implements KeyManagementService<SecretK
    * Registers with KMS to create key for a unique pair of AccountId and ContainerId
    * @param accountId refers to the id of the {@link Account} to register
    * @param containerId refers to the id of the {@link Container} to register
-   * @throws KeyManagementServiceException in registration. {@link DefaultKeyManagementService} doesnt support
-   * registration as the default key is read from config.
    */
   @Override
-  public void register(short accountId, short containerId) throws KeyManagementServiceException {
-    throw new KeyManagementServiceException("Registration is not allowed with DefaultKeyManagementService");
+  public void register(short accountId, short containerId) {
+    // no op
   }
 
   /**
    * Fetches the key associated with the pair of AccountId and ContainerId. {@link DefaultKeyManagementService} returns
-   * the default key for all {@link #getKey(short, short)}} calls fetched from {@link KMSConfig#kmsDefaultKey}
+   * the default key for all {@link #getKey(short, short)}}
    * @param accountId refers to the id of the {@link Account} for which key is expected
    * @param containerId refers to the id of the {@link Container} for which key is expected
    * @return {@link SecretKeySpec} the key associated with the accountId and containerId
    */
   @Override
-  public SecretKeySpec getKey(short accountId, short containerId) throws KeyManagementServiceException {
+  public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
     if (enabled) {
       return secretKeySpec;
     } else {
-      throw new KeyManagementServiceException("getKey() called after DefaultKeyManagementService is closed",
-          new IllegalStateException());
+      throw new GeneralSecurityException("getKey() called after DefaultKeyManagementService is closed");
     }
   }
 

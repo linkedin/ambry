@@ -13,6 +13,10 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.router.CryptoService;
+import java.nio.ByteBuffer;
+
+
 /**
  * Configuration parameters required by a {@link com.github.ambry.router.CryptoService}.
  * <p/>
@@ -29,8 +33,32 @@ public class CryptoServiceConfig {
   @Default("GCM")
   public final String cryptoServiceEncryptionDecryptionMode;
 
+  /**
+   * The iv size that the CryptoService will populate on {@link com.github.ambry.router.CryptoService#encrypt(ByteBuffer, Object)}
+   */
+  @Config("crypto.service.iv.size.in.bytes")
+  @Default("12")
+  public final int cryptoServiceIvSizeInBytes;
+
+  /**
+   * The Key gen algorithm for the key that {@link CryptoService#getRandomKey()} generates
+   */
+  @Config("crypto.service.key.gen.algo")
+  @Default("AES")
+  public final String cryptoServiceKeyGenAlgo;
+
+  /**
+   * The random key size in chars that the CryptoService will populate on {@link CryptoService#getRandomKey()}
+   */
+  @Config("crypto.service.key.size.in.chars")
+  @Default("64")
+  public final int cryptoServiceKeySizeInChars;
+
   public CryptoServiceConfig(VerifiableProperties verifiableProperties) {
     cryptoServiceEncryptionDecryptionMode =
         verifiableProperties.getString("crypto.service.encryption.decryption.mode", "GCM");
+    cryptoServiceIvSizeInBytes = verifiableProperties.getInt("crypto.service.iv.size.in.bytes", 12);
+    cryptoServiceKeySizeInChars = verifiableProperties.getInt("crypto.service.key.size.in.chars", 64);
+    cryptoServiceKeyGenAlgo = verifiableProperties.getString("crypto.service.key.gen.algo", "AES");
   }
 }

@@ -30,16 +30,14 @@ public class KMSConfig {
   public final String kmsKeyGenAlgo;
 
   /**
-   * The default key that will be used for any {@link com.github.ambry.router.KeyManagementService}
-   * Note: key size of 64 chars results in 32 bytes (256 bits) in decoded form
+   * The key size that the KMS will populate for new registrations
    */
-  @Config("kms.default.key")
-  @Default("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308")
-  public final String kmsDefaultKey;
+  @Config("kms.key.size.in.chars")
+  @Default("64")
+  public final int kmsKeySizeInChars;
 
   public KMSConfig(VerifiableProperties verifiableProperties) {
     kmsKeyGenAlgo = verifiableProperties.getString("kms.key.gen.algo", "AES");
-    kmsDefaultKey =
-        verifiableProperties.getString("kms.default.key", "feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
+    kmsKeySizeInChars = verifiableProperties.getInt("kms.key.size.in.chars", 64);
   }
 }

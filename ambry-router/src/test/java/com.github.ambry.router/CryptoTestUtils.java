@@ -20,16 +20,18 @@ import java.util.Properties;
 /**
  * Utilities used for KMS and CryptoService tests
  */
-class CryptoUtils {
+class CryptoTestUtils {
 
   /**
    * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
    * the {@link DefaultKeyManagementService}.
+   * @param keySize kms key size property value
    * @return the created Properties instance.
    */
-  static Properties getKMSProperties(String key) {
+  static Properties getKMSProperties(String key, int keySize) {
     Properties properties = new Properties();
     properties.setProperty("kms.default.key", key);
+    properties.setProperty("kms.key.size.in.chars", "" + keySize);
     properties.setProperty("clustermap.cluster.name", "dev");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import javax.crypto.spec.SecretKeySpec;
@@ -27,15 +26,15 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public class DefaultKeyManagementServiceFactory implements KeyManagementServiceFactory<SecretKeySpec> {
   private final KMSConfig kmsConfig;
-  private final ClusterMapConfig clusterMapConfig;
+  private final String kmsDefaultKey;
 
   DefaultKeyManagementServiceFactory(VerifiableProperties verifiableProperties) {
     kmsConfig = new KMSConfig(verifiableProperties);
-    clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    kmsDefaultKey = verifiableProperties.getString("kms.default.key");
   }
 
   @Override
   public KeyManagementService<SecretKeySpec> getKeyManagementService() {
-    return new DefaultKeyManagementService(kmsConfig, clusterMapConfig);
+    return new DefaultKeyManagementService(kmsConfig, kmsDefaultKey);
   }
 }

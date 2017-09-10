@@ -14,10 +14,11 @@
 package com.github.ambry.router;
 
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 
 
 /**
- * Crypto Service to assist in encrypting or decrypting bytes
+ * Crypto Service to assist in encrypting and decrypting bytes and keys
  * T refers to the key type that this {@link CryptoService} accepts.
  * Ensure that {@link CryptoService} implementation is compatible with the key type that
  * {@link KeyManagementService} generates
@@ -30,37 +31,18 @@ public interface CryptoService<T> {
    * @param key the secret key (of type T) to use to encrypt
    * @return the {@link ByteBuffer} containing the encrypted content. Ensure the result has all
    * the information like the IV along with the encrypted content, inorder to decrypt the content with a given key
-   * @throws {@link CryptoServiceException} on any exception with encryption
+   * @throws {@link GeneralSecurityException} on any exception with encryption
    */
-  ByteBuffer encrypt(ByteBuffer toEncrypt, T key) throws CryptoServiceException;
+  ByteBuffer encrypt(ByteBuffer toEncrypt, T key) throws GeneralSecurityException;
 
   /**
    * Decrypts the {@code toDecrypt} with the given key. This is used for decrypting data chunks.
    * @param toDecrypt {@link ByteBuffer} that needs to be decrypted
    * @param key the secret key (of type T) to use to decrypt
    * @return the {@link ByteBuffer} containing the decrypted content
-   * @throws {@link CryptoServiceException} on any exception with decryption
+   * @throws {@link GeneralSecurityException} on any exception with decryption
    */
-  ByteBuffer decrypt(ByteBuffer toDecrypt, T key) throws CryptoServiceException;
-
-  /**
-   * Encrypts the {@code toEncrypt} with the given key. This is used for encrypting keys(of type T)
-   * @param toEncrypt the byte array that needs to be encrypted
-   * @param key the secret key (of type T) to use to encrypt
-   * @return the byte array containing the encrypted content. Ensure the result has all
-   * the information like the IV along with the encrypted content, inorder to decrypt the content with a given key
-   * @throws {@link CryptoServiceException} on any exception with encryption
-   */
-  byte[] encrypt(byte[] toEncrypt, T key) throws CryptoServiceException;
-
-  /**
-   * Decrypts the {@code toDecrypt} with the given key. This is used for decrypting keys (of type T)
-   * @param toDecrypt the byte array that needs to be decrypted
-   * @param key the secret key (of type T) to use to decrypt
-   * @return the byte array containing the decrypted content
-   * @throws {@link CryptoServiceException} on any exception with decryption
-   */
-  byte[] decrypt(byte[] toDecrypt, T key) throws CryptoServiceException;
+  ByteBuffer decrypt(ByteBuffer toDecrypt, T key) throws GeneralSecurityException;
 
   /**
    * Generate and return a random key (of type T)
@@ -69,37 +51,20 @@ public interface CryptoService<T> {
   T getRandomKey();
 
   /**
-   * Returns the bytes to serialize for a given key. This does not necessarily mean entire key object has to converted
-   * to bytes. Only requirement is that, same key should be constructible when the same bytes is passed into
-   * {@link #getBytesToSerializeForKey(Object)}
-   * @param  key the secret key (of type T) to for which bytes are requested
-   * @return the bytes to serialize for the given key
-   */
-  byte[] getBytesToSerializeForKey(T key);
-
-  /**
-   * Constructs a key from the given bytes. Implementors should ensure that for any given key, calling
-   * {@link #getBytesToSerializeForKey(Object)} followed by {@link #getKeyFromBytes(byte[])} should
-   * fetch the same key
-   * @param bytes byte array from which key needs to be constructed
-   * @return the key thus constructed from the bytes passed in
-   */
-  T getKeyFromBytes(byte[] bytes);
-
-  /**
    * Returns the encrypted form of the key in bytes.
-   * {@link #getBytesToSerializeForKey(Object)}
    * @param  keyToBeEncrypted the secret key (of type T) that needs to be encrypted
    * @param  keyToEncrypt the secret key (of type T) to use to encrypt
-   * @return the bytes representing the encrypted key
+   * @return the {@link ByteBuffer} representing the encrypted key
+   * @throws {@link GeneralSecurityException}
    */
-  byte[] encryptKey(T keyToBeEncrypted, T keyToEncrypt);
+  ByteBuffer encryptKey(T keyToBeEncrypted, T keyToEncrypt) throws GeneralSecurityException;
 
   /**
    * Decrypts the key using the given {@code keyToDecrypt}
-   * @param bytes byte array from which key needs to be decrypted
+   * @param encryptedKey the {@link ByteBuffer} from which key needs to be decrypted
    * @param keyToDecrypt  the secret key (of type T) to use to decrypt
    * @return the key thus decrypted
+   * @throws {@link GeneralSecurityException}
    */
-  T decryptKey(byte[] bytes, T keyToDecrypt);
+  T decryptKey(ByteBuffer encryptedKey, T keyToDecrypt) throws GeneralSecurityException;
 }
