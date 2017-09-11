@@ -124,6 +124,12 @@ public class ServerMetrics {
   public final Histogram replicationControlResponseSendTimeInMs;
   public final Histogram replicationControlRequestTotalTimeInMs;
 
+  public final Histogram catchupStatusRequestQueueTimeInMs;
+  public final Histogram catchupStatusRequestProcessingTimeInMs;
+  public final Histogram catchupStatusResponseQueueTimeInMs;
+  public final Histogram catchupStatusResponseSendTimeInMs;
+  public final Histogram catchupStatusRequestTotalTimeInMs;
+
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -142,6 +148,7 @@ public class ServerMetrics {
   public final Meter triggerCompactionRequestRate;
   public final Meter requestControlRequestRate;
   public final Meter replicationControlRequestRate;
+  public final Meter catchupStatusRequestRate;
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
@@ -319,6 +326,17 @@ public class ServerMetrics {
     replicationControlRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestTotalTimeInMs"));
 
+    catchupStatusRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestQueueTimeInMs"));
+    catchupStatusRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestProcessingTimeInMs"));
+    catchupStatusResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "CatchupStatusResponseQueueTimeInMs"));
+    catchupStatusResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "CatchupStatusResponseSendTimeInMs"));
+    catchupStatusRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestTotalTimeInMs"));
+
     blobSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
 
@@ -341,6 +359,7 @@ public class ServerMetrics {
     requestControlRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "RequestControlRequestRate"));
     replicationControlRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestRate"));
+    catchupStatusRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobRequestRate"));

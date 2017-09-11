@@ -34,8 +34,6 @@ public class AdminRequest extends RequestOrResponse {
   private final PartitionId partitionId;
   private final long sizeInBytes;
 
-  private int sizeSent = 0;
-
   /**
    * Reads from a stream and constructs an {@link AdminRequest}.
    * @param stream the {@link DataInputStream} to read from.
@@ -74,21 +72,16 @@ public class AdminRequest extends RequestOrResponse {
 
   @Override
   public long writeTo(WritableByteChannel channel) throws IOException {
-    long written = 0;
     if (bufferToSend == null) {
       serializeIntoBuffer();
       bufferToSend.flip();
     }
-    if (bufferToSend.remaining() > 0) {
-      written = channel.write(bufferToSend);
-      sizeSent += written;
-    }
-    return written;
+    return bufferToSend.hasRemaining() ? channel.write(bufferToSend) : 0;
   }
 
   @Override
   public boolean isSendComplete() {
-    return sizeSent == sizeInBytes();
+    return bufferToSend != null && bufferToSend.remaining() == 0;
   }
 
   @Override

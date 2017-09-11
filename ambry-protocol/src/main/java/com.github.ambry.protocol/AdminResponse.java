@@ -17,6 +17,8 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.WritableByteChannel;
 
 
 /**
@@ -55,6 +57,28 @@ public class AdminResponse extends Response {
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     // ignore version for now
     return new AdminResponse(correlationId, clientId, error);
+  }
+
+  @Override
+  public long writeTo(WritableByteChannel channel) throws IOException {
+    if (bufferToSend == null) {
+      serializeIntoBuffer();
+      bufferToSend.flip();
+    }
+    return bufferToSend.hasRemaining() ? channel.write(bufferToSend) : 0;
+  }
+
+  @Override
+  public boolean isSendComplete() {
+    return bufferToSend != null && bufferToSend.remaining() == 0;
+  }
+
+  /**
+   * Serializes the response into bytes and loads into the buffer for sending.
+   */
+  protected void serializeIntoBuffer() {
+    bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
+    writeHeader();
   }
 
   @Override
