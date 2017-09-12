@@ -67,7 +67,6 @@ public class HelixAccountServiceTest {
   private static final HelixPropertyStoreConfig storeConfig;
   // This is a switch to choose using between a mock and a real HelixPropertyStore. For now it is always set to
   // true. Later when we introduce test against real ZK server, this can be changed to false.
-  private final boolean shouldUseMockHelixStore = true;
   private Account refAccount;
   private short refAccountId;
   private String refAccountName;
@@ -104,7 +103,7 @@ public class HelixAccountServiceTest {
   public void init() throws Exception {
     notifier = new MockNotifier<>();
     mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, shouldUseMockHelixStore);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
   }
@@ -335,23 +334,20 @@ public class HelixAccountServiceTest {
   @Test
   public void testNullInputs() {
     try {
-      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier,
-          shouldUseMockHelixStore).getAccountService();
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
 
     try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier,
-          shouldUseMockHelixStore).getAccountService();
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
 
-    new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
-        shouldUseMockHelixStore).getAccountService();
+    new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null).getAccountService();
 
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
