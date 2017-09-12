@@ -67,9 +67,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class BlobId extends StoreKey {
   public static final byte DEFAULT_FLAG = 0;
-  // version 1 of the serialized format
   static final short BLOB_ID_V1 = 1;
-  // version 2 of the serialized format
   static final short BLOB_ID_V2 = 2;
   private static final short CURRENT_VERSION = BLOB_ID_V2;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
