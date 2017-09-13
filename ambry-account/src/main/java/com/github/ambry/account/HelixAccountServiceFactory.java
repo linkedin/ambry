@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * Returns a new instance of {@link HelixAccountService} on {@link #getAccountService()} call.
  */
 public class HelixAccountServiceFactory implements AccountServiceFactory {
-  static final String HELIX_ACCOUNT_UPDATER_PREFIX = "helix-account-updater";
+  private static final String HELIX_ACCOUNT_UPDATER_PREFIX = "helix-account-updater";
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final HelixPropertyStoreConfig storeConfig;
   private final AccountServiceMetrics accountServiceMetrics;
