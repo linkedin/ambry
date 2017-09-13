@@ -382,14 +382,18 @@ public class ReplicationManager {
    * Enables/disables replication of the given {@code ids} from {@code origins}. The disabling is in-memory and
    * therefore is not valid across restarts.
    * @param ids the {@link PartitionId}s to enable/disable it on.
-   * @param origins the list of datacenters from which replication should be enabled/disabled.
+   * @param origins the list of datacenters from which replication should be enabled/disabled. Having an empty list
+   *                disables replication from all datacenters.
    * @param enable whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling succeeded, {@code false} otherwise. Disabling fails if {@code origins} is empty
    * or contains unrecognized datacenters.
    */
   public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
       boolean enable) {
-    if (origins.isEmpty() || !replicaThreadPools.keySet().containsAll(origins)) {
+    if (origins.isEmpty()) {
+      origins = new ArrayList<>(replicaThreadPools.keySet());
+    }
+    if (!replicaThreadPools.keySet().containsAll(origins)) {
       return false;
     }
     for (String origin : origins) {

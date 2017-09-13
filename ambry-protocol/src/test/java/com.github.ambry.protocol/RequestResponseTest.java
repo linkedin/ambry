@@ -37,6 +37,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import org.junit.Assert;
@@ -451,8 +452,14 @@ public class RequestResponseTest {
    */
   @Test
   public void replicationControlAdminRequestTest() throws IOException {
-    doReplicationControlAdminRequestTest(true);
-    doReplicationControlAdminRequestTest(false);
+    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
+    List<String> origins = new ArrayList<>();
+    for (int i = 0; i < numOrigins; i++) {
+      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+    }
+    doReplicationControlAdminRequestTest(origins, true);
+    doReplicationControlAdminRequestTest(origins, false);
+    doReplicationControlAdminRequestTest(Collections.EMPTY_LIST, true);
   }
 
   /**
@@ -550,21 +557,17 @@ public class RequestResponseTest {
   /**
    * Does the actual test of ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with
    * reference data.
+   * @param origins the origins list to use in {@link ReplicationControlAdminRequest}.
    * @param enable the value for the enable field in {@link ReplicationControlAdminRequest}.
    * @throws IOException
    */
-  private void doReplicationControlAdminRequestTest(boolean enable) throws IOException {
+  private void doReplicationControlAdminRequestTest(List<String> origins, boolean enable) throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     PartitionId id = clusterMap.getWritablePartitionIds().get(0);
     int correlationId = 1234;
     String clientId = "client";
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.ReplicationControl, id, correlationId, clientId);
-    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
-    List<String> origins = new ArrayList<>();
-    for (int i = 0; i < numOrigins; i++) {
-      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
-    }
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
     DataInputStream requestStream = serAndPrepForRead(controlRequest, -1, true);
     AdminRequest deserializedAdminRequest =
