@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
@@ -779,6 +780,35 @@ public class Utils {
   public static long getTimeInMsToTheNearestSec(long timeInMs) {
     long timeInSecs = timeInMs / Time.MsPerSec;
     return timeInMs != Utils.Infinite_Time ? (timeInSecs * Time.MsPerSec) : Utils.Infinite_Time;
+  }
+
+  /**
+   * Shuts down an {@link ExecutorService} gracefully in a given time. If the {@link ExecutorService} cannot be shut
+   * down within the given time, it will be forced to shut down immediately. In the worst case, it will try to shut down
+   * the {@link ExecutorService} within 2 * shutdownTimeout, separated by a forced shutdown.
+   * @param executorService The {@link ExecutorService} to shut down.
+   * @param shutdownTimeout The timeout in ms to shutdown the {@link ExecutorService}.
+   * @param timeUnit TimeUnit for shutdownTimeout.
+   */
+  public static void shutDownExecutorService(ExecutorService executorService, long shutdownTimeout, TimeUnit timeUnit) {
+    // Disable new tasks from being submitted
+    executorService.shutdown();
+    try {
+      if (!executorService.awaitTermination(shutdownTimeout, timeUnit)) {
+        logger.warn("ExecutorService is not shut down successfully within {} ms, forcing an immediate shutdown.",
+            shutdownTimeout);
+        executorService.shutdownNow();
+        if (!executorService.awaitTermination(shutdownTimeout, timeUnit)) {
+          logger.error("ExecutorService cannot be shut down successfully.");
+        }
+      }
+    } catch (InterruptedException e) {
+      logger.error("Exception occurred when shutting down the ExecutorService. Forcing an immediate shutdown.", e);
+      executorService.shutdownNow();
+      Thread.currentThread().interrupt();
+    } catch (Exception e) {
+      logger.error("Exception occurred when shutting down the ExecutorService.", e);
+    }
   }
 
   /**

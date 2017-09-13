@@ -36,6 +36,8 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.utils.Utils.*;
+
 
 /**
  * The stats manager is responsible for periodic aggregation of node level stats and expose/publish such stats to
@@ -95,10 +97,7 @@ class StatsManager {
       statsAggregator.cancel();
     }
     if (scheduler != null) {
-      scheduler.shutdown();
-      if (!scheduler.awaitTermination(30, TimeUnit.SECONDS)) {
-        logger.error("Could not terminate aggregator tasks after StatsManager shutdown");
-      }
+      shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
     }
   }
 

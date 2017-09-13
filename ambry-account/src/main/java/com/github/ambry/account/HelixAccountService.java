@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.AccountUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -300,23 +301,9 @@ class HelixAccountService implements AccountService {
     if (isOpen) {
       isOpen = false;
       if (scheduler != null) {
-        scheduler.shutdown();
-        try {
-          if (!scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS)) {
-            logger.warn("Scheduler for account updater is not shut down successfully");
-            scheduler.shutdownNow();
-            if (!scheduler.awaitTermination(storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS)) {
-              logger.error("Scheduler for account updater is not shut down successfully");
-            }
-          }
-        } catch (InterruptedException e) {
-          scheduler.shutdownNow();
-          Thread.currentThread().interrupted();
-        } catch (Exception e) {
-          logger.error("Exception occurred when closing HelixAccountService.", e);
-        }
-        helixStore.stop();
+        shutDownExecutorService(scheduler, storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
       }
+      helixStore.stop();
     }
   }
 

@@ -44,6 +44,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.utils.Utils.*;
+
 
 /**
  * Copies messages from one {@link Store} to another and provides the ability to transform the message along the way.
@@ -220,10 +222,7 @@ public class StoreCopier implements Closeable {
       return;
     }
     try {
-      scheduler.shutdown();
-      if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
-        logger.error("Could not shut down scheduler");
-      }
+      shutDownExecutorService(scheduler, 1, TimeUnit.SECONDS);
       src.shutdown();
       tgt.shutdown();
       isOpen = false;
