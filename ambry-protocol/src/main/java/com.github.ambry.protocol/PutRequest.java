@@ -39,6 +39,7 @@ public class PutRequest extends RequestOrResponse {
   protected long sentBytes = 0;
   protected final BlobProperties properties;
   protected final BlobType blobType;
+  protected final byte[] blobKey;
   protected final ByteBuffer blob;
   // crc will cover all the fields associated with the blob, namely:
   // blob type
@@ -53,10 +54,12 @@ public class PutRequest extends RequestOrResponse {
   private static final int UserMetadata_Size_InBytes = 4;
   private static final int Blob_Size_InBytes = 8;
   private static final int BlobType_Size_InBytes = 2;
+  private static final int BlobKeyLength_Size_InBytes = 2;
   private static final int Crc_Field_Size_InBytes = 8;
-  private static final short Put_Request_Version_V2 = 2;
   private static final short Put_Request_Version_V3 = 3;
+  static final short Put_Request_Version_V4 = 4;
 
+  // @todo change this to V4 once V4 becomes standard.
   private static final short currentVersion = Put_Request_Version_V3;
 
   /**
@@ -69,15 +72,17 @@ public class PutRequest extends RequestOrResponse {
    * @param materializedBlob the materialized buffer containing the blob data.
    * @param blobSize the size of the blob data.
    * @param blobType the type of the blob data.
+   * @param blobKey the encryption key for the blob.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType) {
+      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType, byte[] blobKey) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
     this.usermetadata = usermetadata;
     this.blobSize = blobSize;
     this.blobType = blobType;
+    this.blobKey = blobKey;
     this.blob = materializedBlob;
     this.crc = new Crc32();
     this.crcBuf = ByteBuffer.allocate(Crc_Field_Size_InBytes);
@@ -86,10 +91,10 @@ public class PutRequest extends RequestOrResponse {
   public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
-      case Put_Request_Version_V2:
-        return PutRequest_V2.readFrom(stream, map);
       case Put_Request_Version_V3:
         return PutRequest_V3.readFrom(stream, map);
+      case Put_Request_Version_V4:
+        return PutRequest_V4.readFrom(stream, map);
       default:
         throw new IllegalStateException("Unknown Request response version" + versionId);
     }
@@ -104,8 +109,16 @@ public class PutRequest extends RequestOrResponse {
 
   private int sizeExcludingBlobAndCrcSize() {
     // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob type)
-    return (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties)
-        + UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
+    int sizeToReturn =
+        (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties)
+            + UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
+    if (getVersionId() == Put_Request_Version_V4) {
+      sizeToReturn += BlobKeyLength_Size_InBytes;
+      if (blobKey != null) {
+        sizeToReturn += blobKey.length;
+      }
+    }
+    return sizeToReturn;
   }
 
   @Override
@@ -123,6 +136,14 @@ public class PutRequest extends RequestOrResponse {
         bufferToSend.putInt(usermetadata.capacity());
         bufferToSend.put(usermetadata);
         bufferToSend.putShort((short) blobType.ordinal());
+        // @todo remove this check once V4 is everywhere.
+        if (getVersionId() == Put_Request_Version_V4) {
+          short keyLength = blobKey == null ? 0 : (short) blobKey.length;
+          bufferToSend.putShort(keyLength);
+          if (keyLength > 0) {
+            bufferToSend.put(blobKey);
+          }
+        }
         bufferToSend.putLong(blobSize);
         crc.update(bufferToSend.array(), bufferToSend.arrayOffset() + crcStart, bufferToSend.position() - crcStart);
         crc.update(blob.array(), blob.arrayOffset(), blob.remaining());
@@ -181,23 +202,6 @@ public class PutRequest extends RequestOrResponse {
   }
 
   /**
-   * Class to read protocol version 2 PutRequest from the stream.
-   */
-  private static class PutRequest_V2 {
-    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
-      int correlationId = stream.readInt();
-      String clientId = Utils.readIntString(stream);
-      BlobId id = new BlobId(stream, map);
-      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
-      ByteBuffer metadata = Utils.readIntBuffer(stream);
-      BlobType blobType = BlobType.values()[stream.readShort()];
-      long blobSize = stream.readLong();
-      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, stream,
-          null);
-    }
-  }
-
-  /**
    * Class to read protocol version 3 PutRequest from the stream.
    */
   private static class PutRequest_V3 {
@@ -217,8 +221,39 @@ public class PutRequest extends RequestOrResponse {
       if (computedCrc != receivedCrc) {
         throw new IOException("CRC mismatch, data in PutRequest is unreliable");
       }
-      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, blobStream,
-          receivedCrc);
+      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, null,
+          blobStream, receivedCrc);
+    }
+  }
+
+  /**
+   * Class to read protocol version 4 PutRequest from the stream.
+   */
+  private static class PutRequest_V4 {
+    static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
+      int correlationId = stream.readInt();
+      String clientId = Utils.readIntString(stream);
+      CrcInputStream crcInputStream = new CrcInputStream(stream);
+      stream = new DataInputStream(crcInputStream);
+      BlobId id = new BlobId(stream, map);
+      BlobProperties properties = BlobPropertiesSerDe.getBlobPropertiesFromStream(stream);
+      ByteBuffer metadata = Utils.readIntBuffer(stream);
+      BlobType blobType = BlobType.values()[stream.readShort()];
+      byte[] blobKey = null;
+      short keyLength = stream.readShort();
+      if (keyLength > 0) {
+        blobKey = new byte[keyLength];
+        stream.readFully(blobKey);
+      }
+      long blobSize = stream.readLong();
+      ByteBufferInputStream blobStream = new ByteBufferInputStream(stream, (int) blobSize);
+      long computedCrc = crcInputStream.getValue();
+      long receivedCrc = stream.readLong();
+      if (computedCrc != receivedCrc) {
+        throw new IOException("CRC mismatch, data in PutRequest is unreliable");
+      }
+      return new ReceivedPutRequest(correlationId, clientId, id, properties, metadata, blobSize, blobType, blobKey,
+          blobStream, receivedCrc);
     }
   }
 
@@ -233,6 +268,7 @@ public class PutRequest extends RequestOrResponse {
     private final ByteBuffer userMetadata;
     private final long blobSize;
     private final BlobType blobType;
+    private final byte[] blobKey;
     private final InputStream blobStream;
     private final Long receivedCrc;
 
@@ -245,11 +281,12 @@ public class PutRequest extends RequestOrResponse {
      * @param userMetadata the userMetadata associated with the blob being put.
      * @param blobSize the size of the blob data.
      * @param blobType the type of the blob being put.
+     * @param blobKey the encryption key of the blob.
      * @param blobStream the {@link InputStream} containing the data associated with the blob.
      * @param crc the crc associated with this request.
      */
     ReceivedPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
-        ByteBuffer userMetadata, long blobSize, BlobType blobType, InputStream blobStream, Long crc)
+        ByteBuffer userMetadata, long blobSize, BlobType blobType, byte[] blobKey, InputStream blobStream, Long crc)
         throws IOException {
       this.correlationId = correlationId;
       this.clientId = clientId;
@@ -258,6 +295,7 @@ public class PutRequest extends RequestOrResponse {
       this.userMetadata = userMetadata;
       this.blobSize = blobSize;
       this.blobType = blobType;
+      this.blobKey = blobKey;
       this.blobStream = blobStream;
       this.receivedCrc = crc;
     }
@@ -309,6 +347,13 @@ public class PutRequest extends RequestOrResponse {
      */
     public BlobType getBlobType() {
       return blobType;
+    }
+
+    /**
+     * @return the key of the blob in this request.
+     */
+    public byte[] getBlobKey() {
+      return blobKey;
     }
 
     /**

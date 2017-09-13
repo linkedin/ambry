@@ -68,7 +68,7 @@ class DirectSender implements Runnable {
       for (int i = 0; i < blobIds.size(); i++) {
         PutRequest putRequest =
             new PutRequest(1, "client1", blobIds.get(i), blobProperties, ByteBuffer.wrap(usermetadata),
-                ByteBuffer.wrap(data), blobProperties.getBlobSize(), BlobType.DataBlob);
+                ByteBuffer.wrap(data), blobProperties.getBlobSize(), BlobType.DataBlob, null);
 
         channel.send(putRequest);
         InputStream putResponseStream = channel.receive().getInputStream();

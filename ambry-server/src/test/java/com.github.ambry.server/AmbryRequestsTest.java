@@ -421,7 +421,7 @@ public class AmbryRequestsTest {
         case PutRequest:
           BlobProperties properties = new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId());
           request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
-              ByteBuffer.allocate(0), 0, BlobType.DataBlob);
+              ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
           break;
         case DeleteRequest:
           request = new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds());

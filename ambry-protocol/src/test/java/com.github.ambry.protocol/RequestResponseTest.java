@@ -90,58 +90,131 @@ class MockFindToken implements FindToken {
   }
 }
 
+/**
+ * A test class that mimics a V4 PutRequest, since the actual class still creates V3 PutRequests.
+ * @todo Remove this once V4 becomes standard.
+ */
+class PutRequestV4ForTest extends PutRequest {
+  public PutRequestV4ForTest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
+      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType, byte[] blobKey) {
+    super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType, blobKey);
+    versionId = PutRequest.Put_Request_Version_V4;
+  }
+}
+
 class InvalidVersionPutRequest extends PutRequest {
   static final short Put_Request_Invalid_version = 0;
 
   public InvalidVersionPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType) {
-    super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType);
+    super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType, null);
     versionId = Put_Request_Invalid_version;
   }
 }
 
+/**
+ * Tests for different requests and responses in the protocol.
+ */
 public class RequestResponseTest {
-
+  /**
+   * Tests serialization and deserialization of Put requests in different versions.
+   * @param clusterMap the cluster map to use.
+   * @param correlationId the correlation id associated with the request.
+   * @param clientId the client id associated with the request.
+   * @param blobId the blob id in the request.
+   * @param blobProperties the {@link BlobProperties} associated with the request.
+   * @param userMetadata the user metadata associated with the request.
+   * @param blobType the {@link BlobType} associated with the request.
+   * @param blob the blob content.
+   * @param blobSize the size of the blob.
+   * @param blobKey the encryption key of the blob.
+   * @param doInvalidTest whether tests for invalid put requests should be done.
+   */
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
-      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
-      throws IOException {
+      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey,
+      boolean doInvalidTest) throws IOException {
+    doTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType, blob,
+        blobSize, blobKey, null);
+    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+        blobType, blob, blobSize, null, null);
+    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+        blobType, blob, blobSize, new byte[0], null);
+    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+        blobType, blob, blobSize, null, null);
+    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+        blobType, blob, blobSize, blobKey, blobKey);
+    if (doInvalidTest) {
+      doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
+          blobProperties, userMetadata, blobType, blob, blobSize, blobKey, null);
+    }
+  }
+
+  /**
+   * Test Put requests in a specific version.
+   * @param testVersion the version to use for the Put requests. If -1, uses the default version.
+   * @param clusterMap the cluster map to use.
+   * @param correlationId the correlation id associated with the request.
+   * @param clientId the client id associated with the request.
+   * @param blobId the blob id in the request.
+   * @param blobProperties the {@link BlobProperties} associated with the request.
+   * @param userMetadata the user metadata associated with the request.
+   * @param blobType the {@link BlobType} associated with the request.
+   * @param blob the blob content.
+   * @param blobSize the size of the blob.
+   * @param blobKey the encryption key of the blob.
+   * @param expectedKey the expected encryption key from the deserialized Put request.
+   */
+  private void doTest(short testVersion, MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
+      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey,
+      byte[] expectedKey) throws IOException {
     // This PutRequest is created just to get the size.
     int sizeInBytes =
         (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            ByteBuffer.wrap(blob), blobSize, blobType).sizeInBytes();
+            ByteBuffer.wrap(blob), blobSize, blobType, blobKey).sizeInBytes();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
         {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (TestUtils.RANDOM.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
+    DataInputStream requestStream = null;
     for (int allocationSize : channelWriteLimits) {
-      PutRequest request =
-          new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-              ByteBuffer.wrap(blob), blobSize, blobType);
-      DataInputStream requestStream = serAndPrepForRead(request, allocationSize, true);
-      PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
-      Assert.assertEquals(deserializedPutRequest.getBlobId(), blobId);
-      Assert.assertEquals(deserializedPutRequest.getBlobProperties().getBlobSize(), sizeInBlobProperties);
-      Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
-      Assert.assertEquals(deserializedPutRequest.getBlobSize(), blobSize);
-      Assert.assertEquals(deserializedPutRequest.getBlobType(), blobType);
-      byte[] blobRead = new byte[blobSize];
-      deserializedPutRequest.getBlobStream().read(blobRead);
-      Assert.assertArrayEquals(blob, blobRead);
-    }
-  }
+      PutRequest request = null;
+      switch (testVersion) {
+        case InvalidVersionPutRequest.Put_Request_Invalid_version:
+          request = new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties,
+              ByteBuffer.wrap(userMetadata), ByteBuffer.wrap(blob), sizeInBlobProperties, BlobType.DataBlob);
+          requestStream = serAndPrepForRead(request, -1, true);
+          try {
+            PutRequest.readFrom(requestStream, clusterMap);
+            Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
+          } catch (IllegalStateException e) {
+          }
+          break;
 
-  private void testPutRequestInvalidVersion(MockClusterMap clusterMap, int correlationId, String clientId,
-      BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob) throws IOException {
-    int sizeInBlobProperties = (int) blobProperties.getBlobSize();
-    PutRequest request =
-        new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            ByteBuffer.wrap(blob), sizeInBlobProperties, BlobType.DataBlob);
-    DataInputStream requestStream = serAndPrepForRead(request, -1, true);
-    try {
-      PutRequest.readFrom(requestStream, clusterMap);
-      Assert.fail("Deserialization of PutRequest with invalid version should have thrown an exception.");
-    } catch (IllegalStateException e) {
+        case PutRequest.Put_Request_Version_V4:
+          request =
+              new PutRequestV4ForTest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+                  ByteBuffer.wrap(blob), blobSize, blobType, blobKey);
+          // fall through
+
+        default:
+          if (request == null) {
+            request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+                ByteBuffer.wrap(blob), blobSize, blobType, blobKey);
+          }
+          requestStream = serAndPrepForRead(request, allocationSize, true);
+          PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
+          Assert.assertEquals(blobId, deserializedPutRequest.getBlobId());
+          Assert.assertEquals(sizeInBlobProperties, deserializedPutRequest.getBlobProperties().getBlobSize());
+          Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
+          Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
+          Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
+          Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobKey());
+          byte[] blobRead = new byte[blobSize];
+          deserializedPutRequest.getBlobStream().read(blobRead);
+          Assert.assertArrayEquals(blob, blobRead);
+          break;
+      }
     }
   }
 
@@ -157,6 +230,9 @@ public class RequestResponseTest {
     byte[] userMetadata = new byte[50];
     TestUtils.RANDOM.nextBytes(userMetadata);
     ByteBuffer.wrap(userMetadata);
+    int blobKeyLength = TestUtils.RANDOM.nextInt(4096);
+    byte[] blobKey = new byte[blobKeyLength];
+    TestUtils.RANDOM.nextBytes(blobKey);
     int blobSize = 100;
     byte[] blob = new byte[blobSize];
     TestUtils.RANDOM.nextBytes(blob);
@@ -165,33 +241,28 @@ public class RequestResponseTest {
         new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
-        blobSize);
+        blobSize, blobKey, true);
 
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
-        blobSize);
+        blobSize, blobKey, false);
 
     // Put Request with size in blob properties different from the data size and blob type: Metadata blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
-        blob, blobSize);
+        blob, blobSize, blobKey, false);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
-        blob, blobSize);
-
-    blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
-    // Ensure a Put Request with an invalid version does not get deserialized correctly.
-    testPutRequestInvalidVersion(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
+        blob, blobSize, blobKey, true);
 
     // Response test
     PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
