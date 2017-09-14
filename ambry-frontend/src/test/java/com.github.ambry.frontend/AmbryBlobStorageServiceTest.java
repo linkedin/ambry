@@ -130,21 +130,9 @@ public class AmbryBlobStorageServiceTest {
     short refAccountId = Utils.getRandomShort(TestUtils.RANDOM);
     String refAccountName = UtilsTest.getRandomString(10);
     Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
-    short refContainerId = Utils.getRandomShort(TestUtils.RANDOM);
-    String refContainerName = UtilsTest.getRandomString(10);
-    Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
-    String refContainerDescription = UtilsTest.getRandomString(10);
-    boolean refContainerPrivacy = TestUtils.RANDOM.nextBoolean();
-    refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerPrivacy, refAccountId).build();
-    refDefaultPublicContainer =
-        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
-            Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
-            Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
-    refDefaultPrivateContainer =
-        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
-            Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
-            Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, refAccountId).build();
+    refContainer = getRandomContainer(refAccountId);
+    refDefaultPublicContainer = getDefaultContainer(refAccountId, false);
+    refDefaultPrivateContainer = getDefaultContainer(refAccountId, true);
     refAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
         Arrays.asList(refDefaultPublicContainer, refDefaultPrivateContainer, refContainer)).build();
   }
@@ -404,10 +392,26 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void postGetHeadDeleteTest() throws Exception {
+    // add another account
+    short accountId;
+    String accountName;
+    do {
+      accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      accountName = UtilsTest.getRandomString(10);
+    } while (accountId == refAccount.getId() || accountName.equals(refAccount.getName()));
+    Container randomContainer = getRandomContainer(accountId);
+    Container defaultPublicContainer = getDefaultContainer(accountId, false);
+    Container defaultPrivateContainer = getDefaultContainer(accountId, true);
+    Account account = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE,
+        Arrays.asList(defaultPublicContainer, defaultPrivateContainer, randomContainer)).build();
+    accountService.updateAccounts(Collections.singletonList(account));
+
     // valid account and container names passed as part of POST
-    for (Container container : refAccount.getAllContainers()) {
-      doPostGetHeadDeleteTest(refAccount, container, refAccount.getName(), container.isPrivate(), refAccount,
-          container);
+    for (Account testAccount : accountService.getAllAccounts()) {
+      for (Container container : testAccount.getAllContainers()) {
+        doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), container.isPrivate(), testAccount,
+            container);
+      }
     }
     // valid account and container names but only serviceId passed as part of POST
     doPostGetHeadDeleteTest(null, null, refAccount.getName(), false, refAccount, refDefaultPublicContainer);
@@ -812,6 +816,41 @@ public class AmbryBlobStorageServiceTest {
 
   // helpers
   // general
+
+  /**
+   * Creates and returns default public/private container for {@code accountId}.
+   * @param accountId the account id for the container
+   * @param isPrivate {@code true} if private container is required. {@code false} for public.
+   * @return default public/private container for {@code accountId}.
+   */
+  private static Container getDefaultContainer(short accountId, boolean isPrivate) {
+    Container container;
+    if (isPrivate) {
+      container = new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
+          Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
+          Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, accountId).build();
+    } else {
+      container = new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
+          Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
+          Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, accountId).build();
+    }
+    return container;
+  }
+
+  /**
+   * Creates and returns a random {@link Container} for {@code accountId}.
+   * @param accountId the account id for the container
+   * @return returns a random {@link Container} for {@code accountId}
+   */
+  private static Container getRandomContainer(short accountId) {
+    short refContainerId = Utils.getRandomShort(TestUtils.RANDOM);
+    String refContainerName = UtilsTest.getRandomString(10);
+    Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
+    String refContainerDescription = UtilsTest.getRandomString(10);
+    boolean refContainerPrivacy = TestUtils.RANDOM.nextBoolean();
+    return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
+        refContainerPrivacy, accountId).build();
+  }
 
   /**
    * Method to easily create {@link RestRequest} objects containing a specific request.
@@ -2241,7 +2280,7 @@ class FrontendTestAccountService implements AccountService {
 
   @Override
   public Collection<Account> getAllAccounts() {
-    throw new IllegalStateException("Not implemented");
+    return idToAccountMap.values();
   }
 
   @Override
