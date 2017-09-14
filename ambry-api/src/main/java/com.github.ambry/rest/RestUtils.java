@@ -239,7 +239,7 @@ public class RestUtils {
       }
     }
 
-    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate(args), ttl, account.getId(),
+    return new BlobProperties(-1, serviceId, ownerId, contentType, container.isPrivate(), ttl, account.getId(),
         container.getId());
   }
 
