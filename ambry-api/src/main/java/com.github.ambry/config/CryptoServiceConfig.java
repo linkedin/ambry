@@ -14,51 +14,36 @@
 package com.github.ambry.config;
 
 import com.github.ambry.router.CryptoService;
+import com.github.ambry.router.KeyManagementService;
 import java.nio.ByteBuffer;
 
 
 /**
- * Configuration parameters required by a {@link com.github.ambry.router.CryptoService}.
+ * Configuration parameters required by a {@link CryptoService}.
  * <p/>
  * Receives the in-memory representation of a properties file and extracts parameters that are specifically
- * required for {@link com.github.ambry.router.CryptoService} and presents them for retrieval through defined APIs.
+ * required for {@link CryptoService} and presents them for retrieval through defined APIs.
  */
 public class CryptoServiceConfig {
 
   /**
    * The mode to encrypt or decrypt. Accepted values are "GCM" for now.
-   * Ensure this algo goes hand in hand with {@link com.github.ambry.router.KeyManagementService} implementation
+   * Ensure this algo goes hand in hand with {@link KeyManagementService} implementation
    */
   @Config("crypto.service.encryption.decryption.mode")
   @Default("GCM")
   public final String cryptoServiceEncryptionDecryptionMode;
 
   /**
-   * The iv size that the CryptoService will populate on {@link com.github.ambry.router.CryptoService#encrypt(ByteBuffer, Object)}
+   * The iv size that the CryptoService will populate on {@link CryptoService#encrypt(ByteBuffer, Object)}
    */
   @Config("crypto.service.iv.size.in.bytes")
   @Default("12")
   public final int cryptoServiceIvSizeInBytes;
 
-  /**
-   * The Key gen algorithm for the key that {@link CryptoService#getRandomKey()} generates
-   */
-  @Config("crypto.service.key.gen.algo")
-  @Default("AES")
-  public final String cryptoServiceKeyGenAlgo;
-
-  /**
-   * The random key size in chars that the CryptoService will populate on {@link CryptoService#getRandomKey()}
-   */
-  @Config("crypto.service.key.size.in.chars")
-  @Default("64")
-  public final int cryptoServiceKeySizeInChars;
-
   public CryptoServiceConfig(VerifiableProperties verifiableProperties) {
     cryptoServiceEncryptionDecryptionMode =
         verifiableProperties.getString("crypto.service.encryption.decryption.mode", "GCM");
     cryptoServiceIvSizeInBytes = verifiableProperties.getInt("crypto.service.iv.size.in.bytes", 12);
-    cryptoServiceKeySizeInChars = verifiableProperties.getInt("crypto.service.key.size.in.chars", 64);
-    cryptoServiceKeyGenAlgo = verifiableProperties.getString("crypto.service.key.gen.algo", "AES");
   }
 }

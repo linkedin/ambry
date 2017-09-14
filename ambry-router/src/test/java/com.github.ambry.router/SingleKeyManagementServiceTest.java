@@ -30,14 +30,15 @@ import static com.github.ambry.router.CryptoTestUtils.*;
 
 
 /**
- * Tests {@link DefaultKeyManagementService} and {@link DefaultKeyManagementServiceFactory}
+ * Tests {@link SingleKeyManagementService} and {@link SingleKeyManagementServiceFactory}
  */
-public class DefaultKeyManagementServiceTest {
+public class SingleKeyManagementServiceTest {
 
-  private static final int defaultKeySize = 64;
+  private static final int DEFAULT_KEY_SIZE_CHARS = 64;
+  private static final int DEFAULT_KEY_SIZE_BITS = 256;
 
   /**
-   * Test the {@link DefaultKeyManagementService} for happy getKey() path
+   * Test {@link SingleKeyManagementService#getKey(short, short)}
    */
   @Test
   public void testDefaultKMS() throws Exception {
@@ -49,7 +50,7 @@ public class DefaultKeyManagementServiceTest {
       KMSConfig KMSConfig = new KMSConfig(verifiableProperties);
       SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), KMSConfig.kmsKeyGenAlgo);
       KeyManagementService<SecretKeySpec> defaultKMS =
-          new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+          new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
       SecretKeySpec keyFromKMS =
           defaultKMS.getKey(Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
       Assert.assertEquals("Secret key mismatch ", secretKeySpec, keyFromKMS);
@@ -57,28 +58,46 @@ public class DefaultKeyManagementServiceTest {
   }
 
   /**
-   * Test the {@link DefaultKeyManagementService} for {@link DefaultKeyManagementService#register(short, short)}
+   * Tests {@link SingleKeyManagementService#register(short, short)}
    */
   @Test
   public void testDefaultKMSRegister() throws Exception {
-    String key = getRandomKey(defaultKeySize);
-    Properties props = getKMSProperties(key, defaultKeySize);
+    String key = getRandomKey(DEFAULT_KEY_SIZE_CHARS);
+    Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_BITS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> defaultKMS =
-        new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+        new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
     defaultKMS.register(Account.UNKNOWN_ACCOUNT.getId(), Container.UNKNOWN_CONTAINER.getId());
   }
 
   /**
-   * Test the {@link DefaultKeyManagementService} for close()
+   * Tests {@link SingleKeyManagementService#getRandomKey()}
+   */
+  @Test
+  public void testRandomKey() throws Exception {
+    int[] keySizes = {128, 192, 256};
+    for (int keySize : keySizes) {
+      String key = getRandomKey(keySize);
+      Properties props = getKMSProperties(key, keySize);
+      VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+      KeyManagementService<SecretKeySpec> defaultKMS =
+          new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+      SecretKeySpec randomKey = defaultKMS.getRandomKey();
+      Assert.assertNotNull("Random key cannot be null", randomKey);
+      Assert.assertEquals("Key size mismatch", keySize, randomKey.getEncoded().length * 8);
+    }
+  }
+
+  /**
+   * Test the {@link SingleKeyManagementService} for close()
    */
   @Test
   public void testDefaultKMSClose() throws Exception {
-    String key = getRandomKey(defaultKeySize);
-    Properties props = getKMSProperties(key, defaultKeySize);
+    String key = getRandomKey(DEFAULT_KEY_SIZE_CHARS);
+    Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_BITS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> defaultKMS =
-        new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+        new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
     defaultKMS.close();
     try {
       defaultKMS.getKey(Account.UNKNOWN_ACCOUNT.getId(), Container.UNKNOWN_CONTAINER.getId());
@@ -88,23 +107,23 @@ public class DefaultKeyManagementServiceTest {
   }
 
   /**
-   * Test the {@link DefaultKeyManagementServiceFactory}
+   * Tests {@link SingleKeyManagementServiceFactory}
    */
   @Test
   public void testDefaultKMSFactory() throws Exception {
-    Properties props = getKMSProperties("", defaultKeySize);
+    Properties props = getKMSProperties("", DEFAULT_KEY_SIZE_CHARS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     try {
-      new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
-      Assert.fail("DefaultKeyManagementFactory instantiation should have failed as key store path is null ");
+      new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+      Assert.fail("DefaultKeyManagementFactory instantiation should have failed as single default key is null ");
     } catch (IllegalArgumentException e) {
     }
 
     // happy path
-    String key = getRandomKey(defaultKeySize);
-    props = getKMSProperties(key, defaultKeySize);
+    String key = getRandomKey(DEFAULT_KEY_SIZE_CHARS);
+    props = getKMSProperties(key, DEFAULT_KEY_SIZE_BITS);
     verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> defaultKMS =
-        new DefaultKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+        new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
   }
 }

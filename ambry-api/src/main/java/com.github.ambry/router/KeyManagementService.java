@@ -46,4 +46,10 @@ public interface KeyManagementService<T> extends Closeable {
    * @throws {@link GeneralSecurityException} on KMS unavailability or if key is not registered
    */
   T getKey(short accountId, short containerId) throws GeneralSecurityException;
+
+  /**
+   * Generate and return a random key (of type T)
+   * @return a random key (of type T)
+   */
+  T getRandomKey() throws GeneralSecurityException;
 }

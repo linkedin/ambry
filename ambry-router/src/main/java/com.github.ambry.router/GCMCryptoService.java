@@ -22,6 +22,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.Security;
@@ -29,7 +30,6 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.util.encoders.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,23 +38,21 @@ import org.slf4j.LoggerFactory;
  * Default {@link CryptoService} which is capable of encrypting or decrypting bytes based on the given key.
  * This implementation uses GCM for encryption and decryption
  */
-class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
+class GCMCryptoService implements CryptoService<SecretKeySpec> {
 
-  private static final int Version_Field_Size_In_Bytes = Short.BYTES;
-  private static final short KeyRecord_Version_V1 = 1;
-  public static final short IVRecord_Version_V1 = 1;
+  private static final int VERSION_FIELD_SIZE_IN_BYTES = Short.BYTES;
+  private static final short KEY_RECORD_VERSION_V_1 = 1;
+  private static final short IV_RECORD_VERSION_V_1 = 1;
   private static final String GCM_CRYPTO_INSTANCE = "AES/GCM/NoPadding";
-  private static final SecureRandom random = new SecureRandom();
+  private final SecureRandom random = new SecureRandom();
   private final int ivValSize;
-  private final int keySize;
   private final CryptoServiceConfig config;
 
-  private static final Logger logger = LoggerFactory.getLogger(DefaultGCMCryptoService.class);
+  private static final Logger logger = LoggerFactory.getLogger(GCMCryptoService.class);
 
-  DefaultGCMCryptoService(CryptoServiceConfig cryptoServiceConfig) {
+  GCMCryptoService(CryptoServiceConfig cryptoServiceConfig) {
     config = cryptoServiceConfig;
     ivValSize = cryptoServiceConfig.cryptoServiceIvSizeInBytes;
-    keySize = cryptoServiceConfig.cryptoServiceKeySizeInChars;
     Security.addProvider(new BouncyCastleProvider());
     if (!config.cryptoServiceEncryptionDecryptionMode.equals("GCM")) {
       throw new IllegalArgumentException(
@@ -96,29 +94,23 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
   }
 
   @Override
-  public SecretKeySpec getRandomKey() {
-    return new SecretKeySpec(Hex.decode(CryptoUtils.getRandomKey(keySize, random)), config.cryptoServiceKeyGenAlgo);
-  }
-
-  @Override
-  public ByteBuffer encryptKey(SecretKeySpec keyToBeEncrypted, SecretKeySpec keyToEncrypt)
-      throws GeneralSecurityException {
-    byte[] encodedKey = keyToBeEncrypted.getEncoded();
+  public ByteBuffer encryptKey(SecretKeySpec toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
+    byte[] encodedKey = toEncrypt.getEncoded();
     ByteBuffer keyRecordBuffer =
-        ByteBuffer.allocate(KeyRecord_Format_V1.getKeyRecordSize(encodedKey, config.cryptoServiceKeyGenAlgo));
-    KeyRecord_Format_V1.serializeKeyRecord(keyRecordBuffer, encodedKey, config.cryptoServiceKeyGenAlgo);
+        ByteBuffer.allocate(KeyRecord_Format_V1.getKeyRecordSize(encodedKey, toEncrypt.getAlgorithm()));
+    KeyRecord_Format_V1.serializeKeyRecord(keyRecordBuffer, encodedKey, toEncrypt.getAlgorithm());
     keyRecordBuffer.flip();
-    return encrypt(keyRecordBuffer, keyToEncrypt);
+    return encrypt(keyRecordBuffer, key);
   }
 
   @Override
-  public SecretKeySpec decryptKey(ByteBuffer encryptedKey, SecretKeySpec keyToDecrypt) throws GeneralSecurityException {
-    ByteBuffer decryptedKey = decrypt(encryptedKey, keyToDecrypt);
+  public SecretKeySpec decryptKey(ByteBuffer toDecrypt, SecretKeySpec key) throws GeneralSecurityException {
+    ByteBuffer decryptedKey = decrypt(toDecrypt, key);
     DeserializedKey deserializedKey = null;
     try {
       deserializedKey = deserializeKey(new ByteBufferInputStream(decryptedKey));
     } catch (Exception e) {
-      throw new GeneralSecurityException("Exception thrown on deserializing key ");
+      throw new GeneralSecurityException("Exception thrown on deserializing key");
     }
     return new SecretKeySpec(deserializedKey.getEncodedKey(), deserializedKey.getKeyGenAlgo());
   }
@@ -134,7 +126,7 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
     DataInputStream inputStream = new DataInputStream(stream);
     short version = inputStream.readShort();
     switch (version) {
-      case IVRecord_Version_V1:
+      case IV_RECORD_VERSION_V_1:
         return IVRecord_Format_V1.deserializeIVRecord(inputStream);
       default:
         throw new MessageFormatException("IVRecord version not supported",
@@ -153,7 +145,7 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
     DataInputStream inputStream = new DataInputStream(stream);
     short version = inputStream.readShort();
     switch (version) {
-      case KeyRecord_Version_V1:
+      case KEY_RECORD_VERSION_V_1:
         return KeyRecord_Format_V1.deserializeKeyRecord(inputStream);
       default:
         throw new MessageFormatException("KeyRecord version not supported",
@@ -177,7 +169,6 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
    */
   private static class IVRecord_Format_V1 {
     private static final int IV_SIZE_FIELD_IN_BYTES = Integer.BYTES;
-    private static Logger logger = LoggerFactory.getLogger(IVRecord_Format_V1.class);
 
     /**
      * Returns the IV record size for the given iv
@@ -185,7 +176,7 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
      * @return the size of the IV record size for the given iv
      */
     private static int getIVRecordSize(byte[] iv) {
-      return Version_Field_Size_In_Bytes + IV_SIZE_FIELD_IN_BYTES + iv.length;
+      return VERSION_FIELD_SIZE_IN_BYTES + IV_SIZE_FIELD_IN_BYTES + iv.length;
     }
 
     /**
@@ -194,7 +185,7 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
      * @param iv the iv of type byte array that needs to be serialized
      */
     private static void serializeIVRecord(ByteBuffer outputBuffer, byte[] iv) {
-      outputBuffer.putShort(IVRecord_Version_V1);
+      outputBuffer.putShort(IV_RECORD_VERSION_V_1);
       outputBuffer.putInt(iv.length);
       outputBuffer.put(iv);
     }
@@ -231,7 +222,6 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
    */
   private static class KeyRecord_Format_V1 {
     private static final int KEY_SIZE_FIELD_IN_BYTES = Integer.BYTES;
-    private static final int KEY_GEN_ALGO_SIZE_FIELD_IN_BYTES = Integer.BYTES;
 
     /**
      * Returns the key record size for the given key and key gen algo
@@ -240,8 +230,7 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
      * @return the size of key record for the given key and key gen algo
      */
     private static int getKeyRecordSize(byte[] key, String keyGenAlgo) {
-      return Version_Field_Size_In_Bytes + KEY_SIZE_FIELD_IN_BYTES + key.length + KEY_GEN_ALGO_SIZE_FIELD_IN_BYTES
-          + keyGenAlgo.getBytes().length;
+      return VERSION_FIELD_SIZE_IN_BYTES + KEY_SIZE_FIELD_IN_BYTES + key.length + Utils.getIntStringLength(keyGenAlgo);
     }
 
     /**
@@ -251,11 +240,10 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
      * @param keyGenAlgo the key gen algo that needs to be serialized
      */
     private static void serializeKeyRecord(ByteBuffer outputBuffer, byte[] key, String keyGenAlgo) {
-      outputBuffer.putShort(KeyRecord_Version_V1);
+      outputBuffer.putShort(KEY_RECORD_VERSION_V_1);
       outputBuffer.putInt(key.length);
       outputBuffer.put(key);
-      outputBuffer.putInt(keyGenAlgo.getBytes().length);
-      outputBuffer.put(keyGenAlgo.getBytes());
+      Utils.serializeString(outputBuffer, keyGenAlgo, StandardCharsets.US_ASCII);
     }
 
     /**
@@ -274,25 +262,26 @@ class DefaultGCMCryptoService implements CryptoService<SecretKeySpec> {
       return new DeserializedKey(encodedKey, keyAlgo);
     }
   }
+
+  /**
+   * Class to hold the encoded key and the key gen algo
+   */
+  private static class DeserializedKey {
+    private final byte[] encodedKey;
+    private final String keyGenAlgo;
+
+    DeserializedKey(byte[] encodedKey, String keyGenAlgo) {
+      this.encodedKey = encodedKey;
+      this.keyGenAlgo = keyGenAlgo;
+    }
+
+    byte[] getEncodedKey() {
+      return encodedKey;
+    }
+
+    String getKeyGenAlgo() {
+      return keyGenAlgo;
+    }
+  }
 }
 
-/**
- * Class to hold the encoded key and the key gen algo
- */
-class DeserializedKey {
-  private byte[] encodedKey;
-  private String keyGenAlgo;
-
-  DeserializedKey(byte[] encodedKey, String keyGenAlgo) {
-    this.encodedKey = encodedKey;
-    this.keyGenAlgo = keyGenAlgo;
-  }
-
-  byte[] getEncodedKey() {
-    return encodedKey;
-  }
-
-  String getKeyGenAlgo() {
-    return keyGenAlgo;
-  }
-}

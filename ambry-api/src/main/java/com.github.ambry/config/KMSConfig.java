@@ -30,14 +30,14 @@ public class KMSConfig {
   public final String kmsKeyGenAlgo;
 
   /**
-   * The key size that the KMS will populate for new registrations
+   * The key size that the KMS will populate for random key generations
    */
-  @Config("kms.key.size.in.chars")
-  @Default("64")
-  public final int kmsKeySizeInChars;
+  @Config("kms.random.key.size.in.bits")
+  @Default("256")
+  public final int kmsRandomKeySizeInBits;
 
   public KMSConfig(VerifiableProperties verifiableProperties) {
     kmsKeyGenAlgo = verifiableProperties.getString("kms.key.gen.algo", "AES");
-    kmsKeySizeInChars = verifiableProperties.getInt("kms.key.size.in.chars", 64);
+    kmsRandomKeySizeInBits = verifiableProperties.getInt("kms.random.key.size.in.bits", 256);
   }
 }

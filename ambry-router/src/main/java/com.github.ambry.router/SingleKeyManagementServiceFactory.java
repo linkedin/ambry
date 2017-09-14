@@ -19,22 +19,23 @@ import javax.crypto.spec.SecretKeySpec;
 
 
 /**
- * {@link DefaultKeyManagementServiceFactory} specific implementation of {@link KeyManagementServiceFactory}.
+ * {@link SingleKeyManagementServiceFactory} specific implementation of {@link KeyManagementServiceFactory}.
  * <p/>
- * Sets up all the supporting cast required for the operation of {@link DefaultKeyManagementService} and returns a new instance on
- * {@link #getKeyManagementService()}.
+ * Sets up all the supporting cast required for the operation of {@link SingleKeyManagementService} and returns a new instance on
+ * {@link #getKeyManagementService()}. The default key that the {@link SingleKeyManagementService} returns for any
+ * {@link KeyManagementService#getKey(short, short)} is fetched from config "kms.default.key"
  */
-public class DefaultKeyManagementServiceFactory implements KeyManagementServiceFactory<SecretKeySpec> {
+public class SingleKeyManagementServiceFactory implements KeyManagementServiceFactory<SecretKeySpec> {
   private final KMSConfig kmsConfig;
   private final String kmsDefaultKey;
 
-  DefaultKeyManagementServiceFactory(VerifiableProperties verifiableProperties) {
+  SingleKeyManagementServiceFactory(VerifiableProperties verifiableProperties) {
     kmsConfig = new KMSConfig(verifiableProperties);
     kmsDefaultKey = verifiableProperties.getString("kms.default.key");
   }
 
   @Override
   public KeyManagementService<SecretKeySpec> getKeyManagementService() {
-    return new DefaultKeyManagementService(kmsConfig, kmsDefaultKey);
+    return new SingleKeyManagementService(kmsConfig, kmsDefaultKey);
   }
 }

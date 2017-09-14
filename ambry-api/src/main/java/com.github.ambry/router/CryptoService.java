@@ -45,26 +45,20 @@ public interface CryptoService<T> {
   ByteBuffer decrypt(ByteBuffer toDecrypt, T key) throws GeneralSecurityException;
 
   /**
-   * Generate and return a random key (of type T)
-   * @return a random key (of type T)
-   */
-  T getRandomKey();
-
-  /**
    * Returns the encrypted form of the key in bytes.
-   * @param  keyToBeEncrypted the secret key (of type T) that needs to be encrypted
-   * @param  keyToEncrypt the secret key (of type T) to use to encrypt
+   * @param  toEncrypt the secret key (of type T) that needs to be encrypted
+   * @param  key the secret key (of type T) to use to encrypt
    * @return the {@link ByteBuffer} representing the encrypted key
    * @throws {@link GeneralSecurityException}
    */
-  ByteBuffer encryptKey(T keyToBeEncrypted, T keyToEncrypt) throws GeneralSecurityException;
+  ByteBuffer encryptKey(T toEncrypt, T key) throws GeneralSecurityException;
 
   /**
-   * Decrypts the key using the given {@code keyToDecrypt}
-   * @param encryptedKey the {@link ByteBuffer} from which key needs to be decrypted
-   * @param keyToDecrypt  the secret key (of type T) to use to decrypt
+   * Decrypts the key using the given {@code key}
+   * @param toDecrypt the {@link ByteBuffer} from which key needs to be decrypted
+   * @param key  the secret key (of type T) to use to decrypt
    * @return the key thus decrypted
    * @throws {@link GeneralSecurityException}
    */
-  T decryptKey(ByteBuffer encryptedKey, T keyToDecrypt) throws GeneralSecurityException;
+  T decryptKey(ByteBuffer toDecrypt, T key) throws GeneralSecurityException;
 }

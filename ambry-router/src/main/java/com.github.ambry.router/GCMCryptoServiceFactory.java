@@ -19,20 +19,20 @@ import javax.crypto.spec.SecretKeySpec;
 
 
 /**
- * {@link DefaultCryptoServiceFactory} specific implementation of {@link CryptoServiceFactory}.
+ * {@link GCMCryptoServiceFactory} specific implementation of {@link CryptoServiceFactory}.
  * <p/>
- * Sets up all the supporting cast required for the operation of {@link DefaultGCMCryptoService} and returns a new instance on
+ * Sets up all the supporting cast required for the operation of {@link GCMCryptoService} and returns a new instance on
  * {@link #getCryptoService()}.
  */
-public class DefaultCryptoServiceFactory implements CryptoServiceFactory<SecretKeySpec> {
+public class GCMCryptoServiceFactory implements CryptoServiceFactory<SecretKeySpec> {
   private final CryptoServiceConfig cryptoServiceConfig;
 
-  DefaultCryptoServiceFactory(VerifiableProperties verifiableProperties) {
+  GCMCryptoServiceFactory(VerifiableProperties verifiableProperties) {
     cryptoServiceConfig = new CryptoServiceConfig(verifiableProperties);
   }
 
   @Override
   public CryptoService<SecretKeySpec> getCryptoService() {
-    return new DefaultGCMCryptoService(cryptoServiceConfig);
+    return new GCMCryptoService(cryptoServiceConfig);
   }
 }

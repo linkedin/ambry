@@ -18,22 +18,26 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.NoSuchAlgorithmException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.util.encoders.Hex;
 
 
 /**
- * Default {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
+ * Single {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
  * {@link #getKey(short, short)} calls.
  */
-public class DefaultKeyManagementService implements KeyManagementService<SecretKeySpec> {
+public class SingleKeyManagementService implements KeyManagementService<SecretKeySpec> {
   private final SecretKeySpec secretKeySpec;
-  private volatile boolean enabled;
+  private final KMSConfig config;
+  private volatile boolean enabled = true;
 
-  DefaultKeyManagementService(KMSConfig KMSConfig, String defaultKey) {
+  SingleKeyManagementService(KMSConfig config, String defaultKey) {
     byte[] key = Hex.decode(defaultKey);
-    secretKeySpec = new SecretKeySpec(key, KMSConfig.kmsKeyGenAlgo);
-    enabled = true;
+    secretKeySpec = new SecretKeySpec(key, config.kmsKeyGenAlgo);
+    this.config = config;
   }
 
   /**
@@ -47,7 +51,7 @@ public class DefaultKeyManagementService implements KeyManagementService<SecretK
   }
 
   /**
-   * Fetches the key associated with the pair of AccountId and ContainerId. {@link DefaultKeyManagementService} returns
+   * Fetches the key associated with the pair of AccountId and ContainerId. {@link SingleKeyManagementService} returns
    * the default key for all {@link #getKey(short, short)}}
    * @param accountId refers to the id of the {@link Account} for which key is expected
    * @param containerId refers to the id of the {@link Container} for which key is expected
@@ -58,7 +62,21 @@ public class DefaultKeyManagementService implements KeyManagementService<SecretK
     if (enabled) {
       return secretKeySpec;
     } else {
-      throw new GeneralSecurityException("getKey() called after DefaultKeyManagementService is closed");
+      throw new GeneralSecurityException("getKey() called after SingleKeyManagementService is closed");
+    }
+  }
+
+  @Override
+  public SecretKeySpec getRandomKey() throws GeneralSecurityException {
+    KeyGenerator keyGen = null;
+    try {
+      keyGen = KeyGenerator.getInstance("AES");
+      keyGen.init(config.kmsRandomKeySizeInBits);
+      SecretKey secretKey = keyGen.generateKey();
+      byte[] encoded = secretKey.getEncoded();
+      return new SecretKeySpec(encoded, "AES");
+    } catch (NoSuchAlgorithmException e) {
+      throw new GeneralSecurityException("NoSuchAlgorithmException thrown while generating random key", e);
     }
   }
 
