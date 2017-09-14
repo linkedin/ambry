@@ -113,18 +113,15 @@ public class RestUtilsTest {
     tooManyValuesTest(headers, RestUtils.Headers.TTL);
     // no internal keys for account and container
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId, false,
-        false);
+    setAmbryHeadersForPut(headers, ttl, serviceId, null, contentType, ownerId, false);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
     // no internal keys for account
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId, false,
-        true);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId, false);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
     // no internal keys for container
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId, true,
-        false);
+    setAmbryHeadersForPut(headers, ttl, serviceId, null, contentType, ownerId, true);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
 
     // no failures.
@@ -728,11 +725,10 @@ public class RestUtilsTest {
    * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header.
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @param insertAccount {@code true} if {@link Account} info has to be injected into the headers.
-   * @param insertContainer {@code true} if {@link Container} info has to be injected into the headers.
    * @throws JSONException
    */
   private void setAmbryHeadersForPut(JSONObject headers, String ttlInSecs, String serviceId, Container container,
-      String contentType, String ownerId, boolean insertAccount, boolean insertContainer) throws JSONException {
+      String contentType, String ownerId, boolean insertAccount) throws JSONException {
     headers.putOpt(RestUtils.Headers.TTL, ttlInSecs);
     headers.putOpt(RestUtils.Headers.SERVICE_ID, serviceId);
     headers.putOpt(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
@@ -740,7 +736,7 @@ public class RestUtilsTest {
     if (insertAccount) {
       headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
     }
-    if (insertContainer) {
+    if (container != null) {
       headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
     }
   }
@@ -758,7 +754,7 @@ public class RestUtilsTest {
    */
   private void setAmbryHeadersForPut(JSONObject headers, String ttlInSecs, String serviceId, Container container,
       String contentType, String ownerId) throws JSONException {
-    setAmbryHeadersForPut(headers, ttlInSecs, serviceId, container, contentType, ownerId, true, true);
+    setAmbryHeadersForPut(headers, ttlInSecs, serviceId, container, contentType, ownerId, true);
   }
 
   /**
