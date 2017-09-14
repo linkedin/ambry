@@ -508,6 +508,9 @@ public class AmbryRequestsTest {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     sendAndVerifyReplicationControlRequest(origins, true, id, expectedServerErrorCode);
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = true;
+    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, true, id, expectedServerErrorCode);
   }
 
   /**
