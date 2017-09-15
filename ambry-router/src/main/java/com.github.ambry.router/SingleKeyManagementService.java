@@ -27,17 +27,24 @@ import org.bouncycastle.util.encoders.Hex;
 
 /**
  * Single {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
- * {@link #getKey(short, short)} calls.
+ * {@link #getKey(short, short)} calls but a different random key for {@link #getRandomKey()} calls.
  */
 public class SingleKeyManagementService implements KeyManagementService<SecretKeySpec> {
   private final SecretKeySpec secretKeySpec;
-  private final KMSConfig config;
   private volatile boolean enabled = true;
+  private final KeyGenerator keyGen;
+  private final String keyGenAlgo;
 
-  SingleKeyManagementService(KMSConfig config, String defaultKey) {
-    byte[] key = Hex.decode(defaultKey);
-    secretKeySpec = new SecretKeySpec(key, config.kmsKeyGenAlgo);
-    this.config = config;
+  SingleKeyManagementService(KMSConfig config, String defaultKey) throws GeneralSecurityException {
+    try {
+      byte[] key = Hex.decode(defaultKey);
+      keyGenAlgo = config.kmsKeyGenAlgo;
+      secretKeySpec = new SecretKeySpec(key, keyGenAlgo);
+      keyGen = KeyGenerator.getInstance(keyGenAlgo);
+      keyGen.init(config.kmsRandomKeySizeInBits);
+    } catch (NoSuchAlgorithmException e) {
+      throw new GeneralSecurityException("NoSuchAlgorithmException thrown while instantiating KeyGenerator", e);
+    }
   }
 
   /**
@@ -68,16 +75,9 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
 
   @Override
   public SecretKeySpec getRandomKey() throws GeneralSecurityException {
-    KeyGenerator keyGen = null;
-    try {
-      keyGen = KeyGenerator.getInstance("AES");
-      keyGen.init(config.kmsRandomKeySizeInBits);
-      SecretKey secretKey = keyGen.generateKey();
-      byte[] encoded = secretKey.getEncoded();
-      return new SecretKeySpec(encoded, "AES");
-    } catch (NoSuchAlgorithmException e) {
-      throw new GeneralSecurityException("NoSuchAlgorithmException thrown while generating random key", e);
-    }
+    SecretKey secretKey = keyGen.generateKey();
+    byte[] encoded = secretKey.getEncoded();
+    return new SecretKeySpec(encoded, keyGenAlgo);
   }
 
   @Override

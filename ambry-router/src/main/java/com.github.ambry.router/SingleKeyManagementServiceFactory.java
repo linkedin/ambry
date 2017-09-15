@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
+import java.security.GeneralSecurityException;
 import javax.crypto.spec.SecretKeySpec;
 
 
@@ -35,7 +36,7 @@ public class SingleKeyManagementServiceFactory implements KeyManagementServiceFa
   }
 
   @Override
-  public KeyManagementService<SecretKeySpec> getKeyManagementService() {
+  public KeyManagementService<SecretKeySpec> getKeyManagementService() throws GeneralSecurityException {
     return new SingleKeyManagementService(kmsConfig, kmsDefaultKey);
   }
 }
