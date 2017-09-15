@@ -35,9 +35,15 @@ public class InMemoryUnknownAccountServiceTest {
   private AccountService accountService =
       new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
 
+  /**
+   * Cleans up if the store already exists.
+   * @throws Exception Any unexpected exception.
+   */
   @After
-  public void close() throws Exception {
-    accountService.close();
+  public void cleanUp() throws Exception {
+    if (accountService != null) {
+      accountService.close();
+    }
   }
 
   @Test

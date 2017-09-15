@@ -18,8 +18,10 @@ import com.github.ambry.commons.MockHelixPropertyStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import org.apache.helix.ZNRecord;
 
 
@@ -30,6 +32,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
   private final HelixPropertyStoreConfig storeConfig;
   private final AccountServiceMetrics accountServiceMetrics;
   private final Notifier notifier;
+  private final String updaterThreadPrefix;
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
 
   /**
@@ -39,16 +42,19 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
    * @param notifier The {@link Notifier} to start a {@link HelixAccountService}.
    */
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      Notifier<String> notifier) {
+      Notifier<String> notifier, String updaterThreadPrefix) {
     super(verifiableProperties, metricRegistry, notifier);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
     this.notifier = notifier;
+    this.updaterThreadPrefix = updaterThreadPrefix;
   }
 
   @Override
   public AccountService getAccountService() {
-    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier);
+    ScheduledExecutorService scheduler =
+        storeConfig.accountUpdaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
+    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler, storeConfig);
   }
 
   /**

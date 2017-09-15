@@ -17,6 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
+import java.util.concurrent.ScheduledExecutorService;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
@@ -33,6 +35,7 @@ import org.slf4j.LoggerFactory;
  * Returns a new instance of {@link HelixAccountService} on {@link #getAccountService()} call.
  */
 public class HelixAccountServiceFactory implements AccountServiceFactory {
+  private static final String HELIX_ACCOUNT_UPDATER_PREFIX = "helix-account-updater";
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final HelixPropertyStoreConfig storeConfig;
   private final AccountServiceMetrics accountServiceMetrics;
@@ -62,7 +65,11 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}", storeConfig.zkClientConnectString,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);
-    HelixAccountService helixAccountService = new HelixAccountService(helixStore, accountServiceMetrics, notifier);
+    ScheduledExecutorService scheduler =
+        storeConfig.accountUpdaterPollingIntervalMs > 0 ? Utils.newScheduler(1, HELIX_ACCOUNT_UPDATER_PREFIX, false)
+            : null;
+    HelixAccountService helixAccountService =
+        new HelixAccountService(helixStore, accountServiceMetrics, notifier, scheduler, storeConfig);
     long spentTimeMs = System.currentTimeMillis() - startTimeMs;
     logger.info("HelixAccountService started, took {} ms", spentTimeMs);
     accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
