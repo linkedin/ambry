@@ -13,6 +13,9 @@
  */
 package com.github.ambry.router;
 
+import java.security.GeneralSecurityException;
+
+
 /**
  * CryptoService Factory to assist in fetching an instance of {@link CryptoService} which is capable of encrypting or decrypting
  * bytes for a given key
@@ -23,6 +26,7 @@ public interface CryptoServiceFactory<T> {
   /**
    * Instantiates and returns the {@link CryptoService}
    * @return the {@link CryptoService} instantiated
+   * @throws GeneralSecurityException on any exception during instantiation
    */
-  CryptoService<T> getCryptoService();
+  CryptoService<T> getCryptoService() throws GeneralSecurityException;
 }

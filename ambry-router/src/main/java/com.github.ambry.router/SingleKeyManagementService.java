@@ -18,7 +18,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.security.NoSuchAlgorithmException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -36,15 +35,11 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
   private final String keyGenAlgo;
 
   SingleKeyManagementService(KMSConfig config, String defaultKey) throws GeneralSecurityException {
-    try {
-      byte[] key = Hex.decode(defaultKey);
-      keyGenAlgo = config.kmsKeyGenAlgo;
-      secretKeySpec = new SecretKeySpec(key, keyGenAlgo);
-      keyGen = KeyGenerator.getInstance(keyGenAlgo);
-      keyGen.init(config.kmsRandomKeySizeInBits);
-    } catch (NoSuchAlgorithmException e) {
-      throw new GeneralSecurityException("NoSuchAlgorithmException thrown while instantiating KeyGenerator", e);
-    }
+    byte[] key = Hex.decode(defaultKey);
+    keyGenAlgo = config.kmsKeyGenAlgo;
+    secretKeySpec = new SecretKeySpec(key, keyGenAlgo);
+    keyGen = KeyGenerator.getInstance(keyGenAlgo);
+    keyGen.init(config.kmsRandomKeySizeInBits);
   }
 
   /**

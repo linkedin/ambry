@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Default {@link CryptoService} which is capable of encrypting or decrypting bytes based on the given key.
+ * {@link CryptoService} which is capable of encrypting or decrypting bytes based on the given key.
  * This implementation uses GCM for encryption and decryption
  */
 class GCMCryptoService implements CryptoService<SecretKeySpec> {
