@@ -30,7 +30,7 @@ class CryptoTestUtils {
    */
   static Properties getKMSProperties(String key, int keySize) {
     Properties properties = new Properties();
-    properties.setProperty("kms.default.key", key);
+    properties.setProperty("kms.default.container.key", key);
     properties.setProperty("kms.random.key.size.in.bits", Integer.toString(keySize));
     properties.setProperty("clustermap.cluster.name", "dev");
     properties.setProperty("clustermap.datacenter.name", "DC1");

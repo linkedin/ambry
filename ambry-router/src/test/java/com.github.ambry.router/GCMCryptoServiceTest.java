@@ -133,10 +133,10 @@ public class GCMCryptoServiceTest {
   }
 
   /**
-   * Test the {@link GCMCryptoServiceFactory}
+   * Test {@link GCMCryptoServiceFactory}
    */
   @Test
-  public void testDefaultCryptoServiceFactory() throws Exception {
+  public void testGMCryptoServiceFactory() throws Exception {
     // happy path
     VerifiableProperties verifiableProperties = new VerifiableProperties((new Properties()));
     new GCMCryptoServiceFactory(verifiableProperties).getCryptoService();

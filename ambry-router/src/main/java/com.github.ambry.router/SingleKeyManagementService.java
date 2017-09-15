@@ -26,7 +26,7 @@ import org.bouncycastle.util.encoders.Hex;
 
 /**
  * Single {@link KeyManagementService} which returns a default key {@link SecretKeySpec} for any
- * {@link #getKey(short, short)} calls but a different random key for {@link #getRandomKey()} calls.
+ * {@link #getKey(short, short)} calls, but a different random key for any {@link #getRandomKey()} calls.
  */
 public class SingleKeyManagementService implements KeyManagementService<SecretKeySpec> {
   private final SecretKeySpec secretKeySpec;
@@ -34,8 +34,14 @@ public class SingleKeyManagementService implements KeyManagementService<SecretKe
   private final KeyGenerator keyGen;
   private final String keyGenAlgo;
 
-  SingleKeyManagementService(KMSConfig config, String defaultKey) throws GeneralSecurityException {
-    byte[] key = Hex.decode(defaultKey);
+  /**
+   * Instantiates {@link SingleKeyManagementService} with {@link KMSConfig} and a default container key which is hex string.
+   * @param config {@link KMSConfig} to fetch configs from
+   * @param defaultContainerKey the default container key that will be returned for all {@link #getKey(short, short)} calls
+   * @throws GeneralSecurityException
+   */
+  SingleKeyManagementService(KMSConfig config, String defaultContainerKey) throws GeneralSecurityException {
+    byte[] key = Hex.decode(defaultContainerKey);
     keyGenAlgo = config.kmsKeyGenAlgo;
     secretKeySpec = new SecretKeySpec(key, keyGenAlgo);
     keyGen = KeyGenerator.getInstance(keyGenAlgo);
