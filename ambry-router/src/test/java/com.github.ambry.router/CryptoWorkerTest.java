@@ -34,7 +34,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.crypto.spec.SecretKeySpec;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -43,48 +42,42 @@ import static com.github.ambry.utils.Utils.*;
 
 
 /**
- * Tests {@link EncryptDecryptThread}
+ * Tests {@link CryptoWorker}
  */
-public class EncryptDecryptThreadTest {
+public class CryptoWorkerTest {
 
-  private static final int MAX_DATA_SIZE = 10000;
+  private static final int MAX_DATA_SIZE_IN_BYTES = 10000;
   private static final int DEFAULT_KEY_SIZE = 64;
   private static final int RANDOM_KEY_SIZE_IN_BITS = 256;
   private static final String ENCRYPT_JOB_TYPE = "encrypt";
   private static final String DECRYPT_JOB_TYPE = "decrypt";
-  private final BlockingQueue<EncryptDecryptThread.JobInfo> jobQueue;
+  private final BlockingQueue<CryptoWorker.CryptoJob> jobQueue;
   private final CryptoService<SecretKeySpec> cryptoService;
   private final KeyManagementService<SecretKeySpec> kms;
   private final ClusterMap referenceClusterMap;
   private final String defaultKey;
   private final VerifiableProperties verifiableProperties;
-  private EncryptDecryptThread encryptDecryptThread;
+  private CryptoWorker _cryptoWorker;
 
-  public EncryptDecryptThreadTest() throws IOException, GeneralSecurityException {
+  public CryptoWorkerTest() throws IOException, GeneralSecurityException {
     jobQueue = new LinkedBlockingQueue<>();
     defaultKey = getRandomKey(DEFAULT_KEY_SIZE);
     Properties props = getKMSProperties(defaultKey, RANDOM_KEY_SIZE_IN_BITS);
     verifiableProperties = new VerifiableProperties((props));
     kms = new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
     cryptoService = new GCMCryptoServiceFactory(verifiableProperties).getCryptoService();
-    encryptDecryptThread = new EncryptDecryptThread(jobQueue, cryptoService, kms);
+    _cryptoWorker = new CryptoWorker(jobQueue, cryptoService, kms);
     referenceClusterMap = new MockClusterMap();
-    new Thread(encryptDecryptThread).start();
-  }
-
-  @After
-  public void cleanup() {
-    encryptDecryptThread.close();
-    jobQueue.clear();
+    new Thread(_cryptoWorker).start();
   }
 
   /**
-   * Tests {@link EncryptDecryptThread} for happy path
+   * Tests {@link CryptoWorker} for happy path
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
   @Test
-  public void testEncryptDecryptThread() throws InterruptedException, GeneralSecurityException {
+  public void testCryptoWorker() throws InterruptedException, GeneralSecurityException {
     int totalDataCount = 10;
     CountDownLatch encryptCallBackCount = new CountDownLatch(totalDataCount);
     CountDownLatch decryptCallBackCount = new CountDownLatch(totalDataCount);
@@ -97,58 +90,58 @@ public class EncryptDecryptThreadTest {
   }
 
   /**
-   * Tests {@link EncryptDecryptThread} for failures during encryption
+   * Tests {@link CryptoWorker} for failures during encryption
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
   @Test
   public void testEncryptionFailure() throws InterruptedException, GeneralSecurityException {
-    encryptDecryptThread.close();
+    _cryptoWorker.close();
     jobQueue.clear();
     MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
     mockCryptoService.exceptionOnEncryption =
         new GeneralSecurityException("Exception to test", new IllegalStateException());
-    encryptDecryptThread = new EncryptDecryptThread(jobQueue, mockCryptoService, kms);
-    new Thread(encryptDecryptThread).start();
+    _cryptoWorker = new CryptoWorker(jobQueue, mockCryptoService, kms);
+    new Thread(_cryptoWorker).start();
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
     testFailureOnEncryption(perBlobSecretKey);
     mockCryptoService.clearStates();
-    encryptDecryptThread.close();
+    _cryptoWorker.close();
     jobQueue.clear();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
     mockKms.exceptionToThrow = new GeneralSecurityException("Exception to test", new IllegalStateException());
-    encryptDecryptThread = new EncryptDecryptThread(jobQueue, cryptoService, mockKms);
-    new Thread(encryptDecryptThread).start();
+    _cryptoWorker = new CryptoWorker(jobQueue, cryptoService, mockKms);
+    new Thread(_cryptoWorker).start();
     testFailureOnEncryption(perBlobSecretKey);
   }
 
   /**
-   * Tests {@link EncryptDecryptThread} for failures during decryption
+   * Tests {@link CryptoWorker} for failures during decryption
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
   @Test
   public void testDecryptionFailure() throws InterruptedException, GeneralSecurityException {
-    encryptDecryptThread.close();
+    _cryptoWorker.close();
     jobQueue.clear();
     MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
     mockCryptoService.exceptionOnDecryption =
         new GeneralSecurityException("Exception to test", new IllegalStateException());
-    encryptDecryptThread = new EncryptDecryptThread(jobQueue, mockCryptoService, kms);
-    new Thread(encryptDecryptThread).start();
+    _cryptoWorker = new CryptoWorker(jobQueue, mockCryptoService, kms);
+    new Thread(_cryptoWorker).start();
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
     testFailureOnDecryption(perBlobSecretKey, null, false);
     mockCryptoService.clearStates();
-    encryptDecryptThread.close();
+    _cryptoWorker.close();
     jobQueue.clear();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
-    encryptDecryptThread = new EncryptDecryptThread(jobQueue, cryptoService, mockKms);
-    new Thread(encryptDecryptThread).start();
+    _cryptoWorker = new CryptoWorker(jobQueue, cryptoService, mockKms);
+    new Thread(_cryptoWorker).start();
     testFailureOnDecryption(perBlobSecretKey, mockKms, true);
   }
 
   /**
-   * Tests {@link EncryptDecryptThread} for pending encrypt jobs callback after closing the thread
+   * Tests {@link CryptoWorker} for pending encrypt jobs callback after closing the thread
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
@@ -162,25 +155,26 @@ public class EncryptDecryptThreadTest {
     SecretKeySpec perBlobKey = kms.getRandomKey();
     for (int i = 0; i < testDataCount; i++) {
       Pair<BlobId, ByteBuffer> randomData = getRandomBlob();
-      jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-          new EncryptDecryptThread.EncryptCallBack() {
+      jobQueue.add(new CryptoWorker.EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey,
+          new CryptoWorker.EncryptCallback() {
             @Override
-            public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-                GeneralSecurityException exception) {
+            public void onCompletion(CryptoWorker.EncryptJobResult result, Exception exception) {
               encryptCallBackCount.countDown();
-              Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), callbackBlobId);
+              Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), result.getBlobId());
               if (!exceptionSeen.get() && exception == null) {
-                Assert.assertNotNull("Encrypted content should not be null", encryptedContent);
-                Assert.assertNotNull("Encrypted key should not be null", encryptedKey);
+                Assert.assertNotNull("Encrypted content should not be null", result.getEncryptedContent());
+                Assert.assertNotNull("Encrypted key should not be null", result.getEncryptedKey());
               } else {
                 exceptionSeen.set(true);
                 Assert.assertNotNull(
                     "Exception should have been thrown to encrypt contents for " + randomData.getFirst(), exception);
-                Assert.assertNull("Encrypted contents should have been null", encryptedContent);
-                Assert.assertNull("Encrypted key should have been null", encryptedKey);
+                Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+                    exception instanceof GeneralSecurityException);
+                Assert.assertNull("Encrypted contents should have been null", result.getEncryptedContent());
+                Assert.assertNull("Encrypted key should have been null", result.getEncryptedKey());
               }
               if (!closeIssued.get() && encryptCallBackCount.getCount() == closeOnCount) {
-                new Thread(new ThreadToCloseEncryptDecryptThread(encryptDecryptThread)).start();
+                new Thread(new ThreadToCloseEncryptDecryptThread(_cryptoWorker)).start();
                 closeIssued.set(true);
               }
             }
@@ -190,7 +184,7 @@ public class EncryptDecryptThreadTest {
   }
 
   /**
-   * Tests {@link EncryptDecryptThread} for pending decrypt jobs callback after closing the thread
+   * Tests {@link CryptoWorker} for pending decrypt jobs callback after closing the thread
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
@@ -201,57 +195,58 @@ public class EncryptDecryptThreadTest {
     CountDownLatch encryptCallBackCount = new CountDownLatch(testDataCount);
     CountDownLatch decryptCallBackCount = new CountDownLatch(testDataCount);
     SecretKeySpec perBlobKey = kms.getRandomKey();
-    List<EncryptDecryptThread.DecryptJobInfo> decryptJobInfos = new ArrayList<>();
+    List<CryptoWorker.DecryptJob> decryptJobInfos = new ArrayList<>();
     for (int i = 0; i < testDataCount; i++) {
       Pair<BlobId, ByteBuffer> randomData = getRandomBlob();
-      jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-          new EncryptDecryptThread.EncryptCallBack() {
+      jobQueue.add(new CryptoWorker.EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey,
+          new CryptoWorker.EncryptCallback() {
             @Override
-            public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-                GeneralSecurityException exception) {
-              Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), callbackBlobId);
-              Assert.assertNotNull("Encrypted content should not be null", encryptedContent);
-              Assert.assertNotNull("Encrypted key should not be null", encryptedKey);
+            public void onCompletion(CryptoWorker.EncryptJobResult encryptJobResult, Exception exception) {
+              Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), encryptJobResult.getBlobId());
+              Assert.assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedContent());
+              Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
               encryptCallBackCount.countDown();
-              decryptJobInfos.add(
-                  new EncryptDecryptThread.DecryptJobInfo(randomData.getFirst(), encryptedKey, encryptedContent,
-                      new EncryptDecryptThread.DecryptCallBack() {
-                        @Override
-                        public void onCompletion(BlobId blobId, ByteBuffer decryptedContent,
-                            GeneralSecurityException e) {
-                          Assert.assertEquals("BlobId mismatch ", blobId, callbackBlobId);
-                          if (e == null) {
-                            Assert.assertNull("Exception shouldn't have been thrown to decrypt contents for " + blobId,
-                                exception);
-                            Assert.assertNotNull("Decrypted contents should not be null", decryptedContent);
-                            Assert.assertArrayEquals("Decrypted bytes and plain bytes should match",
-                                randomData.getSecond().array(), decryptedContent.array());
-                          } else {
-                            Assert.assertNotNull("Exception should have been thrown to decrypt contents for " + blobId,
-                                e);
-                            Assert.assertNull("Decrypted contents should have been null", decryptedContent);
-                          }
-                          decryptCallBackCount.countDown();
-                        }
-                      }));
+              decryptJobInfos.add(new CryptoWorker.DecryptJob(randomData.getFirst(), encryptJobResult.getEncryptedKey(),
+                  encryptJobResult.getEncryptedContent(), new CryptoWorker.DecryptCallback() {
+                @Override
+                public void onCompletion(CryptoWorker.DecryptJobResult decryptJobResult, Exception e) {
+                  Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), decryptJobResult.getBlobId());
+                  if (e == null) {
+                    Assert.assertNull(
+                        "Exception shouldn't have been thrown to decrypt contents for " + randomData.getFirst(),
+                        exception);
+                    Assert.assertNotNull("Decrypted contents should not be null",
+                        decryptJobResult.getDecryptedContent());
+                    Assert.assertArrayEquals("Decrypted bytes and plain bytes should match",
+                        randomData.getSecond().array(), decryptJobResult.getDecryptedContent().array());
+                  } else {
+                    Assert.assertNotNull(
+                        "Exception should have been thrown to decrypt contents for " + randomData.getFirst(), e);
+                    Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+                        e instanceof GeneralSecurityException);
+                    Assert.assertNull("Decrypted contents should have been null",
+                        decryptJobResult.getDecryptedContent());
+                  }
+                  decryptCallBackCount.countDown();
+                }
+              }));
             }
           }));
     }
 
     // add special job that will close the thread. Add all the decrypt jobs to the queue before closing the thread.
     Pair<BlobId, ByteBuffer> probeData = getRandomBlob();
-    jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(probeData.getFirst(), probeData.getSecond(), perBlobKey,
-        new EncryptDecryptThread.EncryptCallBack() {
+    jobQueue.add(new CryptoWorker.EncryptJob(probeData.getFirst(), probeData.getSecond(), perBlobKey,
+        new CryptoWorker.EncryptCallback() {
           @Override
-          public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-              GeneralSecurityException exception) {
-            Iterator<EncryptDecryptThread.DecryptJobInfo> iterator = decryptJobInfos.iterator();
+          public void onCompletion(CryptoWorker.EncryptJobResult result, Exception exception) {
+            Iterator<CryptoWorker.DecryptJob> iterator = decryptJobInfos.iterator();
             while (iterator.hasNext()) {
-              EncryptDecryptThread.DecryptJobInfo decryptJobInfo = iterator.next();
+              CryptoWorker.DecryptJob decryptJobInfo = iterator.next();
               jobQueue.add(decryptJobInfo);
               iterator.remove();
             }
-            new Thread(new ThreadToCloseEncryptDecryptThread(encryptDecryptThread)).start();
+            new Thread(new ThreadToCloseEncryptDecryptThread(_cryptoWorker)).start();
             closeIssued.set(true);
           }
         }));
@@ -260,33 +255,30 @@ public class EncryptDecryptThreadTest {
   }
 
   /**
-   * Tests {@link EncryptDecryptThread} for encrypt and decrypt calls after closing the thread
+   * Tests {@link CryptoWorker} for encrypt and decrypt calls after closing the thread
    * @throws GeneralSecurityException
    */
   @Test
-  public void testEncryptDecryptThreadAfterClose() throws GeneralSecurityException {
+  public void testCryptoWorkerClose() throws GeneralSecurityException {
     SecretKeySpec perBlobKey = kms.getRandomKey();
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob();
-    encryptDecryptThread.close();
+    _cryptoWorker.close();
 
-    jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-        new EncryptDecryptThread.EncryptCallBack() {
+    jobQueue.add(new CryptoWorker.EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey,
+        new CryptoWorker.EncryptCallback() {
           @Override
-          public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-              GeneralSecurityException exception) {
-            Assert.fail("Callback should not have been called since EncryptDecryptThread is closed");
+          public void onCompletion(CryptoWorker.EncryptJobResult result, Exception exception) {
+            Assert.fail("Callback should not have been called since CryptoWorker is closed");
           }
         }));
 
-    jobQueue.add(
-        new EncryptDecryptThread.DecryptJobInfo(randomData.getFirst(), randomData.getSecond(), randomData.getSecond(),
-            new EncryptDecryptThread.DecryptCallBack() {
-              @Override
-              public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedContent,
-                  GeneralSecurityException exception) {
-                Assert.fail("Callback should not have been called since EncryptDecryptThread is closed");
-              }
-            }));
+    jobQueue.add(new CryptoWorker.DecryptJob(randomData.getFirst(), randomData.getSecond(), randomData.getSecond(),
+        new CryptoWorker.DecryptCallback() {
+          @Override
+          public void onCompletion(CryptoWorker.DecryptJobResult result, Exception exception) {
+            Assert.fail("Callback should not have been called since CryptoWorker is closed");
+          }
+        }));
   }
 
   /**
@@ -298,23 +290,23 @@ public class EncryptDecryptThreadTest {
   private void testEncryptDecryptFlow(SecretKeySpec perBlobKey, CountDownLatch encryptCallBackCount,
       CountDownLatch decryptCallBackCount) {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob();
-    jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-        new EncryptCallBackVerifier(randomData.getFirst(), false, encryptCallBackCount,
-            new DecryptCallBackVerifier(randomData.getFirst(), randomData.getSecond(), false, decryptCallBackCount))));
+    jobQueue.add(new CryptoWorker.EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey,
+        new EncryptCallbackVerifier(randomData.getFirst(), false, encryptCallBackCount,
+            new DecryptCallbackVerifier(randomData.getFirst(), randomData.getSecond(), false, decryptCallBackCount))));
   }
 
   /**
    * Encrypt callback verifier. Verifies non null for arguments and adds a decrypt job to the jobQueue on successful completion.
    * Else, verifies the exception is set correctly.
    */
-  private class EncryptCallBackVerifier implements EncryptDecryptThread.EncryptCallBack {
-    BlobId blobId;
-    boolean expectException;
-    CountDownLatch countDownLatch;
-    DecryptCallBackVerifier decryptCallBackVerifier;
+  private class EncryptCallbackVerifier implements CryptoWorker.EncryptCallback {
+    private final BlobId blobId;
+    private final boolean expectException;
+    private final CountDownLatch countDownLatch;
+    private final DecryptCallbackVerifier decryptCallBackVerifier;
 
-    EncryptCallBackVerifier(BlobId blobId, boolean expectException, CountDownLatch encryptCountDownLatch,
-        DecryptCallBackVerifier decryptCallBackVerifier) {
+    EncryptCallbackVerifier(BlobId blobId, boolean expectException, CountDownLatch encryptCountDownLatch,
+        DecryptCallbackVerifier decryptCallBackVerifier) {
       this.blobId = blobId;
       this.expectException = expectException;
       this.countDownLatch = encryptCountDownLatch;
@@ -322,22 +314,23 @@ public class EncryptDecryptThreadTest {
     }
 
     @Override
-    public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-        GeneralSecurityException exception) {
-      Assert.assertEquals("BlobId mismatch ", blobId, callbackBlobId);
+    public void onCompletion(CryptoWorker.EncryptJobResult encryptJobResult, Exception exception) {
+      Assert.assertEquals("BlobId mismatch ", blobId, encryptJobResult.getBlobId());
       if (countDownLatch != null) {
         countDownLatch.countDown();
       }
       if (!expectException) {
         Assert.assertNull("Exception shouldn't have been thrown to encrypt contents for " + blobId, exception);
-        Assert.assertNotNull("Encrypted content should not be null", encryptedContent);
-        Assert.assertNotNull("Encrypted key should not be null", encryptedKey);
-        jobQueue.add(
-            new EncryptDecryptThread.DecryptJobInfo(blobId, encryptedKey, encryptedContent, decryptCallBackVerifier));
+        Assert.assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedContent());
+        Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
+        jobQueue.add(new CryptoWorker.DecryptJob(blobId, encryptJobResult.getEncryptedKey(),
+            encryptJobResult.getEncryptedContent(), decryptCallBackVerifier));
       } else {
         Assert.assertNotNull("Exception should have been thrown to encrypt contents for " + blobId, exception);
-        Assert.assertNull("Encrypted contents should have been null", encryptedContent);
-        Assert.assertNull("Encrypted key should have been null", encryptedKey);
+        Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+            exception instanceof GeneralSecurityException);
+        Assert.assertNull("Encrypted contents should have been null", encryptJobResult.getEncryptedContent());
+        Assert.assertNull("Encrypted key should have been null", encryptJobResult.getEncryptedKey());
       }
     }
   }
@@ -346,13 +339,13 @@ public class EncryptDecryptThreadTest {
    * Decrypt callback verifier. Verifies the decrypted content matches raw content on successful completion.
    * Else, verifies the exception is set correctly.
    */
-  private class DecryptCallBackVerifier implements EncryptDecryptThread.DecryptCallBack {
-    BlobId blobId;
-    boolean expectException;
-    ByteBuffer unencryptedContent;
-    CountDownLatch countDownLatch;
+  private class DecryptCallbackVerifier implements CryptoWorker.DecryptCallback {
+    private final BlobId blobId;
+    private final boolean expectException;
+    private final ByteBuffer unencryptedContent;
+    private final CountDownLatch countDownLatch;
 
-    DecryptCallBackVerifier(BlobId blobId, ByteBuffer unencryptedContent, boolean expectException,
+    DecryptCallbackVerifier(BlobId blobId, ByteBuffer unencryptedContent, boolean expectException,
         CountDownLatch countDownLatch) {
       this.blobId = blobId;
       this.unencryptedContent = unencryptedContent;
@@ -361,19 +354,21 @@ public class EncryptDecryptThreadTest {
     }
 
     @Override
-    public void onCompletion(BlobId callbackBlobId, ByteBuffer decryptedContent, GeneralSecurityException exception) {
+    public void onCompletion(CryptoWorker.DecryptJobResult result, Exception exception) {
       if (countDownLatch != null) {
         countDownLatch.countDown();
       }
-      Assert.assertEquals("BlobId mismatch ", blobId, callbackBlobId);
+      Assert.assertEquals("BlobId mismatch ", blobId, result.getBlobId());
       if (!expectException) {
         Assert.assertNull("Exception shouldn't have been thrown to decrypt contents for " + blobId, exception);
-        Assert.assertNotNull("Decrypted contents should not be null", decryptedContent);
+        Assert.assertNotNull("Decrypted contents should not be null", result.getDecryptedContent());
         Assert.assertArrayEquals("Decrypted bytes and plain bytes should match", unencryptedContent.array(),
-            decryptedContent.array());
+            result.getDecryptedContent().array());
       } else {
         Assert.assertNotNull("Exception should have been thrown to decrypt contents for " + blobId, exception);
-        Assert.assertNull("Decrypted contents should have been null", decryptedContent);
+        Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+            exception instanceof GeneralSecurityException);
+        Assert.assertNull("Decrypted contents should have been null", result.getDecryptedContent());
       }
     }
   }
@@ -386,8 +381,8 @@ public class EncryptDecryptThreadTest {
   private void testFailureOnEncryption(SecretKeySpec perBlobKey) throws InterruptedException {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob();
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
-    jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-        new EncryptCallBackVerifier(randomData.getFirst(), true, encryptCallBackCount, null)));
+    jobQueue.add(new CryptoWorker.EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey,
+        new EncryptCallbackVerifier(randomData.getFirst(), true, encryptCallBackCount, null)));
     awaitCountDownLatch(encryptCallBackCount, ENCRYPT_JOB_TYPE);
   }
 
@@ -404,35 +399,34 @@ public class EncryptDecryptThreadTest {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob();
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     CountDownLatch decryptCallBackCount = new CountDownLatch(1);
-    jobQueue.add(new EncryptDecryptThread.EncryptJobInfo(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-        new EncryptDecryptThread.EncryptCallBack() {
+    jobQueue.add(new CryptoWorker.EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey,
+        new CryptoWorker.EncryptCallback() {
           @Override
-          public void onCompletion(BlobId callbackBlobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-              GeneralSecurityException exception) {
+          public void onCompletion(CryptoWorker.EncryptJobResult encryptJobResult, Exception exception) {
             encryptCallBackCount.countDown();
             Assert.assertNull("Exception shouldn't have been thrown to encrypt contents for " + randomData.getFirst(),
                 exception);
-            Assert.assertNotNull("Encrypted contents should not be null", encryptedContent);
-            Assert.assertNotNull("Encrypted key should not be null", encryptedKey);
-            Assert.assertEquals("BlobId mismatch", randomData.getFirst(), callbackBlobId);
+            Assert.assertNotNull("Encrypted contents should not be null", encryptJobResult.getEncryptedContent());
+            Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
+            Assert.assertEquals("BlobId mismatch", randomData.getFirst(), encryptJobResult.getBlobId());
 
             // set exception using MockKMS
             if (setExceptionForKMS) {
               mockKMS.exceptionToThrow = new GeneralSecurityException("Exception to test", new IllegalStateException());
             }
-            jobQueue.add(new EncryptDecryptThread.DecryptJobInfo(randomData.getFirst(), encryptedKey, encryptedContent,
-                new EncryptDecryptThread.DecryptCallBack() {
-                  @Override
-                  public void onCompletion(BlobId callbackBlobId, ByteBuffer decryptedContent,
-                      GeneralSecurityException exception) {
-                    decryptCallBackCount.countDown();
-                    Assert.assertNotNull(
-                        "Exception should have been thrown to decrypt contents for " + randomData.getFirst(),
-                        exception);
-                    Assert.assertNull("Decrypted contents should have been null", decryptedContent);
-                    Assert.assertEquals("BlobId mismatch", randomData.getFirst(), callbackBlobId);
-                  }
-                }));
+            jobQueue.add(new CryptoWorker.DecryptJob(randomData.getFirst(), encryptJobResult.getEncryptedKey(),
+                encryptJobResult.getEncryptedContent(), new CryptoWorker.DecryptCallback() {
+              @Override
+              public void onCompletion(CryptoWorker.DecryptJobResult result, Exception exception) {
+                decryptCallBackCount.countDown();
+                Assert.assertNotNull(
+                    "Exception should have been thrown to decrypt contents for " + randomData.getFirst(), exception);
+                Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+                    exception instanceof GeneralSecurityException);
+                Assert.assertNull("Decrypted contents should have been null", result.getDecryptedContent());
+                Assert.assertEquals("BlobId mismatch", randomData.getFirst(), result.getBlobId());
+              }
+            }));
           }
         }));
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
@@ -456,7 +450,7 @@ public class EncryptDecryptThreadTest {
    */
   private Pair<BlobId, ByteBuffer> getRandomBlob() {
     BlobId blobId = getNewBlobId();
-    int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE);
+    int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE_IN_BYTES);
     byte[] data = new byte[size];
     TestUtils.RANDOM.nextBytes(data);
     ByteBuffer toEncrypt = ByteBuffer.wrap(data);
@@ -475,12 +469,12 @@ public class EncryptDecryptThreadTest {
   }
 
   /**
-   * Thread to close the {@link EncryptDecryptThread} asynchronously
+   * Thread to close the {@link CryptoWorker} asynchronously
    */
   class ThreadToCloseEncryptDecryptThread implements Runnable {
-    private final EncryptDecryptThread thread;
+    private final CryptoWorker thread;
 
-    ThreadToCloseEncryptDecryptThread(EncryptDecryptThread thread) {
+    ThreadToCloseEncryptDecryptThread(CryptoWorker thread) {
       this.thread = thread;
     }
 

@@ -20,38 +20,34 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
- * Thread responsible for encrypting and decrypting blob content and per blob keys. Thread listens to a job queue
+ * Thread responsible for encrypting and decrypting blob content and per blob keys. Worker Thread listens to a job queue
  * for new jobs and processes it one by one.
  */
-public class EncryptDecryptThread implements Runnable {
-  private final BlockingQueue<JobInfo> jobQueue;
+public class CryptoWorker implements Runnable {
+  private final BlockingQueue<CryptoJob> jobQueue;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final AtomicBoolean enabled;
-  private final Lock lock;
   private CountDownLatch shutdownLatch;
 
-  private static final Logger logger = LoggerFactory.getLogger(EncryptDecryptThread.class);
+  private static final Logger logger = LoggerFactory.getLogger(CryptoWorker.class);
 
   /**
-   * Instantiates {@link EncryptDecryptThread} with the job queue, {@link CryptoService} and {@link KeyManagementService}
+   * Instantiates {@link CryptoWorker} with the job queue, {@link CryptoService} and {@link KeyManagementService}
    * @param jobQueue the {@link BlockingQueue} that contains the jobs
    * @param cryptoService the {@link CryptoService} to use to encrypt or decrypt
    * @param kms the {@link KeyManagementService} to fetch keys from
    */
-  EncryptDecryptThread(BlockingQueue<JobInfo> jobQueue, CryptoService cryptoService, KeyManagementService kms) {
+  CryptoWorker(BlockingQueue<CryptoJob> jobQueue, CryptoService cryptoService, KeyManagementService kms) {
     this.jobQueue = jobQueue;
     this.cryptoService = cryptoService;
     this.kms = kms;
     enabled = new AtomicBoolean(false);
-    lock = new ReentrantLock();
   }
 
   @Override
@@ -60,16 +56,13 @@ public class EncryptDecryptThread implements Runnable {
     shutdownLatch = new CountDownLatch(1);
     try {
       while (enabled.get()) {
-        lock.lock();
         try {
-          JobInfo jobInfo = jobQueue.poll(10, TimeUnit.MILLISECONDS);
-          if (jobInfo != null) {
-            jobInfo.doOperation(cryptoService, kms);
+          CryptoJob cryptoJob = jobQueue.poll(10, TimeUnit.MILLISECONDS);
+          if (cryptoJob != null) {
+            cryptoJob.doOperation(cryptoService, kms);
           }
         } catch (InterruptedException e) {
-          logger.error("InterruptedException thrown in EncryptDecryptThread");
-        } finally {
-          lock.unlock();
+          logger.error("InterruptedException thrown in CryptoWorker");
         }
       }
     } finally {
@@ -81,20 +74,15 @@ public class EncryptDecryptThread implements Runnable {
    * Shuts down the thread by closing all pending jobs
    */
   void close() {
-    lock.lock();
-    try {
-      if (enabled.compareAndSet(true, false)) {
-        logger.info("Closing EncryptDecryptThread");
-        closePendingJobs(new GeneralSecurityException("Shutting down EncryptDecrypt Thread"));
-      }
-    } finally {
-      lock.unlock();
+    if (enabled.compareAndSet(true, false)) {
+      logger.info("Closing CryptoWorker");
+      closePendingJobs(new GeneralSecurityException("Shutting down EncryptDecrypt Thread"));
     }
     if (shutdownLatch != null) {
       try {
-        shutdownLatch.await(10, TimeUnit.SECONDS);
+        shutdownLatch.await(1, TimeUnit.SECONDS);
       } catch (InterruptedException e) {
-        logger.error("InterruptedException thrown while waiting for EncryptDecryptThread to shutdown");
+        logger.error("InterruptedException thrown while waiting for CryptoWorker to shutdown");
       }
     }
   }
@@ -104,21 +92,21 @@ public class EncryptDecryptThread implements Runnable {
    * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callbacks for the pending jobs
    */
   private void closePendingJobs(GeneralSecurityException gse) {
-    JobInfo jobInfo = jobQueue.poll();
-    while (jobInfo != null) {
-      jobInfo.closeJob(gse);
-      jobInfo = jobQueue.poll();
+    CryptoJob cryptoJob = jobQueue.poll();
+    while (cryptoJob != null) {
+      cryptoJob.closeJob(gse);
+      cryptoJob = jobQueue.poll();
     }
   }
 
   /**
-   * JobInfo representing the job that needs processing
+   * CryptoJob representing the job that needs processing
    */
-  static abstract class JobInfo {
+  static abstract class CryptoJob {
     protected final BlobId blobId;
     protected final ByteBuffer input;
 
-    JobInfo(BlobId blobId, ByteBuffer input) {
+    CryptoJob(BlobId blobId, ByteBuffer input) {
       this.blobId = blobId;
       this.input = input;
     }
@@ -140,49 +128,93 @@ public class EncryptDecryptThread implements Runnable {
   /**
    * Callback to invoke for encrypt jobs
    */
-  interface EncryptCallBack {
+  interface EncryptCallback extends Callback<EncryptJobResult> {
     /**
      * Callback to be invoked on completion of an encryption job.
-     * @param blobId {@link BlobId} for which encryption was requested
-     * @param encryptedKey {@link ByteBuffer} representing the encrypted per blob key
-     * @param encryptedContent {@link ByteBuffer} representing encrypted content
-     * @param gse {@link GeneralSecurityException} thrown while encrypting
+     * @param result {@link EncryptJobResult} representing the result of an encrypt job
+     * @param e {@link Exception} thrown while encrypting
      */
-    void onCompletion(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
-        GeneralSecurityException gse);
+    void onCompletion(EncryptJobResult result, Exception e);
   }
 
   /**
    * Callback to invoke for decrypt jobs
    */
-  interface DecryptCallBack {
+  interface DecryptCallback extends Callback<DecryptJobResult> {
     /**
      * Callback to be invoked on completion of an decryption job.
-     * @param blobId {@link BlobId} for which encryption was requested
-     * @param decryptedContent {@link ByteBuffer} representing decrypted content
-     * @param gse {@link GeneralSecurityException} thrown while decrypting
+     * @param result {@link DecryptJobResult} representing the result of an decrypt job
+     * @param e {@link Exception} thrown while decrypting
      */
-    void onCompletion(BlobId blobId, ByteBuffer decryptedContent, GeneralSecurityException gse);
+    void onCompletion(DecryptJobResult result, Exception e);
+  }
+
+  /**
+   * Class representing encrypt job result
+   */
+  static class EncryptJobResult {
+    private final BlobId blobId;
+    private final ByteBuffer encryptedKey;
+    private final ByteBuffer encryptedContent;
+
+    EncryptJobResult(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent) {
+      this.blobId = blobId;
+      this.encryptedKey = encryptedKey;
+      this.encryptedContent = encryptedContent;
+    }
+
+    BlobId getBlobId() {
+      return blobId;
+    }
+
+    ByteBuffer getEncryptedKey() {
+      return encryptedKey;
+    }
+
+    ByteBuffer getEncryptedContent() {
+      return encryptedContent;
+    }
+  }
+
+  /**
+   * Class respresenting decrypt job result
+   */
+  static class DecryptJobResult {
+    private final BlobId blobId;
+    private final ByteBuffer decryptedContent;
+
+    DecryptJobResult(BlobId blobId, ByteBuffer decryptedContent) {
+      this.blobId = blobId;
+      this.decryptedContent = decryptedContent;
+    }
+
+    BlobId getBlobId() {
+      return blobId;
+    }
+
+    ByteBuffer getDecryptedContent() {
+      return decryptedContent;
+    }
   }
 
   /**
    * Class representing an encrypt Job.
    */
-  static class EncryptJobInfo extends JobInfo {
+  static class EncryptJob extends CryptoJob {
     private final Object perBlobKey;
-    private final EncryptCallBack callBack;
+    private final EncryptCallback callback;
 
     /**
-     * Instantiates {@link EncryptJobInfo} with {@link BlobId}, content to encrypt, perBlobKey and the {@link EncryptCallBack}
+     * Instantiates {@link EncryptJob} with {@link BlobId}, content to encrypt, perBlobKey and the {@link EncryptCallback}
      * @param blobId the {@link BlobId} for which encryption is requested
      * @param toEncrypt {@link ByteBuffer} to be encrypted
      * @param perBlobKey per blob key to use to encrypt the blob content
-     * @param callBack {@link EncryptCallBack} to be invoked on completion
+     * @param callback {@link EncryptCallback} to be invoked on completion
      */
-    EncryptJobInfo(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, EncryptCallBack callBack) {
+    EncryptJob(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, EncryptCallback callback) {
       super(blobId, toEncrypt);
       this.perBlobKey = perBlobKey;
-      this.callBack = callBack;
+      this.callback = callback;
     }
 
     /**
@@ -200,37 +232,37 @@ public class EncryptDecryptThread implements Runnable {
         ByteBuffer encryptedContent = cryptoService.encrypt(input, perBlobKey);
         Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
         ByteBuffer encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
-        callBack.onCompletion(blobId, encryptedKey, encryptedContent, null);
-      } catch (GeneralSecurityException e) {
-        callBack.onCompletion(blobId, null, null, e);
+        callback.onCompletion(new EncryptJobResult(blobId, encryptedKey, encryptedContent), null);
+      } catch (Exception e) {
+        callback.onCompletion(new EncryptJobResult(blobId, null, null), e);
       }
     }
 
     @Override
     void closeJob(GeneralSecurityException gse) {
-      callBack.onCompletion(blobId, null, null, gse);
+      callback.onCompletion(new EncryptJobResult(blobId, null, null), gse);
     }
   }
 
   /**
    * Class representing an decrypt Job.
    */
-  static class DecryptJobInfo extends JobInfo {
+  static class DecryptJob extends CryptoJob {
     private final ByteBuffer encryptedKey;
-    private final DecryptCallBack callBack;
+    private final DecryptCallback callback;
 
     /**
-     * Instantiates {@link DecryptJobInfo} with {@link BlobId}, key to be decrypted, content to be decrypted and the
-     * {@link DecryptCallBack}
+     * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
+     * {@link DecryptCallback}
      * @param blobId the {@link BlobId} for which decryption is requested
      * @param encryptedKey encrypted per blob key
      * @param encryptedContent encrypted blob content
-     * @param callBack {@link DecryptCallBack} to be invoked on completion
+     * @param callback {@link DecryptCallback} to be invoked on completion
      */
-    DecryptJobInfo(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent, DecryptCallBack callBack) {
+    DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent, DecryptCallback callback) {
       super(blobId, encryptedContent);
       this.encryptedKey = encryptedKey;
-      this.callBack = callBack;
+      this.callback = callback;
     }
 
     /**
@@ -248,15 +280,15 @@ public class EncryptDecryptThread implements Runnable {
         Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
         Object perBlobKey = cryptoService.decryptKey(encryptedKey, containerKey);
         ByteBuffer decryptedContent = cryptoService.decrypt(input, perBlobKey);
-        callBack.onCompletion(blobId, decryptedContent, null);
-      } catch (GeneralSecurityException e) {
-        callBack.onCompletion(blobId, null, e);
+        callback.onCompletion(new DecryptJobResult(blobId, decryptedContent), null);
+      } catch (Exception e) {
+        callback.onCompletion(new DecryptJobResult(blobId, null), e);
       }
     }
 
     @Override
     void closeJob(GeneralSecurityException gse) {
-      callBack.onCompletion(blobId, null, gse);
+      callback.onCompletion(new DecryptJobResult(blobId, null), gse);
     }
   }
 }
