@@ -34,6 +34,7 @@ import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpStatusClass;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
@@ -68,6 +69,7 @@ import org.slf4j.LoggerFactory;
 class NettyResponseChannel implements RestResponseChannel {
   // Detailed message about an error in an error response.
   static final String FAILURE_REASON_HEADER = "x-ambry-failure-reason";
+  static final String ERROR_CODE_HEADER = "x-ambry-error-code";
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST or PUT, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
@@ -373,9 +375,10 @@ class NettyResponseChannel implements RestResponseChannel {
    */
   private FullHttpResponse getErrorResponse(Throwable cause) {
     HttpResponseStatus status;
+    RestServiceErrorCode restServiceErrorCode = null;
     String errReason = null;
     if (cause instanceof RestServiceException) {
-      RestServiceErrorCode restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
+      restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
       status = getHttpResponseStatus(errorResponseStatus);
       if (status == HttpResponseStatus.BAD_REQUEST) {
@@ -394,6 +397,9 @@ class NettyResponseChannel implements RestResponseChannel {
     HttpUtil.setContentLength(response, 0);
     if (errReason != null) {
       response.headers().set(FAILURE_REASON_HEADER, errReason);
+    }
+    if (restServiceErrorCode != null && HttpStatusClass.CLIENT_ERROR.contains(status.code())) {
+      response.headers().set(ERROR_CODE_HEADER, restServiceErrorCode.name());
     }
     response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
     boolean keepAlive =
