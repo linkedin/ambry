@@ -27,6 +27,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -331,7 +332,8 @@ public class PublicAccessLogHandlerTest {
       SSLEngine sslEngine = SSL_CONTEXT.newEngine(channel.alloc());
       // HttpRequests pass through the SslHandler without a handshake (it only operates on ByteBuffers) so we have
       // to mock certain methods of SSLEngine and SSLSession to ensure that we can test certificate logging.
-      SSLEngine mockSSLEngine = new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), PEER_CERT));
+      SSLEngine mockSSLEngine =
+          new MockSSLEngine(sslEngine, new MockSSLSession(sslEngine.getSession(), new Certificate[]{PEER_CERT}));
       channel.pipeline().addLast(new SslHandler(mockSSLEngine));
     }
     channel.pipeline()
