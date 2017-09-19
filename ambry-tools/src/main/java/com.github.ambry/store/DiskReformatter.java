@@ -288,7 +288,7 @@ public class DiskReformatter {
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     Store store =
-        new BlobStore("move_check", storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(),
+        new BlobStore("move_check", storeConfig, null, null, diskIOScheduler, null, metrics, srcDir.getAbsolutePath(),
             storeCapacity, storeKeyFactory, recovery, null, time);
     store.start();
     store.shutdown();

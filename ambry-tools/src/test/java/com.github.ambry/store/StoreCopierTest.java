@@ -116,7 +116,7 @@ public class StoreCopierTest {
     // copy the store descriptor file over
     Files.copy(new File(srcDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(),
         new File(tgtDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
-    BlobStore tgt = new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER,
+    BlobStore tgt = new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, null,
         new StorageManagerMetrics(new MetricRegistry()), tgtDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY,
         null, null, time);
     tgt.start();
@@ -151,7 +151,7 @@ public class StoreCopierTest {
    * @throws StoreException
    */
   private void setupTestState() throws IOException, StoreException {
-    BlobStore src = new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER,
+    BlobStore src = new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, null,
         new StorageManagerMetrics(clusterMap.getMetricRegistry()), srcDir.getAbsolutePath(), STORE_CAPACITY,
         STORE_KEY_FACTORY, null, null, time);
     src.start();
