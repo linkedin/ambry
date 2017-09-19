@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
@@ -41,6 +42,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Properties;
@@ -48,9 +50,9 @@ import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
-import junit.framework.Assert;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -62,12 +64,23 @@ public class AmbrySecurityServiceTest {
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
+  private static final InMemAccountServiceFactory.InMemAccountService accountService =
+      new InMemAccountServiceFactory(false).getAccountService();
+  private static final Account REF_ACCOUNT = accountService.createAndAddRandomAccount();
+  private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
   private static final BlobInfo DEFAULT_INFO = new BlobInfo(
-      new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM)), null);
+      new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1, SERVICE_ID, OWNER_ID, "image/gif", true,
+          Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId()), null);
+  private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
+      new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID), null);
 
   private final SecurityService securityService =
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()));
+
+  static {
+    accountService.updateAccounts(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
+  }
 
   /**
    * Tests {@link AmbrySecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases
@@ -140,27 +153,33 @@ public class AmbrySecurityServiceTest {
 
     // HEAD
     // normal
-    testHeadBlobWithVariousRanges(DEFAULT_INFO);
+    testHeadBlobWithVariousRanges(DEFAULT_INFO, true);
+    // unknown account
+    testHeadBlobWithVariousRanges(UNKNOWN_INFO, true);
+    // without account and container inserted
+    testHeadBlobWithVariousRanges(UNKNOWN_INFO, false);
     // with no owner id
     BlobInfo blobInfo = new BlobInfo(
-        new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID), null);
-    testHeadBlobWithVariousRanges(blobInfo);
+        new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
+            REF_CONTAINER.getId()), null);
+    testHeadBlobWithVariousRanges(blobInfo, true);
     // with no content type
     blobInfo = new BlobInfo(
-        new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID), null);
-    testHeadBlobWithVariousRanges(blobInfo);
+        new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
+            REF_CONTAINER.getId()), null);
+    testHeadBlobWithVariousRanges(blobInfo, true);
     // with a TTL
     blobInfo = new BlobInfo(
-        new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID), null);
-    testHeadBlobWithVariousRanges(blobInfo);
+        new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000, REF_ACCOUNT.getId(),
+            REF_CONTAINER.getId()), null);
+    testHeadBlobWithVariousRanges(blobInfo, true);
 
     // GET BlobInfo
-    testGetSubResource(RestUtils.SubResource.BlobInfo);
+    testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo, true);
+    testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo, true);
+    testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo, false);
     // GET UserMetadata
-    testGetSubResource(RestUtils.SubResource.UserMetadata);
+    testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.UserMetadata, true);
 
     // POST
     testPostBlob();
@@ -224,6 +243,41 @@ public class AmbrySecurityServiceTest {
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
           RestServiceErrorCode.ServiceUnavailable);
+    }
+  }
+
+  /**
+   * Inserts the given {@code account} and {@code container} in {@code restRequest}.
+   * @param restRequest the {@link RestRequest} to insert the objects into.
+   * @param account the {@link Account} to insert.
+   * @param container the {@link Container} to insert.
+   */
+  private void insertAccountAndContainer(RestRequest restRequest, Account account, Container container) {
+    if (account != null && container != null) {
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, account);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
+    }
+  }
+
+  /**
+   * Verify that the account and container headers in the response are correct.
+   * @param restResponseChannel the {@link MockRestResponseChannel} to get headers from.
+   * @param expectedAccount the expected {@link Account}. Can be {@code null} if response is not expected to have the
+   *                        details.
+   * @param expectedContainer the expected {@link Container}. Can be {@code null} if response is not expected to have
+   *                          the details.
+   */
+  private void verifyAccountAndContainerHeaders(MockRestResponseChannel restResponseChannel, Account expectedAccount,
+      Container expectedContainer) {
+    if (expectedAccount != null && expectedAccount.getId() != Account.UNKNOWN_ACCOUNT_ID && expectedContainer != null
+        && expectedContainer.getId() != Container.UNKNOWN_CONTAINER_ID) {
+      Assert.assertEquals("Account name not as expected", expectedAccount.getName(),
+          restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
+      Assert.assertEquals("Container name not as expected", expectedContainer.getName(),
+          restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
+    } else {
+      verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.TARGET_ACCOUNT_NAME,
+          RestUtils.Headers.TARGET_CONTAINER_NAME);
     }
   }
 
@@ -358,26 +412,31 @@ public class AmbrySecurityServiceTest {
    * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Head
    * request with the passed in {@link BlobInfo} and various range settings, including no set range (entire blob).
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}s
+   * @param insertAccountContainer {@code true} if the {@link Account} and {@link Container} has to be inserted in the
+   *                                          created {@link RestRequest}.
    * @throws Exception
    */
-  private void testHeadBlobWithVariousRanges(BlobInfo blobInfo) throws Exception {
+  private void testHeadBlobWithVariousRanges(BlobInfo blobInfo, boolean insertAccountContainer) throws Exception {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
-    testHeadBlob(blobInfo, null);
+    testHeadBlob(blobInfo, null, insertAccountContainer);
 
-    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0));
+    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0), insertAccountContainer);
     if (blobSize > 0) {
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0));
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0), insertAccountContainer);
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)),
+          insertAccountContainer);
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1), insertAccountContainer);
 
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
+      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)),
+          insertAccountContainer);
 
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
+      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize), insertAccountContainer);
     }
     if (blobSize > 1) {
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
+      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)),
+          insertAccountContainer);
     }
   }
 
@@ -386,17 +445,27 @@ public class AmbrySecurityServiceTest {
    * {@link RestMethod#HEAD}.
    * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
    * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
+   * @param insertAccountContainer {@code true} if the {@link Account} and {@link Container} has to be inserted in the
+   *                                          created {@link RestRequest}.
    * @throws Exception
    */
-  private void testHeadBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
+  private void testHeadBlob(BlobInfo blobInfo, ByteRange range, boolean insertAccountContainer) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", headers);
+    Account account = null;
+    Container container = null;
+    if (insertAccountContainer) {
+      account = accountService.getAccountById(blobInfo.getBlobProperties().getAccountId());
+      container = account.getContainerById(blobInfo.getBlobProperties().getContainerId());
+      insertAccountAndContainer(restRequest, account, container);
+    }
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
+    verifyAccountAndContainerHeaders(restResponseChannel, account, container);
   }
 
   /**
@@ -404,18 +473,19 @@ public class AmbrySecurityServiceTest {
    * @param subResource the {@link RestUtils.SubResource}  to test.
    * @throws Exception
    */
-  private void testGetSubResource(RestUtils.SubResource subResource) throws Exception {
+  private void testGetSubResource(BlobInfo blobInfo, RestUtils.SubResource subResource,
+      boolean shouldInsertAccountAndContainer) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
-    securityService.processResponse(restRequest, restResponseChannel, DEFAULT_INFO).get();
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set ", ResponseStatus.Ok,
         restResponseChannel.getStatus());
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertEquals("Last Modified does not match creation time",
-        RestUtils.toSecondsPrecisionInMs(DEFAULT_INFO.getBlobProperties().getCreationTimeInMs()),
+        RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs()),
         RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED)).longValue());
     if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
-      verifyBlobPropertiesHeaders(DEFAULT_INFO.getBlobProperties(), restResponseChannel);
+      verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
     } else {
       verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.PRIVATE, RestUtils.Headers.TTL,
           RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,

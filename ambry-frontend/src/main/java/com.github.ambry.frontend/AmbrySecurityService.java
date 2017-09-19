@@ -13,6 +13,8 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -102,7 +104,7 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setStatus(options.getRange() == null ? ResponseStatus.Ok : ResponseStatus.PartialContent);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-            setHeadResponseHeaders(blobInfo, options, responseChannel);
+            setHeadResponseHeaders(blobInfo, options, restRequest, responseChannel);
             break;
           case GET:
             responseChannel.setStatus(ResponseStatus.Ok);
@@ -126,6 +128,7 @@ class AmbrySecurityService implements SecurityService {
             } else {
               if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
                 setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+                setAccountAndContainerHeaders(restRequest, responseChannel);
               }
             }
             break;
@@ -168,10 +171,11 @@ class AmbrySecurityService implements SecurityService {
    * Sets the required headers in the HEAD response.
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @param options the {@link GetBlobOptions} associated with the request.
+   * @param restRequest the {@link RestRequest} that was received.
    * @param restResponseChannel the {@link RestResponseChannel} to set headers on.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setHeadResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
+  private void setHeadResponseHeaders(BlobInfo blobInfo, GetBlobOptions options, RestRequest restRequest,
       RestResponseChannel restResponseChannel) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     if (blobProperties.getContentType() != null) {
@@ -186,6 +190,7 @@ class AmbrySecurityService implements SecurityService {
     }
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, contentLength);
     setBlobPropertiesHeaders(blobProperties, restResponseChannel);
+    setAccountAndContainerHeaders(restRequest, restResponseChannel);
   }
 
   /**
@@ -258,6 +263,27 @@ class AmbrySecurityService implements SecurityService {
     }
     if (blobProperties.getOwnerId() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.OWNER_ID, blobProperties.getOwnerId());
+    }
+  }
+
+  /**
+   * Adds the account and container details to the response headers.
+   * @param restRequest the {@link RestRequest} that contains the {@link Account} and {@link Container} details.
+   * @param restResponseChannel the {@link RestResponseChannel} where headers need to be set.
+   * @throws RestServiceException if headers cannot be set.
+   */
+  private void setAccountAndContainerHeaders(RestRequest restRequest, RestResponseChannel restResponseChannel)
+      throws RestServiceException {
+    Object accountObj = restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
+    Object containerObj = restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
+    if (accountObj != null && accountObj instanceof Account) {
+      Account account = (Account) accountObj;
+      if (account.getId() != Account.UNKNOWN_ACCOUNT_ID) {
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, ((Account) accountObj).getName());
+        if (containerObj != null && containerObj instanceof Container) {
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, ((Container) containerObj).getName());
+        }
+      }
     }
   }
 }
