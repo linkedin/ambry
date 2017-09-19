@@ -34,7 +34,7 @@ public class MockSSLSession implements SSLSession {
    * @param peerCertsToReturn If not {@code null}, return these certificates in {@link #getPeerCertificates()} instead
    *                          of delegating.
    */
-  MockSSLSession(SSLSession delegateSession, Certificate[] peerCertsToReturn) {
+  public MockSSLSession(SSLSession delegateSession, Certificate[] peerCertsToReturn) {
     this.delegateSession = delegateSession;
     this.peerCertsToReturn = peerCertsToReturn;
   }
