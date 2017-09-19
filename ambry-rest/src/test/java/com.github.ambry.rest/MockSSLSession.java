@@ -25,18 +25,18 @@ import javax.net.ssl.SSLSessionContext;
  * A mock of {@link SSLSession} that either delegates to a passed in {@link SSLSession}, or returns the provided
  * objects.
  */
-class MockSSLSession implements SSLSession {
+public class MockSSLSession implements SSLSession {
   private SSLSession delegateSession;
-  private Certificate peerCertToReturn;
+  private Certificate[] peerCertsToReturn;
 
   /**
    * @param delegateSession An {@link SSLSession} to delegate to in most cases.
-   * @param peerCertToReturn If not {@code null}, return this certificate in {@link #getPeerCertificates()} instead of
-   *                         delegating.
+   * @param peerCertsToReturn If not {@code null}, return these certificates in {@link #getPeerCertificates()} instead
+   *                          of delegating.
    */
-  MockSSLSession(SSLSession delegateSession, Certificate peerCertToReturn) {
+  MockSSLSession(SSLSession delegateSession, Certificate[] peerCertsToReturn) {
     this.delegateSession = delegateSession;
-    this.peerCertToReturn = peerCertToReturn;
+    this.peerCertsToReturn = peerCertsToReturn;
   }
 
   @Override
@@ -91,8 +91,8 @@ class MockSSLSession implements SSLSession {
 
   @Override
   public Certificate[] getPeerCertificates() throws SSLPeerUnverifiedException {
-    if (peerCertToReturn != null) {
-      return new Certificate[]{peerCertToReturn};
+    if (peerCertsToReturn != null) {
+      return peerCertsToReturn;
     }
     return delegateSession.getPeerCertificates();
   }
