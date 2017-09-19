@@ -22,6 +22,7 @@ import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -30,10 +31,12 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.TimeZone;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -56,9 +59,12 @@ public class RestUtilsTest {
   @Test
   public void getBlobPropertiesGoodInputTest() throws Exception {
     JSONObject headers = new JSONObject();
-    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), Boolean.toString(RANDOM.nextBoolean()),
-        generateRandomString(10), "image/gif", generateRandomString(10));
-    verifyBlobPropertiesConstructionSuccess(headers);
+    Container[] containers = {Container.DEFAULT_PRIVATE_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER};
+    for (Container container : containers) {
+      setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10), container,
+          "image/gif", generateRandomString(10));
+      verifyBlobPropertiesConstructionSuccess(headers);
+    }
   }
 
   /**
@@ -69,7 +75,6 @@ public class RestUtilsTest {
   @Test
   public void getBlobPropertiesVariedInputTest() throws Exception {
     String ttl = Long.toString(RANDOM.nextInt(10000));
-    String isPrivate = Boolean.toString(RANDOM.nextBoolean());
     String serviceId = generateRandomString(10);
     String contentType = "image/gif";
     String ownerId = generateRandomString(10);
@@ -78,77 +83,154 @@ public class RestUtilsTest {
     // failure required.
     // ttl not a number.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, "NaN", isPrivate, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, "NaN", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // ttl < -1.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, "-2", isPrivate, serviceId, contentType, ownerId);
-    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
-    // isPrivate not true or false.
-    headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, "!(true||false)", serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, "-2", serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // serviceId missing.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, null, contentType, ownerId);
+    setAmbryHeadersForPut(headers, ttl, null, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.MissingArgs);
     // serviceId null.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, null, contentType, ownerId);
+    setAmbryHeadersForPut(headers, ttl, null, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     headers.put(RestUtils.Headers.SERVICE_ID, JSONObject.NULL);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // contentType missing.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, null, ownerId);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, null, ownerId);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.MissingArgs);
     // contentType null.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, null, ownerId);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, null, ownerId);
     headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, JSONObject.NULL);
     verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InvalidArgs);
     // too many values for some headers.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     tooManyValuesTest(headers, RestUtils.Headers.TTL);
-    tooManyValuesTest(headers, RestUtils.Headers.PRIVATE);
+    // no internal keys for account and container
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, serviceId, null, contentType, ownerId, false);
+    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
+    // no internal keys for account
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId, false);
+    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
+    // no internal keys for container
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttl, serviceId, null, contentType, ownerId, true);
+    verifyBlobPropertiesConstructionFailure(headers, RestServiceErrorCode.InternalServerError);
 
     // no failures.
     // ttl missing. Should be infinite time by default.
-    // isPrivate missing. Should be false by default.
     // ownerId missing.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, null, null, serviceId, contentType, null);
+    setAmbryHeadersForPut(headers, null, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, null);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // ttl null.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, null, isPrivate, serviceId, contentType, ownerId);
+    setAmbryHeadersForPut(headers, null, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     headers.put(RestUtils.Headers.TTL, JSONObject.NULL);
-    verifyBlobPropertiesConstructionSuccess(headers);
-
-    // isPrivate null.
-    headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, ownerId);
-    headers.put(RestUtils.Headers.PRIVATE, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // ownerId null.
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, null);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, null);
     headers.put(RestUtils.Headers.OWNER_ID, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // blobSize null (should be ignored)
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, null);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     headers.put(RestUtils.Headers.BLOB_SIZE, JSONObject.NULL);
     verifyBlobPropertiesConstructionSuccess(headers);
 
     // blobSize negative (should succeed)
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, ttl, isPrivate, serviceId, contentType, null);
+    setAmbryHeadersForPut(headers, ttl, serviceId, Container.DEFAULT_PUBLIC_CONTAINER, contentType, ownerId);
     headers.put(RestUtils.Headers.BLOB_SIZE, -1);
     verifyBlobPropertiesConstructionSuccess(headers);
+  }
+
+  /**
+   * Tests for {@link RestUtils#isPrivate(Map)}
+   * @throws Exception
+   */
+  @Test
+  public void isPrivateTest() throws Exception {
+    String serviceId = generateRandomString(10);
+    String contentType = "image/gif";
+    JSONObject headers = new JSONObject();
+    // using this just to help with setting the other necessary headers - doesn't matter what the container is, the
+    // PRIVATE header won't have been set.
+    setAmbryHeadersForPut(headers, null, serviceId, Container.DEFAULT_PRIVATE_CONTAINER, contentType, null);
+
+    // isPrivate not true or false.
+    headers.put(RestUtils.Headers.PRIVATE, "!(true || false)");
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    try {
+      RestUtils.isPrivate(restRequest.getArgs());
+      fail("An exception was expected but none were thrown");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+
+    // isPrivate null.
+    headers.put(RestUtils.Headers.PRIVATE, JSONObject.NULL);
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    assertFalse("isPrivate should be false because it was not set", RestUtils.isPrivate(restRequest.getArgs()));
+
+    // isPrivate false
+    headers.put(RestUtils.Headers.PRIVATE, "false");
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    assertFalse("isPrivate should be false because it was set to false", RestUtils.isPrivate(restRequest.getArgs()));
+
+    // isPrivate true
+    headers.put(RestUtils.Headers.PRIVATE, "true");
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    assertTrue("isPrivate should be true because it was set to true", RestUtils.isPrivate(restRequest.getArgs()));
+  }
+
+  /**
+   * Tests for {@link RestUtils#ensureRequiredHeadersOrThrow(RestRequest, Set)}.
+   * @throws Exception
+   */
+  @Test
+  public void ensureRequiredHeadersOrThrowTest() throws Exception {
+    JSONObject headers = new JSONObject();
+    Set<String> requiredHeaders = new HashSet<>(Arrays.asList("required_a", "required_b", "required_c"));
+    for (String requiredHeader : requiredHeaders) {
+      headers.put(requiredHeader, UtilsTest.getRandomString(10));
+    }
+    headers.put(UtilsTest.getRandomString(10), UtilsTest.getRandomString(10));
+
+    // success test
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    RestUtils.ensureRequiredHeadersOrThrow(restRequest, requiredHeaders);
+
+    // failure test
+    // null
+    headers.put(requiredHeaders.iterator().next(), JSONObject.NULL);
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    try {
+      RestUtils.ensureRequiredHeadersOrThrow(restRequest, requiredHeaders);
+      fail("Should have failed because one of the required headers has a bad value");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+    // not present
+    headers.remove(requiredHeaders.iterator().next());
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    try {
+      RestUtils.ensureRequiredHeadersOrThrow(restRequest, requiredHeaders);
+      fail("Should have failed because one of the required headers is not present");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MissingArgs, e.getErrorCode());
+    }
   }
 
   /**
@@ -168,8 +250,8 @@ public class RestUtilsTest {
   @Test
   public void getUserMetadataGoodInputTest() throws Exception {
     JSONObject headers = new JSONObject();
-    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), Boolean.toString(RANDOM.nextBoolean()),
-        generateRandomString(10), "image/gif", generateRandomString(10));
+    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
+        Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
@@ -200,8 +282,8 @@ public class RestUtilsTest {
   @Test
   public void getUserMetadataUnusualInputTest() throws Exception {
     JSONObject headers = new JSONObject();
-    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), Boolean.toString(RANDOM.nextBoolean()),
-        generateRandomString(10), "image/gif", generateRandomString(10));
+    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
+        Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
     String key1 = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1";
     userMetadata.put(key1, "value1");
@@ -237,8 +319,8 @@ public class RestUtilsTest {
   @Test
   public void getEmptyUserMetadataInputTest() throws Exception {
     JSONObject headers = new JSONObject();
-    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), Boolean.toString(RANDOM.nextBoolean()),
-        generateRandomString(10), "image/gif", generateRandomString(10));
+    setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
+        Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
     setUserMetadataHeaders(headers, userMetadata);
 
@@ -638,19 +720,41 @@ public class RestUtilsTest {
    * Any other headers have to be set explicitly.
    * @param headers the {@link JSONObject} where the headers should be set.
    * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header.
-   * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
    * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header.
+   * @param container used to set the container for {@link RestUtils.InternalKeys#TARGET_CONTAINER_KEY}.
+   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header.
+   * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
+   * @param insertAccount {@code true} if {@link Account} info has to be injected into the headers.
+   * @throws JSONException
+   */
+  private void setAmbryHeadersForPut(JSONObject headers, String ttlInSecs, String serviceId, Container container,
+      String contentType, String ownerId, boolean insertAccount) throws JSONException {
+    headers.putOpt(RestUtils.Headers.TTL, ttlInSecs);
+    headers.putOpt(RestUtils.Headers.SERVICE_ID, serviceId);
+    headers.putOpt(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
+    headers.putOpt(RestUtils.Headers.OWNER_ID, ownerId);
+    if (insertAccount) {
+      headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+    }
+    if (container != null) {
+      headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
+    }
+  }
+
+  /**
+   * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
+   * Any other headers have to be set explicitly.
+   * @param headers the {@link JSONObject} where the headers should be set.
+   * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header.
+   * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header.
+   * @param container used to set the container for {@link RestUtils.InternalKeys#TARGET_CONTAINER_KEY}.
    * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header.
    * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
    * @throws JSONException
    */
-  private void setAmbryHeadersForPut(JSONObject headers, String ttlInSecs, String isPrivate, String serviceId,
+  private void setAmbryHeadersForPut(JSONObject headers, String ttlInSecs, String serviceId, Container container,
       String contentType, String ownerId) throws JSONException {
-    headers.putOpt(RestUtils.Headers.TTL, ttlInSecs);
-    headers.putOpt(RestUtils.Headers.PRIVATE, isPrivate);
-    headers.putOpt(RestUtils.Headers.SERVICE_ID, serviceId);
-    headers.putOpt(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
-    headers.putOpt(RestUtils.Headers.OWNER_ID, ownerId);
+    setAmbryHeadersForPut(headers, ttlInSecs, serviceId, container, contentType, ownerId, true);
   }
 
   /**
@@ -661,19 +765,17 @@ public class RestUtilsTest {
    */
   private void verifyBlobPropertiesConstructionSuccess(JSONObject headers) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
-    restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
+    Account account = (Account) headers.get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
+    Container container = (Container) headers.get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
+    restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, account);
+    restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
     BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
     long expectedTTL = Utils.Infinite_Time;
     if (headers.has(RestUtils.Headers.TTL) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.TTL))) {
       expectedTTL = headers.getLong(RestUtils.Headers.TTL);
     }
     assertEquals("Blob TTL does not match", expectedTTL, blobProperties.getTimeToLiveInSeconds());
-    boolean expectedIsPrivate = false;
-    if (headers.has(RestUtils.Headers.PRIVATE) && !JSONObject.NULL.equals(headers.get(RestUtils.Headers.PRIVATE))) {
-      expectedIsPrivate = headers.getBoolean(RestUtils.Headers.PRIVATE);
-    }
-    assertEquals("Blob isPrivate does not match", expectedIsPrivate, blobProperties.isPrivate());
+    assertEquals("Blob isPrivate does not match", container.isPrivate(), blobProperties.isPrivate());
     assertEquals("Blob service ID does not match", headers.getString(RestUtils.Headers.SERVICE_ID),
         blobProperties.getServiceId());
     assertEquals("Blob content type does not match", headers.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
@@ -682,8 +784,8 @@ public class RestUtilsTest {
       assertEquals("Blob owner ID does not match", headers.getString(RestUtils.Headers.OWNER_ID),
           blobProperties.getOwnerId());
     }
-    assertEquals("Target account id does not match", Account.UNKNOWN_ACCOUNT_ID, blobProperties.getAccountId());
-    assertEquals("Target container id does not match", Container.UNKNOWN_CONTAINER_ID, blobProperties.getContainerId());
+    assertEquals("Target account id does not match", account.getId(), blobProperties.getAccountId());
+    assertEquals("Target container id does not match", container.getId(), blobProperties.getContainerId());
   }
 
   /**
@@ -720,10 +822,8 @@ public class RestUtilsTest {
    */
   private void verifyBlobPropertiesConstructionFailure(JSONObject headers, RestServiceErrorCode expectedCode)
       throws JSONException, UnsupportedEncodingException, URISyntaxException {
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     try {
-      RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
-      restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
       RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");
     } catch (RestServiceException e) {

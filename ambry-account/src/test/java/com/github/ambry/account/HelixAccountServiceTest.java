@@ -19,6 +19,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -30,16 +31,18 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -59,14 +62,11 @@ public class HelixAccountServiceTest {
   private static final String BAD_ACCOUNT_METADATA_STRING = "badAccountMetadataString";
   private static final int NUM_REF_ACCOUNT = 10;
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
-  private static final Properties helixConfigProps = new Properties();
   private static final Map<Short, Account> idToRefAccountMap = new HashMap<>();
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
-  private static final VerifiableProperties vHelixConfigProps;
-  private static final HelixPropertyStoreConfig storeConfig;
-  // This is a switch to choose using between a mock and a real HelixPropertyStore. For now it is always set to
-  // true. Later when we introduce test against real ZK server, this can be changed to false.
-  private final boolean shouldUseMockHelixStore = true;
+  private final Properties helixConfigProps = new Properties();
+  private VerifiableProperties vHelixConfigProps;
+  private HelixPropertyStoreConfig storeConfig;
   private Account refAccount;
   private short refAccountId;
   private String refAccountName;
@@ -82,7 +82,11 @@ public class HelixAccountServiceTest {
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
   private Notifier<String> notifier;
 
-  static {
+  /**
+   * Resets variables and settings, and cleans up if the store already exists.
+   * @throws Exception Any unexpected exception.
+   */
+  public HelixAccountServiceTest() throws Exception {
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
         String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
@@ -93,17 +97,9 @@ public class HelixAccountServiceTest {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
-  }
-
-  /**
-   * Resets variables and settings, and cleans up if the store already exists.
-   * @throws Exception Any unexpected exception.
-   */
-  @Before
-  public void init() throws Exception {
     notifier = new MockNotifier<>();
     mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, shouldUseMockHelixStore);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
   }
@@ -285,26 +281,17 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has a random number
-   * of invalid records. This is a NOT good {@link ZNRecord} format that should fail fetch or update, and none of the
-   * record should be read.
+   * Tests reading {@link ZNRecord} from {@link HelixPropertyStore}, where the {@link ZNRecord} has an invalid account
+   * record and a valid account record. This is a NOT good {@link ZNRecord} format and it should fail fetch or update
+   * operations, with none of the record should be read.
    * @throws Exception Any unexpected exception.
    */
   @Test
   public void testReadBadZNRecordCase6() throws Exception {
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
-    List<Account> goodAccounts = new ArrayList<>();
-    List<Account> badAccounts = new ArrayList<>();
     Map<String, String> accountMap = new HashMap<>();
-    for (Account account : idToRefAccountMap.values()) {
-      if (random.nextDouble() < 0.3) {
-        accountMap.put(String.valueOf(account.getId()), BAD_ACCOUNT_METADATA_STRING);
-        badAccounts.add(account);
-      } else {
-        accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
-        goodAccounts.add(account);
-      }
-    }
+    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
+    accountMap.put(String.valueOf(refAccount.getId() + 1), BAD_ACCOUNT_METADATA_STRING);
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
     updateAndWriteZNRecord(zNRecord, false);
   }
@@ -341,31 +328,23 @@ public class HelixAccountServiceTest {
    * Tests a number of bad inputs.
    */
   @Test
-  public void testNullInputs() {
+  public void testNullInputs() throws IOException {
     try {
-      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier,
-          shouldUseMockHelixStore).getAccountService();
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null).getAccountService();
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
 
     try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier,
-          shouldUseMockHelixStore).getAccountService();
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null).getAccountService();
       fail("should have thrown");
-    } catch (IllegalArgumentException e) {
+    } catch (NullPointerException e) {
       // expected
     }
-
-    try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
-          shouldUseMockHelixStore).getAccountService();
-      fail("should have thrown");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
-
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null).getAccountService();
+    accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
       accountService.updateAccounts(null);
@@ -568,6 +547,124 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Tests adding/removing {@link Consumer}.
+   * @throws Exception
+   */
+  @Test
+  public void testAccountUpdateConsumer() throws Exception {
+    // pre-populate account metadata in ZK.
+    writeAccountsToHelixPropertyStore(idToRefAccountMap.values(), false);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+
+    // add consumer
+    int numOfConsumers = 10;
+    List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
+    List<Consumer<Collection<Account>>> accountUpdateConsumers = new ArrayList<>();
+    for (int i = 0; i < numOfConsumers; i++) {
+      Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {
+        updatedAccountsReceivedByConsumers.add(updatedAccounts);
+      };
+      accountService.addAccountUpdateConsumer(accountUpdateConsumer);
+      accountUpdateConsumers.add(accountUpdateConsumer);
+    }
+
+    // listen to adding a new account
+    Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    Set<Account> accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateConsumers(Collections.singleton(newAccount), numOfConsumers, updatedAccountsReceivedByConsumers);
+
+    // listen to modification of existing accounts. Only updated accounts will be received by consumers.
+    updatedAccountsReceivedByConsumers.clear();
+    accountsToUpdate = new HashSet<>();
+    for (Account account : idToRefAccountMap.values()) {
+      AccountBuilder accountBuilder = new AccountBuilder(account);
+      accountBuilder.setName(account.getName() + "-extra");
+      accountsToUpdate.add(accountBuilder.build());
+    }
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateConsumers(accountsToUpdate, numOfConsumers, updatedAccountsReceivedByConsumers);
+
+    // removes the consumers so the consumers will not be informed.
+    updatedAccountsReceivedByConsumers.clear();
+    for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+      accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
+    }
+    newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
+    updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
+    assertAccountUpdateConsumers(Collections.emptySet(), 0, updatedAccountsReceivedByConsumers);
+  }
+
+  /**
+   * Tests the background updater for updating accounts from remote. During the initialization of
+   * {@link HelixAccountService}, its internal {@link HelixPropertyStore} will be read to first time get account data.
+   * Because of the background account updater, it should continuously make get calls to the {@link HelixPropertyStore},
+   * even no notification for account updates is received. Therefore, there will be more than 1 get calls to the
+   * {@link HelixPropertyStore}.
+   * @throws Exception
+   */
+  @Test
+  public void testBackgroundUpdater() throws Exception {
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "1");
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    CountDownLatch latch = new CountDownLatch(1);
+    mockHelixAccountServiceFactory.getHelixStore(storeConfig).setReadLatch(latch);
+    assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(updaterThreadPrefix));
+    awaitLatchOrTimeout(latch, 100);
+  }
+
+  /**
+   * Tests disabling the background thread. By setting the polling interval to 0ms, the accounts should not be fetched.
+   * Therefore, after the {@link HelixAccountService} starts, there should be a single get call to the
+   * {@link HelixPropertyStore}.
+   * @throws Exception
+   */
+  @Test
+  public void testDisableBackgroundUpdater() throws Exception {
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "0");
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(updaterThreadPrefix));
+  }
+
+  /**
+   * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
+   * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
+   * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.
+   * @param accountsInConsumers A list of collection of {@link Account}s, where each collection of {@link Account}s are
+   *                            received by one {@link Consumer}.
+   */
+  private void assertAccountUpdateConsumers(Set<Account> expectedAccounts, int expectedNumberOfConsumers,
+      List<Collection<Account>> accountsInConsumers) {
+    assertEquals("Wrong number of consumers", expectedNumberOfConsumers, accountsInConsumers.size());
+    for (Collection<Account> accounts : accountsInConsumers) {
+      assertEquals("Wrong number of updated accounts received by consumers", expectedAccounts.size(), accounts.size());
+      for (Account account : accounts) {
+        assertTrue("Account should be received by the consumers but not.", expectedAccounts.contains(account));
+      }
+      try {
+        accounts.add(Account.UNKNOWN_ACCOUNT);
+        fail("Should have thrown");
+      } catch (UnsupportedOperationException e) {
+        // expected
+      }
+    }
+  }
+
+  /**
    * Pre-populates two {@link Account}s: (id=1, name="a") and (id=2, name="b") in
    * {@link org.apache.helix.store.HelixPropertyStore}.
    * @throws Exception Any unexpected exception.
@@ -702,8 +799,8 @@ public class HelixAccountServiceTest {
    *
    * If the {@link ZNRecord} is good, it should not affect updating operation.
    * @param zNRecord A {@link ZNRecord} to write to {@link HelixPropertyStore}.
-   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} should not affect updating operation; {@code false}
-   *                       otherwise.
+   * @param isGoodZNRecord {code true} to indicate the {@link ZNRecord} is good, which should not affect updating
+   *                       operation; {@code false} otherwise.
    * @throws Exception Any unexpected exception.
    */
   private void updateAndWriteZNRecord(ZNRecord zNRecord, boolean isGoodZNRecord) throws Exception {

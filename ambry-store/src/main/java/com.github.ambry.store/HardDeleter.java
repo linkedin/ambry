@@ -720,7 +720,7 @@ public class HardDeleter implements Runnable {
          later occurrence is the one really associated with this token, it does not affect the safety.
          Persisting more than what is required is okay as hard deleting a blob is an idempotent operation. */
         messageStoreRecoveryListIterator.next();
-        if (blobReadOptionsListIterator.next().getStoreKey().equals(storeKey)) {
+        if (blobReadOptionsListIterator.next().getMessageInfo().getStoreKey().equals(storeKey)) {
           break;
         } else {
           blobReadOptionsListIterator.remove();

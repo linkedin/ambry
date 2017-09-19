@@ -352,7 +352,7 @@ class BlobStoreStats implements StoreStats, Closeable {
         IndexValue indexValue = indexEntry.getValue();
         if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
           // delete records does not count towards valid data size for quota (containers)
-          updateNestedMapHelper(validDataSizePerContainer, String.valueOf(indexValue.getServiceId()),
+          updateNestedMapHelper(validDataSizePerContainer, String.valueOf(indexValue.getAccountId()),
               String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         }
       }
@@ -498,8 +498,9 @@ class BlobStoreStats implements StoreStats, Closeable {
   private IndexValue getPutRecordForDeletedKey(StoreKey key, IndexValue deleteIndexValue) throws StoreException {
     BlobReadOptions originalPut = index.getBlobReadInfo(key, EnumSet.allOf(StoreGetOptions.class));
     Offset originalPutOffset = new Offset(originalPut.getLogSegmentName(), originalPut.getOffset());
-    return new IndexValue(originalPut.getSize(), originalPutOffset, originalPut.getExpiresAtMs(),
-        deleteIndexValue.getOperationTimeInMs(), deleteIndexValue.getServiceId(), deleteIndexValue.getContainerId());
+    return new IndexValue(originalPut.getMessageInfo().getSize(), originalPutOffset,
+        originalPut.getMessageInfo().getExpirationTimeInMs(), deleteIndexValue.getOperationTimeInMs(),
+        deleteIndexValue.getAccountId(), deleteIndexValue.getContainerId());
   }
 
   /**
@@ -549,7 +550,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       int operator) {
     if (isWithinRange(results.containerForecastStartTimeMs, results.containerLastBucketTimeMs, expOrDelTimeInMs)) {
       results.updateContainerBucket(results.getContainerBucketKey(expOrDelTimeInMs),
-          String.valueOf(indexValue.getServiceId()), String.valueOf(indexValue.getContainerId()),
+          String.valueOf(indexValue.getAccountId()), String.valueOf(indexValue.getContainerId()),
           indexValue.getSize() * operator);
     }
   }
@@ -577,7 +578,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private void processNewPut(ScanResults results, IndexValue putValue) {
     long expiresAtMs = putValue.getExpiresAtMs();
     if (!isExpired(expiresAtMs, results.containerForecastStartTimeMs)) {
-      results.updateContainerBaseBucket(String.valueOf(putValue.getServiceId()),
+      results.updateContainerBaseBucket(String.valueOf(putValue.getAccountId()),
           String.valueOf(putValue.getContainerId()), putValue.getSize());
       if (expiresAtMs != Utils.Infinite_Time) {
         handleContainerBucketUpdate(results, putValue, expiresAtMs, SUBTRACT);
@@ -628,7 +629,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       IndexValue indexValue = indexEntry.getValue();
       if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
         // delete records does not count towards valid data size for quota (containers)
-        results.updateContainerBaseBucket(String.valueOf(indexValue.getServiceId()),
+        results.updateContainerBaseBucket(String.valueOf(indexValue.getAccountId()),
             String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         long expOrDelTimeInMs = indexValue.getExpiresAtMs();
         if (deletedKeys.containsKey(indexEntry.getKey())) {

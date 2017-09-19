@@ -27,7 +27,7 @@ import org.junit.Test;
 import static com.github.ambry.store.CompactionPolicyTest.*;
 
 
-public class DefaultCompactionPolicyTest {
+public class StatsBasedCompactionPolicyTest {
 
   private static long DEFAULT_MAX_BLOB_SIZE = CAPACITY_IN_BYTES / 100;
   // the properties that will used to generate a StoreConfig. Clear before use if required.
@@ -43,14 +43,14 @@ public class DefaultCompactionPolicyTest {
    * Instantiates {@link CompactionPolicyTest} with the required cast
    * @throws InterruptedException
    */
-  public DefaultCompactionPolicyTest() throws InterruptedException {
+  public StatsBasedCompactionPolicyTest() throws InterruptedException {
     Pair<MockBlobStore, StoreConfig> initState =
         CompactionPolicyTest.initializeBlobStore(properties, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
     messageRetentionTimeInMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
-    compactionPolicy = new DefaultCompactionPolicy(config, time);
+    compactionPolicy = new StatsBasedCompactionPolicy(config, time);
   }
 
   /**

@@ -211,7 +211,15 @@ public class RestUtils {
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
     Account account = (Account) args.get(InternalKeys.TARGET_ACCOUNT_KEY);
+    if (account == null) {
+      throw new RestServiceException(InternalKeys.TARGET_ACCOUNT_KEY + " is not set",
+          RestServiceErrorCode.InternalServerError);
+    }
     Container container = (Container) args.get(InternalKeys.TARGET_CONTAINER_KEY);
+    if (container == null) {
+      throw new RestServiceException(InternalKeys.TARGET_CONTAINER_KEY + " is not set",
+          RestServiceErrorCode.InternalServerError);
+    }
     String serviceId = getHeader(args, Headers.SERVICE_ID, true);
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
@@ -231,7 +239,7 @@ public class RestUtils {
       }
     }
 
-    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate(args), ttl, account.getId(),
+    return new BlobProperties(-1, serviceId, ownerId, contentType, container.isPrivate(), ttl, account.getId(),
         container.getId());
   }
 

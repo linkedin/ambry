@@ -13,8 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -127,7 +125,11 @@ public class GetBlobInfoOperationTest {
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, time);
-    blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
+    blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
+            containerId);
     userMetadata = new byte[BLOB_USER_METADATA_SIZE];
     random.nextBytes(userMetadata);
     putContent = new byte[BLOB_SIZE];
@@ -153,8 +155,8 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testInstantiation() throws Exception {
     String blobIdStr =
-        (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID, mockClusterMap.getWritablePartitionIds().get(0))).getID();
+        (new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random),
+            Utils.getRandomShort(random), mockClusterMap.getWritablePartitionIds().get(0))).getID();
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
       // no op.
     };

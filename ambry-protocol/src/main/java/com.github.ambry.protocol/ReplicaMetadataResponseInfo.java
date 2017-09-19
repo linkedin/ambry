@@ -143,11 +143,11 @@ public class ReplicaMetadataResponseInfo {
    */
   private static short getMessageInfoListVersion(short replicaMetadataResponseVersion) {
     switch (replicaMetadataResponseVersion) {
-      case ReplicaMetadataResponse.Replica_Metadata_Response_Version_V1:
+      case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_1:
         return MessageInfoListSerde.VERSION_1;
-      case ReplicaMetadataResponse.Replica_Metadata_Response_Version_V2:
+      case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_2:
         return MessageInfoListSerde.VERSION_2;
-      case ReplicaMetadataResponse.Replica_Metadata_Response_Version_V3:
+      case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3:
         return MessageInfoListSerde.VERSION_3;
       default:
         throw new IllegalArgumentException(

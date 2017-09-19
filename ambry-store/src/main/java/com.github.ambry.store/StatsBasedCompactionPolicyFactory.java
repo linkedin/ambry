@@ -18,19 +18,19 @@ import com.github.ambry.utils.Time;
 
 
 /**
- *  Factory class interface to get {@link DefaultCompactionPolicy}
+ *  Factory class interface to get {@link StatsBasedCompactionPolicy}
  */
-public class DefaultCompactionPolicyFactory implements CompactionPolicyFactory {
+public class StatsBasedCompactionPolicyFactory implements CompactionPolicyFactory {
 
   private final StoreConfig storeConfig;
   private final Time time;
 
-  public DefaultCompactionPolicyFactory(StoreConfig storeConfig, Time time) {
+  public StatsBasedCompactionPolicyFactory(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
   }
 
   public CompactionPolicy getCompactionPolicy() {
-    return new DefaultCompactionPolicy(storeConfig, time);
+    return new StatsBasedCompactionPolicy(storeConfig, time);
   }
 }

@@ -143,7 +143,8 @@ public class IndexReadPerformance {
       final HashMap<String, IndexPayload> hashes = new HashMap<String, IndexPayload>();
       String line;
       MetricRegistry metricRegistry = new MetricRegistry();
-      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), metricRegistry);
+      StoreMetrics metrics =
+          new StoreMetrics(System.getProperty("user.dir"), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
       File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
       reserveFileDir.deleteOnExit();

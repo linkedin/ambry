@@ -49,7 +49,7 @@ public class RequestControlAdminRequest extends AdminRequest {
    * Construct a RequestControlAdminRequest
    * @param requestTypeToControl the {@link RequestOrResponseType} to control.
    * @param enable enable/disable flag ({@code true} to enable).
-   * @param adminRequest the {@link AdminRequest} that contains common admin request releated information.
+   * @param adminRequest the {@link AdminRequest} that contains common admin request related information.
    */
   public RequestControlAdminRequest(RequestOrResponseType requestTypeToControl, boolean enable,
       AdminRequest adminRequest) {

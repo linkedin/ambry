@@ -111,7 +111,7 @@ class BlobStoreCompactor {
     this.storeKeyFactory = storeKeyFactory;
     this.config = config;
     this.srcMetrics = metrics;
-    tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry());
+    tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry(), metrics.aggregatedStoreMetrics);
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.diskSpaceAllocator = diskSpaceAllocator;
@@ -365,6 +365,14 @@ class BlobStoreCompactor {
 
     numSwapsUsed = tgtIndex.getLogSegmentCount();
     logger.debug("Swaps used to copy {} is {} for {}", compactionLog.getCompactionDetails(), numSwapsUsed, storeId);
+    if (isActive) {
+      // it is possible to double count based on the time at which shutdown occurs (if it occurs b/w this statement
+      // and before the subsequent commit can take effect)
+      long segmentCountDiff =
+          compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().size() - numSwapsUsed;
+      long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff;
+      srcMetrics.aggregatedStoreMetrics.compactionBytesReclaimedCount.inc(savedBytes);
+    }
     tgtIndex.close();
     tgtLog.close();
     // persist the bloom of the "latest" index segment if it exists
@@ -658,9 +666,10 @@ class BlobStoreCompactor {
             try (BlobReadOptions options = srcIndex.getBlobReadInfo(indexEntry.getKey(),
                 EnumSet.allOf(StoreGetOptions.class))) {
               Offset offset = new Offset(indexSegmentStartOffset.getName(), options.getOffset());
+              MessageInfo info = options.getMessageInfo();
               IndexValue putValue =
-                  new IndexValue(options.getSize(), offset, options.getExpiresAtMs(), value.getOperationTimeInMs(),
-                      value.getServiceId(), value.getContainerId());
+                  new IndexValue(info.getSize(), offset, info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+                      info.getAccountId(), info.getContainerId());
               validEntries.add(new IndexEntry(indexEntry.getKey(), putValue));
             } catch (StoreException e) {
               logger.error("Fetching PUT index entry of {} in {} failed", indexEntry.getKey(), indexSegmentStartOffset);
@@ -734,11 +743,11 @@ class BlobStoreCompactor {
           if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
             IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
             if (putValue != null) {
-              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan);
+              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
             } else {
               IndexValue tgtValue =
                   new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                      srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+                      srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
               tgtValue.setFlag(IndexValue.Flags.Delete_Index);
               tgtValue.clearOriginalMessageOffset();
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
@@ -746,7 +755,7 @@ class BlobStoreCompactor {
           } else {
             IndexValue tgtValue =
                 new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                    srcValue.getOperationTimeInMs(), srcValue.getServiceId(), srcValue.getContainerId());
+                    srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
             tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
           }
           long lastModifiedTimeSecsToSet =

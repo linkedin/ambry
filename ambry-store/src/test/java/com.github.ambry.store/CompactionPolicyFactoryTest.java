@@ -38,8 +38,8 @@ public class CompactionPolicyFactoryTest {
   @Test
   public void testCompactionPolicyFactory() throws Exception {
     List<Pair<String, String>> validCompactionPolicyInfos = new ArrayList<>();
-    validCompactionPolicyInfos.add(new Pair<>("com.github.ambry.store.DefaultCompactionPolicyFactory",
-        "com.github.ambry.store.DefaultCompactionPolicy"));
+    validCompactionPolicyInfos.add(new Pair<>("com.github.ambry.store.StatsBasedCompactionPolicyFactory",
+        "com.github.ambry.store.StatsBasedCompactionPolicy"));
     validCompactionPolicyInfos.add(
         new Pair<>("com.github.ambry.store.CompactAllPolicyFactory", "com.github.ambry.store.CompactAllPolicy"));
     for (Pair<String, String> validCompactionPolicyInfo : validCompactionPolicyInfos) {

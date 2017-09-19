@@ -18,16 +18,11 @@ import com.github.ambry.commons.MockHelixPropertyStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import java.util.Collections;
+import com.github.ambry.utils.Utils;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import org.apache.helix.ZNRecord;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
-import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
 /**
@@ -37,7 +32,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
   private final HelixPropertyStoreConfig storeConfig;
   private final AccountServiceMetrics accountServiceMetrics;
   private final Notifier notifier;
-  private final boolean shouldUseMockHelixStore;
+  private final String updaterThreadPrefix;
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
 
   /**
@@ -45,40 +40,21 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
    * @param verifiableProperties The properties to start a {@link HelixAccountService}.
    * @param metricRegistry The {@link MetricRegistry} to start a {@link HelixAccountService}.
    * @param notifier The {@link Notifier} to start a {@link HelixAccountService}.
-   * @param shouldUseMockHelixStore {@code true} if {@link HelixAccountService} is generated using a
-   *                                {@link MockHelixPropertyStore}; {@code false} using a real {@link HelixPropertyStore}.
    */
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      Notifier<String> notifier, boolean shouldUseMockHelixStore) {
+      Notifier<String> notifier, String updaterThreadPrefix) {
     super(verifiableProperties, metricRegistry, notifier);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
     this.notifier = notifier;
-    this.shouldUseMockHelixStore = shouldUseMockHelixStore;
+    this.updaterThreadPrefix = updaterThreadPrefix;
   }
 
   @Override
   public AccountService getAccountService() {
-    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier);
-  }
-
-  /**
-   * Gets a {@link HelixPropertyStore} configured by {@link #shouldUseMockHelixStore}, it will either return a
-   * {@link MockHelixPropertyStore} if set to {@code true}, or {@link HelixPropertyStore} if set to {@code false}.
-   * When {@code shouldUseMockHelixStore} is {@code true}, it will return an existing store if a store has been
-   * created for the {@code storeConfig}.
-   * @param storeConfig The config for constructing a {@link HelixPropertyStore}.
-   * @return A {@link HelixPropertyStore}.
-   */
-  public HelixPropertyStore getHelixStore(HelixPropertyStoreConfig storeConfig) {
-    if (shouldUseMockHelixStore) {
-      return getMockHelixStore(storeConfig);
-    } else {
-      ZkClient zkClient = new ZkClient(storeConfig.zkClientConnectString, storeConfig.zkClientSessionTimeoutMs,
-          storeConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-      List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
-      return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), storeConfig.rootPath, subscribedPaths);
-    }
+    ScheduledExecutorService scheduler =
+        storeConfig.accountUpdaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
+    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler, storeConfig);
   }
 
   /**
@@ -86,7 +62,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
    * @param storeConfig A {@link HelixPropertyStoreConfig}.
    * @return A {@link MockHelixPropertyStore} defined by the {@link HelixPropertyStoreConfig}.
    */
-  private MockHelixPropertyStore<ZNRecord> getMockHelixStore(HelixPropertyStoreConfig storeConfig) {
+  MockHelixPropertyStore<ZNRecord> getHelixStore(HelixPropertyStoreConfig storeConfig) {
     return storeKeyToMockStoreMap.computeIfAbsent(storeConfig.zkClientConnectString + storeConfig.rootPath,
         path -> new MockHelixPropertyStore<>());
   }

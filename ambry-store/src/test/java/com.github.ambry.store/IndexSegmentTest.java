@@ -87,7 +87,8 @@ public class IndexSegmentTest {
    */
   public IndexSegmentTest(short version) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + UtilsTest.getRandomString(10));
-    metrics = new StoreMetrics(tempDir.getAbsolutePath(), new MetricRegistry());
+    MetricRegistry metricRegistry = new MetricRegistry();
+    metrics = new StoreMetrics(tempDir.getName(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
     this.version = version;
   }
 
@@ -327,7 +328,8 @@ public class IndexSegmentTest {
       long offset = offsets.get(i);
       long size = i == offsets.size() - 1 ? lastEntrySize : offsets.get(i + 1) - offset;
       IndexValue value =
-          IndexValueTest.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset), time.milliseconds(),
+          IndexValueTest.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset), Utils.Infinite_Time,
+              time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
               version);
       IndexEntry entry = new IndexEntry(id, value);
       segment.addEntry(entry, new Offset(segment.getLogSegmentName(), offset + size));
@@ -541,8 +543,9 @@ public class IndexSegmentTest {
       IndexValue value = segment.find(id);
       if (value == null) {
         // create an index value with a random log segment name
-        value =
-            IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), time.milliseconds(), version);
+        value = IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), Utils.Infinite_Time,
+            time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+            version);
       } else {
         // if in this segment, add to putRecordOffsets so that journal can verify these later
         putRecordOffsets.put(value.getOffset(), id);

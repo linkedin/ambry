@@ -124,7 +124,8 @@ public class IndexWritePerformance {
       writer = new FileWriter(logFile);
 
       MetricRegistry metricRegistry = new MetricRegistry();
-      StoreMetrics metrics = new StoreMetrics(System.getProperty("user.dir"), metricRegistry);
+      StoreMetrics metrics =
+          new StoreMetrics(System.getProperty("user.dir"), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
       File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
       reserveFileDir.deleteOnExit();
       DiskSpaceAllocator diskSpaceAllocator =

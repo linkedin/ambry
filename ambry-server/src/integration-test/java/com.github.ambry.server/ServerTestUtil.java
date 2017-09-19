@@ -60,6 +60,7 @@ import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
@@ -98,7 +99,10 @@ public final class ServerTestUtil {
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
       byte[] data = new byte[31870];
-      BlobProperties properties = new BlobProperties(31870, "serviceid1");
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+
+      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId);
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
@@ -141,7 +145,8 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 4 that is expired
-      BlobProperties propertiesExpired = new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0);
+      BlobProperties propertiesExpired =
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId);
       PutRequest putRequest4 =
           new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
@@ -166,6 +171,8 @@ public final class ServerTestUtil {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         assertEquals(31870, propertyOutput.getBlobSize());
         assertEquals("serviceid1", propertyOutput.getServiceId());
+        assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+        assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -186,6 +193,8 @@ public final class ServerTestUtil {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         assertEquals(31870, propertyOutput.getBlobSize());
         assertEquals("serviceid1", propertyOutput.getServiceId());
+        assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+        assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -224,6 +233,8 @@ public final class ServerTestUtil {
         assertEquals(31870, propertyOutput.getBlobSize());
         assertEquals("serviceid1", propertyOutput.getServiceId());
         assertEquals("ownerid", propertyOutput.getOwnerId());
+        assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+        assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -252,6 +263,8 @@ public final class ServerTestUtil {
       BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(responseStream);
       assertEquals(31870, propertyOutput.getBlobSize());
       assertEquals("serviceid1", propertyOutput.getServiceId());
+      assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+      assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       // verify user metadata
       ByteBuffer userMetadataOutput = MessageFormatRecord.deserializeUserMetadata(responseStream);
       Assert.assertArrayEquals(usermetadata, userMetadataOutput.array());
@@ -341,7 +354,9 @@ public final class ServerTestUtil {
       List<AmbryServer> serverList = cluster.getServers();
       byte[] usermetadata = new byte[100];
       byte[] data = new byte[100];
-      BlobProperties properties = new BlobProperties(100, "serviceid1");
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      BlobProperties properties = new BlobProperties(100, "serviceid1", accountId, containerId);
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
 
@@ -391,7 +406,8 @@ public final class ServerTestUtil {
       testLatePutRequest(blobIds.get(0), properties, usermetadata, data, channel1, channel2, channel3,
           ServerErrorCode.No_Error);
       // Test the case where a put arrives with the same id as one in the server, but the blob is not identical.
-      BlobProperties differentProperties = new BlobProperties(properties.getBlobSize(), properties.getServiceId());
+      BlobProperties differentProperties =
+          new BlobProperties(properties.getBlobSize(), properties.getServiceId(), accountId, containerId);
       testLatePutRequest(blobIds.get(0), differentProperties, usermetadata, data, channel1, channel2, channel3,
           ServerErrorCode.Blob_Already_Exists);
       byte[] differentUsermetadata = Arrays.copyOf(usermetadata, usermetadata.length);
@@ -431,6 +447,8 @@ public final class ServerTestUtil {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             assertEquals(100, propertyOutput.getBlobSize());
             assertEquals("serviceid1", propertyOutput.getServiceId());
+            assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+            assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
           } catch (MessageFormatException e) {
             Assert.fail();
           }
@@ -496,7 +514,7 @@ public final class ServerTestUtil {
           } else if (j == 2) {
             channel = channel3;
           }
-          DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIds.get(i));
+          DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIds.get(i), System.currentTimeMillis());
           channel.send(deleteRequest);
           InputStream deleteResponseStream = channel.receive().getInputStream();
           DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -587,6 +605,8 @@ public final class ServerTestUtil {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             assertEquals(100, propertyOutput.getBlobSize());
             assertEquals("serviceid1", propertyOutput.getServiceId());
+            assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+            assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
           } catch (MessageFormatException e) {
             Assert.fail();
           }
@@ -698,6 +718,8 @@ public final class ServerTestUtil {
             BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
             assertEquals(100, propertyOutput.getBlobSize());
             assertEquals("serviceid1", propertyOutput.getServiceId());
+            assertEquals("AccountId mismatch", accountId, propertyOutput.getAccountId());
+            assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
           } catch (MessageFormatException e) {
             Assert.fail();
           }
@@ -787,10 +809,13 @@ public final class ServerTestUtil {
     final AtomicReference<Exception> exceptionRef = new AtomicReference<>(null);
     final CountDownLatch callbackLatch = new CountDownLatch(numberOfRequestsToSend);
     List<Future<String>> putFutures = new ArrayList<>(numberOfRequestsToSend);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     for (int i = 0; i < numberOfRequestsToSend; i++) {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
-          new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, Utils.Infinite_Time);
+          new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, Utils.Infinite_Time, accountId,
+              containerId);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       new Random().nextBytes(metadata);
@@ -852,10 +877,13 @@ public final class ServerTestUtil {
       throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
+      int expectedTokenSize = 0;
       MockClusterMap clusterMap = cluster.getClusterMap();
       byte[] usermetadata = new byte[1000];
       byte[] data = new byte[1000];
-      BlobProperties properties = new BlobProperties(1000, "serviceid1");
+      short accontId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      BlobProperties properties = new BlobProperties(1000, "serviceid1", accontId, containerId);
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       PartitionId partition = clusterMap.getWritablePartitionIds().get(0);
@@ -885,6 +913,8 @@ public final class ServerTestUtil {
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId1, ByteBuffer.wrap(usermetadata), data);
+
       BlockingChannel channel1 =
           getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
       BlockingChannel channel2 =
@@ -903,6 +933,8 @@ public final class ServerTestUtil {
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -911,6 +943,8 @@ public final class ServerTestUtil {
       PutRequest putRequest3 =
           new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -920,6 +954,8 @@ public final class ServerTestUtil {
       putRequest =
           new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId4, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel1.send(putRequest);
       putResponseStream = channel1.receive().getInputStream();
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -929,6 +965,8 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId5, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -938,6 +976,8 @@ public final class ServerTestUtil {
       putRequest3 =
           new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId6, ByteBuffer.wrap(usermetadata), data);
+      System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -968,6 +1008,8 @@ public final class ServerTestUtil {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         assertEquals(1000, propertyOutput.getBlobSize());
         assertEquals("serviceid1", propertyOutput.getServiceId());
+        assertEquals("AccountId mismatch", accontId, propertyOutput.getAccountId());
+        assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -1043,7 +1085,9 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.Blob_Not_Found, resp4.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // delete a blob and ensure it is propagated
-      DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1);
+      DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1, System.currentTimeMillis());
+      expectedTokenSize += getDeleteRecordSize(blobId1);
+      System.out.println("Expected size after first delete " + expectedTokenSize);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
@@ -1066,13 +1110,15 @@ public final class ServerTestUtil {
       // get the data node to inspect replication tokens on
       DataNodeId dataNodeId = clusterMap.getDataNodeId("localhost", interestedDataNodePortNumber);
       // read the replica file and check correctness
-      // The token offset value of 13074 was derived as followed:
+      // The token offset value of 13098 was derived as followed:
       // - Up to this point we have done 6 puts and 1 delete
-      // - Each put takes up 2179 bytes in the log (1000 data, 1000 user metadata, 179 ambry metadata)
+
+      // - Each put takes up 2183 bytes in the log (1000 data, 1000 user metadata, 183 ambry metadata)
       // - Each delete takes up 97 bytes in the log
       // - The offset stored in the token will be the position of the last entry in the log (the delete, in this case)
-      // - Thus, it will be at the end of the 6 puts: 6 * 2179 = 13074
-      checkReplicaTokens(clusterMap, dataNodeId, 13074, "0");
+      // - Thus, it will be at the end of the 6 puts: 6 * 2183 = 13098
+
+      checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobId1), "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();
@@ -1082,6 +1128,7 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId7, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1091,6 +1138,7 @@ public final class ServerTestUtil {
       putRequest3 =
           new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId8, ByteBuffer.wrap(usermetadata), data);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1100,6 +1148,7 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId9, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1109,6 +1158,7 @@ public final class ServerTestUtil {
       putRequest3 =
           new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId10, ByteBuffer.wrap(usermetadata), data);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1118,6 +1168,7 @@ public final class ServerTestUtil {
       putRequest2 =
           new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob);
+      expectedTokenSize += getPutRecordSize(properties, blobId11, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1208,6 +1259,31 @@ public final class ServerTestUtil {
       e.printStackTrace();
       Assert.fail();
     }
+  }
+
+  /**
+   * Fetches the put record size in log
+   * @param properties {@link BlobProperties} associated with the put
+   * @param blobId {@link BlobId} associated with the put
+   * @param usermetadata Usermetadata associated with the put
+   * @param data actual data associated with the put
+   * @return the size of the put record in the log
+   */
+  private static long getPutRecordSize(BlobProperties properties, BlobId blobId, ByteBuffer usermetadata, byte[] data) {
+    return MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() + blobId.sizeInBytes()
+        + MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties)
+        + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
+        + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
+  }
+
+  /**
+   * Fetches the delete record size in log
+   * @param blobId {@link BlobId} associated with the delete
+   * @return the size of the put record in the log
+   */
+  private static long getDeleteRecordSize(BlobId blobId) {
+    return MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() + blobId.sizeInBytes()
+        + MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
   }
 
   /**

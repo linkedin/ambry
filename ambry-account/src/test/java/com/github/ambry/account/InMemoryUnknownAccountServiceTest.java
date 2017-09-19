@@ -15,8 +15,12 @@ package com.github.ambry.account;
 
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 import org.junit.After;
 import org.junit.Test;
 
@@ -28,16 +32,22 @@ import static org.junit.Assert.*;
  */
 public class InMemoryUnknownAccountServiceTest {
   private static final Random random = new Random();
-  private AccountService accountService;
+  private AccountService accountService =
+      new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
 
+  /**
+   * Cleans up if the store already exists.
+   * @throws Exception Any unexpected exception.
+   */
   @After
-  public void close() throws Exception {
-    accountService.close();
+  public void cleanUp() throws Exception {
+    if (accountService != null) {
+      accountService.close();
+    }
   }
 
   @Test
   public void testAllMethods() throws Exception {
-    accountService = new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
     assertEquals("Wrong account", null, accountService.getAccountById(Utils.getRandomShort(random)));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById((short) -1));
     assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT,
@@ -62,7 +72,6 @@ public class InMemoryUnknownAccountServiceTest {
    */
   @Test
   public void testNullInputs() {
-    accountService = new InMemoryUnknownAccountServiceFactory(null, null, null).getAccountService();
     try {
       accountService.updateAccounts(null);
       fail("should have thrown");
@@ -75,5 +84,27 @@ public class InMemoryUnknownAccountServiceTest {
     } catch (NullPointerException e) {
       // expected
     }
+  }
+
+  /**
+   * Tests adding/removing {@link Consumer}.
+   */
+  @Test
+  public void testAddRemoveConsumer() {
+    List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
+    // add consumers
+    Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {
+      updatedAccountsReceivedByConsumers.add(updatedAccounts);
+    };
+    accountService.addAccountUpdateConsumer(accountUpdateConsumer);
+    Account updatedAccount = new AccountBuilder(Account.UNKNOWN_ACCOUNT).setName("newName").build();
+    accountService.updateAccounts(Collections.singletonList(updatedAccount));
+    assertEquals("Wrong number of updated accounts received by consumer.", 0,
+        updatedAccountsReceivedByConsumers.size());
+    Account newAccount = new AccountBuilder((short) 1, "newAccount", Account.AccountStatus.ACTIVE, null).build();
+    accountService.updateAccounts(Collections.singletonList(newAccount));
+    assertEquals("Wrong number of updated accounts received by consumer.", 0,
+        updatedAccountsReceivedByConsumers.size());
+    accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
   }
 }

@@ -17,6 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -54,11 +56,14 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +74,10 @@ import org.slf4j.LoggerFactory;
 class ReplicaThread implements Runnable {
 
   private final Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode;
+  private final Set<PartitionId> replicationDisabledPartitions = new HashSet<>();
+  private final Set<PartitionId> unmodifiableReplicationDisabledPartitions =
+      Collections.unmodifiableSet(replicationDisabledPartitions);
+  private final Set<PartitionId> allReplicatedPartitions;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
   private boolean waitEnabled;
@@ -89,6 +98,10 @@ class ReplicaThread implements Runnable {
   private final boolean replicatingFromRemoteColo;
   private final boolean replicatingOverSsl;
   private final String datacenterName;
+  private final ReentrantLock lock = new ReentrantLock();
+  private final Condition pauseCondition = lock.newCondition();
+
+  private volatile boolean allDisabled = false;
 
   ReplicaThread(String threadName, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicateGroupedByNode,
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
@@ -115,6 +128,48 @@ class ReplicaThread implements Runnable {
     this.waitEnabled = !replicatingFromRemoteColo;
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
+    Set<PartitionId> partitions = new HashSet<>();
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : replicasToReplicateGroupedByNode.entrySet()) {
+      for (RemoteReplicaInfo info : entry.getValue()) {
+        partitions.add(info.getReplicaId().getPartitionId());
+      }
+    }
+    allReplicatedPartitions = Collections.unmodifiableSet(partitions);
+  }
+
+  /**
+   * Enables/disables replication on the given {@code ids}.
+   * @param ids the {@link PartitionId}s to enable/disable it on.
+   * @param enable whether to enable ({@code true}) or disable.
+   */
+  void controlReplicationForPartitions(List<? extends PartitionId> ids, boolean enable) {
+    lock.lock();
+    try {
+      for (PartitionId id : ids) {
+        if (allReplicatedPartitions.contains(id)) {
+          if (enable) {
+            if (replicationDisabledPartitions.remove(id)) {
+              allDisabled = false;
+              pauseCondition.signal();
+            }
+          } else {
+            replicationDisabledPartitions.add(id);
+            allDisabled = allReplicatedPartitions.size() == replicationDisabledPartitions.size();
+          }
+          logger.info("Enable status of replication of {} from {} is {}. allDisabled for {} is {}", id, datacenterName,
+              replicationDisabledPartitions.contains(id), getName(), allDisabled);
+        }
+      }
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /**
+   * @return {@link Set} of {@link PartitionId}s for which replication is disabled.
+   */
+  Set<PartitionId> getReplicationDisabledPartitions() {
+    return unmodifiableReplicationDisabledPartitions;
   }
 
   String getName() {
@@ -134,6 +189,16 @@ class ReplicaThread implements Runnable {
       logger.info("Begin iteration for thread " + threadName);
       while (running) {
         replicate(replicasToReplicate);
+        lock.lock();
+        try {
+          if (running && allDisabled) {
+            pauseCondition.await();
+          }
+        } catch (Exception e) {
+          logger.error("Received interrupted exception during pause", e);
+        } finally {
+          lock.unlock();
+        }
       }
     } finally {
       running = false;
@@ -142,8 +207,8 @@ class ReplicaThread implements Runnable {
   }
 
   /**
-   * Replicates from the given {@code replicasToReplicate}.
-   * @param replicasToReplicate the remote replicas to replicate from
+   * Replicas from the given replicas
+   * @param replicasToReplicate list of {@link RemoteReplicaInfo} by data node
    */
   void replicate(List<List<RemoteReplicaInfo>> replicasToReplicate) {
     // shuffle the nodes
@@ -183,7 +248,8 @@ class ReplicaThread implements Runnable {
 
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<RemoteReplicaInfo>();
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-        if (!remoteReplicaInfo.getReplicaId().isDown()) {
+        ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+        if (!replicationDisabledPartitions.contains(replicaId.getPartitionId()) && !replicaId.isDown()) {
           activeReplicasPerNode.add(remoteReplicaInfo);
         }
       }
@@ -465,7 +531,9 @@ class ReplicaThread implements Runnable {
           MessageFormatInputStream deleteStream =
               new DeleteMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
                   messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
-          MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true);
+          MessageInfo info =
+              new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, messageInfo.getAccountId(),
+                  messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
@@ -750,6 +818,12 @@ class ReplicaThread implements Runnable {
 
   void shutdown() throws InterruptedException {
     running = false;
+    lock.lock();
+    try {
+      pauseCondition.signal();
+    } finally {
+      lock.unlock();
+    }
     shutdownLatch.await();
   }
 }

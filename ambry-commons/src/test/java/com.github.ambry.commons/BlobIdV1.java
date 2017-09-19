@@ -19,11 +19,11 @@ import java.io.IOException;
 
 
 /**
- *  A class that makes {@link BlobId#getCurrentVersion()} to return {@link BlobId#BLOB_ID_V2}, which will serialize
- *  a blobId to {@link BlobIdV2}.
+ *  A class that makes {@link BlobId#getCurrentVersion()} to return {@link BlobId#BLOB_ID_V1}, which will serialize
+ *  a blobId to {@link BlobIdV1}.
  */
-public class BlobIdV2 extends BlobId {
-  public BlobIdV2(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
+public class BlobIdV1 extends BlobId {
+  public BlobIdV1(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
     super(flag, datacenterId, accountId, containerId, partitionId);
   }
 
@@ -34,12 +34,12 @@ public class BlobIdV2 extends BlobId {
    * @param clusterMap of the cluster that the blobId belongs to.
    * @throws IOException
    */
-  public BlobIdV2(String id, ClusterMap clusterMap) throws IOException {
+  public BlobIdV1(String id, ClusterMap clusterMap) throws IOException {
     super(id, clusterMap);
   }
 
   @Override
   protected short getCurrentVersion() {
-    return BLOB_ID_V2;
+    return BLOB_ID_V1;
   }
 }

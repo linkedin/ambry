@@ -15,15 +15,19 @@ package com.github.ambry.account;
 
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.TopicListener;
-import java.util.ArrayList;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
@@ -33,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.AccountUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -81,22 +86,42 @@ class HelixAccountService implements AccountService {
   private final TopicListener<String> listener;
   private final Notifier<String> notifier;
   private final AtomicReference<AccountInfoMap> accountInfoMapRef = new AtomicReference<>(new AccountInfoMap());
-  private volatile boolean isOpen = false;
   private final ReentrantLock lock = new ReentrantLock();
+  private final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers = new CopyOnWriteArraySet<>();
+  private final ScheduledExecutorService scheduler;
+  private final HelixPropertyStoreConfig storeConfig;
+  private volatile boolean isOpen = false;
 
   /**
-   * Constructor. It fetches the full account metadata set and caches locally.
-   * This call is blocking until it fetches all the {@link Account} metadata from {@link HelixPropertyStore}.
+   * <p>
+   *   Constructor. It fetches the remote account data in {@code ZooKeeper} and caches locally during initialization,
+   *   and updates the remote account data during updating accounts. If a non-null {@link Notifier} is provided, it
+   *   will listen to the changes of the remote accounts, and reactively updates its local cache. It als sends message
+   *   to notify other listeners after each update made to the remote accounts.
+   * </p>
+   * <p>
+   *   This call is blocking until it fetches all the {@link Account} metadata from {@link HelixPropertyStore}.
+   * </p>
    * @param helixStore A {@link HelixPropertyStore} used by the {@code HelixAccountService}. Cannot be {@code null}.
    * @param accountServiceMetrics {@link AccountServiceMetrics} to report metrics. Cannot be {@code null}.
    * @param notifier A {@link Notifier} that will be used to publish message after updating {@link Account}s, and
-   *                 listen to {@link Account} change messages. Cannot be {@code null}.
+   *                 listen to {@link Account} change messages. Can be {@code null}.
+   * @param scheduler A {@link ScheduledExecutorService} that will run thread to update accounts in background.
+   *                  {@code null} to disable background updating.
+   * @param storeConfig The configs for {@code HelixAccountService}.
    */
   HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
-      Notifier<String> notifier) {
+      Notifier<String> notifier, ScheduledExecutorService scheduler, HelixPropertyStoreConfig storeConfig) {
     this.helixStore = Objects.requireNonNull(helixStore, "helixStore cannot be null");
     this.accountServiceMetrics = Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null");
-    this.notifier = Objects.requireNonNull(notifier, "notifier cannot be null");
+    this.notifier = notifier;
+    this.scheduler = scheduler;
+    this.storeConfig = storeConfig;
+    if (notifier == null) {
+      logger.warn("Notifier is null. Account updates cannot be notified to other entities. Local account cache may not "
+          + "be in sync with remote account data.");
+      accountServiceMetrics.nullNotifierCount.inc();
+    }
     listener = (topic, message) -> {
       checkOpen();
       logger.trace("Start to process message={} for topic={}", message, topic);
@@ -104,7 +129,7 @@ class HelixAccountService implements AccountService {
         switch (message) {
           case FULL_ACCOUNT_METADATA_CHANGE_MESSAGE:
             logger.trace("Start processing message={} for topic={}", message, topic);
-            readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH);
+            readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH, true);
             logger.trace("Completed processing message={} for topic={}", message, topic);
             break;
           default:
@@ -117,12 +142,25 @@ class HelixAccountService implements AccountService {
         accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
       }
     };
-    notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, listener);
-    try {
-      readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH);
-    } catch (Exception e) {
-      logger.error("Exception occurred when fetching remote account data", e);
-      accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+    if (notifier != null) {
+      notifier.subscribe(ACCOUNT_METADATA_CHANGE_TOPIC, listener);
+    }
+    Runnable updater = () -> {
+      try {
+        readFullAccountAndUpdateCache(FULL_ACCOUNT_METADATA_PATH, false);
+      } catch (Exception e) {
+        logger.error("Exception occurred when fetching remote account data", e);
+        accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+      }
+    };
+    updater.run();
+    if (scheduler != null) {
+      int initialDelay = new Random().nextInt(storeConfig.accountUpdaterPollingIntervalMs + 1);
+      scheduler.scheduleAtFixedRate(updater, initialDelay, storeConfig.accountUpdaterPollingIntervalMs,
+          TimeUnit.MILLISECONDS);
+      logger.info(
+          "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
+          initialDelay, storeConfig.accountUpdaterPollingIntervalMs);
     }
     isOpen = true;
   }
@@ -144,6 +182,20 @@ class HelixAccountService implements AccountService {
   public Collection<Account> getAllAccounts() {
     checkOpen();
     return accountInfoMapRef.get().getAccounts();
+  }
+
+  @Override
+  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
+    return accountUpdateConsumers.add(accountUpdateConsumer);
+  }
+
+  @Override
+  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    checkOpen();
+    Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to unsubscribe cannot be null");
+    return accountUpdateConsumers.remove(accountUpdateConsumer);
   }
 
   /**
@@ -229,7 +281,9 @@ class HelixAccountService implements AccountService {
       logger.trace("Completed updating accounts, took time={} ms", timeForUpdate);
       accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
       // notify account changes after successfully update.
-      if (notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE)) {
+      if (notifier == null) {
+        logger.warn("Notifier is not provided. Cannot notify other entities interested in account data change.");
+      } else if (notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE)) {
         logger.trace("Successfully published message for account metadata change");
       } else {
         logger.error("Failed to send notification for account metadata change");
@@ -245,12 +299,11 @@ class HelixAccountService implements AccountService {
   @Override
   public void close() {
     if (isOpen) {
-      try {
-        isOpen = false;
-        helixStore.stop();
-      } catch (Exception e) {
-        logger.error("Exception occurred when closing HelixAccountService.", e);
+      isOpen = false;
+      if (scheduler != null) {
+        shutDownExecutorService(scheduler, storeConfig.accountUpdaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
       }
+      helixStore.stop();
     }
   }
 
@@ -258,8 +311,10 @@ class HelixAccountService implements AccountService {
    * Reads the full set of {@link Account} metadata from {@link HelixPropertyStore}, and update the local cache.
    *
    * @param pathToFullAccountMetadata The path to read the full set of {@link Account} metadata.
+   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
    */
-  private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata) throws JSONException {
+  private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata, boolean isCalledFromListener)
+      throws JSONException {
     lock.lock();
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -278,15 +333,36 @@ class HelixAccountService implements AccountService {
           logger.trace("Start parsing remote account data.");
           AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
           Map<Short, Account> oldIdToAccountMap = accountInfoMapRef.get().idToAccountMap;
-          List<Short> idsOfUpdatedAccounts = new ArrayList<>();
+          accountInfoMapRef.set(newAccountInfoMap);
+          Map<Short, Account> idToUpdatedAccounts = new HashMap<>();
           for (Account newAccount : newAccountInfoMap.getAccounts()) {
             if (!newAccount.equals(oldIdToAccountMap.get(newAccount.getId()))) {
-              idsOfUpdatedAccounts.add(newAccount.getId());
+              idToUpdatedAccounts.put(newAccount.getId(), newAccount);
             }
           }
-          accountInfoMapRef.set(newAccountInfoMap);
-          logger.info("Received updates for {} accounts. Account IDs={}", idsOfUpdatedAccounts.size(),
-              idsOfUpdatedAccounts);
+          if (idToUpdatedAccounts.size() > 0) {
+            logger.info("Received updates for {} accounts by listener={}. Account IDs={}", idToUpdatedAccounts.size(),
+                isCalledFromListener, idToUpdatedAccounts.keySet());
+            // @todo In long run, this metric is not necessary.
+            if (isCalledFromListener) {
+              accountServiceMetrics.accountUpdatesCapturedByScheduledUpdaterCount.inc();
+            }
+            Collection<Account> updatedAccounts = Collections.unmodifiableCollection(idToUpdatedAccounts.values());
+            for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+              long startTime = System.currentTimeMillis();
+              try {
+                accountUpdateConsumer.accept(updatedAccounts);
+                long consumerExecutionTimeInMs = System.currentTimeMillis() - startTime;
+                logger.trace("Consumer={} has been notified for account change, took {} ms", accountUpdateConsumer,
+                    consumerExecutionTimeInMs);
+                accountServiceMetrics.accountUpdateConsumerTimeInMs.update(consumerExecutionTimeInMs);
+              } catch (Exception e) {
+                logger.error("Exception occurred when notifying accountUpdateConsumer={}", accountUpdateConsumer, e);
+              }
+            }
+          } else {
+            logger.debug("HelixAccountService is updated with 0 updated account");
+          }
         }
       }
     } finally {

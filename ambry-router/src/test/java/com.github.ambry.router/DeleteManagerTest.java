@@ -13,8 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -28,6 +26,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -102,8 +101,8 @@ public class DeleteManagerTest {
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, mockTime);
     List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds();
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, partition);
+    blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partition);
     blobIdString = blobId.getID();
   }
 

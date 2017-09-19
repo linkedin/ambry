@@ -48,7 +48,7 @@ java -cp ambry.jar com.github.ambry.store.DumpIndexTool --propsFile [Config file
 //Contents of config file
 hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
-type.of.operation=DumpIndex
+type.of.operation=DumpIndexFile
 file.to.read=[indexFile]
 silent=false
 ```
@@ -59,7 +59,7 @@ java -cp ambry.jar com.github.ambry.store.DumpIndexTool  --propsFile [Config fil
 //Contents of config file
 hardware.layout.file.path=[HardwareLayoutFile]
 partition.layout.file.path=[PartitionLayoutFile]
-type.of.operation=DumpIndex
+type.of.operation=DumpIndexFile
 file.to.read=[indexFile]
 blobId.list=blobid1,blobid2,blobid3
 silent=false

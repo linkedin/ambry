@@ -52,7 +52,8 @@ public class LogSegmentTest {
   public LogSegmentTest() throws IOException {
     tempDir = Files.createTempDirectory("logSegmentDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
-    metrics = new StoreMetrics(tempDir.getName(), new MetricRegistry());
+    MetricRegistry metricRegistry = new MetricRegistry();
+    metrics = new StoreMetrics(tempDir.getName(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
   }
 
   /**

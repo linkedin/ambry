@@ -58,6 +58,7 @@ subprojects {
         unitTestCompile sourceSets.test.output
         unitTestCompile configurations.testCompile
         unitTestRuntime configurations.testRuntime
+        testRuntime project(':log4j-test-config')
     }
 
     test {
@@ -222,6 +223,7 @@ project(':ambry-tools') {
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-account').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile project(':ambry-store').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
     }
 }
@@ -234,6 +236,7 @@ project(':ambry-protocol') {
                 project(':ambry-utils'),
                 project(':ambry-commons')
         testCompile project(':ambry-clustermap').sourceSets.test.output
+        testCompile project(':ambry-utils').sourceSets.test.output
     }
 }
 
@@ -266,6 +269,7 @@ project(':ambry-router') {
                 project(':ambry-protocol'),
                 project(':ambry-network')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         testCompile project(':ambry-api').sourceSets.test.output
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output

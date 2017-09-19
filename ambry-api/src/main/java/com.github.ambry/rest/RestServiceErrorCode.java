@@ -54,6 +54,11 @@ public enum RestServiceErrorCode {
   ResourceDirty,
 
   /**
+   * An authenticated client is not authorized to access a resource.
+   */
+  AccessDenied,
+
+  /**
    * Client has sent a request that cannot be processed due to authorization failure.
    */
   Unauthorized,

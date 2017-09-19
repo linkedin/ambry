@@ -56,7 +56,7 @@ class IndexValue {
 
   private final static int EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 = 4;
   private final static int OPERATION_TIME_SECS_SIZE_IN_BYTES = 4;
-  private final static int SERVICE_ID_SIZE_IN_BYTES = 2;
+  private final static int ACCOUNT_ID_SIZE_IN_BYTES = 2;
   private final static int CONTAINER_ID_SIZE_IN_BYTES = 2;
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
@@ -65,7 +65,7 @@ class IndexValue {
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V1 =
       BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
-          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + SERVICE_ID_SIZE_IN_BYTES
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
           + CONTAINER_ID_SIZE_IN_BYTES;
 
   private long size;
@@ -74,7 +74,7 @@ class IndexValue {
   private final long expiresAtMs;
   private long originalMessageOffset;
   private final long operationTimeInMs;
-  private final short serviceId;
+  private final short accountId;
   private final short containerId;
   private final short version;
 
@@ -97,7 +97,7 @@ class IndexValue {
         expiresAtMs = value.getLong();
         originalMessageOffset = value.getLong();
         operationTimeInMs = (int) Utils.Infinite_Time;
-        serviceId = UNKNOWN_ACCOUNT_ID;
+        accountId = UNKNOWN_ACCOUNT_ID;
         containerId = UNKNOWN_CONTAINER_ID;
         break;
       case PersistentIndex.VERSION_1:
@@ -114,7 +114,7 @@ class IndexValue {
         long operationTimeInSecs = value.getInt();
         operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? TimeUnit.SECONDS.toMillis(operationTimeInSecs)
             : Utils.Infinite_Time;
-        serviceId = value.getShort();
+        accountId = value.getShort();
         containerId = value.getShort();
         break;
       default:
@@ -127,36 +127,12 @@ class IndexValue {
    * @param size the size of the blob that this index value refers to
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
    * @param expiresAtMs the expiration time in ms at which the blob expires
-   */
-  IndexValue(long size, Offset offset, long expiresAtMs) {
-    this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), (int) Utils.Infinite_Time,
-        UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param flags the {@link Flags} that needs to be set for the Index Value
-   * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param operationTimeInMs operation time ins ms of the entry in secs
-   */
-  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, UNKNOWN_ACCOUNT_ID,
-        UNKNOWN_CONTAINER_ID);
-  }
-
-  /**
-   * Constructs IndexValue based on the args passed
-   * @param size the size of the blob that this index value refers to
-   * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
-   * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param operationTimeInMs operation time in ms of the entry
-   * @param serviceId the serviceId that this blob belongs to
+   * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
-  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInMs, short serviceId, short containerId) {
-    this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), operationTimeInMs, serviceId, containerId);
+  IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInMs, short accountId, short containerId) {
+    this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId);
   }
 
   /**
@@ -166,12 +142,12 @@ class IndexValue {
    * @param flags the {@link Flags} that needs to be set for the Index Value
    * @param expiresAtMs the expiration time in ms at which the blob expires
    * @param operationTimeInMs operation time in ms of the entry
-   * @param serviceId the serviceId that this blob belongs to
+   * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
-  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs, short serviceId,
+  IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs, short accountId,
       short containerId) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, serviceId, containerId);
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId);
   }
 
   /**
@@ -183,11 +159,11 @@ class IndexValue {
    * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
    *                              in the same log segment. Set to {@link #UNKNOWN_ORIGINAL_MESSAGE_OFFSET} otherwise.
    * @param operationTimeInMs the time in ms at which the operation occurred.
-   * @param serviceId the serviceId that this blob belongs to
+   * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
   private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
-      long operationTimeInMs, short serviceId, short containerId) {
+      long operationTimeInMs, short accountId, short containerId) {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
@@ -199,7 +175,7 @@ class IndexValue {
     }
     this.originalMessageOffset = originalMessageOffset;
     this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
-    this.serviceId = serviceId;
+    this.accountId = accountId;
     this.containerId = containerId;
     version = PersistentIndex.CURRENT_VERSION;
   }
@@ -256,10 +232,10 @@ class IndexValue {
   }
 
   /**
-   * @return the serviceId of the {@link IndexValue}
+   * @return the accountId of the {@link IndexValue}
    */
-  short getServiceId() {
-    return serviceId;
+  short getAccountId() {
+    return accountId;
   }
 
   /**
@@ -324,7 +300,7 @@ class IndexValue {
         value.putLong(originalMessageOffset);
         value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
             : (int) operationTimeInMs);
-        value.putShort(serviceId);
+        value.putShort(accountId);
         value.putShort(containerId);
         value.position(0);
         break;
@@ -338,7 +314,7 @@ class IndexValue {
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
         + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
-        version != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", ServiceId "
-            + getServiceId() + ", ContainerId " + getContainerId()) : "");
+        version != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId "
+            + getAccountId() + ", ContainerId " + getContainerId()) : "");
   }
 }

@@ -19,6 +19,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -70,19 +71,23 @@ public class HardDeleterTest {
 
     void add(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
+      short acccountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       IndexValue indexValue =
-          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, Utils.Infinite_Time);
+          new IndexValue(sizeOfEntry, offset, IndexValue.FLAGS_DEFAULT_VALUE, 12345, time.milliseconds(), acccountId,
+              containerId);
       index.addToIndex(new IndexEntry(id, indexValue),
           new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
-      offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry));
+      offsetMap.put(nextOffset, new MessageInfo(id, sizeOfEntry, acccountId, containerId, time.milliseconds()));
       nextOffset += sizeOfEntry;
     }
 
     void delete(MockId id) throws IOException, StoreException {
       Offset offset = new Offset(logSegmentName, nextOffset);
-      index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)));
+      index.markAsDeleted(id, new FileSpan(offset, new Offset(logSegmentName, nextOffset + sizeOfEntry)),
+          time.milliseconds());
       ByteBuffer byteBuffer = ByteBuffer.allocate((int) sizeOfEntry);
       log.appendFrom(byteBuffer);
       nextOffset += sizeOfEntry;
@@ -149,8 +154,10 @@ public class HardDeleterTest {
       c.delete();
     }
     scheduler = Utils.newScheduler(1, false);
-    log = new Log(rootDirectory.getAbsolutePath(), 10000, 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-        new StoreMetrics(rootDirectory.getAbsolutePath(), new MetricRegistry()));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    StoreMetrics metrics =
+        new StoreMetrics(rootDirectory.getAbsolutePath(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    log = new Log(rootDirectory.getAbsolutePath(), 10000, 10000, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics);
     Properties props = new Properties();
     // the test will set the tokens, so disable the index persistor.
     props.setProperty("store.data.flush.interval.seconds", "3600");
@@ -319,8 +326,9 @@ public class HardDeleterTest {
     MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
         MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId) throws StoreException {
       super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-          new DiskIOScheduler(null), new StoreMetrics(datadir, new MetricRegistry()), time, new UUID(1, 1),
-          incarnationId);
+          new DiskIOScheduler(null),
+          new StoreMetrics(datadir, new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry())), time,
+          new UUID(1, 1), incarnationId);
     }
 
     /**

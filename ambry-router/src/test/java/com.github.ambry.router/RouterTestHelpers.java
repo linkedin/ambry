@@ -37,7 +37,8 @@ class RouterTestHelpers {
     return a.getServiceId().equals(b.getServiceId()) && a.getOwnerId().equals(b.getOwnerId()) && a.getContentType()
         .equals(b.getContentType()) && a.isPrivate() == b.isPrivate()
         && a.getTimeToLiveInSeconds() == b.getTimeToLiveInSeconds()
-        && a.getCreationTimeInMs() == b.getCreationTimeInMs();
+        && a.getCreationTimeInMs() == b.getCreationTimeInMs() && a.getAccountId() == b.getAccountId()
+        && a.getContainerId() == b.getContainerId();
   }
 
   /**

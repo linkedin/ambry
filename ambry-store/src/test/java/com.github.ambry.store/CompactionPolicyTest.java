@@ -65,7 +65,7 @@ public class CompactionPolicyTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{DefaultCompactionPolicyFactory.class.getName()}, {CompactAllPolicyFactory.class.getName()}});
+        new Object[][]{{StatsBasedCompactionPolicyFactory.class.getName()}, {CompactAllPolicyFactory.class.getName()}});
   }
 
   /**
@@ -92,8 +92,8 @@ public class CompactionPolicyTest {
   @Test
   public void testDifferentUsedCapacities() throws StoreException {
     List<String> bestCandidates = null;
-    if (compactionPolicy instanceof DefaultCompactionPolicy) {
-      bestCandidates = setUpStateForDefaultCompactionPolicy(blobStore, mockBlobStoreStats);
+    if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
+      bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
     } else if (compactionPolicy instanceof CompactAllPolicy) {
       blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
       bestCandidates = blobStore.logSegmentsNotInJournal;
@@ -130,8 +130,8 @@ public class CompactionPolicyTest {
     List<String> bestCandidates = null;
     for (int minLogSize : minLogSizeToTriggerCompactionInPercentages) {
       initializeBlobStore(properties, time, minLogSize, -1, DEFAULT_MAX_BLOB_SIZE);
-      if (compactionPolicy instanceof DefaultCompactionPolicy) {
-        bestCandidates = setUpStateForDefaultCompactionPolicy(blobStore, mockBlobStoreStats);
+      if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
+        bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
       } else if (compactionPolicy instanceof CompactAllPolicy) {
         blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
         bestCandidates = blobStore.logSegmentsNotInJournal;
@@ -158,9 +158,9 @@ public class CompactionPolicyTest {
       time = new MockTime();
       Pair<MockBlobStore, StoreConfig> initState =
           initializeBlobStore(properties, time, -1, messageRetentionDays, DEFAULT_MAX_BLOB_SIZE);
-      if (compactionPolicy instanceof DefaultCompactionPolicy) {
-        bestCandidates = setUpStateForDefaultCompactionPolicy(blobStore, mockBlobStoreStats);
-        compactionPolicy = new DefaultCompactionPolicy(initState.getSecond(), time);
+      if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
+        bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
+        compactionPolicy = new StatsBasedCompactionPolicy(initState.getSecond(), time);
       } else if (compactionPolicy instanceof CompactAllPolicy) {
         blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
         bestCandidates = blobStore.logSegmentsNotInJournal;
@@ -204,10 +204,11 @@ public class CompactionPolicyTest {
   }
 
   /**
-   * Sets up the state (like logSegemntsNotInJournal and valid data size map) for {@link DefaultCompactionPolicy}
+   * Sets up the state (like logSegemntsNotInJournal and valid data size map) for
+   * {@link StatsBasedCompactionPolicy}
    * @return a {@link List} of log segment names referring to the best candidate to compact
    */
-  private List<String> setUpStateForDefaultCompactionPolicy(MockBlobStore blobStore,
+  private List<String> setUpStateForStatsBasedCompactionPolicy(MockBlobStore blobStore,
       MockBlobStoreStats mockBlobStoreStats) {
     long maxLogSegmentCapacity =
         blobStore.segmentCapacity - blobStore.segmentHeaderSize - mockBlobStoreStats.getMaxBlobSize();

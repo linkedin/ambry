@@ -67,11 +67,9 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class BlobId extends StoreKey {
   public static final byte DEFAULT_FLAG = 0;
-  // version 1 of the serialized format
   static final short BLOB_ID_V1 = 1;
-  // version 2 of the serialized format
   static final short BLOB_ID_V2 = 2;
-  private static final short CURRENT_VERSION = BLOB_ID_V1;
+  private static final short CURRENT_VERSION = BLOB_ID_V2;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
@@ -358,8 +356,15 @@ public class BlobId extends StoreKey {
     return Utils.hashcode(new Object[]{version, partitionId, uuid});
   }
 
-  /**
-   * Gets the value of {@link #CURRENT_VERSION}.
+  /**<p>
+   *   Gets the value of {@link #CURRENT_VERSION}.
+   * </p>
+   * <p>
+   *   It is typically not a good practice to call overridable methods from constructor. However, there could not be
+   *   cleaner way to set the {@link #version} field by either calling this method, or by reading from an input stream
+   *   from {@link BlobId#BlobId(String, ClusterMap)}, and also because this method simply returns a static final value
+   *   that does not depend on the state of an instance.
+   * </p>
    * @return The value of {@link #CURRENT_VERSION}.
    */
   protected short getCurrentVersion() {

@@ -69,6 +69,8 @@ public class BlobStoreCompactorTest {
   // InterruptionInducingIndex irrespective of the value of throwExceptionInsteadOfClose
   private boolean throwExceptionBeforeOperation = false;
 
+  private MetricRegistry metricRegistry;
+
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
@@ -299,6 +301,7 @@ public class BlobStoreCompactorTest {
 
       compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
       compactor.initialize(state.index);
+      long logSegmentsBeforeCompaction = state.index.getLogSegmentCount();
       try {
         compactor.compact(details);
       } finally {
@@ -317,6 +320,7 @@ public class BlobStoreCompactorTest {
       // there should be no temp files
       assertEquals("There are some temp log segments", 0,
           tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
+      verifySavedBytesCount(logSegmentsBeforeCompaction, 0);
     }
   }
 
@@ -459,7 +463,7 @@ public class BlobStoreCompactorTest {
   public void interspersedDeletedAndExpiredBlobsTest() throws Exception {
     refreshState(false, false);
     state.properties.put("store.index.max.number.of.inmem.elements", Integer.toString(5));
-    state.initIndex(new MetricRegistry());
+    state.initIndex();
 
     int numFinalSegmentsCount = 3;
     long expiryTimeMs = getInvalidationTime(numFinalSegmentsCount + 1);
@@ -511,10 +515,13 @@ public class BlobStoreCompactorTest {
     MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
     state.addDeleteEntry(idFromAnotherSegment);
 
-    // 9. Delete entry for an Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
+    // 9. Delete entry for a Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
     // cleanup
     // the delete record itself won't be cleaned up
-    state.addDeleteEntry(state.getUniqueId());
+    MockId uniqueId = state.getUniqueId();
+    state.addDeleteEntry(uniqueId,
+        new MessageInfo(uniqueId, Integer.MAX_VALUE, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
 
     // fill up the rest of the segment + one more
     writeDataToMeetRequiredSegmentCount(numFinalSegmentsCount, null);
@@ -527,6 +534,7 @@ public class BlobStoreCompactorTest {
     CompactionDetails details = new CompactionDetails(deleteReferenceTimeMs, segmentsUnderCompaction);
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
+    long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
       compactor.compact(details);
     } finally {
@@ -593,6 +601,7 @@ public class BlobStoreCompactorTest {
     // there should be no temp files
     assertEquals("There are some temp log segments", 0,
         tempDir.listFiles(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length);
+    verifySavedBytesCount(logSegmentCountBeforeCompaction, 0);
   }
 
   /**
@@ -690,7 +699,7 @@ public class BlobStoreCompactorTest {
     Log log = new InterruptionInducingLog(1, Integer.MAX_VALUE);
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
     compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction, deleteReferenceTimeMs,
-        true);
+        true, false);
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
   }
 
@@ -799,6 +808,7 @@ public class BlobStoreCompactorTest {
 
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
+    long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
       compactor.compact(details);
     } finally {
@@ -864,6 +874,7 @@ public class BlobStoreCompactorTest {
         // PUT record exists.
       }
     }
+    verifySavedBytesCount(logSegmentCountBeforeCompaction, 0);
   }
 
   /**
@@ -937,9 +948,10 @@ public class BlobStoreCompactorTest {
   private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException, StoreException {
     closeOrExceptionInduced = false;
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
+    metricRegistry = new MetricRegistry();
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config,
-        new StoreMetrics(STORE_ID, new MetricRegistry()), ioScheduler, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log,
-        state.time, state.sessionId, state.incarnationId);
+        new StoreMetrics(STORE_ID, metricRegistry, new AggregatedStoreMetrics(metricRegistry)), ioScheduler,
+        StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId, state.incarnationId);
   }
 
   /**
@@ -1098,6 +1110,7 @@ public class BlobStoreCompactorTest {
         state.index.getIndexSegments().size());
     checkVitals(changeExpected, logSegmentSizeSumBeforeCompaction, logSegmentCountBeforeCompaction,
         indexSegmentCountBeforeCompaction);
+    verifySavedBytesCount(logSegmentCountBeforeCompaction, 0);
   }
 
   /**
@@ -1109,10 +1122,13 @@ public class BlobStoreCompactorTest {
    * @param segmentsUnderCompaction the names of the log segments under compaction.
    * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
    * @param changeExpected {@code true} if compaction will cause a change in size of data. {@code false} otherwise.
+   * @param checkSavedBytesReported {@code true} if the metric reporting saved bytes has to be checked. {@code false}
+   *                                            otherwise.
    * @throws Exception
    */
   private void compactWithRecoveryAndVerify(Log log, DiskIOScheduler diskIOScheduler, PersistentIndex index,
-      List<String> segmentsUnderCompaction, long deleteReferenceTimeMs, boolean changeExpected) throws Exception {
+      List<String> segmentsUnderCompaction, long deleteReferenceTimeMs, boolean changeExpected,
+      boolean checkSavedBytesReported) throws Exception {
     // getting these from the "real" log and indexes
     long logSegmentSizeSumBeforeCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
@@ -1141,11 +1157,15 @@ public class BlobStoreCompactorTest {
       compactor.close(0);
     }
 
+    // record any bytes saved because index is going to reinit the metric registry
+    long savedBytesReported = metricRegistry.getCounters()
+        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
+        .getCount();
     // have to reload log since the instance changed by the old compactor compactor is different.
     state.reloadLog(false);
     // use the "real" log, index and disk IO schedulers this time.
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
-    state.initIndex(state.metricRegistry);
+    state.initIndex();
     compactor.initialize(state.index);
     assertEquals("Wrong number of swap segments in use",
         tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse());
@@ -1161,6 +1181,9 @@ public class BlobStoreCompactorTest {
         idsInCompactedLogSegments, deleteReferenceTimeMs);
     checkVitals(changeExpected, logSegmentSizeSumBeforeCompaction, logSegmentCountBeforeCompaction,
         indexSegmentCountBeforeCompaction);
+    if (checkSavedBytesReported) {
+      verifySavedBytesCount(logSegmentCountBeforeCompaction, savedBytesReported);
+    }
   }
 
   /**
@@ -1475,9 +1498,10 @@ public class BlobStoreCompactorTest {
   private void checkRecord(MockId id, BlobReadOptions options) throws IOException {
     MessageReadSet readSet = new StoreMessageReadSet(Arrays.asList(options));
     IndexValue value = state.getExpectedValue(id, true);
-    assertEquals("Unexpected key in BlobReadOptions", id, options.getStoreKey());
-    assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getSize());
-    assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(), options.getExpiresAtMs());
+    assertEquals("Unexpected key in BlobReadOptions", id, options.getMessageInfo().getStoreKey());
+    assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getMessageInfo().getSize());
+    assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(),
+        options.getMessageInfo().getExpirationTimeInMs());
     if (state.index.hardDeleter.enabled.get() && !state.deletedKeys.contains(id)) {
       ByteBuffer readBuf = ByteBuffer.allocate((int) value.getSize());
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
@@ -1498,11 +1522,26 @@ public class BlobStoreCompactorTest {
     IndexValue valueFromStore = state.index.findKey(id);
     assertEquals("Unexpected size in IndexValue", value.getSize(), valueFromStore.getSize());
     assertEquals("Unexpected expiresAtMs in IndexValue", value.getExpiresAtMs(), valueFromStore.getExpiresAtMs());
-    assertEquals("Unexpected op time in IndexValue", value.getOperationTimeInMs(),
+    assertEquals("Unexpected op time in IndexValue ", value.getOperationTimeInMs(),
         valueFromStore.getOperationTimeInMs());
-    assertEquals("Unexpected service ID in IndexValue", value.getServiceId(), valueFromStore.getServiceId());
+    assertEquals("Unexpected account ID in IndexValue", value.getAccountId(), valueFromStore.getAccountId());
     assertEquals("Unexpected container ID in IndexValue", value.getContainerId(), valueFromStore.getContainerId());
     assertEquals("Unexpected flags in IndexValue", value.getFlags(), valueFromStore.getFlags());
+  }
+
+  /**
+   * Verifies that the metric reporting the number of bytes saved after compaction is correct.
+   * @param logSegmentCountBeforeCompaction the number of log segments in the {@link Log} before compaction.
+   * @param alreadySavedBytes the number of bytes that have already been saved but won't show up in the metric registry
+   * (because it may have been re-inited).
+   */
+  private void verifySavedBytesCount(long logSegmentCountBeforeCompaction, long alreadySavedBytes) {
+    long expectedSavedBytes =
+        state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - state.index.getLogSegmentCount());
+    long savedBytesReported = alreadySavedBytes + metricRegistry.getCounters()
+        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
+        .getCount();
+    assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
   }
 
   // badInputTest() helpers
@@ -1673,7 +1712,7 @@ public class BlobStoreCompactorTest {
     // create another log that wraps over the same files but induces close as required.
     Log log = new InterruptionInducingLog(addSegmentCallCountToInterruptAt, dropSegmentCallCountToInterruptAt);
     compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
-        state.time.milliseconds(), false);
+        state.time.milliseconds(), false, true);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
     // there will be changes past expiration time
@@ -1683,7 +1722,7 @@ public class BlobStoreCompactorTest {
     // create another log that wraps over the same files but induces close as required.
     log = new InterruptionInducingLog(addSegmentCallCountToInterruptAt, dropSegmentCallCountToInterruptAt);
     compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction,
-        state.time.milliseconds(), true);
+        state.time.milliseconds(), true, true);
   }
 
   // interruptionDuringIndexCommitTest() helpers
@@ -1700,7 +1739,7 @@ public class BlobStoreCompactorTest {
     // create another index that wraps over the same files but induces close as required.
     PersistentIndex index = new InterruptionInducingIndex();
     compactWithRecoveryAndVerify(state.log, DISK_IO_SCHEDULER, index, segmentsUnderCompaction,
-        state.time.milliseconds(), false);
+        state.time.milliseconds(), false, true);
     verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
     // there will be changes past expiration time
@@ -1710,7 +1749,7 @@ public class BlobStoreCompactorTest {
     // create another index that wraps over the same files but induces close as required.
     index = new InterruptionInducingIndex();
     compactWithRecoveryAndVerify(state.log, DISK_IO_SCHEDULER, index, segmentsUnderCompaction,
-        state.time.milliseconds(), true);
+        state.time.milliseconds(), true, true);
   }
 
   // interruptionDuringOrAfterIndexSegmentProcessingTest() helpers
@@ -1731,7 +1770,7 @@ public class BlobStoreCompactorTest {
       // create a DiskIOScheduler
       DiskIOScheduler diskIOScheduler = new InterruptionInducingDiskIOScheduler(countToInterruptAt, Integer.MAX_VALUE);
       compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
-          state.time.milliseconds(), false);
+          state.time.milliseconds(), false, true);
       verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
       // there will be changes past expiration time
@@ -1743,7 +1782,7 @@ public class BlobStoreCompactorTest {
           : getIndexSegmentStartOffsetsForLogSegments(segmentsUnderCompaction).size() + interruptAt;
       diskIOScheduler = new InterruptionInducingDiskIOScheduler(countToInterruptAt, Integer.MAX_VALUE);
       compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
-          state.time.milliseconds(), true);
+          state.time.milliseconds(), true, true);
     }
   }
 
@@ -1788,7 +1827,7 @@ public class BlobStoreCompactorTest {
       // create a DiskIOScheduler
       DiskIOScheduler diskIOScheduler = new InterruptionInducingDiskIOScheduler(Integer.MAX_VALUE, countToInterruptAt);
       compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
-          state.time.milliseconds(), false);
+          state.time.milliseconds(), false, true);
       verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
 
       // there will be changes past expiration time
@@ -1804,7 +1843,7 @@ public class BlobStoreCompactorTest {
       }
       diskIOScheduler = new InterruptionInducingDiskIOScheduler(Integer.MAX_VALUE, countToInterruptAt);
       compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
-          state.time.milliseconds(), true);
+          state.time.milliseconds(), true, true);
     }
   }
 
@@ -1844,7 +1883,7 @@ public class BlobStoreCompactorTest {
         log = new InterruptionInducingLog(1, Integer.MAX_VALUE);
       }
       compactWithRecoveryAndVerify(log, diskIOScheduler, state.index, segmentsUnderCompaction,
-          state.time.milliseconds(), true);
+          state.time.milliseconds(), true, true);
     } else {
       compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
     }
@@ -1923,8 +1962,9 @@ public class BlobStoreCompactorTest {
     InterruptionInducingIndex() throws StoreException {
       super(tempDirStr, state.scheduler, state.log, new StoreConfig(new VerifiableProperties(state.properties)),
           CuratedLogIndexState.STORE_KEY_FACTORY, state.recovery, state.hardDelete,
-          CuratedLogIndexState.DISK_IO_SCHEDULER, new StoreMetrics(STORE_ID, new MetricRegistry()), state.time,
-          state.sessionId, state.incarnationId);
+          CuratedLogIndexState.DISK_IO_SCHEDULER,
+          new StoreMetrics(STORE_ID, new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry())),
+          state.time, state.sessionId, state.incarnationId);
     }
 
     @Override
@@ -1955,7 +1995,8 @@ public class BlobStoreCompactorTest {
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
         throws IOException {
       super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(),
-          StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, new StoreMetrics(STORE_ID, new MetricRegistry()));
+          StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+          new StoreMetrics(STORE_ID, new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry())));
       if (addSegmentCallCountToInterruptAt <= 0 || dropSegmentCallCountToInterruptAt <= 0) {
         throw new IllegalArgumentException("Arguments cannot be <= 0");
       }

@@ -15,5 +15,6 @@ addons:
   apt:
     packages:
       - oracle-java8-installer
+      - oracle-java8-unlimited-jce-policy
 after_success:
   - bash <(curl -s https://codecov.io/bash)

@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.github.ambry.router.RouterUtils.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -102,7 +103,7 @@ public class InMemoryRouter implements Router {
       this.blobProperties =
           new BlobProperties(blob.remaining(), blobProperties.getServiceId(), blobProperties.getOwnerId(),
               blobProperties.getContentType(), blobProperties.isPrivate(), blobProperties.getTimeToLiveInSeconds(),
-              blobProperties.getCreationTimeInMs());
+              blobProperties.getCreationTimeInMs(), blobProperties.getAccountId(), blobProperties.getContainerId());
       this.userMetadata = userMetadata;
       this.blob = blob;
     }
@@ -236,15 +237,8 @@ public class InMemoryRouter implements Router {
 
   @Override
   public void close() throws IOException {
-    try {
-      if (routerOpen.compareAndSet(true, false)) {
-        operationPool.shutdown();
-        operationPool.awaitTermination(1, TimeUnit.MINUTES);
-      } else {
-        operationPool.awaitTermination(1, TimeUnit.MINUTES);
-      }
-    } catch (InterruptedException e) {
-      // too bad.
+    if (routerOpen.compareAndSet(true, false)) {
+      shutDownExecutorService(operationPool, 1, TimeUnit.MINUTES);
     }
   }
 

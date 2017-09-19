@@ -13,8 +13,6 @@
  */
 package com.github.ambry.protocol;
 
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -30,13 +28,16 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import org.junit.Assert;
@@ -101,7 +102,6 @@ class InvalidVersionPutRequest extends PutRequest {
 }
 
 public class RequestResponseTest {
-  private final Random random = new Random();
 
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
@@ -113,7 +113,7 @@ public class RequestResponseTest {
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
-        {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (random.nextInt(sizeInBytes - 1) + 1)};
+        {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (TestUtils.RANDOM.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     for (int allocationSize : channelWriteLimits) {
       PutRequest request =
@@ -148,44 +148,49 @@ public class RequestResponseTest {
 
   @Test
   public void putRequestResponseTest() throws IOException {
-    Random rnd = new Random();
     MockClusterMap clusterMap = new MockClusterMap();
 
     int correlationId = 5;
     String clientId = "client";
-    BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
+    BlobId blobId =
+        new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+            Utils.getRandomShort(TestUtils.RANDOM), clusterMap.getWritablePartitionIds().get(0));
     byte[] userMetadata = new byte[50];
-    rnd.nextBytes(userMetadata);
+    TestUtils.RANDOM.nextBytes(userMetadata);
     ByteBuffer.wrap(userMetadata);
     int blobSize = 100;
     byte[] blob = new byte[blobSize];
-    rnd.nextBytes(blob);
+    TestUtils.RANDOM.nextBytes(blob);
 
     BlobProperties blobProperties =
-        new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize);
 
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
     blobProperties =
-        new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize);
 
     // Put Request with size in blob properties different from the data size and blob type: Metadata blob.
     blobProperties =
-        new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
         blob, blobSize);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
-    blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
+    blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
         blob, blobSize);
 
-    blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time);
+    blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     // Ensure a Put Request with an invalid version does not get deserialized correctly.
     testPutRequestInvalidVersion(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blob);
 
@@ -200,8 +205,10 @@ public class RequestResponseTest {
   @Test
   public void getRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        clusterMap.getWritablePartitionIds().get(0));
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
     blobIdList.add(id1);
     PartitionRequestInfo partitionRequestInfo1 = new PartitionRequestInfo(new MockPartitionId(), blobIdList);
@@ -216,9 +223,7 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().size(), 1);
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().get(0), id1);
 
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
-    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
     ArrayList<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
@@ -241,7 +246,7 @@ public class RequestResponseTest {
     Assert.assertEquals(msgInfo.getSize(), 1000);
     Assert.assertEquals(msgInfo.getStoreKey(), id1);
     Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
-    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
@@ -255,19 +260,19 @@ public class RequestResponseTest {
   @Test
   public void deleteRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
         clusterMap.getWritablePartitionIds().get(0));
     short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
     for (short version : versions) {
-      long deletionTimeMs = Utils.getRandomLong(random, Long.MAX_VALUE);
-      int correlationId = random.nextInt();
+      long deletionTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+      int correlationId = TestUtils.RANDOM.nextInt();
       DeleteRequest deleteRequest;
       if (version == DeleteRequest.DELETE_REQUEST_VERSION_1) {
-        deleteRequest = new DeleteRequest(correlationId, "client", id1);
+        deleteRequest = new DeleteRequestV1(correlationId, "client", id1);
       } else {
-        deleteRequest = new DeleteRequestV2(correlationId, "client", id1, deletionTimeMs);
+        deleteRequest = new DeleteRequest(correlationId, "client", id1, deletionTimeMs);
       }
       DataInputStream requestStream = serAndPrepForRead(deleteRequest, -1, true);
       DeleteRequest deserializedDeleteRequest = DeleteRequest.readFrom(requestStream, clusterMap);
@@ -278,10 +283,8 @@ public class RequestResponseTest {
         Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedDeleteRequest.getContainerId());
         Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializedDeleteRequest.getDeletionTimeInMs());
       } else {
-        Assert.assertEquals("AccountId mismatch ", Account.UNKNOWN_ACCOUNT_ID,
-            deserializedDeleteRequest.getAccountId());
-        Assert.assertEquals("ContainerId mismatch ", Container.UNKNOWN_CONTAINER_ID,
-            deserializedDeleteRequest.getContainerId());
+        Assert.assertEquals("AccountId mismatch ", accountId, deserializedDeleteRequest.getAccountId());
+        Assert.assertEquals("ContainerId mismatch ", containerId, deserializedDeleteRequest.getContainerId());
         Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time,
             deserializedDeleteRequest.getDeletionTimeInMs());
       }
@@ -296,8 +299,10 @@ public class RequestResponseTest {
   @Test
   public void replicaMetadataRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobId id1 = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        clusterMap.getWritablePartitionIds().get(0));
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");
@@ -323,9 +328,7 @@ public class RequestResponseTest {
       Assert.assertTrue(true);
     }
 
-    short accountId = Utils.getRandomShort(random);
-    short containerId = Utils.getRandomShort(random);
-    long operationTimeMs = SystemTime.getInstance().milliseconds() + random.nextInt();
+    long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     MessageInfo messageInfo = new MessageInfo(id1, 1000, accountId, containerId, operationTimeMs);
     List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
@@ -350,13 +353,13 @@ public class RequestResponseTest {
     Assert.assertEquals("MsgInfo size mismatch ", 1000, msgInfo.getSize());
     Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
     Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
-    if (GetResponse.getCurrentVersion() == GetResponse.Get_Response_Version_V3) {
+    if (ReplicaMetadataResponse.getCurrentVersion() == ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
+      Assert.assertEquals("ContainerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
     } else {
       Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, msgInfo.getAccountId());
-      Assert.assertEquals("ConatinerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
+      Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", Utils.Infinite_Time, msgInfo.getOperationTimeMs());
     }
   }
@@ -382,12 +385,15 @@ public class RequestResponseTest {
       requestStream = serAndPrepForRead(adminRequest, -1, true);
       deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId, type, null);
       // response
-      AdminResponse response = new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
+      ServerErrorCode[] values = ServerErrorCode.values();
+      int indexToPick = TestUtils.RANDOM.nextInt(values.length);
+      ServerErrorCode responseErrorCode = values[indexToPick];
+      AdminResponse response = new AdminResponse(correlationId, clientId, responseErrorCode);
       DataInputStream responseStream = serAndPrepForRead(response, -1, false);
       AdminResponse deserializedAdminResponse = AdminResponse.readFrom(responseStream);
       Assert.assertEquals(deserializedAdminResponse.getCorrelationId(), correlationId);
       Assert.assertEquals(deserializedAdminResponse.getClientId(), clientId);
-      Assert.assertEquals(deserializedAdminResponse.getError(), ServerErrorCode.No_Error);
+      Assert.assertEquals(deserializedAdminResponse.getError(), responseErrorCode);
     }
   }
 
@@ -404,24 +410,77 @@ public class RequestResponseTest {
   }
 
   /**
+   * Tests the ser/de of {@link CatchupStatusAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void catchupStatusAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    int correlationId = 1234;
+    String clientId = "client";
+    // request
+    long acceptableLag = Utils.getRandomLong(TestUtils.RANDOM, 10000);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
+    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLag, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(catchupStatusRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.CatchupStatus, id);
+    CatchupStatusAdminRequest deserializedCatchupStatusRequest =
+        CatchupStatusAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    Assert.assertEquals("Acceptable lag not as set", acceptableLag,
+        deserializedCatchupStatusRequest.getAcceptableLagInBytes());
+    // response
+    boolean isCaughtUp = TestUtils.RANDOM.nextBoolean();
+    ServerErrorCode[] values = ServerErrorCode.values();
+    int indexToPick = TestUtils.RANDOM.nextInt(values.length);
+    ServerErrorCode responseErrorCode = values[indexToPick];
+    AdminResponse adminResponse = new AdminResponse(correlationId, clientId, responseErrorCode);
+    CatchupStatusAdminResponse catchupStatusResponse = new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
+    DataInputStream responseStream = serAndPrepForRead(catchupStatusResponse, -1, false);
+    CatchupStatusAdminResponse deserializedCatchupStatusResponse = CatchupStatusAdminResponse.readFrom(responseStream);
+    Assert.assertEquals(deserializedCatchupStatusResponse.getCorrelationId(), correlationId);
+    Assert.assertEquals(deserializedCatchupStatusResponse.getClientId(), clientId);
+    Assert.assertEquals(deserializedCatchupStatusResponse.getError(), responseErrorCode);
+    Assert.assertEquals(deserializedCatchupStatusResponse.isCaughtUp(), isCaughtUp);
+  }
+
+  /**
+   * Tests the ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void replicationControlAdminRequestTest() throws IOException {
+    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
+    List<String> origins = new ArrayList<>();
+    for (int i = 0; i < numOrigins; i++) {
+      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+    }
+    doReplicationControlAdminRequestTest(origins, true);
+    doReplicationControlAdminRequestTest(origins, false);
+    doReplicationControlAdminRequestTest(Collections.EMPTY_LIST, true);
+  }
+
+  /**
    * Serializes a {@link RequestOrResponseType} and prepares it for reading.
    * @param requestOrResponse the {@link RequestOrResponseType} to serialize.
-   * @param allocationSize the amount of data that the output channel should read in one iteration. Setting this to -1
+   * @param channelSize the amount of data that the output channel should read in one iteration. Setting this to -1
    *                       will set the size of the output channel buffer to 1/3rd the size of {@code requestOrResponse}
    * @param isRequest {@code true} if {@code requestOrResponse} is a request. {@code false} otherwise.
    * @return the serialized form of {@code requestOrResponse} as a {@link DataInputStream}.
    * @throws IOException
    */
-  private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse, int allocationSize, boolean isRequest)
+  private DataInputStream serAndPrepForRead(RequestOrResponse requestOrResponse, int channelSize, boolean isRequest)
       throws IOException {
-    if (allocationSize == -1) {
-      allocationSize = (int) (requestOrResponse.sizeInBytes() / 3);
+    if (channelSize == -1) {
+      channelSize = (int) (requestOrResponse.sizeInBytes() / 3);
     }
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + allocationSize - 1) / allocationSize);
+    int expectedWriteToCount = (int) ((requestOrResponse.sizeInBytes() + channelSize - 1) / channelSize);
     int actualWriteToCount = 0;
     do {
-      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(allocationSize));
+      ByteBufferChannel channel = new ByteBufferChannel(ByteBuffer.allocate(channelSize));
       requestOrResponse.writeTo(channel);
       ByteBuffer underlyingBuf = channel.getBuffer();
       underlyingBuf.flip();
@@ -496,18 +555,42 @@ public class RequestResponseTest {
   }
 
   /**
-   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#DELETE_REQUEST_VERSION_2}
+   * Does the actual test of ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with
+   * reference data.
+   * @param origins the origins list to use in {@link ReplicationControlAdminRequest}.
+   * @param enable the value for the enable field in {@link ReplicationControlAdminRequest}.
+   * @throws IOException
    */
-  private class DeleteRequestV2 extends DeleteRequest {
+  private void doReplicationControlAdminRequestTest(List<String> origins, boolean enable) throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    int correlationId = 1234;
+    String clientId = "client";
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.ReplicationControl, id, correlationId, clientId);
+    ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(controlRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.ReplicationControl, id);
+    ReplicationControlAdminRequest deserializedControlRequest =
+        ReplicationControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+    Assert.assertEquals(origins, deserializedControlRequest.getOrigins());
+    Assert.assertEquals(enable, deserializedControlRequest.shouldEnable());
+  }
+
+  /**
+   * Class representing {@link DeleteRequest} in version {@link DeleteRequest#DELETE_REQUEST_VERSION_1}
+   */
+  private class DeleteRequestV1 extends DeleteRequest {
     /**
-     * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_2}
+     * Constructs {@link DeleteRequest} in {@link #DELETE_REQUEST_VERSION_1}
      * @param correlationId correlationId of the delete request
      * @param clientId clientId of the delete request
      * @param blobId blobId of the delete request
-     * @param deletionTimeInMs deletion time of the blob in ms
      */
-    private DeleteRequestV2(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs) {
-      super(correlationId, clientId, blobId, deletionTimeInMs, DeleteRequest.DELETE_REQUEST_VERSION_2);
+    private DeleteRequestV1(int correlationId, String clientId, BlobId blobId) {
+      super(correlationId, clientId, blobId, Utils.Infinite_Time, DeleteRequest.DELETE_REQUEST_VERSION_1);
     }
   }
 }

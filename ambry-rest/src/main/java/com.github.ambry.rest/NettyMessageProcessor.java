@@ -284,9 +284,11 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           if ((HttpMethod.POST.equals(httpRequest.method()) || HttpMethod.PUT.equals(httpRequest.method()))
               && HttpPostRequestDecoder.isMultipart(httpRequest)) {
             nettyMetrics.multipartPostRequestRate.mark();
-            request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics);
+            request = new NettyMultipartRequest(httpRequest, ctx.channel(), nettyMetrics,
+                nettyConfig.nettyBlacklistedQueryParams);
           } else {
-            request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics);
+            request =
+                new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, nettyConfig.nettyBlacklistedQueryParams);
           }
           responseChannel.setRequest(request);
           logger.trace("Channel {} now handling request {}", ctx.channel(), request.getUri());
