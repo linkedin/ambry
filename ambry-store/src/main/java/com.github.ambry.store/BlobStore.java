@@ -56,9 +56,9 @@ class BlobStore implements Store {
   private final StoreMetrics metrics;
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
+  private final ReplicaId replicaId;
+  private final ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
 
-  private ReplicaId replicaId;
-  private ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
   private WriteState writeState = WriteState.IDLE;
   private Log log;
   private BlobStoreCompactor compactor;
@@ -91,24 +91,16 @@ class BlobStore implements Store {
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) {
-    this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, storageManagerMetrics,
-        replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory, recovery, hardDelete, time);
     this.replicaId = replicaId;
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
-  }
-
-  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
-      StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
-    this.storeId = storeId;
-    this.dataDir = dataDir;
+    this.metrics = storageManagerMetrics.createStoreMetrics(replicaId.getPartitionId().toString());
+    this.storeId = replicaId.getPartitionId().toString();
+    this.dataDir = replicaId.getReplicaPath();
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
-    this.capacityInBytes = capacityInBytes;
+    this.capacityInBytes = replicaId.getCapacityInBytes();
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
@@ -163,6 +155,9 @@ class BlobStore implements Store {
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
+        if (!storeDescriptor.alreadyExisted()) {
+          checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
+        }
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -242,7 +237,8 @@ class BlobStore implements Store {
         clusterManagerWriteStatusDelegate.setToRO(replicaId);
         writeState = WriteState.READ_ONLY;
       } else if (percentFilled <= config.storeDataReadOnlySizeThresholdPercentage - config.storeDataReadWriteSizeThresholdPercentageDelta
-          && writeState != WriteState.READ_WRITE) {
+          && writeState != WriteState.READ_WRITE
+          || percentFilled <= config.storeDataReadOnlySizeThresholdPercentage && writeState == WriteState.IDLE) {
         clusterManagerWriteStatusDelegate.setToRW(replicaId);
         writeState = WriteState.READ_WRITE;
       }

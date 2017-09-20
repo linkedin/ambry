@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
@@ -33,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -308,7 +310,10 @@ class MockBlobStore extends BlobStore {
 
   MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
       long segmentCapacity, long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
-    super("", config, null, null, null, metrics, null, 0, null, null, null, time);
+    super(StoreTestUtils.getMockReplicaId("",0, null), config, null,
+        null, null, metrics, null, null, null,
+        null, time);
+    //super("", config, null, null, null, metrics, null, 0, null, null, null, time);
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;

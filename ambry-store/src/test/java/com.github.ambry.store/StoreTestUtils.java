@@ -13,9 +13,12 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import org.mockito.Mockito;
 
 
 /**
@@ -33,6 +36,16 @@ class StoreTestUtils {
     File tempDir = Files.createTempDirectory(prefix).toFile();
     tempDir.deleteOnExit();
     return tempDir;
+  }
+
+  static ReplicaId getMockReplicaId(String storeId, long capacity, String filePath) {
+    ReplicaId replicaId = Mockito.mock(ReplicaId.class);
+    PartitionId partitionId = Mockito.mock(PartitionId.class);
+    Mockito.when(partitionId.toString()).thenReturn(storeId);
+    Mockito.when(replicaId.getPartitionId()).thenReturn(partitionId);
+    Mockito.when(replicaId.getCapacityInBytes()).thenReturn(capacity);
+    Mockito.when(replicaId.getReplicaPath()).thenReturn(filePath);
+    return replicaId;
   }
 
   /**

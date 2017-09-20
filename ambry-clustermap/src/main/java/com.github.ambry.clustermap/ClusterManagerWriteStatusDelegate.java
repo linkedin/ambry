@@ -4,23 +4,23 @@ public class ClusterManagerWriteStatusDelegate {
 
   private static ClusterManagerWriteStatusDelegate instance;
 
-  private final HelixParticipant helixParticipant;
+  private final ClusterParticipant clusterParticipant;
 
   /**
    *
-   * @param helixParticipant
+   * @param clusterParticipant
    * @return
    */
-  public static ClusterManagerWriteStatusDelegate getInstance(HelixParticipant helixParticipant) {
+  public static ClusterManagerWriteStatusDelegate getInstance(ClusterParticipant clusterParticipant) {
     if (instance == null)
     {
-      instance = new ClusterManagerWriteStatusDelegate(helixParticipant);
+      instance = new ClusterManagerWriteStatusDelegate(clusterParticipant);
     }
     return instance;
   }
 
-  private ClusterManagerWriteStatusDelegate(HelixParticipant helixParticipant) {
-    this.helixParticipant = helixParticipant;
+  private ClusterManagerWriteStatusDelegate(ClusterParticipant clusterParticipant) {
+    this.clusterParticipant = clusterParticipant;
   }
 
   /**
@@ -28,7 +28,7 @@ public class ClusterManagerWriteStatusDelegate {
    * @param replicaId
    */
   public void setToRO(ReplicaId replicaId) {
-    helixParticipant.setReplicaSealedState(replicaId, true);
+    clusterParticipant.setReplicaSealedState(replicaId, true);
   }
 
   /**
@@ -36,6 +36,6 @@ public class ClusterManagerWriteStatusDelegate {
    * @param replicaId
    */
   public void setToRW(ReplicaId replicaId) {
-    helixParticipant.setReplicaSealedState(replicaId, false);
+    clusterParticipant.setReplicaSealedState(replicaId, false);
   }
 }
