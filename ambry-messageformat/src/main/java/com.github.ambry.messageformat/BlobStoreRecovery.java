@@ -79,7 +79,8 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               MessageInfo info =
                   new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
                       Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(),
-                          properties.getTimeToLiveInSeconds()));
+                          properties.getTimeToLiveInSeconds()), properties.getAccountId(), properties.getContainerId(),
+                      properties.getCreationTimeInMs());
               messageRecovered.add(info);
             } else {
               DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);

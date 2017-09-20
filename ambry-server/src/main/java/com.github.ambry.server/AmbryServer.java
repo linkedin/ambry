@@ -57,6 +57,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.utils.Utils.*;
+
 
 /**
  * Ambry server
@@ -198,10 +200,7 @@ public class AmbryServer {
         clusterParticipant.close();
       }
       if (scheduler != null) {
-        scheduler.shutdown();
-        if (!scheduler.awaitTermination(5, TimeUnit.MINUTES)) {
-          logger.error("Could not terminate all tasks after scheduler shutdown");
-        }
+        shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
       }
       if (statsManager != null) {
         statsManager.shutdown();

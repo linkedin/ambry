@@ -19,6 +19,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -30,17 +31,18 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.account.Container.*;
 import static com.github.ambry.account.HelixAccountService.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -60,14 +62,11 @@ public class HelixAccountServiceTest {
   private static final String BAD_ACCOUNT_METADATA_STRING = "badAccountMetadataString";
   private static final int NUM_REF_ACCOUNT = 10;
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
-  private static final Properties helixConfigProps = new Properties();
   private static final Map<Short, Account> idToRefAccountMap = new HashMap<>();
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
-  private static final VerifiableProperties vHelixConfigProps;
-  private static final HelixPropertyStoreConfig storeConfig;
-  // This is a switch to choose using between a mock and a real HelixPropertyStore. For now it is always set to
-  // true. Later when we introduce test against real ZK server, this can be changed to false.
-  private final boolean shouldUseMockHelixStore = true;
+  private final Properties helixConfigProps = new Properties();
+  private VerifiableProperties vHelixConfigProps;
+  private HelixPropertyStoreConfig storeConfig;
   private Account refAccount;
   private short refAccountId;
   private String refAccountName;
@@ -83,7 +82,11 @@ public class HelixAccountServiceTest {
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
   private Notifier<String> notifier;
 
-  static {
+  /**
+   * Resets variables and settings, and cleans up if the store already exists.
+   * @throws Exception Any unexpected exception.
+   */
+  public HelixAccountServiceTest() throws Exception {
     helixConfigProps.setProperty(
         HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms",
         String.valueOf(ZK_CLIENT_CONNECTION_TIMEOUT_MS));
@@ -94,17 +97,9 @@ public class HelixAccountServiceTest {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
-  }
-
-  /**
-   * Resets variables and settings, and cleans up if the store already exists.
-   * @throws Exception Any unexpected exception.
-   */
-  @Before
-  public void init() throws Exception {
     notifier = new MockNotifier<>();
     mockHelixAccountServiceFactory =
-        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, shouldUseMockHelixStore);
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, null);
     deleteStoreIfExists();
     generateReferenceAccountsAndContainers();
   }
@@ -333,26 +328,23 @@ public class HelixAccountServiceTest {
    * Tests a number of bad inputs.
    */
   @Test
-  public void testNullInputs() {
+  public void testNullInputs() throws IOException {
     try {
-      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier,
-          shouldUseMockHelixStore).getAccountService();
+      new MockHelixAccountServiceFactory(null, new MetricRegistry(), notifier, null).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
 
     try {
-      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier,
-          shouldUseMockHelixStore).getAccountService();
+      new MockHelixAccountServiceFactory(vHelixConfigProps, null, notifier, null).getAccountService();
       fail("should have thrown");
     } catch (NullPointerException e) {
       // expected
     }
-
-    new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null,
-        shouldUseMockHelixStore).getAccountService();
-
+    accountService =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), null, null).getAccountService();
+    accountService.close();
     accountService = mockHelixAccountServiceFactory.getAccountService();
     try {
       accountService.updateAccounts(null);
@@ -603,6 +595,49 @@ public class HelixAccountServiceTest {
     accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
     assertAccountUpdateConsumers(Collections.emptySet(), 0, updatedAccountsReceivedByConsumers);
+  }
+
+  /**
+   * Tests the background updater for updating accounts from remote. During the initialization of
+   * {@link HelixAccountService}, its internal {@link HelixPropertyStore} will be read to first time get account data.
+   * Because of the background account updater, it should continuously make get calls to the {@link HelixPropertyStore},
+   * even no notification for account updates is received. Therefore, there will be more than 1 get calls to the
+   * {@link HelixPropertyStore}.
+   * @throws Exception
+   */
+  @Test
+  public void testBackgroundUpdater() throws Exception {
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "1");
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    CountDownLatch latch = new CountDownLatch(1);
+    mockHelixAccountServiceFactory.getHelixStore(storeConfig).setReadLatch(latch);
+    assertEquals("Wrong number of thread for account updater.", 1, numThreadsByThisName(updaterThreadPrefix));
+    awaitLatchOrTimeout(latch, 100);
+  }
+
+  /**
+   * Tests disabling the background thread. By setting the polling interval to 0ms, the accounts should not be fetched.
+   * Therefore, after the {@link HelixAccountService} starts, there should be a single get call to the
+   * {@link HelixPropertyStore}.
+   * @throws Exception
+   */
+  @Test
+  public void testDisableBackgroundUpdater() throws Exception {
+    helixConfigProps.setProperty(
+        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "0");
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    assertEquals("Wrong number of thread for account updater.", 0, numThreadsByThisName(updaterThreadPrefix));
   }
 
   /**

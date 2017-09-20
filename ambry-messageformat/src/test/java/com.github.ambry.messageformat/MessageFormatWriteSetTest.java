@@ -16,6 +16,8 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
@@ -56,8 +58,10 @@ public class MessageFormatWriteSetTest {
   @Test
   public void writeSetTest() throws IOException {
     byte[] buf = new byte[2000];
-    MessageInfo info1 = new MessageInfo(new MockId("id1"), 1000, 123);
-    MessageInfo info2 = new MessageInfo(new MockId("id2"), 1000, 123);
+    MessageInfo info1 = new MessageInfo(new MockId("id1"), 1000, 123, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt());
+    MessageInfo info2 = new MessageInfo(new MockId("id2"), 1000, 123, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt());
     List<MessageInfo> infoList = new ArrayList<MessageInfo>();
     infoList.add(info1);
     infoList.add(info2);

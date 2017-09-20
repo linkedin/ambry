@@ -13,6 +13,8 @@
  */
 package com.github.ambry.tools.admin;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
@@ -96,6 +98,7 @@ public class ConcurrencyTestTool {
   private static final String ROUTER_PUT_GET_HELPER = "com.github.ambry.tools.admin.RouterPutGetHelperFactory";
   private static final String SERVER_PUT_GET_HELPER = "com.github.ambry.tools.admin.ServerPutGetHelperFactory";
   private static final AtomicBoolean putComplete = new AtomicBoolean(false);
+  private static final Random random = new Random();
 
   public static void main(String args[]) throws Exception {
     InvocationOptions options = new InvocationOptions(args);
@@ -614,8 +617,9 @@ public class ConcurrencyTestTool {
     public Future putBlob(final Callback callback, final MetricsCollector metricsCollector) {
       int randomNum = localRandom.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
       final byte[] blob = new byte[randomNum];
-      byte[] usermetadata = new byte[new Random().nextInt(1024)];
-      BlobProperties props = new BlobProperties(randomNum, "test");
+      byte[] usermetadata = new byte[random.nextInt(1024)];
+      BlobProperties props =
+          new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
       final FutureResult futureResult = new FutureResult();
       try {
         final long startTimeInMs = SystemTime.getInstance().milliseconds();

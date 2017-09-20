@@ -58,7 +58,8 @@ public class BlobStoreHardDeleteTest {
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
-      BlobProperties blobProperties = new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999);
+      BlobProperties blobProperties =
+          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
 

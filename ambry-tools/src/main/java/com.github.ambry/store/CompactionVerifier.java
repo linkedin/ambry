@@ -246,8 +246,9 @@ public class CompactionVerifier implements Closeable {
     LOGGER.info("Delete ref time: {} ms", deleteRefTimeMs);
 
     MetricRegistry metricRegistry = new MetricRegistry();
-    StoreMetrics srcMetrics = new StoreMetrics(verifierConfig.storeId + "-src", metricRegistry);
-    StoreMetrics tgtMetrics = new StoreMetrics(verifierConfig.storeId + "-tgt", metricRegistry);
+    AggregatedStoreMetrics aggregatedStoreMetrics = new AggregatedStoreMetrics(metricRegistry);
+    StoreMetrics srcMetrics = new StoreMetrics(verifierConfig.storeId + "-src", metricRegistry, aggregatedStoreMetrics);
+    StoreMetrics tgtMetrics = new StoreMetrics(verifierConfig.storeId + "-tgt", metricRegistry, aggregatedStoreMetrics);
     UUID sessionId = UUID.randomUUID();
     UUID incarnationId = UUID.randomUUID();
     MessageStoreRecovery recovery = new MessageStoreRecovery() {
@@ -589,8 +590,8 @@ public class CompactionVerifier implements Closeable {
         tgtValue.getExpiresAtMs()) :
         errMsgId + ": ExpiresAt mismatch: old - " + srcValue.getExpiresAtMs() + ", new - " + tgtValue.getExpiresAtMs();
     assert
-        srcValue.getServiceId() == tgtValue.getServiceId() :
-        errMsgId + ": Service ID mismatch: old - " + srcValue.getServiceId() + ", new - " + tgtValue.getServiceId();
+        srcValue.getAccountId() == tgtValue.getAccountId() :
+        errMsgId + ": AccountId ID mismatch: old - " + srcValue.getAccountId() + ", new - " + tgtValue.getAccountId();
     assert
         srcValue.getContainerId() == tgtValue.getContainerId() :
         errMsgId + ": Container ID mismatch: old - " + srcValue.getContainerId() + ", new - "
@@ -670,9 +671,9 @@ public class CompactionVerifier implements Closeable {
             try (BlobReadOptions options = index.getBlobReadInfo(indexEntry.getKey(),
                 EnumSet.allOf(StoreGetOptions.class))) {
               Offset putOffset = new Offset(indexSegment.getLogSegmentName(), options.getOffset());
-              IndexValue putValue =
-                  new IndexValue(options.getSize(), putOffset, options.getExpiresAtMs(), value.getOperationTimeInMs(),
-                      value.getServiceId(), value.getContainerId());
+              IndexValue putValue = new IndexValue(options.getMessageInfo().getSize(), putOffset,
+                  options.getMessageInfo().getExpirationTimeInMs(), value.getOperationTimeInMs(), value.getAccountId(),
+                  value.getContainerId());
               entriesToAdd.add(new IndexEntry(indexEntry.getKey(), putValue));
             }
           }

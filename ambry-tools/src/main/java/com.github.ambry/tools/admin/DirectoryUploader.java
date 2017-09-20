@@ -14,6 +14,8 @@
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -146,7 +148,8 @@ public class DirectoryUploader {
           throw new IllegalArgumentException("File length is " + f.length() + "; files larger than " + Integer.MAX_VALUE
               + " cannot be put using this tool.");
         }
-        BlobProperties props = new BlobProperties(f.length(), "migration");
+        BlobProperties props =
+            new BlobProperties(f.length(), "migration", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
         try {

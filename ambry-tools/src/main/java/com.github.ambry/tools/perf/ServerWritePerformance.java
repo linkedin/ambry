@@ -14,6 +14,8 @@
 package com.github.ambry.tools.perf;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -334,7 +336,8 @@ public class ServerWritePerformance {
           int randomNum = rand.nextInt((maxBlobSize - minBlobSize) + 1) + minBlobSize;
           byte[] blob = new byte[randomNum];
           byte[] usermetadata = new byte[new Random().nextInt(1024)];
-          BlobProperties props = new BlobProperties(randomNum, "test");
+          BlobProperties props =
+              new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
           ConnectedChannel channel = null;
           try {
             List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();

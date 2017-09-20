@@ -208,6 +208,16 @@ public class UtilsTest {
   }
 
   @Test
+  public void testGetIntStringLength() {
+    for (int i = 0; i < 10; i++) {
+      String value = getRandomString(1000 + TestUtils.RANDOM.nextInt(10000));
+      assertEquals("Size mismatch ", Integer.BYTES + value.length(), Utils.getIntStringLength(value));
+    }
+    assertEquals("Size mismatch for empty string ", Integer.BYTES, Utils.getIntStringLength(""));
+    assertEquals("Size mismatch for null string ", Integer.BYTES, Utils.getIntStringLength(null));
+  }
+
+  @Test
   public void testSerializeNullableString() {
     String randomString = getRandomString(10);
     ByteBuffer outputBuffer = ByteBuffer.allocate(4 + randomString.getBytes().length);

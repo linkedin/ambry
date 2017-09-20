@@ -440,7 +440,9 @@ public class DumpIndexTool {
       Map<String, IndexValue> blobIdToMessageMap, AtomicLong lastModifiedTimeMs, Time time) throws Exception {
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
-    StoreMetrics storeMetrics = new StoreMetrics(indexFileToDump.getParent(), new MetricRegistry());
+    MetricRegistry metricRegistry = new MetricRegistry();
+    StoreMetrics storeMetrics =
+        new StoreMetrics(indexFileToDump.getParent(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
     IndexSegment segment = new IndexSegment(indexFileToDump, false, storeKeyFactory, config, storeMetrics,
         new Journal(indexFileToDump.getParent(), 0, 0), time);
     lastModifiedTimeMs.set(segment.getLastModifiedTimeMs());

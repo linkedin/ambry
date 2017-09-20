@@ -15,9 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.utils.Utils;
 
-import static com.github.ambry.account.Account.*;
-import static com.github.ambry.account.Container.*;
-
 
 /**
  * A message info class that contains basic info about a message
@@ -32,62 +29,6 @@ public class MessageInfo {
   private final short accountId;
   private final short containerId;
   private final long operationTimeMs;
-
-  /**
-   * Construct an instance of MessageInfo.
-   * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message in bytes.
-   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
-   * @todo: remove this constructor once MessageInfo V3 is enabled
-   */
-  public MessageInfo(StoreKey key, long size, long expirationTimeInMs) {
-    this(key, size, false, expirationTimeInMs);
-  }
-
-  /**
-   * Construct an instance of MessageInfo.
-   * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message in bytes.
-   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
-   * @todo: remove this constructor once MessageInfo V3 is enabled
-   */
-  public MessageInfo(StoreKey key, long size, boolean deleted) {
-    this(key, size, deleted, Utils.Infinite_Time);
-  }
-
-  /**
-   * Construct an instance of MessageInfo.
-   * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message in bytes.
-   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
-   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
-   * @todo: remove this constructor once MessageInfo V3 is enabled
-   */
-  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs) {
-    this(key, size, deleted, expirationTimeInMs, null);
-  }
-
-  /**
-   * Construct an instance of MessageInfo.
-   * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message in bytes.
-   * @todo: remove this constructor once MessageInfo V3 is enabled
-   */
-  public MessageInfo(StoreKey key, long size) {
-    this(key, size, Utils.Infinite_Time);
-  }
-
-  /**
-   * Construct an instance of MessageInfo.
-   * @param key the {@link StoreKey} associated with this message.
-   * @param size the size of this message in bytes.
-   * @param deleted {@code true} if the message is deleted, {@code false} otherwise
-   * @param expirationTimeInMs the time at which the message will expire. A value of -1 means no expiration.
-   * @param crc the crc associated with this message. If unavailable, pass in null.
-   */
-  public MessageInfo(StoreKey key, long size, boolean deleted, long expirationTimeInMs, Long crc) {
-    this(key, size, deleted, expirationTimeInMs, crc, UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
-  }
 
   /**
    * Construct an instance of MessageInfo.

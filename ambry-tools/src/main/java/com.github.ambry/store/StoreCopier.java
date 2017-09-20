@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -42,6 +43,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -153,6 +156,7 @@ public class StoreCopier implements Closeable {
   }
 
   private static final Logger logger = LoggerFactory.getLogger(StoreCopier.class);
+  private static final DecimalFormat df = new DecimalFormat(".###");
 
   private final String storeId;
   private final Store src;
@@ -218,10 +222,7 @@ public class StoreCopier implements Closeable {
       return;
     }
     try {
-      scheduler.shutdown();
-      if (!scheduler.awaitTermination(1, TimeUnit.SECONDS)) {
-        logger.error("Could not shut down scheduler");
-      }
+      shutDownExecutorService(scheduler, 1, TimeUnit.SECONDS);
       src.shutdown();
       tgt.shutdown();
       isOpen = false;
@@ -271,7 +272,7 @@ public class StoreCopier implements Closeable {
       }
       token = findInfo.getFindToken();
       logger.info("[{}] [{}] {}% copied", Thread.currentThread().getName(), storeId,
-          token.getBytesRead() * 100 / src.getSizeInBytes());
+          df.format(token.getBytesRead() * 100.0 / src.getSizeInBytes()));
     } while (!token.equals(lastToken));
     return token;
   }

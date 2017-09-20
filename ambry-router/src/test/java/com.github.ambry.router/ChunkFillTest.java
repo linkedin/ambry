@@ -102,8 +102,11 @@ public class ChunkFillTest {
     RouterConfig routerConfig = new RouterConfig(vProps);
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
     BlobProperties putBlobProperties =
-        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
+            containerId);
     Random random = new Random();
     byte[] putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
@@ -199,8 +202,11 @@ public class ChunkFillTest {
     RouterConfig routerConfig = new RouterConfig(vProps);
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
+    short accountId = Utils.getRandomShort(random);
+    short containerId = Utils.getRandomShort(random);
     BlobProperties putBlobProperties =
-        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(blobSize, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
+            containerId);
     Random random = new Random();
     byte[] putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);

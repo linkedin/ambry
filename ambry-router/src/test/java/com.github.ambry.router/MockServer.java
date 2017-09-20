@@ -13,6 +13,8 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
@@ -172,6 +174,9 @@ class MockServer {
       int byteBufferSize;
       ByteBuffer byteBuffer;
       StoreKey key = getRequest.getPartitionInfoList().get(0).getBlobIds().get(0);
+      short accountId = Account.UNKNOWN_ACCOUNT_ID;
+      short containerId = Container.UNKNOWN_CONTAINER_ID;
+      long operationTimeMs = Utils.Infinite_Time;
       StoredBlob blob = blobs.get(key.getID());
       ServerErrorCode processedError = errorForGet(blob, getRequest);
       if (processedError == ServerErrorCode.No_Error) {
@@ -185,6 +190,9 @@ class MockServer {
         switch (getRequest.getMessageFormatFlag()) {
           case BlobInfo:
             BlobProperties blobProperties = originalBlobPutReq.getBlobProperties();
+            accountId = blobProperties.getAccountId();
+            containerId = blobProperties.getContainerId();
+            operationTimeMs = blobProperties.getCreationTimeInMs();
             ByteBuffer userMetadata = originalBlobPutReq.getUsermetadata();
             byteBufferSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties)
                 + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
@@ -219,7 +227,10 @@ class MockServer {
             break;
           case All:
             blobProperties = originalBlobPutReq.getBlobProperties();
+            accountId = blobProperties.getAccountId();
+            containerId = blobProperties.getContainerId();
             userMetadata = originalBlobPutReq.getUsermetadata();
+            operationTimeMs = originalBlobPutReq.getBlobProperties().getCreationTimeInMs();
             int blobHeaderSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
             int blobPropertiesSize =
                 MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
@@ -297,7 +308,7 @@ class MockServer {
       ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
       List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(1);
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
-      messageInfoList.add(new MessageInfo(key, byteBufferSize));
+      messageInfoList.add(new MessageInfo(key, byteBufferSize, accountId, containerId, operationTimeMs));
       PartitionResponseInfo partitionResponseInfo =
           partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
               getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList)

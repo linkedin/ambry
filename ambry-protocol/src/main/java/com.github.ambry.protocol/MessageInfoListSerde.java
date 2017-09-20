@@ -13,9 +13,12 @@
  */
 package com.github.ambry.protocol;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -141,11 +144,15 @@ class MessageInfoListSerde {
       Long crc = null;
       switch (versionToDeserializeIn) {
         case VERSION_1:
-          messageInfoList.add(new MessageInfo(id, size, isDeleted, ttl, crc));
+          messageInfoList.add(
+              new MessageInfo(id, size, isDeleted, ttl, crc, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                  Utils.Infinite_Time));
           break;
         case VERSION_2:
           crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
-          messageInfoList.add(new MessageInfo(id, size, isDeleted, ttl, crc));
+          messageInfoList.add(
+              new MessageInfo(id, size, isDeleted, ttl, crc, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                  Utils.Infinite_Time));
           break;
         case VERSION_3:
           crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;

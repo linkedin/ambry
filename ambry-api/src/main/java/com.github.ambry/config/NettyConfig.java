@@ -13,6 +13,11 @@
  */
 package com.github.ambry.config;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
+
 /**
  * Configuration parameters required by Netty.
  */
@@ -97,6 +102,14 @@ public class NettyConfig {
   @Default("32 * 1024 * 1024")
   public final int nettyServerRequestBufferWatermark;
 
+  /**
+   * A comma separated list of query parameters that should not be honored when forwarded to the
+   * {@link com.github.ambry.rest.BlobStorageService} layer.
+   */
+  @Config("netty.server.blacklisted.query.params")
+  @Default("")
+  public final Set<String> nettyBlacklistedQueryParams;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
@@ -111,5 +124,7 @@ public class NettyConfig {
     nettyServerRequestBufferWatermark =
         verifiableProperties.getIntInRange("netty.server.request.buffer.watermark", 32 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
+    nettyBlacklistedQueryParams = new HashSet<>(
+        Arrays.asList(verifiableProperties.getString("netty.server.blacklisted.query.params", "").split(",")));
   }
 }

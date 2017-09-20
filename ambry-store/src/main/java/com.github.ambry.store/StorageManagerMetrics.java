@@ -40,6 +40,7 @@ public class StorageManagerMetrics {
 
   private final Counter compactionCount;
   private final AtomicLong compactionsInProgress = new AtomicLong(0);
+  private final AggregatedStoreMetrics aggregatedStoreMetrics;
 
   /**
    * Create a {@link StorageManagerMetrics} object for handling metrics related to the stores on a node.
@@ -47,6 +48,7 @@ public class StorageManagerMetrics {
    */
   public StorageManagerMetrics(MetricRegistry registry) {
     this.registry = registry;
+    aggregatedStoreMetrics = new AggregatedStoreMetrics(registry);
     storageManagerStartTimeMs =
         registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerStartTimeMs"));
     storageManagerShutdownTimeMs =
@@ -120,6 +122,6 @@ public class StorageManagerMetrics {
    * @return the {@link StoreMetrics}
    */
   public StoreMetrics createStoreMetrics(String storeId) {
-    return new StoreMetrics(storeId, registry);
+    return new StoreMetrics(storeId, registry, aggregatedStoreMetrics);
   }
 }

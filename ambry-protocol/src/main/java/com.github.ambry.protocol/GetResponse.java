@@ -37,15 +37,15 @@ public class GetResponse extends Response {
   private int partitionResponseInfoSize;
 
   private static int Partition_Response_Info_List_Size = 4;
-  static final short Get_Response_Version_V1 = 1;
-  static final short Get_Response_Version_V2 = 2;
-  static final short Get_Response_Version_V3 = 3;
+  static final short GET_RESPONSE_VERSION_V_1 = 1;
+  static final short GET_RESPONSE_VERSION_V_2 = 2;
+  static final short GET_RESPONSE_VERSION_V_3 = 3;
 
-  private static final short currentVersion = Get_Response_Version_V2;
+  private static final short CURRENT_VERSION = GET_RESPONSE_VERSION_V_3;
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       Send send, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, currentVersion, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -56,7 +56,7 @@ public class GetResponse extends Response {
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       InputStream stream, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, currentVersion, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -66,7 +66,7 @@ public class GetResponse extends Response {
   }
 
   public GetResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, currentVersion, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.partitionResponseInfoList = null;
     this.partitionResponseInfoSize = 0;
   }
@@ -159,6 +159,6 @@ public class GetResponse extends Response {
    * @return the current version in which new GetResponse objects are created.
    */
   static short getCurrentVersion() {
-    return currentVersion;
+    return CURRENT_VERSION;
   }
 }

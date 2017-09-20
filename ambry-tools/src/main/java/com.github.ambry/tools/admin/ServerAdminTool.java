@@ -42,6 +42,8 @@ import com.github.ambry.network.Send;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.CatchupStatusAdminRequest;
+import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -95,7 +97,7 @@ public class ServerAdminTool implements Closeable {
    * The different operations supported by the tool.
    */
   private enum Operation {
-    GetBlobProperties, GetUserMetadata, GetBlob, TriggerCompaction, RequestControl, ReplicationControl
+    GetBlobProperties, GetUserMetadata, GetBlob, TriggerCompaction, RequestControl, ReplicationControl, CatchupStatus
   }
 
   /**
@@ -117,7 +119,8 @@ public class ServerAdminTool implements Closeable {
 
     /**
      * The type of operation.
-     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl,ReplicationControl
+     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl,ReplicationControl,
+     * CatchupStatus
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
@@ -155,8 +158,8 @@ public class ServerAdminTool implements Closeable {
     /**
      * Comma separated list of the string representations of the partitions to operate on (if applicable).
      * Some requests (TriggerCompaction) will not work with an empty list but some requests treat empty lists as "all
-     * partitions" (RequestControl,ReplicationControl).
-     * Applicable for: TriggerCompaction,RequestControl,ReplicationControl
+     * partitions" (RequestControl,ReplicationControl,CatchupStatus).
+     * Applicable for: TriggerCompaction,RequestControl,ReplicationControl,CatchupStatus
      */
     @Config("partition.ids")
     @Default("")
@@ -187,6 +190,14 @@ public class ServerAdminTool implements Closeable {
     final String[] origins;
 
     /**
+     * The acceptable lag in bytes in case of catchup status requests
+     * Applicable for: CatchupStatus
+     */
+    @Config("acceptable.lag.in.bytes")
+    @Default("0")
+    final long acceptableLagInBytes;
+
+    /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
      * user metadata from GetUserMetadata will be written into this file.
      */
@@ -211,6 +222,7 @@ public class ServerAdminTool implements Closeable {
           RequestOrResponseType.valueOf(verifiableProperties.getString("request.type.to.control", "PutRequest"));
       enableState = verifiableProperties.getBoolean("enable.state", true);
       origins = verifiableProperties.getString("replication.origins", "").split(",");
+      acceptableLagInBytes = verifiableProperties.getLongInRange("acceptable.lag.in.bytes", 0, 0, Long.MAX_VALUE);
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -317,6 +329,31 @@ public class ServerAdminTool implements Closeable {
           LOGGER.info("No partition list provided. Requesting enable status for replication from {} to be set to {} on "
               + "all partitions", origins, config.enableState);
           sendReplicationControlRequest(serverAdminTool, clusterMap, dataNodeId, null, origins, config.enableState);
+        }
+        break;
+      case CatchupStatus:
+        if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
+          for (String partitionId : config.partitionIds) {
+            Pair<ServerErrorCode, Boolean> response =
+                serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes, clusterMap);
+            if (response.getFirst() == ServerErrorCode.No_Error) {
+              LOGGER.info("Replicas are {} within {} for {}", response.getSecond() ? "" : "NOT",
+                  config.acceptableLagInBytes, partitionId);
+            } else {
+              LOGGER.error("From {}, received server error code {} for request for catchup status of {}", dataNodeId,
+                  response.getFirst(), partitionId);
+            }
+          }
+        } else {
+          Pair<ServerErrorCode, Boolean> response =
+              serverAdminTool.isCaughtUp(dataNodeId, null, config.acceptableLagInBytes, clusterMap);
+          if (response.getFirst() == ServerErrorCode.No_Error) {
+            LOGGER.info("Replicas are {} within {} for all partitions", response.getSecond() ? "" : "NOT",
+                config.acceptableLagInBytes);
+          } else {
+            LOGGER.error("From {}, received server error code {} for request for catchup status of all partitions",
+                dataNodeId, response.getFirst());
+          }
         }
         break;
       default:
@@ -552,6 +589,30 @@ public class ServerAdminTool implements Closeable {
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();
+  }
+
+  /**
+   * Sends a {@link CatchupStatusAdminRequest} for {@code partitionIdStr} to {@code dataNodeId}.
+   * @param dataNodeId the {@link DataNodeId} to contact.
+   * @param partitionIdStr the String representation of the {@link PartitionId} to compact. If {@code null}, status is
+   *                       for all partitions on {@code dataNodeId}
+   * @param acceptableLagInBytes that lag in bytes that is considered OK.
+   * @param clusterMap the {@link ClusterMap} to use.
+   * @return the {@link ServerErrorCode} and the catchup status that is returned.
+   * @throws IOException
+   * @throws TimeoutException
+   */
+  public Pair<ServerErrorCode, Boolean> isCaughtUp(DataNodeId dataNodeId, String partitionIdStr,
+      long acceptableLagInBytes, ClusterMap clusterMap) throws IOException, TimeoutException {
+    PartitionId targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.CatchupStatus, targetPartitionId, correlationId.incrementAndGet(),
+            CLIENT_ID);
+    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLagInBytes, adminRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, catchupStatusRequest);
+    CatchupStatusAdminResponse response =
+        CatchupStatusAdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    return new Pair<>(response.getError(), response.isCaughtUp());
   }
 
   /**

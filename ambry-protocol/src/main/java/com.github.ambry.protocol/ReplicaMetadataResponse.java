@@ -36,15 +36,15 @@ public class ReplicaMetadataResponse extends Response {
 
   private static int Replica_Metadata_Response_Info_List_Size_In_Bytes = 4;
 
-  static final short Replica_Metadata_Response_Version_V1 = 1;
-  static final short Replica_Metadata_Response_Version_V2 = 2;
-  static final short Replica_Metadata_Response_Version_V3 = 3;
+  static final short REPLICA_METADATA_RESPONSE_VERSION_V_1 = 1;
+  static final short REPLICA_METADATA_RESPONSE_VERSION_V_2 = 2;
+  static final short REPLICA_METADATA_RESPONSE_VERSION_V_3 = 3;
 
-  private static final short currentVersion = Replica_Metadata_Response_Version_V2;
+  private static final short CURRENT_VERSION = REPLICA_METADATA_RESPONSE_VERSION_V_3;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.replicaMetadataResponseInfoList = replicaMetadataResponseInfoList;
     this.replicaMetadataResponseInfoListSizeInBytes = 0;
     for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : replicaMetadataResponseInfoList) {
@@ -53,7 +53,7 @@ public class ReplicaMetadataResponse extends Response {
   }
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.ReplicaMetadataResponse, currentVersion, correlationId, clientId, error);
+    super(RequestOrResponseType.ReplicaMetadataResponse, CURRENT_VERSION, correlationId, clientId, error);
     replicaMetadataResponseInfoList = null;
     replicaMetadataResponseInfoListSizeInBytes = 0;
   }
@@ -136,6 +136,6 @@ public class ReplicaMetadataResponse extends Response {
    * @return the current version in which new ReplicaMetadataResponse objects are created.
    */
   public static short getCurrentVersion() {
-    return currentVersion;
+    return CURRENT_VERSION;
   }
 }

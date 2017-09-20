@@ -29,6 +29,7 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -92,7 +93,8 @@ public class PutOperationTest {
   public void testSendIncomplete() throws Exception {
     int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
     BlobProperties blobProperties =
-        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time);
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     byte[] userMetadata = new byte[10];
     byte[] content = new byte[chunkSize * numChunks];
     random.nextBytes(content);

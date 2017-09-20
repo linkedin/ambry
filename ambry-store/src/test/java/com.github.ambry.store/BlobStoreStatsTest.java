@@ -15,6 +15,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.server.StatsSnapshot;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
@@ -54,7 +56,8 @@ public class BlobStoreStatsTest {
   private static final long TEST_TIME_INTERVAL_IN_MS = CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / 2;
   private static final long BUCKET_SPAN_IN_MS = Time.MsPerSec;
   private static final long QUEUE_PROCESSOR_PERIOD_IN_Ms = 100;
-  private static final StoreMetrics METRICS = new StoreMetrics("test", new MetricRegistry());
+  private static final StoreMetrics METRICS =
+      new StoreMetrics("test", new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry()));
   private static final long DEFAULT_WAIT_TIMEOUT_SECS = Time.SecsPerMin;
   private final Map<String, Throttler> throttlers = new HashMap<>();
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(throttlers);
@@ -885,9 +888,16 @@ public class BlobStoreStatsTest {
       }
       assertEquals("Mismatch in number of containerIds in serviceId: " + serviceId, innerMap.size(),
           actualContainerValidSizeMap.get(serviceId).size());
+      actualContainerValidSizeMap.remove(serviceId);
     }
-    assertEquals("Mismatch in number of serviceIds", expectedContainerValidSizeMap.size(),
-        actualContainerValidSizeMap.size());
+    for (Map.Entry<String, Map<String, Long>> actualContainerValidSizeEntry : actualContainerValidSizeMap.entrySet()) {
+      if (actualContainerValidSizeEntry.getValue().size() != 0) {
+        for (Map.Entry<String, Long> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
+          assertEquals("Additional values found in actual container valid size map ", 0,
+              mapEntry.getValue().longValue());
+        }
+      }
+    }
 
     return totalValidSize;
   }
@@ -956,7 +966,7 @@ public class BlobStoreStatsTest {
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();
         if (!indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-          updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getServiceId()),
+          updateNestedMapHelper(containerValidSizeMap, String.valueOf(indexValue.getAccountId()),
               String.valueOf(indexValue.getContainerId()), indexValue.getSize());
         }
       }
@@ -1037,7 +1047,8 @@ public class BlobStoreStatsTest {
     private final CountDownLatch latch;
 
     MockIndexValue(CountDownLatch latch, Offset offset) {
-      super(0, offset, Utils.Infinite_Time);
+      super(0, offset, Utils.Infinite_Time, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID);
       this.latch = latch;
     }
 

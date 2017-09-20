@@ -39,6 +39,7 @@ import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpStatusClass;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedWriteHandler;
@@ -47,6 +48,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -80,6 +82,7 @@ public class NettyResponseChannelTest {
     REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.ResourceScanInProgress,
         HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED);
     REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN);
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.AccessDenied, HttpResponseStatus.FORBIDDEN);
     REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.InternalServerError,
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
     REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.RangeNotSatisfiable,
@@ -419,6 +422,13 @@ public class NettyResponseChannelTest {
         assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
       } else {
         assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
+      }
+      if (HttpStatusClass.CLIENT_ERROR.contains(response.status().code())) {
+        assertEquals("Wrong error code", entry.getKey(),
+            RestServiceErrorCode.valueOf(response.headers().get(NettyResponseChannel.ERROR_CODE_HEADER)));
+      } else {
+        assertFalse("Should not have found error code header",
+            response.headers().contains(NettyResponseChannel.ERROR_CODE_HEADER));
       }
       if (response instanceof FullHttpResponse) {
         // assert that there is no content
@@ -865,7 +875,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
    */
   private void handleRequest(HttpRequest httpRequest) throws Exception {
     writeCallbacksToVerify.clear();
-    request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics);
+    request = new NettyRequest(httpRequest, ctx.channel(), nettyMetrics, Collections.emptySet());
     restResponseChannel = new NettyResponseChannel(ctx, nettyMetrics);
     restResponseChannel.setRequest(request);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
