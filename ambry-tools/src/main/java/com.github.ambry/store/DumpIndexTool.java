@@ -51,10 +51,15 @@ import org.slf4j.LoggerFactory;
  * Supported operations are
  * 1. Dump index.
  * 2. Dump an index segment.
- * 3. Verify an index for sanity (no duplicate records).
+ * 3. Verify an index for sanity (no duplicate records and that all index segments are deserializable).
  */
 public class DumpIndexTool {
 
+  /**
+   * Contains information for a single blob regarding
+   * 1. Its states (i.e. it could be deleted and expired).
+   * 2. Whether it is in one of the two most recent index segments.
+   */
   public class Info {
     private final EnumSet<BlobState> states;
     private final boolean isInRecentIndexSegment;
@@ -64,15 +69,24 @@ public class DumpIndexTool {
       this.isInRecentIndexSegment = isInRecentIndexSegment;
     }
 
+    /**
+     * @return states the blob is in in the index.
+     */
     public EnumSet<BlobState> getStates() {
       return states;
     }
 
+    /**
+     * @return {@code true} if the blob is one of the last two index segments in the index.
+     */
     public boolean isInRecentIndexSegment() {
       return isInRecentIndexSegment;
     }
   }
 
+  /**
+   * Contains all the results obtained from processing the index.
+   */
   public class IndexProcessingResults {
     private final Map<StoreKey, Info> keyToState;
     private final long processedCount;
@@ -83,7 +97,7 @@ public class DumpIndexTool {
     private final Set<StoreKey> duplicateDeletes;
     private final long activeCount;
 
-    public IndexProcessingResults(Map<StoreKey, Info> keyToState, long processedCount, long putCount, long deleteCount,
+    IndexProcessingResults(Map<StoreKey, Info> keyToState, long processedCount, long putCount, long deleteCount,
         Set<StoreKey> duplicatePuts, Set<StoreKey> putAfterDeletes, Set<StoreKey> duplicateDeletes) {
       this.keyToState = keyToState;
       this.processedCount = processedCount;
@@ -95,38 +109,65 @@ public class DumpIndexTool {
       activeCount = keyToState.values().stream().filter(value -> value.getStates().contains(BlobState.Valid)).count();
     }
 
+    /**
+     * @return the map of {@link StoreKey} to an {@link Info} object that contains some details about it.
+     */
     public Map<StoreKey, Info> getKeyToState() {
       return keyToState;
     }
 
+    /**
+     * @return the number of entries processed.
+     */
     public long getProcessedCount() {
       return processedCount;
     }
 
+    /**
+     * @return the number of {@link StoreKey}s that are valid (i.e. not deleted or expired).
+     */
     public long getActiveCount() {
       return activeCount;
     }
 
+    /**
+     * @return the total number of put entries.
+     */
     public long getPutCount() {
       return putCount;
     }
 
+    /**
+     * @return the total number of delete entries.
+     */
     public long getDeleteCount() {
       return deleteCount;
     }
 
+    /**
+     * @return the number of duplicate put entries found.
+     */
     public Set<StoreKey> getDuplicatePuts() {
       return duplicatePuts;
     }
 
+    /**
+     * @return the number of put entries that were found after a delete entry for the same key.
+     */
     public Set<StoreKey> getPutAfterDeletes() {
       return putAfterDeletes;
     }
 
+    /**
+     * @return the number of duplicate delete entries found.
+     */
     public Set<StoreKey> getDuplicateDeletes() {
       return duplicateDeletes;
     }
 
+    /**
+     * @return {@code true} if there are no duplicate puts or deletes and no puts after deletes. {@code false} otherwise
+     */
     public boolean isIndexSane() {
       return duplicatePuts.size() == 0 && putAfterDeletes.size() == 0 && duplicateDeletes.size() == 0;
     }
@@ -139,6 +180,9 @@ public class DumpIndexTool {
     }
   }
 
+  /**
+   * The possible states of a blob.
+   */
   public enum BlobState {
     Valid, Deleted, Expired;
   }
@@ -147,7 +191,19 @@ public class DumpIndexTool {
    * The different operations supported by the tool.
    */
   private enum Operation {
-    DumpIndex, DumpIndexSegment, VerifyIndex
+    /**
+     * Processes all the index segments and dumps all or the filtered entries.
+     */
+    DumpIndex,
+    /**
+     * Processes the given index segment and dumps all or the filtered entries.
+     */
+    DumpIndexSegment,
+    /**
+     * Processes all the index segments (deserialization check) and makes sure that there are no duplicate records
+     * and no put after delete records.
+     */
+    VerifyIndex
   }
 
   /**
@@ -189,6 +245,8 @@ public class DumpIndexTool {
     /**
      * A comma separated list of blob IDs that the tool should operate on. Leaving this empty indicates that the tool
      * should work on all blobs.
+     * For DumpIndex and DumpIndexSegment, this will be the list of blobs whose entries will be dumped.
+     * For VerifyIndex, this will be the list of blobs whose entries are examined.
      */
     @Config("filter.set")
     @Default("")

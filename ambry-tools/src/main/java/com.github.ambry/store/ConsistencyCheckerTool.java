@@ -45,8 +45,10 @@ import org.slf4j.LoggerFactory;
  * 2) In the index file boundaries on all replicas in a partition
  */
 public class ConsistencyCheckerTool {
-  /* Path referring to root directory containing one directory per replica
-  Expected format of the partition root directory
+  /*
+  Path referring to root directory containing one directory per replica
+  Expected format of the path.of.input
+
   - Partition Root Directory
       - Replica_1
             - IndexSegment_0
