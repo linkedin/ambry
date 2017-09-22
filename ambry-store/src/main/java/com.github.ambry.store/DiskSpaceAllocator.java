@@ -18,7 +18,6 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
-import java.nio.file.CopyOption;
 import java.nio.file.Files;
 import java.util.Collection;
 import java.util.Collections;
@@ -55,6 +54,7 @@ class DiskSpaceAllocator {
       pathname -> pathname.isFile() && pathname.getName().startsWith(RESERVE_FILE_PREFIX);
   private static final FileFilter FILE_SIZE_DIR_FILTER =
       pathname -> pathname.isDirectory() && getFileSizeForDirName(pathname.getName()) != null;
+  private final boolean enablePooling;
   private final File reserveDir;
   private final long requiredSwapSegmentsPerSize;
   private final StorageManagerMetrics metrics;
@@ -62,22 +62,26 @@ class DiskSpaceAllocator {
   private PoolState poolState = PoolState.NOT_INVENTORIED;
 
   /**
-   * This constructor will  inventory any existing reserve files in the pool (adding them to the in-memory map) but not
+   * This constructor will inventory any existing reserve files in the pool (adding them to the in-memory map) but not
    * create the reserve directory if it does not exist. Any files that already exist in the pool can be checked out
    * prior to calling {@link #initializePool(Collection)}. If a file of the correct size does not yet exist, a new file
    * will be allocated at runtime.
+   * @param enablePooling if set to {@code false}, the reserve pool will not be initialized/used and new files will be
+   *                      created each time a segment is allocated.
    * @param reserveDir the directory where reserve files will reside. If this directory does not exist yet, it will
-   *                   be created.
+   *                   be created. This can be {@code null} if pooling is disabled.
    * @param requiredSwapSegmentsPerSize the number of swap segments needed for each segment size in the pool.
    * @param metrics a {@link StorageManagerMetrics} instance.
    * @throws StoreException
    */
-  DiskSpaceAllocator(File reserveDir, long requiredSwapSegmentsPerSize, StorageManagerMetrics metrics) {
+  DiskSpaceAllocator(boolean enablePooling, File reserveDir, long requiredSwapSegmentsPerSize,
+      StorageManagerMetrics metrics) {
+    this.enablePooling = enablePooling;
     this.reserveDir = reserveDir;
     this.requiredSwapSegmentsPerSize = requiredSwapSegmentsPerSize;
     this.metrics = metrics;
     try {
-      if (reserveDir.isDirectory()) {
+      if (enablePooling && reserveDir.isDirectory()) {
         reserveFiles = inventoryExistingReserveFiles();
         poolState = PoolState.INVENTORIED;
       }
@@ -118,16 +122,20 @@ class DiskSpaceAllocator {
   void initializePool(Collection<DiskSpaceRequirements> requirementsList) throws StoreException {
     long startTime = System.currentTimeMillis();
     try {
-      if (poolState == PoolState.NOT_INVENTORIED) {
-        prepareDirectory(reserveDir);
-        reserveFiles = inventoryExistingReserveFiles();
-        poolState = PoolState.INVENTORIED;
+      if (enablePooling) {
+        if (poolState == PoolState.NOT_INVENTORIED) {
+          prepareDirectory(reserveDir);
+          reserveFiles = inventoryExistingReserveFiles();
+          poolState = PoolState.INVENTORIED;
+        }
+        Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
+        deleteExtraSegments(overallRequirements);
+        addRequiredSegments(overallRequirements);
+        // TODO fill the disk with additional swap segments
+        poolState = PoolState.INITIALIZED;
+      } else {
+        logger.info("Disk segment pooling disabled; pool will not be initialized.");
       }
-      Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
-      deleteExtraSegments(overallRequirements);
-      addRequiredSegments(overallRequirements);
-      // TODO fill the disk with additional swap segments
-      poolState = PoolState.INITIALIZED;
     } catch (Exception e) {
       metrics.diskSpaceAllocatorInitFailureCount.inc();
       poolState = PoolState.NOT_INVENTORIED;
@@ -148,10 +156,12 @@ class DiskSpaceAllocator {
    * @throws IOException if the file could not be moved to the destination.
    */
   void allocate(File destinationFile, long sizeInBytes) throws IOException {
-    if (poolState != PoolState.INITIALIZED) {
+    if (enablePooling && poolState != PoolState.INITIALIZED) {
       logger.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
           destinationFile.getAbsolutePath());
       metrics.diskSpaceAllocatorAllocBeforeInitCount.inc();
+    } else {
+      logger.debug("Allocating segment of size {} to {}", sizeInBytes, destinationFile.getAbsolutePath());
     }
     if (destinationFile.exists()) {
       throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
@@ -182,10 +192,12 @@ class DiskSpaceAllocator {
    * @throws IOException if the file to return does not exist or cannot be cleaned or recreated correctly.
    */
   void free(File fileToReturn, long sizeInBytes) throws IOException {
-    if (poolState != PoolState.INITIALIZED) {
+    if (enablePooling && poolState != PoolState.INITIALIZED) {
       logger.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
           fileToReturn.getAbsolutePath());
       metrics.diskSpaceAllocatorFreeBeforeInitCount.inc();
+    } else {
+      logger.debug("Freeing segment of size {} from {}", sizeInBytes, fileToReturn.getAbsolutePath());
     }
     // For now, we delete the file and create a new one. Newer linux kernel versions support
     // additional fallocate flags, which will be useful for cleaning up returned files.

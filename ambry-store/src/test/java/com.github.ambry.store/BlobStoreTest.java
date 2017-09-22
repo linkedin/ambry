@@ -228,7 +228,7 @@ public class BlobStoreTest {
 
   private final String storeId = UtilsTest.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
-  private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.getDiskSpaceAllocator();
+  private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR;
   private final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
   private final ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
   private final Properties properties = new Properties();

@@ -73,9 +73,9 @@ class DiskManager {
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
-    diskSpaceAllocator = diskManagerConfig.diskManagerEnableDiskSpaceAllocator ? new DiskSpaceAllocator(
+    diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableDiskSpaceAllocator,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
-        diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics) : null;
+        diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         String storeId = replica.getPartitionId().toString();
@@ -120,20 +120,18 @@ class DiskManager {
             "Could not start " + numStoreFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
 
-      if (diskSpaceAllocator != null) {
-        // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
-        // from each store.
-        List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
-        for (BlobStore blobStore : stores.values()) {
-          if (blobStore.isStarted()) {
-            DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
-            if (requirements != null) {
-              requirementsList.add(requirements);
-            }
+      // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
+      // from each store.
+      List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
+      for (BlobStore blobStore : stores.values()) {
+        if (blobStore.isStarted()) {
+          DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
+          if (requirements != null) {
+            requirementsList.add(requirements);
           }
         }
-        diskSpaceAllocator.initializePool(requirementsList);
       }
+      diskSpaceAllocator.initializePool(requirementsList);
 
       compactionManager.enable();
 

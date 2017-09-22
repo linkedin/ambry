@@ -90,7 +90,8 @@ public class StoreCopierTest {
     setupTestState();
     time.sleep(1000);
     _storeCopier = new StoreCopier("test_store", srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig,
-        clusterMap.getMetricRegistry(), STORE_KEY_FACTORY, DISK_IO_SCHEDULER, Collections.EMPTY_LIST, time);
+        clusterMap.getMetricRegistry(), STORE_KEY_FACTORY, DISK_IO_SCHEDULER,
+        StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, Collections.emptyList(), time);
   }
 
   /**
@@ -116,9 +117,10 @@ public class StoreCopierTest {
     // copy the store descriptor file over
     Files.copy(new File(srcDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(),
         new File(tgtDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
-    BlobStore tgt = new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, null,
-        new StorageManagerMetrics(new MetricRegistry()), tgtDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY,
-        null, null, time);
+    BlobStore tgt =
+        new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+            new StorageManagerMetrics(new MetricRegistry()), tgtDir.getAbsolutePath(), STORE_CAPACITY,
+            STORE_KEY_FACTORY, null, null, time);
     tgt.start();
     try {
       // should not be able to get expired or deleted ids
@@ -151,9 +153,10 @@ public class StoreCopierTest {
    * @throws StoreException
    */
   private void setupTestState() throws IOException, StoreException {
-    BlobStore src = new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, null,
-        new StorageManagerMetrics(clusterMap.getMetricRegistry()), srcDir.getAbsolutePath(), STORE_CAPACITY,
-        STORE_KEY_FACTORY, null, null, time);
+    BlobStore src =
+        new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+            new StorageManagerMetrics(clusterMap.getMetricRegistry()), srcDir.getAbsolutePath(), STORE_CAPACITY,
+            STORE_KEY_FACTORY, null, null, time);
     src.start();
     try {
       deletedId = new MockId("deletedId");

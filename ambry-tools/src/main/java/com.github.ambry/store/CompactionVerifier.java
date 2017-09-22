@@ -262,10 +262,8 @@ public class CompactionVerifier implements Closeable {
     MessageStoreHardDelete hardDelete = new BlobStoreHardDelete();
 
     DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
-    File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
-    reserveFileDir.deleteOnExit();
     DiskSpaceAllocator diskSpaceAllocator =
-        new DiskSpaceAllocator(reserveFileDir, 1, new StorageManagerMetrics(metricRegistry));
+        new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
     // load "src compaction" log and index
     srcLog = new Log(srcDir.getAbsolutePath(), verifierConfig.storeCapacity, -1, diskSpaceAllocator, srcMetrics);
     srcIndex =

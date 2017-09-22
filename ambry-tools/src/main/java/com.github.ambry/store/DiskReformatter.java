@@ -76,6 +76,7 @@ public class DiskReformatter {
   private final ClusterMap clusterMap;
   private final Time time;
   private final ConsistencyCheckerTool consistencyChecker;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
 
   /**
@@ -206,6 +207,8 @@ public class DiskReformatter {
     this.storeKeyFactory = storeKeyFactory;
     this.clusterMap = clusterMap;
     this.time = time;
+    diskSpaceAllocator =
+        new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
     consistencyChecker =
         new ConsistencyCheckerTool(clusterMap, new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
   }
@@ -287,9 +290,8 @@ public class DiskReformatter {
   private void ensureNotInUse(File srcDir, long storeCapacity, MetricRegistry metricRegistry) throws StoreException {
     StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    Store store =
-        new BlobStore("move_check", storeConfig, null, null, diskIOScheduler, null, metrics, srcDir.getAbsolutePath(),
-            storeCapacity, storeKeyFactory, recovery, null, time);
+    Store store = new BlobStore("move_check", storeConfig, null, null, diskIOScheduler, diskSpaceAllocator, metrics,
+        srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     store.start();
     store.shutdown();
   }
@@ -304,7 +306,7 @@ public class DiskReformatter {
    */
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
     try (StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig,
-        new MetricRegistry(), storeKeyFactory, diskIOScheduler, transformers, time)) {
+        new MetricRegistry(), storeKeyFactory, diskIOScheduler, diskSpaceAllocator, transformers, time)) {
       copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
     }
     // verify that the stores are equivalent

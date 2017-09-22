@@ -374,11 +374,7 @@ class Log implements Write {
   private File allocate(String filename, long size) throws IOException {
     File segmentFile = new File(dataDir, filename);
     if (!segmentFile.exists()) {
-      if (diskSpaceAllocator != null) {
-        diskSpaceAllocator.allocate(segmentFile, size);
-      } else {
-        Utils.preAllocateFileIfNeeded(segmentFile, size);
-      }
+      diskSpaceAllocator.allocate(segmentFile, size);
     }
     return segmentFile;
   }
@@ -391,11 +387,7 @@ class Log implements Write {
   private void free(LogSegment logSegment) throws IOException {
     File segmentFile = logSegment.getView().getFirst();
     logSegment.close();
-    if (diskSpaceAllocator != null) {
-      diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
-    } else if (!segmentFile.delete()) {
-      throw new IOException("Could not delete segment file: " + segmentFile.getAbsolutePath());
-    }
+    diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
   }
 
   /**

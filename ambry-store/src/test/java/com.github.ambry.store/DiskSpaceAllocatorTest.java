@@ -370,7 +370,7 @@ public class DiskSpaceAllocatorTest {
    * @return a new {@link DiskSpaceAllocator} instance.
    */
   private DiskSpaceAllocator constructAllocator() {
-    return new DiskSpaceAllocator(reserveFileDir, requiredSwapSegmentsPerSize, METRICS);
+    return new DiskSpaceAllocator(true, reserveFileDir, requiredSwapSegmentsPerSize, METRICS);
   }
 
   /**

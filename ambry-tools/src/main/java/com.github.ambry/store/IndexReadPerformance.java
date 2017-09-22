@@ -146,10 +146,8 @@ public class IndexReadPerformance {
       StoreMetrics metrics =
           new StoreMetrics(System.getProperty("user.dir"), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
-      File reserveFileDir = Files.createTempDirectory("reserve-pool").toFile();
-      reserveFileDir.deleteOnExit();
       DiskSpaceAllocator diskSpaceAllocator =
-          new DiskSpaceAllocator(reserveFileDir, 1, new StorageManagerMetrics(metricRegistry));
+          new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
       Log log = new Log(System.getProperty("user.dir"), 1000, 1000, diskSpaceAllocator, metrics);
 
       Properties props = new Properties();

@@ -23,7 +23,9 @@ import java.nio.file.Files;
  * Utility class for common functions used in tests of store classes.
  */
 class StoreTestUtils {
-  static final DiskSpaceAllocator DEFAULT_DISK_SPACE_ALLOCATOR = getDiskSpaceAllocator();
+  static final DiskSpaceAllocator DEFAULT_DISK_SPACE_ALLOCATOR =
+      new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(new MetricRegistry()));
+
   /**
    * Creates a temporary directory whose name starts with the given {@code prefix}.
    * @param prefix the prefix of the directory name.
@@ -58,18 +60,5 @@ class StoreTestUtils {
       success = file.delete() && success;
     }
     return deleteDirectory ? dir.delete() && success : success;
-  }
-
-  /**
-   * Get an un-initialized {@link DiskSpaceAllocator} for use in unit tests.
-   * @return the {@link DiskSpaceAllocator}
-   */
-  static DiskSpaceAllocator getDiskSpaceAllocator() {
-    try {
-      return new DiskSpaceAllocator(StoreTestUtils.createTempDirectory("reserve-pool"), 1,
-          new StorageManagerMetrics(new MetricRegistry()));
-    } catch (Exception e) {
-      throw new IllegalStateException("Exception while constructing DiskSpaceAllocator", e);
-    }
   }
 }
