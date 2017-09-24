@@ -60,6 +60,7 @@ class RouterUtils {
 
   /**
    * Determine if an error is indicative of the health of the system, and not a user error.
+   * If it is a system health error, then the error is logged.
    * @param exception The {@link Exception} to check.
    * @return true if this is an internal error and not a user error; false otherwise.
    */
@@ -81,6 +82,9 @@ class RouterUtils {
           isSystemHealthError = false;
           break;
       }
+    }
+    if (isSystemHealthError) {
+      logger.error("Router operation met with a system health error: ", exception);
     }
     return isSystemHealthError;
   }
