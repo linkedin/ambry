@@ -51,16 +51,16 @@ public class PutRequest extends RequestOrResponse {
   private final ByteBuffer crcBuf;
   private boolean okayToWriteCrc = false;
 
-  private static final int UserMetadata_Size_InBytes = 4;
-  private static final int Blob_Size_InBytes = 8;
-  private static final int BlobType_Size_InBytes = 2;
-  private static final int BlobKeyLength_Size_InBytes = 2;
-  private static final int Crc_Field_Size_InBytes = 8;
-  private static final short Put_Request_Version_V3 = 3;
-  static final short Put_Request_Version_V4 = 4;
+  private static final int USERMETADATA_SIZE_IN_BYTES = Integer.BYTES;
+  private static final int BLOB_SIZE_IN_BYTES = Long.BYTES;
+  private static final int BLOBTYPE_SIZE_IN_BYTES = Short.BYTES;
+  private static final int BLOBKEYLENGTH_SIZE_IN_BYTES = Short.BYTES;
+  private static final int CRC_SIZE_IN_BYTES = Long.BYTES;
+  private static final short PUT_REQUEST_VERSION_V3 = 3;
+  static final short PUT_REQUEST_VERSION_V4 = 4;
 
   // @todo change this to V4 once V4 becomes standard.
-  private static final short currentVersion = Put_Request_Version_V3;
+  private static final short currentVersion = PUT_REQUEST_VERSION_V3;
 
   /**
    * Construct a PutRequest
@@ -85,15 +85,15 @@ public class PutRequest extends RequestOrResponse {
     this.blobKey = blobKey;
     this.blob = materializedBlob;
     this.crc = new Crc32();
-    this.crcBuf = ByteBuffer.allocate(Crc_Field_Size_InBytes);
+    this.crcBuf = ByteBuffer.allocate(CRC_SIZE_IN_BYTES);
   }
 
   public static ReceivedPutRequest readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     short versionId = stream.readShort();
     switch (versionId) {
-      case Put_Request_Version_V3:
+      case PUT_REQUEST_VERSION_V3:
         return PutRequest_V3.readFrom(stream, map);
-      case Put_Request_Version_V4:
+      case PUT_REQUEST_VERSION_V4:
         return PutRequest_V4.readFrom(stream, map);
       default:
         throw new IllegalStateException("Unknown Request response version" + versionId);
@@ -103,7 +103,7 @@ public class PutRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     long sizeInBytes = sizeExcludingBlobAndCrcSize() + blobSize;
-    sizeInBytes += Crc_Field_Size_InBytes;
+    sizeInBytes += CRC_SIZE_IN_BYTES;
     return sizeInBytes;
   }
 
@@ -111,9 +111,10 @@ public class PutRequest extends RequestOrResponse {
     // size of (header + blobId + blob properties + metadata size + metadata + blob size + blob type)
     int sizeToReturn =
         (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties)
-            + UserMetadata_Size_InBytes + usermetadata.capacity() + Blob_Size_InBytes + BlobType_Size_InBytes;
-    if (getVersionId() == Put_Request_Version_V4) {
-      sizeToReturn += BlobKeyLength_Size_InBytes;
+            + USERMETADATA_SIZE_IN_BYTES + usermetadata.capacity() + BLOB_SIZE_IN_BYTES + BLOBTYPE_SIZE_IN_BYTES;
+    // @todo: remove this check once V4 becomes standard.
+    if (getVersionId() == PUT_REQUEST_VERSION_V4) {
+      sizeToReturn += BLOBKEYLENGTH_SIZE_IN_BYTES;
       if (blobKey != null) {
         sizeToReturn += blobKey.length;
       }
@@ -137,7 +138,7 @@ public class PutRequest extends RequestOrResponse {
         bufferToSend.put(usermetadata);
         bufferToSend.putShort((short) blobType.ordinal());
         // @todo remove this check once V4 is everywhere.
-        if (getVersionId() == Put_Request_Version_V4) {
+        if (getVersionId() == PUT_REQUEST_VERSION_V4) {
           short keyLength = blobKey == null ? 0 : (short) blobKey.length;
           bufferToSend.putShort(keyLength);
           if (keyLength > 0) {

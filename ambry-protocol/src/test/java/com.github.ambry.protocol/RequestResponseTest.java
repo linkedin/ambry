@@ -98,7 +98,7 @@ class PutRequestV4ForTest extends PutRequest {
   public PutRequestV4ForTest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType, byte[] blobKey) {
     super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType, blobKey);
-    versionId = PutRequest.Put_Request_Version_V4;
+    versionId = PutRequest.PUT_REQUEST_VERSION_V4;
   }
 }
 
@@ -135,13 +135,13 @@ public class RequestResponseTest {
       boolean doInvalidTest) throws IOException {
     doTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType, blob,
         blobSize, blobKey, null);
-    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, null, null);
-    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, new byte[0], null);
-    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, null, null);
-    doTest(PutRequest.Put_Request_Version_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
+    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, blobKey, blobKey);
     if (doInvalidTest) {
       doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
@@ -191,7 +191,7 @@ public class RequestResponseTest {
           }
           break;
 
-        case PutRequest.Put_Request_Version_V4:
+        case PutRequest.PUT_REQUEST_VERSION_V4:
           request =
               new PutRequestV4ForTest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
                   ByteBuffer.wrap(blob), blobSize, blobType, blobKey);
