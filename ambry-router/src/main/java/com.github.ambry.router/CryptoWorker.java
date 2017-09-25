@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -26,12 +27,13 @@ import org.slf4j.LoggerFactory;
  * Thread responsible for encrypting and decrypting blob content and per-blob keys.
  * Worker Thread listens to a job queue for new jobs and processes it one by one.
  */
-public class CryptoWorker implements Runnable {
+public class CryptoWorker implements Runnable, Closeable {
   private final BlockingQueue<CryptoJob> jobQueue;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final AtomicBoolean enabled;
   private volatile boolean endMarkerSeen = false;
+  private final String threadName;
   private CountDownLatch shutdownLatch;
 
   private static final Logger logger = LoggerFactory.getLogger(CryptoWorker.class);
@@ -41,13 +43,16 @@ public class CryptoWorker implements Runnable {
    * @param jobQueue the {@link BlockingQueue} that contains the jobs
    * @param cryptoService the {@link CryptoService} to use to encrypt or decrypt
    * @param kms the {@link KeyManagementService} to fetch keys from
+   * @param threadName name of the thread
    */
-  CryptoWorker(BlockingQueue<CryptoJob> jobQueue, CryptoService cryptoService, KeyManagementService kms) {
+  CryptoWorker(BlockingQueue<CryptoJob> jobQueue, CryptoService cryptoService, KeyManagementService kms,
+      String threadName) {
     this.jobQueue = jobQueue;
     this.cryptoService = cryptoService;
     this.kms = kms;
     enabled = new AtomicBoolean(true);
     shutdownLatch = new CountDownLatch(1);
+    this.threadName = threadName;
   }
 
   @Override
@@ -76,7 +81,8 @@ public class CryptoWorker implements Runnable {
   /**
    * Shuts down the thread by closing all pending jobs. Any jobs added after close will be ignored
    */
-  void close() {
+  @Override
+  public void close() {
     if (enabled.compareAndSet(true, false)) {
       jobQueue.add(new CryptoJob.EndMarkerJob());
     }
