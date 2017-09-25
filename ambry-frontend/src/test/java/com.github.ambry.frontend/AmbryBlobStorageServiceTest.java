@@ -122,7 +122,7 @@ public class AmbryBlobStorageServiceTest {
   private Container refDefaultPublicContainer;
   private Container refDefaultPrivateContainer;
   private InMemAccountServiceFactory.InMemAccountService accountService =
-      new InMemAccountServiceFactory(false).getAccountService();
+      new InMemAccountServiceFactory(false, true).getAccountService();
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -548,7 +548,7 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void accountNameMismatchTest() throws Exception {
-    accountService = new InMemAccountServiceFactory(true).getAccountService();
+    accountService = new InMemAccountServiceFactory(true, false).getAccountService();
     ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",

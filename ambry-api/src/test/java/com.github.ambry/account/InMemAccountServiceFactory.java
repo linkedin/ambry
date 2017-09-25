@@ -33,10 +33,12 @@ import java.util.function.Consumer;
  * Factory to create {@link InMemAccountService}. The account services returned are static variables.
  */
 public class InMemAccountServiceFactory implements AccountServiceFactory {
-  private static final InMemAccountService ONLY_UNKNOWN = new InMemAccountService(true);
-  private static final InMemAccountService ANY_ACCOUNT = new InMemAccountService(false);
+  private static final InMemAccountService ONLY_UNKNOWN = new InMemAccountService(true, false);
+  private static final InMemAccountService ANY_ACCOUNT_NOTIFY = new InMemAccountService(false, true);
+  private static final InMemAccountService ANY_ACCOUNT_NO_NOTIFY = new InMemAccountService(false, false);
 
   private final boolean returnOnlyUnknown;
+  private final boolean notifyConsumers;
 
   /**
    * Constructor. If the properties contains a field "in.mem.account.service.only.unknown" set to {@code true}, an
@@ -44,49 +46,71 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
    * functional service is returned. These account services are also static (singleton) so the same instance of these
    * services is returned no matter how many times {@link #getAccountService()} is called or different instances of
    * {@link InMemAccountServiceFactory} are created.
+   * <p/>
+   * If "in.mem.account.service.only.unknown" is {@code false}, then notifications to consumers can be enabled/disabled
+   * by setting the value of "in.mem.account.service.notify.consumers" appropriately. Once again, the instance returned
+   * is static (singleton).
    * @param verifiableProperties The properties to get a {@link InMemAccountService} instance. Cannot be {@code null}.
    * @param metricRegistry will be discarded
    * @param notifier will be discarded
    */
   public InMemAccountServiceFactory(VerifiableProperties verifiableProperties, Object metricRegistry, Object notifier) {
     returnOnlyUnknown = verifiableProperties.getBoolean("in.mem.account.service.only.unknown", false);
+    notifyConsumers =
+        !returnOnlyUnknown && verifiableProperties.getBoolean("in.mem.account.service.notify.consumers", true);
   }
 
-  public InMemAccountServiceFactory(boolean returnOnlyUnknown) {
+  /**
+   * Constructor. Each different configuration for these parameters has a singleton {@link AccountService}.
+   * @param returnOnlyUnknown on {@link #getAccountService()}, returns an {@link AccountService} that will only return
+   *                          {@link Account#UNKNOWN_ACCOUNT}.
+   *
+   * @param notifyConsumers if {@code true}, will notify consumers when accounts are updated. This cannot be
+   *                        {@code true} if {@code returnOnlyUnknown} is {@code true}.
+   */
+  public InMemAccountServiceFactory(boolean returnOnlyUnknown, boolean notifyConsumers) {
     this.returnOnlyUnknown = returnOnlyUnknown;
+    this.notifyConsumers = notifyConsumers;
+    if (returnOnlyUnknown && notifyConsumers) {
+      throw new IllegalArgumentException(
+          "Cannot have an account service that returns UNKNOWN only but notifies consumers on account changes");
+    }
   }
 
   @Override
   public InMemAccountService getAccountService() {
-    return returnOnlyUnknown ? ONLY_UNKNOWN : ANY_ACCOUNT;
+    return returnOnlyUnknown ? ONLY_UNKNOWN : notifyConsumers ? ANY_ACCOUNT_NOTIFY : ANY_ACCOUNT_NO_NOTIFY;
   }
 
   /**
    * Implementation of {@link AccountService} for test. This implementation synchronizes on all methods.
    */
   public static class InMemAccountService implements AccountService {
-    private final boolean shouldReturnOnlyUnknownAccount;
+    private final boolean shouldReturnOnlyUnknown;
+    private final boolean notifyConsumers;
     private final Map<Short, Account> idToAccountMap = new HashMap<>();
     private final Map<String, Account> nameToAccountMap = new HashMap<>();
     private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
 
     /**
      * Constructor.
-     * @param shouldReturnOnlyUnknownAccount {@code true} if always returns {@link Account#UNKNOWN_ACCOUNT} when queried
+     * @param shouldReturnOnlyUnknown {@code true} if always returns {@link Account#UNKNOWN_ACCOUNT} when queried
      *                                                     by account name; {@code false} to do the actual query.
+     * @param notifyConsumers {@code true} if consumers should be notified of account changes. {@code false} otherwise.
      */
-    private InMemAccountService(boolean shouldReturnOnlyUnknownAccount) {
-      this.shouldReturnOnlyUnknownAccount = shouldReturnOnlyUnknownAccount;
+    private InMemAccountService(boolean shouldReturnOnlyUnknown, boolean notifyConsumers) {
+      this.shouldReturnOnlyUnknown = shouldReturnOnlyUnknown;
+      this.notifyConsumers = notifyConsumers;
     }
 
     @Override
     public synchronized Account getAccountById(short accountId) {
-      return shouldReturnOnlyUnknownAccount ? Account.UNKNOWN_ACCOUNT : idToAccountMap.get(accountId);
+      return shouldReturnOnlyUnknown ? Account.UNKNOWN_ACCOUNT : idToAccountMap.get(accountId);
     }
 
     @Override
     public synchronized Account getAccountByName(String accountName) {
-      return shouldReturnOnlyUnknownAccount ? Account.UNKNOWN_ACCOUNT : nameToAccountMap.get(accountName);
+      return shouldReturnOnlyUnknown ? Account.UNKNOWN_ACCOUNT : nameToAccountMap.get(accountName);
     }
 
     @Override
@@ -95,8 +119,10 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
         idToAccountMap.put(account.getId(), account);
         nameToAccountMap.put(account.getName(), account);
       }
-      for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
-        accountUpdateConsumer.accept(accounts);
+      if (notifyConsumers) {
+        for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+          accountUpdateConsumer.accept(accounts);
+        }
       }
       return true;
     }
@@ -130,8 +156,10 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
       Collection<Account> allAccounts = idToAccountMap.values();
       idToAccountMap.clear();
       nameToAccountMap.clear();
-      for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
-        accountUpdateConsumer.accept(allAccounts);
+      if (notifyConsumers) {
+        for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
+          accountUpdateConsumer.accept(allAccounts);
+        }
       }
     }
 
@@ -150,33 +178,14 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
       } while (idToAccountMap.containsKey(refAccountId) || nameToAccountMap.containsKey(refAccountName));
       Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
       Container randomContainer = getRandomContainer(refAccountId);
-      Container publicContainer = getDefaultContainer(refAccountId, false);
-      Container privateContainer = getDefaultContainer(refAccountId, true);
+      Container publicContainer =
+          new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId).build();
+      Container privateContainer =
+          new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId).build();
       Account account = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
           Arrays.asList(publicContainer, privateContainer, randomContainer)).build();
       updateAccounts(Collections.singletonList(account));
       return account;
-    }
-
-    /**
-     * Creates and returns default public/private container for {@code accountId}.
-     * @param accountId the account id for the container
-     * @param isPrivate {@code true} if private container is required. {@code false} for public.
-     * @return default public/private container for {@code accountId}.
-     */
-    private Container getDefaultContainer(short accountId, boolean isPrivate) {
-      Container container;
-      if (isPrivate) {
-        container =
-            new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
-                Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
-                Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, accountId).build();
-      } else {
-        container = new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
-            Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
-            Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, accountId).build();
-      }
-      return container;
     }
 
     /**

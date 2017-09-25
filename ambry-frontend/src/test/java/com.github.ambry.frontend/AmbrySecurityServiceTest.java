@@ -65,7 +65,7 @@ public class AmbrySecurityServiceTest {
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
   private static final InMemAccountServiceFactory.InMemAccountService accountService =
-      new InMemAccountServiceFactory(false).getAccountService();
+      new InMemAccountServiceFactory(false, true).getAccountService();
   private static final Account REF_ACCOUNT = accountService.createAndAddRandomAccount();
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
   private static final BlobInfo DEFAULT_INFO = new BlobInfo(

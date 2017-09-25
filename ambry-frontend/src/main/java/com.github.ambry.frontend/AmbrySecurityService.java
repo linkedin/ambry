@@ -267,7 +267,8 @@ class AmbrySecurityService implements SecurityService {
   }
 
   /**
-   * Adds the account and container details to the response headers.
+   * Adds the account and container details to the response headers if the {@code restRequest} contains the target
+   * account and container and they are not generic unknowns.
    * @param restRequest the {@link RestRequest} that contains the {@link Account} and {@link Container} details.
    * @param restResponseChannel the {@link RestResponseChannel} where headers need to be set.
    * @throws RestServiceException if headers cannot be set.

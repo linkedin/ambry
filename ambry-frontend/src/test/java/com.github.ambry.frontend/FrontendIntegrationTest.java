@@ -99,7 +99,7 @@ public class FrontendIntegrationTest {
   private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountServiceFactory.InMemAccountService ACCOUNT_SERVICE =
-      new InMemAccountServiceFactory(false).getAccountService();
+      new InMemAccountServiceFactory(false, true).getAccountService();
 
   static {
     try {
