@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
@@ -178,9 +177,10 @@ public class StoreCopier implements Closeable {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       File srcDir = new File(config.srcStoreDirPath);
       File tgtDir = new File(config.tgtStoreDirPath);
+      StorageManagerMetrics metrics = new StorageManagerMetrics(clusterMap.getMetricRegistry());
       try (StoreCopier storeCopier = new StoreCopier("src", srcDir, tgtDir, config.storeCapacity,
-          config.fetchSizeInBytes, storeConfig, clusterMap.getMetricRegistry(), storeKeyFactory,
-          new DiskIOScheduler(null), Collections.EMPTY_LIST, SystemTime.getInstance())) {
+          config.fetchSizeInBytes, storeConfig, metrics, storeKeyFactory, new DiskIOScheduler(null),
+          Collections.EMPTY_LIST, SystemTime.getInstance())) {
         storeCopier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
       }
     }
@@ -193,7 +193,7 @@ public class StoreCopier implements Closeable {
    * @param storeCapacity the capacity of the store.
    * @param fetchSizeInBytes the size of each fetch from the soure store.
    * @param storeConfig {@link StoreConfig} that contains config to initiate a {@link BlobStore}.
-   * @param metricRegistry {@link MetricRegistry} to use for metrics.
+   * @param metrics {@link StorageManagerMetrics} to use for metrics.
    * @param storeKeyFactory the {@link StoreKeyFactory} to use for {@link StoreKey}s in the {@link Store}.
    * @param diskIOScheduler the {@link DiskIOScheduler} to use.
    * @param transformers the list of {@link Transformer} functions to execute. They will be executed in order.
@@ -201,12 +201,11 @@ public class StoreCopier implements Closeable {
    * @throws StoreException
    */
   public StoreCopier(String storeId, File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes,
-      StoreConfig storeConfig, MetricRegistry metricRegistry, StoreKeyFactory storeKeyFactory,
+      StoreConfig storeConfig, StorageManagerMetrics metrics, StoreKeyFactory storeKeyFactory,
       DiskIOScheduler diskIOScheduler, List<Transformer> transformers, Time time) throws StoreException {
     this.storeId = storeId;
     this.fetchSizeInBytes = fetchSizeInBytes;
     this.transformers = transformers;
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(),
         storeCapacity, storeKeyFactory, recovery, null, time);
