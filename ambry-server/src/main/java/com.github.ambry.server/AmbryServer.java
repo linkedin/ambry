@@ -135,7 +135,8 @@ public class AmbryServer {
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       storageManager =
           new StorageManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
-              new BlobStoreRecovery(), new BlobStoreHardDelete(), ClusterManagerWriteStatusDelegate.getInstance(clusterParticipant), time);
+              new BlobStoreRecovery(), new BlobStoreHardDelete(),
+              ClusterManagerWriteStatusDelegate.getInstance(clusterParticipant), time);
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

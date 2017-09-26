@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -23,7 +22,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -254,7 +252,7 @@ public class BlobStoreTest {
   }
 
   private ReplicaId getMockReplicaId(String filePath) {
-    return StoreTestUtils.getMockReplicaId(storeId, LOG_CAPACITY, filePath);
+    return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
   }
 
   /**
@@ -286,7 +284,7 @@ public class BlobStoreTest {
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
-  private void shutdownStoreAndDeleteFiles() throws IOException, StoreException{
+  private void shutdownStoreAndDeleteFiles() throws IOException, StoreException {
     if (store.isStarted()) {
       store.shutdown();
     }
@@ -298,11 +296,12 @@ public class BlobStoreTest {
     return createBlobStore(replicaId, config, null);
   }
 
-  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
+  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
+      ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
     MetricRegistry registry = new MetricRegistry();
     StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
-    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics,
-        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, STORE_KEY_FACTORY,
+        recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
   }
 
   /**
@@ -312,15 +311,17 @@ public class BlobStoreTest {
   @Test
   public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
     //Test only relevant for stores with segmented logs
-    if (!isLogSegmented)
+    if (!isLogSegmented) {
       return;
+    }
 
     //Setup threshold test properties, replicaId, mock write status delegate
     properties.setProperty(StoreConfig.storeDataReadOnlySizeThresholdPercentageName, "65");
     properties.setProperty(StoreConfig.storeDataReadWriteSizeThresholdPercentageDeltaName, "5");
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     ReplicaId replicaId = getMockReplicaId(tempDirStr);
-    ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = Mockito.mock(ClusterManagerWriteStatusDelegate.class);
+    ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate =
+        Mockito.mock(ClusterManagerWriteStatusDelegate.class);
 
     //Restart store with new threshold properties, mock delegate
     store.shutdown();

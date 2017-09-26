@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import org.mockito.Mockito;
 
+import static org.mockito.Mockito.*;
+
 
 /**
  * Utility class for common functions used in tests of store classes.
@@ -38,13 +40,20 @@ class StoreTestUtils {
     return tempDir;
   }
 
-  static ReplicaId getMockReplicaId(String storeId, long capacity, String filePath) {
-    ReplicaId replicaId = Mockito.mock(ReplicaId.class);
-    PartitionId partitionId = Mockito.mock(PartitionId.class);
-    Mockito.when(partitionId.toString()).thenReturn(storeId);
-    Mockito.when(replicaId.getPartitionId()).thenReturn(partitionId);
-    Mockito.when(replicaId.getCapacityInBytes()).thenReturn(capacity);
-    Mockito.when(replicaId.getReplicaPath()).thenReturn(filePath);
+  /**
+   * Creates a mock replicaId for blob store testing
+   * @param storeId partitionId from replicaId.getPartitionId() will toString() to this
+   * @param capacity replicaId.getCapacityInBytes() will output this
+   * @param filePath replicaId.getReplicaPath() will output this
+   * @return mock replicaId
+   */
+  static ReplicaId createMockReplicaId(String storeId, long capacity, String filePath) {
+    ReplicaId replicaId = mock(ReplicaId.class);
+    PartitionId partitionId = mock(PartitionId.class);
+    when(partitionId.toString()).thenReturn(storeId);
+    when(replicaId.getPartitionId()).thenReturn(partitionId);
+    when(replicaId.getCapacityInBytes()).thenReturn(capacity);
+    when(replicaId.getReplicaPath()).thenReturn(filePath);
     return replicaId;
   }
 

@@ -17,6 +17,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,13 +99,14 @@ class HelixParticipant implements ClusterParticipant {
     HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    if (sealedReplicas == null)
+      sealedReplicas = new ArrayList<>();
     if (isSealed) {
       sealedReplicas.add(replicaId.getPartitionId().toPathString());
     } else {
       sealedReplicas.remove(replicaId.getPartitionId().toPathString());
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
-    //Is this really necessary?
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 

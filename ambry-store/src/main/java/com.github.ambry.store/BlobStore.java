@@ -82,15 +82,14 @@ class BlobStore implements Store {
   }
 
   private enum WriteState {
-    IDLE,
-    READ_ONLY,
-    READ_WRITE;
+    IDLE, READ_ONLY, READ_WRITE;
   }
 
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
-      StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) {
+      StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate,
+      Time time) {
     this.replicaId = replicaId;
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
     this.metrics = storageManagerMetrics.createStoreMetrics(replicaId.getPartitionId().toString());
@@ -232,18 +231,18 @@ class BlobStore implements Store {
 
   private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity) {
     if (clusterManagerWriteStatusDelegate != null) {
-      double percentFilled = (index.getLogUsedCapacity() / (double) log.getCapacityInBytes())*100;
+      double percentFilled = (index.getLogUsedCapacity() / (double) log.getCapacityInBytes()) * 100;
       if (percentFilled > config.storeDataReadOnlySizeThresholdPercentage && writeState != WriteState.READ_ONLY) {
         clusterManagerWriteStatusDelegate.setToRO(replicaId);
         writeState = WriteState.READ_ONLY;
-      } else if (percentFilled <= config.storeDataReadOnlySizeThresholdPercentage - config.storeDataReadWriteSizeThresholdPercentageDelta
+      } else if (percentFilled
+          <= config.storeDataReadOnlySizeThresholdPercentage - config.storeDataReadWriteSizeThresholdPercentageDelta
           && writeState != WriteState.READ_WRITE
           || percentFilled <= config.storeDataReadOnlySizeThresholdPercentage && writeState == WriteState.IDLE) {
         clusterManagerWriteStatusDelegate.setToRW(replicaId);
         writeState = WriteState.READ_WRITE;
       }
-    }
-    else {
+    } else {
       logger.warn("ClusterManagerWriteStatusDelegate not set, dynamic helix write status turned off");
     }
   }
