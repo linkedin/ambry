@@ -21,12 +21,12 @@ public class RouterException extends Exception {
   private final RouterErrorCode errorCode;
 
   public RouterException(String message, RouterErrorCode errorCode) {
-    super(message);
+    super(message + " Error: " + errorCode);
     this.errorCode = errorCode;
   }
 
   public RouterException(String message, Throwable e, RouterErrorCode errorCode) {
-    super(message, e);
+    super(message + " Error: " + errorCode, e);
     this.errorCode = errorCode;
   }
 

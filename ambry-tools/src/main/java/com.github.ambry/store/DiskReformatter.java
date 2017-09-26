@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -34,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.io.FileUtils;
@@ -76,6 +76,7 @@ public class DiskReformatter {
   private final ClusterMap clusterMap;
   private final Time time;
   private final ConsistencyCheckerTool consistencyChecker;
+  private final StorageManagerMetrics metrics;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
 
   /**
@@ -208,6 +209,7 @@ public class DiskReformatter {
     this.time = time;
     consistencyChecker =
         new ConsistencyCheckerTool(clusterMap, new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
+    metrics = new StorageManagerMetrics(clusterMap.getMetricRegistry());
   }
 
   /**
@@ -247,7 +249,7 @@ public class DiskReformatter {
     if (scratchTgt.exists()) {
       throw new IllegalStateException(scratchTgt + " already exists");
     }
-    ensureNotInUse(scratchSrc, toMove.getCapacityInBytes(), clusterMap.getMetricRegistry());
+    ensureNotInUse(scratchSrc, toMove.getCapacityInBytes());
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
     FileUtils.moveDirectory(scratchSrc, scratchTgt);
 
@@ -281,15 +283,13 @@ public class DiskReformatter {
    * directory.
    * @param srcDir the directory to use
    * @param storeCapacity the capacity of the store
-   * @param metricRegistry the {@link MetricRegistry} to use.
    * @throws StoreException if there are any problems starting or stopping the store.
    */
-  private void ensureNotInUse(File srcDir, long storeCapacity, MetricRegistry metricRegistry) throws StoreException {
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+  private void ensureNotInUse(File srcDir, long storeCapacity) throws StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     Store store =
-        new BlobStore("move_check", storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(),
-            storeCapacity, storeKeyFactory, recovery, null, time);
+        new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler, metrics,
+            srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     store.start();
     store.shutdown();
   }
@@ -303,8 +303,9 @@ public class DiskReformatter {
    * @throws Exception
    */
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
-    try (StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig,
-        new MetricRegistry(), storeKeyFactory, diskIOScheduler, transformers, time)) {
+    try (
+        StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig, metrics,
+            storeKeyFactory, diskIOScheduler, transformers, time)) {
       copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
     }
     // verify that the stores are equivalent
