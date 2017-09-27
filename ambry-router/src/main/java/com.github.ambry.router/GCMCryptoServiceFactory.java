@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import javax.crypto.spec.SecretKeySpec;
@@ -27,7 +28,12 @@ import javax.crypto.spec.SecretKeySpec;
 public class GCMCryptoServiceFactory implements CryptoServiceFactory<SecretKeySpec> {
   private final CryptoServiceConfig cryptoServiceConfig;
 
-  GCMCryptoServiceFactory(VerifiableProperties verifiableProperties) {
+  /**
+   * Instantiates {@link GCMCryptoServiceFactory}
+   * @param verifiableProperties {@link VerifiableProperties} to load configs from
+   * @param registry {@link MetricRegistry} to use
+   */
+  GCMCryptoServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry registry) {
     cryptoServiceConfig = new CryptoServiceConfig(verifiableProperties);
   }
 
