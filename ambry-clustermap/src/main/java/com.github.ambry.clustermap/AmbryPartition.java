@@ -116,7 +116,8 @@ class AmbryPartition extends PartitionId {
    * Construct name based on the id that is appropriate for use as a file or directory name.
    * @return string representation of the id for use as part of file system path.
    */
-  String toPathString() {
+  @Override
+  public String toPathString() {
     return id.toString();
   }
 

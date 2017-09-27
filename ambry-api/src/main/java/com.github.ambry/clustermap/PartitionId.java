@@ -54,4 +54,10 @@ public abstract class PartitionId implements Resource, Comparable<PartitionId> {
    */
   @Override
   public abstract String toString();
+
+  /**
+   * Returns a strictly numerical {@link String} that uniquely represents the {@code PartitionId}.
+   * @return Strictly numerical string representation of the {@code PartitionId}.
+   */
+  public abstract String toPathString();
 }

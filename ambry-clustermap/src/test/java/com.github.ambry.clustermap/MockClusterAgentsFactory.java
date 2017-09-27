@@ -55,6 +55,11 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         public void close() {
 
         }
+
+        @Override
+        public void setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+
+        }
       };
     }
     return clusterParticipant;

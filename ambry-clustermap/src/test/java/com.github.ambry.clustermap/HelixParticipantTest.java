@@ -44,6 +44,7 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.messaging.handling.MessageHandler;
 import org.apache.helix.model.HelixConfigScope;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.StateMachineEngine;
@@ -52,6 +53,7 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
@@ -63,6 +65,7 @@ import static org.junit.Assert.*;
 public class HelixParticipantTest {
   private final MockHelixManagerFactory helixManagerFactory;
   private final Properties props;
+  private final String clusterName = "HelixParticipantTestCluster";
 
   public HelixParticipantTest() throws Exception {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
@@ -70,10 +73,59 @@ public class HelixParticipantTest {
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.cluster.name", "HelixParticipantTestCluster");
+    props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     helixManagerFactory = new MockHelixManagerFactory();
+  }
+
+  private ReplicaId createMockReplicaId(String partitionIdString) {
+    ReplicaId replicaId = Mockito.mock(ReplicaId.class);
+    PartitionId partitionId = Mockito.mock(PartitionId.class);
+    Mockito.when(partitionId.toPathString()).thenReturn(partitionIdString);
+    Mockito.when(replicaId.getPartitionId()).thenReturn(partitionId);
+    return replicaId;
+  }
+
+  /**
+   * Tests setReplicaSealedState method for {@link HelixParticipant}
+   * @throws IOException
+   */
+  @Test
+  public void testSetReplicaSealedState() throws IOException {
+    //setup HelixParticipant and dependencies
+    String partitionId = "somePartitionId";
+    ReplicaId replicaId = createMockReplicaId(partitionId);
+    String hostname = "localhost";
+    int port = 2200;
+    String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
+    helixParticipant.initialize(hostname, port, Collections.EMPTY_LIST);
+    HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
+    HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
+    helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    InstanceConfig ic = helixAdmin.getInstanceConfig(clusterName, instanceName);
+
+    //Make sure the current sealedReplicas list is null
+    List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    assertTrue("sealedReplicas is not null", sealedReplicas == null);
+
+    //Check that invoking setReplicaSealedState adds the partition to the list of sealed replicas
+    helixParticipant.setReplicaSealedState(replicaId, true);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    assertFalse("sealedReplicas is null", sealedReplicas == null);
+    assertTrue("sealedReplicas is not size 1, it's size " + sealedReplicas.size(), sealedReplicas.size() == 1);
+    assertTrue(sealedReplicas.get(0) + " does not equal '" + partitionId + "'",
+        sealedReplicas.get(0).equals(partitionId));
+
+    //Check that invoking setReplicaSealedState with isSealed == false removes partition from list of sealed replicas
+    helixParticipant.setReplicaSealedState(replicaId, false);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    assertFalse("sealedReplicas is null", sealedReplicas == null);
+    assertTrue("sealedReplicas is not size 0, it's size " + sealedReplicas.size(), sealedReplicas.size() == 0);
   }
 
   /**
@@ -165,6 +217,7 @@ public class HelixParticipantTest {
     private StateModelFactory stateModelFactory;
     private boolean isConnected;
     boolean beBad;
+    private HelixAdmin helixAdmin = new MockHelixAdmin();
 
     @Override
     public StateMachineEngine getStateMachineEngine() {
@@ -323,7 +376,7 @@ public class HelixParticipantTest {
 
     @Override
     public HelixAdmin getClusterManagmentTool() {
-      throw new IllegalStateException("Not implemented");
+      return helixAdmin;
     }
 
     @Override
