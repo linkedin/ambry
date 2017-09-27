@@ -128,11 +128,10 @@ public class RequestResponseTest {
    * @param blob the blob content.
    * @param blobSize the size of the blob.
    * @param blobKey the encryption key of the blob.
-   * @param doInvalidTest whether tests for invalid put requests should be done.
    */
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
-      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey,
-      boolean doInvalidTest) throws IOException {
+      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey)
+      throws IOException {
     doTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType, blob,
         blobSize, blobKey, null);
     doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
@@ -141,10 +140,6 @@ public class RequestResponseTest {
         blobType, blob, blobSize, new byte[0], null);
     doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, blobKey, blobKey);
-    if (doInvalidTest) {
-      doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
-          blobProperties, userMetadata, blobType, blob, blobSize, blobKey, null);
-    }
   }
 
   /**
@@ -246,28 +241,30 @@ public class RequestResponseTest {
         new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
-        blobSize, blobKey, true);
+        blobSize, blobKey);
+    doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
+        blobProperties, userMetadata, BlobType.DataBlob, blob, blobSize, blobKey, null);
 
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
-        blobSize, blobKey, false);
+        blobSize, blobKey);
 
     // Put Request with size in blob properties different from the data size and blob type: Metadata blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
-        blob, blobSize, blobKey, false);
+        blob, blobSize, blobKey);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
-        blob, blobSize, blobKey, true);
+        blob, blobSize, blobKey);
 
     // Response test
     PutResponse response = new PutResponse(1234, clientId, ServerErrorCode.No_Error);
