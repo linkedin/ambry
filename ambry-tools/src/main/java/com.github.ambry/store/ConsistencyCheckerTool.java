@@ -231,18 +231,18 @@ public class ConsistencyCheckerTool {
     for (StoreKey blobId : blobIdToStatusMap.keySet()) {
       ReplicationStatus consistencyBlobResult = blobIdToStatusMap.get(blobId);
       // valid blobs : count of available replicas = total replica count or count of deleted replicas = total replica count
-      boolean isValid = consistencyBlobResult.getAvailableReplicaSet().size() == replicaCount
-          || consistencyBlobResult.getDeletedOrExpiredReplicaSet().size() == replicaCount;
+      boolean isValid = consistencyBlobResult.available.size() == replicaCount
+          || consistencyBlobResult.deletedOrExpired.size() == replicaCount;
       if (!isValid) {
         totalInconsistentBlobs++;
-        if ((consistencyBlobResult.getDeletedOrExpiredReplicaSet().size()
-            + consistencyBlobResult.getUnavailableReplicaSet().size() == replicaCount)) {
+        if ((consistencyBlobResult.deletedOrExpired.size() + consistencyBlobResult.unavailable.size()
+            == replicaCount)) {
           // acceptable inconsistent blobs : count of deleted + count of unavailable = total replica count
           logger.debug("Partially deleted (acceptable inconsistency) blob {} isDeletedOrExpired {}. Blob status - {}",
-              blobId, consistencyBlobResult.isDeletedOrExpired(), consistencyBlobResult);
+              blobId, consistencyBlobResult.isDeletedOrExpired, consistencyBlobResult);
           acceptableInconsistentBlobs++;
         } else {
-          if (consistencyBlobResult.belongsToRecentIndexSegment()) {
+          if (consistencyBlobResult.belongsToRecentIndexSegment) {
             logger.debug("Inconsistent blob found possibly due to replication {} Status map {} ", blobId,
                 consistencyBlobResult);
             inconsistentDueToReplicationCount++;
@@ -265,45 +265,28 @@ public class ConsistencyCheckerTool {
   }
 
   /**
-   * Holds status of a blob from the perspective of an Index. If multiple index entries are found for the same blob,
-   * everything is captured in a single instance of this class
+   * Contains status of a blob across all replicas, whether it is deleted or expired in any of them and whether it
+   * belongs to the most recent segment in any of them.
    */
   private static class ReplicationStatus {
-    private final Set<File> available = new HashSet<>();
-    private final Set<File> deletedOrExpired = new HashSet<>();
-    private final Set<File> unavailable = new HashSet<>();
-    private boolean isDeletedOrExpired;
-    private boolean belongsToRecentIndexSegment = false;
+    final Set<File> available = new HashSet<>();
+    final Set<File> deletedOrExpired = new HashSet<>();
+    final Set<File> unavailable = new HashSet<>();
+    boolean isDeletedOrExpired;
+    boolean belongsToRecentIndexSegment = false;
 
     /**
-     * Initializes a {@link ReplicationStatus} with a list of Replica. ConsistencyChecker uses the {@link ReplicationStatus} to keep
-     * track of the status of a blob in every replica. "Replica" refers to a directory name where all replicas for a given
-     * partition is present.
+     * Initializes a {@link ReplicationStatus} with a list of Replica. ConsistencyChecker uses the
+     * {@link ReplicationStatus} to keep track of the status of a blob in every replica.
      * @param replicas the list of replicas for which blob status needs to be collected
      */
     ReplicationStatus(File[] replicas) {
       unavailable.addAll(Arrays.asList(replicas));
     }
 
-    Set<File> getAvailableReplicaSet() {
-      return available;
-    }
-
     void addAvailable(File replica) {
       available.add(replica);
       unavailable.remove(replica);
-    }
-
-    Set<File> getDeletedOrExpiredReplicaSet() {
-      return deletedOrExpired;
-    }
-
-    Set<File> getUnavailableReplicaSet() {
-      return unavailable;
-    }
-
-    boolean belongsToRecentIndexSegment() {
-      return belongsToRecentIndexSegment;
     }
 
     void setBelongsToRecentIndexSegment(boolean belongsToRecentIndexSegment) {
@@ -317,10 +300,7 @@ public class ConsistencyCheckerTool {
       available.remove(replica);
     }
 
-    boolean isDeletedOrExpired() {
-      return isDeletedOrExpired;
-    }
-
+    @Override
     public String toString() {
       int totalReplicas = available.size() + deletedOrExpired.size() + unavailable.size();
       return "Available size: " + available.size() + ", Available :: " + available + "\nDeleted/Expired size: "
