@@ -56,9 +56,9 @@ class BlobStore implements Store {
   private final StoreMetrics metrics;
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
-  private final ReplicaId replicaId;
-  private final ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
 
+  private ReplicaId replicaId;
+  private ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
   private WriteState writeState = WriteState.IDLE;
   private Log log;
   private BlobStoreCompactor compactor;
@@ -90,16 +90,25 @@ class BlobStore implements Store {
       StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate,
       Time time) {
+    this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler,
+        storageManagerMetrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory,
+        recovery, hardDelete, time);
     this.replicaId = replicaId;
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
-    this.metrics = storageManagerMetrics.createStoreMetrics(replicaId.getPartitionId().toString());
-    this.storeId = replicaId.getPartitionId().toString();
-    this.dataDir = replicaId.getReplicaPath();
+  }
+
+  BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
+    this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
+    this.storeId = storeId;
+    this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
     this.config = config;
-    this.capacityInBytes = replicaId.getCapacityInBytes();
+    this.capacityInBytes = capacityInBytes;
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;

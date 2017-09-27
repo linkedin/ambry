@@ -57,6 +57,7 @@ import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 
 
 /**
@@ -311,9 +312,7 @@ public class BlobStoreTest {
   @Test
   public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
     //Test only relevant for stores with segmented logs
-    if (!isLogSegmented) {
-      return;
-    }
+    assumeTrue(isLogSegmented);
 
     //Setup threshold test properties, replicaId, mock write status delegate
     properties.setProperty(StoreConfig.storeDataReadOnlySizeThresholdPercentageName, "65");
