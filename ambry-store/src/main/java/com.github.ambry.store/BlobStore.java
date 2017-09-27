@@ -85,6 +85,7 @@ class BlobStore implements Store {
     IDLE, READ_ONLY, READ_WRITE;
   }
 
+  //Ctor used in ambry-server
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
@@ -97,6 +98,7 @@ class BlobStore implements Store {
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
   }
 
+  //Ctor used in ambry-tools
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,

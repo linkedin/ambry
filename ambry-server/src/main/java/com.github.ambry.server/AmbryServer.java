@@ -136,7 +136,7 @@ public class AmbryServer {
       storageManager =
           new StorageManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
               new BlobStoreRecovery(), new BlobStoreHardDelete(),
-              ClusterManagerWriteStatusDelegate.getInstance(clusterParticipant), time);
+              new ClusterManagerWriteStatusDelegate(clusterParticipant), time);
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

@@ -29,7 +29,7 @@ public class ClusterManagerWriteStatusDelegateTest {
     //Initializes delegate and arguments
     ClusterParticipant clusterParticipant = mock(ClusterParticipant.class);
     ReplicaId replicaId = mock(ReplicaId.class);
-    ClusterManagerWriteStatusDelegate delegate = ClusterManagerWriteStatusDelegate.getInstance(clusterParticipant);
+    ClusterManagerWriteStatusDelegate delegate = new ClusterManagerWriteStatusDelegate(clusterParticipant);
 
     //Checks that the right underlying ClusterParticipant methods are called
     delegate.setToRO(replicaId);

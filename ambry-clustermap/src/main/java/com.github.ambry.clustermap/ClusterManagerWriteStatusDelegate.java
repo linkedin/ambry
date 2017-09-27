@@ -19,24 +19,9 @@ package com.github.ambry.clustermap;
  */
 public class ClusterManagerWriteStatusDelegate {
 
-  private static ClusterManagerWriteStatusDelegate instance;
-
   private final ClusterParticipant clusterParticipant;
 
-  /**
-   * Creates / retrieves singleton ClusterManagerWriteStatusDelegate.  Not thread safe.
-   * @param clusterParticipant
-   * @return ClusterManagerWriteStatusDelegate singleton
-   */
-  public static ClusterManagerWriteStatusDelegate getInstance(ClusterParticipant clusterParticipant) {
-    if (instance == null)
-    {
-      instance = new ClusterManagerWriteStatusDelegate(clusterParticipant);
-    }
-    return instance;
-  }
-
-  private ClusterManagerWriteStatusDelegate(ClusterParticipant clusterParticipant) {
+  public ClusterManagerWriteStatusDelegate(ClusterParticipant clusterParticipant) {
     this.clusterParticipant = clusterParticipant;
   }
 
