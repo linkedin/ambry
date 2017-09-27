@@ -69,7 +69,7 @@ public class AmbrySecurityServiceTest {
   private static final Account REF_ACCOUNT = accountService.createAndAddRandomAccount();
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
   private static final BlobInfo DEFAULT_INFO = new BlobInfo(
-      new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1, SERVICE_ID, OWNER_ID, "image/gif", true,
+      new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1, SERVICE_ID, OWNER_ID, "image/gif", false,
           Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId()), null);
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,

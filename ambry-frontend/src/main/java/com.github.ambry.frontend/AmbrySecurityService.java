@@ -254,7 +254,10 @@ class AmbrySecurityService implements SecurityService {
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
     restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
-    restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
+    Object isPrivateSet = restResponseChannel.getHeader(RestUtils.Headers.PRIVATE);
+    if (isPrivateSet == null || isPrivateSet.toString().isEmpty()) {
+      restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, blobProperties.isPrivate());
+    }
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }
@@ -282,7 +285,9 @@ class AmbrySecurityService implements SecurityService {
       if (account.getId() != Account.UNKNOWN_ACCOUNT_ID) {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, ((Account) accountObj).getName());
         if (containerObj != null && containerObj instanceof Container) {
-          restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, ((Container) containerObj).getName());
+          Container container = (Container) containerObj;
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, container.getName());
+          restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, container.isPrivate());
         }
       }
     }
