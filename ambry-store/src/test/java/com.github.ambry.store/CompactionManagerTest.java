@@ -53,9 +53,10 @@ public class CompactionManagerTest {
   public CompactionManagerTest() throws InterruptedException {
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     blobStore = new MockBlobStore(config, metrics, time, null);
-    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore),
+        new StorageManagerMetrics(metricRegistry), time);
   }
 
   /**
@@ -139,7 +140,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     MockBlobStore lastStore = null;
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = new MockBlobStore(config, metrics, time, compactCallsCountdown, null);
@@ -148,7 +149,8 @@ public class CompactionManagerTest {
       stores.add(store);
       lastStore = store;
     }
-    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, time);
+    compactionManager =
+        new CompactionManager(MOUNT_PATH, config, stores, new StorageManagerMetrics(metricRegistry), time);
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -198,7 +200,7 @@ public class CompactionManagerTest {
     properties.setProperty("store.compaction.check.frequency.in.hours", Integer.toString(100));
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = new MockBlobStore(config, metrics, time, compactCallsCountdown, null);
       store.details = generateRandomCompactionDetails(2);
@@ -216,7 +218,8 @@ public class CompactionManagerTest {
     }
     // using real time here so that compaction is not scheduled more than once for a store during the test unless
     // asked for.
-    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, metrics, SystemTime.getInstance());
+    compactionManager = new CompactionManager(MOUNT_PATH, config, stores, new StorageManagerMetrics(metricRegistry),
+        SystemTime.getInstance());
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -381,13 +384,13 @@ public class CompactionManagerTest {
     RuntimeException exceptionToThrowOnCompact = null;
     boolean started = true;
 
-    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, CompactionDetails details) {
+    MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CompactionDetails details) {
       this(config, metrics, time, new CountDownLatch(0), details);
     }
 
-    MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, CountDownLatch compactCallsCountdown,
+    MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CountDownLatch compactCallsCountdown,
         CompactionDetails details) {
-      super("", config, null, null, null, metrics, null, 0, null, null, null, time);
+      super("", config, null, null, null, metrics, metrics, null, 0, null, null, null, time);
       this.compactCallsCountdown = compactCallsCountdown;
       this.details = details;
     }

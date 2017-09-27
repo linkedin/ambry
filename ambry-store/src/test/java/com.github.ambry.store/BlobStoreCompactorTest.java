@@ -948,9 +948,9 @@ public class BlobStoreCompactorTest {
     closeOrExceptionInduced = false;
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
-    return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config,
-        new StoreMetrics(STORE_ID, metricRegistry, new AggregatedStoreMetrics(metricRegistry)), ioScheduler, log,
-        state.time, state.sessionId, state.incarnationId);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
+    return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config, metrics,
+        metrics, ioScheduler, log, state.time, state.sessionId, state.incarnationId);
   }
 
   /**
@@ -1157,7 +1157,7 @@ public class BlobStoreCompactorTest {
 
     // record any bytes saved because index is going to reinit the metric registry
     long savedBytesReported = metricRegistry.getCounters()
-        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
+        .get(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBytesReclaimedCount"))
         .getCount();
     // have to reload log since the instance changed by the old compactor compactor is different.
     state.reloadLog(false);
@@ -1535,7 +1535,7 @@ public class BlobStoreCompactorTest {
     long expectedSavedBytes =
         state.log.getSegmentCapacity() * (logSegmentCountBeforeCompaction - state.index.getLogSegmentCount());
     long savedBytesReported = alreadySavedBytes + metricRegistry.getCounters()
-        .get(MetricRegistry.name(StorageManager.class, "CompactionBytesReclaimedCount"))
+        .get(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBytesReclaimedCount"))
         .getCount();
     assertEquals("Saved bytes reported not equal to expected", expectedSavedBytes, savedBytesReported);
   }
@@ -1956,11 +1956,10 @@ public class BlobStoreCompactorTest {
   private class InterruptionInducingIndex extends PersistentIndex {
 
     InterruptionInducingIndex() throws StoreException {
-      super(tempDirStr, state.scheduler, state.log, new StoreConfig(new VerifiableProperties(state.properties)),
-          CuratedLogIndexState.STORE_KEY_FACTORY, state.recovery, state.hardDelete,
-          CuratedLogIndexState.DISK_IO_SCHEDULER,
-          new StoreMetrics(STORE_ID, new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry())),
-          state.time, state.sessionId, state.incarnationId);
+      super(tempDirStr, tempDirStr, state.scheduler, state.log,
+          new StoreConfig(new VerifiableProperties(state.properties)), CuratedLogIndexState.STORE_KEY_FACTORY,
+          state.recovery, state.hardDelete, CuratedLogIndexState.DISK_IO_SCHEDULER,
+          new StoreMetrics(new MetricRegistry()), state.time, state.sessionId, state.incarnationId);
     }
 
     @Override
@@ -1991,7 +1990,7 @@ public class BlobStoreCompactorTest {
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
         throws IOException {
       super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(),
-          new StoreMetrics(STORE_ID, new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry())));
+          new StoreMetrics(new MetricRegistry()));
       if (addSegmentCallCountToInterruptAt <= 0 || dropSegmentCallCountToInterruptAt <= 0) {
         throw new IllegalArgumentException("Arguments cannot be <= 0");
       }
