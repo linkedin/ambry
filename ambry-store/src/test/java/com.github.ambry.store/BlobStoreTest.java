@@ -58,6 +58,7 @@ import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -306,7 +307,7 @@ public class BlobStoreTest {
   }
 
   /**
-   *
+   * Tests blob store use of {@link ClusterManagerWriteStatusDelegate}
    * @throws StoreException
    */
   @Test
@@ -328,12 +329,12 @@ public class BlobStoreTest {
     store.start();
 
     //Check that after start, because StoreDescriptor file already exists, delegate is not called
-    Mockito.verify(clusterManagerWriteStatusDelegate, Mockito.times(0)).setToRW(replicaId);
-    Mockito.verify(clusterManagerWriteStatusDelegate, Mockito.times(0)).setToRO(replicaId);
+    verify(clusterManagerWriteStatusDelegate, times(0)).setToRW(replicaId);
+    verify(clusterManagerWriteStatusDelegate, times(0)).setToRO(replicaId);
 
     //Verify that after putting in enough data, the store goes to read only
     List<MockId> addedIds = put(5, 900, Utils.Infinite_Time, store);
-    Mockito.verify(clusterManagerWriteStatusDelegate, Mockito.times(1)).setToRO(replicaId);
+    verify(clusterManagerWriteStatusDelegate, times(1)).setToRO(replicaId);
 
     //Delete added data
     for (MockId addedId : addedIds) {
@@ -345,19 +346,19 @@ public class BlobStoreTest {
     store.shutdown();
     store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
     store.start();
-    Mockito.verify(clusterManagerWriteStatusDelegate, Mockito.times(0)).setToRW(replicaId);
+    verify(clusterManagerWriteStatusDelegate, times(0)).setToRW(replicaId);
 
     //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
     //that the store is now read-write
     time.sleep(TimeUnit.DAYS.toMillis(8));
     store.compact(store.getCompactionDetails(new CompactAllPolicy(config, time)));
-    Mockito.verify(clusterManagerWriteStatusDelegate, Mockito.times(1)).setToRW(replicaId);
+    verify(clusterManagerWriteStatusDelegate, times(1)).setToRW(replicaId);
 
     //Test when StoreDescriptor is deleted that it updates the status upon startup
     shutdownStoreAndDeleteFiles();
     store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
     store.start();
-    Mockito.verify(clusterManagerWriteStatusDelegate, Mockito.times(2)).setToRW(replicaId);
+    verify(clusterManagerWriteStatusDelegate, times(2)).setToRW(replicaId);
     store.shutdown();
   }
 
