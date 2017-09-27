@@ -96,7 +96,7 @@ class MockFindToken implements FindToken {
  */
 class PutRequestV4ForTest extends PutRequest {
   public PutRequestV4ForTest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType, byte[] blobKey) {
+      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType, ByteBuffer blobKey) {
     super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType, blobKey);
     versionId = PutRequest.PUT_REQUEST_VERSION_V4;
   }
@@ -140,8 +140,6 @@ public class RequestResponseTest {
     doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, new byte[0], null);
     doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
-        blobType, blob, blobSize, null, null);
-    doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, blobKey, blobKey);
     if (doInvalidTest) {
       doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
@@ -169,14 +167,18 @@ public class RequestResponseTest {
       byte[] expectedKey) throws IOException {
     // This PutRequest is created just to get the size.
     int sizeInBytes =
-        (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-            ByteBuffer.wrap(blob), blobSize, blobType, blobKey).sizeInBytes();
+        testVersion == PutRequestV4ForTest.PUT_REQUEST_VERSION_V4 ? (int) new PutRequestV4ForTest(correlationId,
+            clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata), ByteBuffer.wrap(blob), blobSize, blobType,
+            blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes()
+            : (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+                ByteBuffer.wrap(blob), blobSize, blobType,
+                blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
         {sizeInBytes, 2 * sizeInBytes, sizeInBytes / 2, sizeInBytes / (TestUtils.RANDOM.nextInt(sizeInBytes - 1) + 1)};
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
-    DataInputStream requestStream = null;
+    DataInputStream requestStream;
     for (int allocationSize : channelWriteLimits) {
       PutRequest request = null;
       switch (testVersion) {
@@ -194,13 +196,13 @@ public class RequestResponseTest {
         case PutRequest.PUT_REQUEST_VERSION_V4:
           request =
               new PutRequestV4ForTest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-                  ByteBuffer.wrap(blob), blobSize, blobType, blobKey);
+                  ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
           // fall through
 
         default:
           if (request == null) {
             request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-                ByteBuffer.wrap(blob), blobSize, blobType, blobKey);
+                ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
           }
           requestStream = serAndPrepForRead(request, allocationSize, true);
           PutRequest.ReceivedPutRequest deserializedPutRequest = PutRequest.readFrom(requestStream, clusterMap);
@@ -209,7 +211,11 @@ public class RequestResponseTest {
           Assert.assertArrayEquals(userMetadata, deserializedPutRequest.getUsermetadata().array());
           Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
           Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
-          Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobKey());
+          if (expectedKey == null) {
+            Assert.assertNull(deserializedPutRequest.getBlobKey());
+          } else {
+            Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobKey().array());
+          }
           byte[] blobRead = new byte[blobSize];
           deserializedPutRequest.getBlobStream().read(blobRead);
           Assert.assertArrayEquals(blob, blobRead);
@@ -229,7 +235,6 @@ public class RequestResponseTest {
             Utils.getRandomShort(TestUtils.RANDOM), clusterMap.getWritablePartitionIds().get(0));
     byte[] userMetadata = new byte[50];
     TestUtils.RANDOM.nextBytes(userMetadata);
-    ByteBuffer.wrap(userMetadata);
     int blobKeyLength = TestUtils.RANDOM.nextInt(4096);
     byte[] blobKey = new byte[blobKeyLength];
     TestUtils.RANDOM.nextBytes(blobKey);
