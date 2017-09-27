@@ -13,12 +13,14 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.security.GeneralSecurityException;
 import java.util.Properties;
 import javax.crypto.spec.SecretKeySpec;
@@ -36,6 +38,8 @@ public class SingleKeyManagementServiceTest {
 
   private static final int DEFAULT_KEY_SIZE_CHARS = 64;
   private static final int DEFAULT_RANDOM_KEY_SIZE_BITS = 256;
+  private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
+  private static final MetricRegistry registry = new MetricRegistry();
 
   /**
    * Test {@link SingleKeyManagementService#getKey(short, short)}
@@ -50,7 +54,7 @@ public class SingleKeyManagementServiceTest {
       KMSConfig config = new KMSConfig(verifiableProperties);
       SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), config.kmsKeyGenAlgo);
       KeyManagementService<SecretKeySpec> kms =
-          new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+          new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, registry).getKeyManagementService();
       SecretKeySpec keyFromKMS =
           kms.getKey(Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
       Assert.assertEquals("Secret key mismatch ", secretKeySpec, keyFromKMS);
@@ -68,7 +72,7 @@ public class SingleKeyManagementServiceTest {
       Properties props = getKMSProperties(key, keySize);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       KeyManagementService<SecretKeySpec> kms =
-          new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+          new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, registry).getKeyManagementService();
       SecretKeySpec randomKey = kms.getRandomKey();
       Assert.assertNotNull("Random key cannot be null", randomKey);
       Assert.assertEquals("Key size mismatch", keySize, randomKey.getEncoded().length * 8);
@@ -84,7 +88,7 @@ public class SingleKeyManagementServiceTest {
     Properties props = getKMSProperties(key, DEFAULT_RANDOM_KEY_SIZE_BITS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> kms =
-        new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+        new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, registry).getKeyManagementService();
     kms.close();
     try {
       kms.getKey(Account.UNKNOWN_ACCOUNT.getId(), Container.UNKNOWN_CONTAINER.getId());
@@ -101,7 +105,7 @@ public class SingleKeyManagementServiceTest {
     Properties props = getKMSProperties("", DEFAULT_KEY_SIZE_CHARS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     try {
-      new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+      new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, registry).getKeyManagementService();
       Assert.fail("SingleKeyManagementFactory instantiation should have failed as single default key is null ");
     } catch (IllegalArgumentException e) {
     }
@@ -111,6 +115,6 @@ public class SingleKeyManagementServiceTest {
     props = getKMSProperties(key, DEFAULT_RANDOM_KEY_SIZE_BITS);
     verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> kms =
-        new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
+        new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, registry).getKeyManagementService();
   }
 }
