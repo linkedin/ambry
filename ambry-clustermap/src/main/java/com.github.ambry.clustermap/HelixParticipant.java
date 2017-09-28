@@ -99,12 +99,16 @@ class HelixParticipant implements ClusterParticipant {
     HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
-    if (sealedReplicas == null)
+    if (sealedReplicas == null) {
       sealedReplicas = new ArrayList<>();
-    if (isSealed) {
-      sealedReplicas.add(replicaId.getPartitionId().toPathString());
-    } else {
-      sealedReplicas.remove(replicaId.getPartitionId().toPathString());
+    }
+    String partitionId = replicaId.getPartitionId().toPathString();
+
+    if (!isSealed) {
+      sealedReplicas.remove(partitionId);
+    }
+    else if (!sealedReplicas.contains(partitionId)) {
+      sealedReplicas.add(partitionId);
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);

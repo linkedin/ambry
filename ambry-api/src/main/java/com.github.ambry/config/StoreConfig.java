@@ -191,7 +191,7 @@ public class StoreConfig {
   public static final String storeDataReadOnlySizeThresholdPercentageName = "store.data.readonly.size.threshold.percentage";
 
   /**
-   * Specifies the size threshold delta below storeDataReadOnlySizeThresholdPercentageName that a chunk will be
+   * Specifies the size threshold delta below {@link #storeDataReadOnlySizeThresholdPercentageName} that a chunk will be
    * converted from RO to RW
    */
   @Config(storeDataReadWriteSizeThresholdPercentageDeltaName)

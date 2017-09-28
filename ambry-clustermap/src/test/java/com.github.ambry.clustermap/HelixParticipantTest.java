@@ -87,6 +87,11 @@ public class HelixParticipantTest {
     return replicaId;
   }
 
+  private void listIsExpectedSize(List list, int expectedSize, String name) {
+    assertNotNull(name + " is null", list);
+    assertEquals(name + " is not size " + expectedSize, expectedSize, list.size());
+  }
+
   /**
    * Tests setReplicaSealedState method for {@link HelixParticipant}
    * @throws IOException
@@ -95,7 +100,9 @@ public class HelixParticipantTest {
   public void testSetReplicaSealedState() throws IOException {
     //setup HelixParticipant and dependencies
     String partitionId = "somePartitionId";
+    String partitionId2 = "someOtherPartitionId";
     ReplicaId replicaId = createMockReplicaId(partitionId);
+    ReplicaId replicaId2 = createMockReplicaId(partitionId2);
     String hostname = "localhost";
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
@@ -111,21 +118,42 @@ public class HelixParticipantTest {
 
     //Make sure the current sealedReplicas list is null
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
-    assertTrue("sealedReplicas is not null", sealedReplicas == null);
+    assertNull("sealedReplicas is not null", sealedReplicas);
+
+    String listName = "sealedReplicas";
 
     //Check that invoking setReplicaSealedState adds the partition to the list of sealed replicas
     helixParticipant.setReplicaSealedState(replicaId, true);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
-    assertFalse("sealedReplicas is null", sealedReplicas == null);
-    assertTrue("sealedReplicas is not size 1, it's size " + sealedReplicas.size(), sealedReplicas.size() == 1);
-    assertTrue(sealedReplicas.get(0) + " does not equal '" + partitionId + "'",
-        sealedReplicas.get(0).equals(partitionId));
+    listIsExpectedSize(sealedReplicas, 1, listName);
+    assertEquals(partitionId, sealedReplicas.get(0));
+
+    //Seal another replicaId
+    helixParticipant.setReplicaSealedState(replicaId2, true);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 2, listName);
+    assertEquals(partitionId2, sealedReplicas.get(1));
+
+    //Check that sealed replica list doesn't take duplicates
+    helixParticipant.setReplicaSealedState(replicaId2, true);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 2, listName);
+    assertEquals(partitionId2, sealedReplicas.get(1));
 
     //Check that invoking setReplicaSealedState with isSealed == false removes partition from list of sealed replicas
     helixParticipant.setReplicaSealedState(replicaId, false);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
-    assertFalse("sealedReplicas is null", sealedReplicas == null);
-    assertTrue("sealedReplicas is not size 0, it's size " + sealedReplicas.size(), sealedReplicas.size() == 0);
+    listIsExpectedSize(sealedReplicas, 1, listName);
+
+    //Removing a replicaId that's already been removed doesn't hurt anything
+    helixParticipant.setReplicaSealedState(replicaId, false);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 1, listName);
+
+    //Removing all replicas yields expected behavior
+    helixParticipant.setReplicaSealedState(replicaId2, false);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 0, listName);
   }
 
   /**

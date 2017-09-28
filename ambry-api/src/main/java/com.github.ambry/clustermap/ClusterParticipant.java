@@ -35,10 +35,10 @@ public interface ClusterParticipant extends AutoCloseable {
 
   /**
    * Set or reset the sealed state of the replica for the given partition on the given instance.
-   * @param partition the {@link ReplicaId}
+   * @param replicaId the {@link ReplicaId}
    * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
    */
-  void setReplicaSealedState(ReplicaId partition, boolean isSealed);
+  void setReplicaSealedState(ReplicaId replicaId, boolean isSealed);
 
   /**
    * Terminate the participant.
