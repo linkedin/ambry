@@ -93,18 +93,6 @@ class MockFindToken implements FindToken {
   }
 }
 
-/**
- * A test class that mimics a V4 PutRequest, since the actual class still creates V3 PutRequests.
- * @todo Remove this once V4 becomes standard.
- */
-class PutRequestV4ForTest extends PutRequest {
-  public PutRequestV4ForTest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType, ByteBuffer blobKey) {
-    super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType, blobKey);
-    versionId = PutRequest.PUT_REQUEST_VERSION_V4;
-  }
-}
-
 class InvalidVersionPutRequest extends PutRequest {
   static final short Put_Request_Invalid_version = 0;
 
@@ -148,7 +136,7 @@ public class RequestResponseTest {
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey)
       throws IOException {
     doTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType, blob,
-        blobSize, blobKey, null);
+        blobSize, blobKey, blobKey);
     doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
         blobType, blob, blobSize, null, null);
     doTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata,
@@ -177,12 +165,8 @@ public class RequestResponseTest {
       byte[] expectedKey) throws IOException {
     // This PutRequest is created just to get the size.
     int sizeInBytes =
-        testVersion == PutRequestV4ForTest.PUT_REQUEST_VERSION_V4 ? (int) new PutRequestV4ForTest(correlationId,
-            clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata), ByteBuffer.wrap(blob), blobSize, blobType,
-            blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes()
-            : (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-                ByteBuffer.wrap(blob), blobSize, blobType,
-                blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
+        (int) new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
+            ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey)).sizeInBytes();
     // Initialize channel write limits in such a way that writeTo() may or may not be able to write out all the
     // data at once.
     int channelWriteLimits[] =
@@ -202,13 +186,6 @@ public class RequestResponseTest {
           } catch (IllegalStateException e) {
           }
           break;
-
-        case PutRequest.PUT_REQUEST_VERSION_V4:
-          request =
-              new PutRequestV4ForTest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
-                  ByteBuffer.wrap(blob), blobSize, blobType, blobKey == null ? null : ByteBuffer.wrap(blobKey));
-          // fall through
-
         default:
           if (request == null) {
             request = new PutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
