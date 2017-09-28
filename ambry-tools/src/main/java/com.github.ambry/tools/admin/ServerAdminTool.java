@@ -337,7 +337,7 @@ public class ServerAdminTool implements Closeable {
             Pair<ServerErrorCode, Boolean> response =
                 serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes, clusterMap);
             if (response.getFirst() == ServerErrorCode.No_Error) {
-              LOGGER.info("Replicas are {} within {} for {}", response.getSecond() ? "" : "NOT",
+              LOGGER.info("Replicas are {} within {} bytes for {}", response.getSecond() ? "" : "NOT",
                   config.acceptableLagInBytes, partitionId);
             } else {
               LOGGER.error("From {}, received server error code {} for request for catchup status of {}", dataNodeId,
