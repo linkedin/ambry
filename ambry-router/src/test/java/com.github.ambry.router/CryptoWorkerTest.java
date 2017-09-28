@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -21,6 +22,7 @@ import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -54,6 +56,8 @@ public class CryptoWorkerTest {
   private static final String ENCRYPT_JOB_TYPE = "encrypt";
   private static final String DECRYPT_JOB_TYPE = "decrypt";
   private static final String THREAD_NAME = "CryptoWorker";
+  private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
+  private static final MetricRegistry REGISTRY = new MetricRegistry();
   private final BlockingQueue<CryptoJob> jobQueue;
   private final CryptoService<SecretKeySpec> cryptoService;
   private final KeyManagementService<SecretKeySpec> kms;
@@ -67,8 +71,8 @@ public class CryptoWorkerTest {
     defaultKey = getRandomKey(DEFAULT_KEY_SIZE);
     Properties props = getKMSProperties(defaultKey, RANDOM_KEY_SIZE_IN_BITS);
     verifiableProperties = new VerifiableProperties((props));
-    kms = new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
-    cryptoService = new GCMCryptoServiceFactory(verifiableProperties).getCryptoService();
+    kms = new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
+    cryptoService = new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
     cryptoWorker = new CryptoWorker(jobQueue, cryptoService, kms, THREAD_NAME);
     referenceClusterMap = new MockClusterMap();
     new Thread(cryptoWorker).start();

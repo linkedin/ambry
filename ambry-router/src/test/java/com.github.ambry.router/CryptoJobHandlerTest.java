@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -20,6 +21,7 @@ import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -46,6 +48,8 @@ public class CryptoJobHandlerTest {
   private static final int DEFAULT_WORKER_COUNT = 2;
   private static final String ENCRYPT_JOB_TYPE = "encrypt";
   private static final String DECRYPT_JOB_TYPE = "decrypt";
+  private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
+  private static final MetricRegistry REGISTRY = new MetricRegistry();
   private final CryptoService<SecretKeySpec> cryptoService;
   private final KeyManagementService<SecretKeySpec> kms;
   private final ClusterMap referenceClusterMap;
@@ -57,8 +61,8 @@ public class CryptoJobHandlerTest {
     defaultKey = getRandomKey(DEFAULT_KEY_SIZE);
     Properties props = getKMSProperties(defaultKey, RANDOM_KEY_SIZE_IN_BITS);
     verifiableProperties = new VerifiableProperties((props));
-    kms = new SingleKeyManagementServiceFactory(verifiableProperties).getKeyManagementService();
-    cryptoService = new GCMCryptoServiceFactory(verifiableProperties).getCryptoService();
+    kms = new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
+    cryptoService = new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(cryptoService, kms, DEFAULT_WORKER_COUNT);
     referenceClusterMap = new MockClusterMap();
     cryptoJobHandler.startup();
@@ -95,7 +99,7 @@ public class CryptoJobHandlerTest {
   @Test
   public void testCryptoJobHandlerDiffWorkerCount() throws GeneralSecurityException, InterruptedException {
     int totalDataCount = 10;
-    for (int j = 0; j < 10; j++) {
+    for (int j = 0; j < 5; j++) {
       cryptoJobHandler.close();
       cryptoJobHandler = new CryptoJobHandler(cryptoService, kms, j + 1);
       cryptoJobHandler.startup();

@@ -35,7 +35,7 @@ public class GCMCryptoServiceTest {
 
   private static final int MAX_DATA_SIZE = 10000;
   private static final int DEFAULT_KEY_SIZE_IN_CHARS = 64;
-  private static final MetricRegistry registry = new MetricRegistry();
+  private static final MetricRegistry REGISTRY = new MetricRegistry();
 
   /**
    * Tests basic encryption and decryption for different sizes of keys and random data in bytes
@@ -48,7 +48,7 @@ public class GCMCryptoServiceTest {
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
       CryptoService<SecretKeySpec> cryptoService =
-          new GCMCryptoServiceFactory(verifiableProperties, registry).getCryptoService();
+          new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
       for (int i = 0; i < 5; i++) {
         int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE);
         byte[] randomData = new byte[size];
@@ -76,7 +76,7 @@ public class GCMCryptoServiceTest {
       String keyToBeEncrypted = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       SecretKeySpec secretKeyToBeEncrypted = new SecretKeySpec(Hex.decode(keyToBeEncrypted), "AES");
       CryptoService<SecretKeySpec> cryptoService =
-          new GCMCryptoServiceFactory(verifiableProperties, registry).getCryptoService();
+          new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
       ByteBuffer encryptedBytes = cryptoService.encryptKey(secretKeyToBeEncrypted, secretKeyToEncrypt);
       Assert.assertFalse("Encrypted key and plain key should not match",
           Arrays.equals(keyToBeEncrypted.getBytes(), encryptedBytes.array()));
@@ -100,7 +100,7 @@ public class GCMCryptoServiceTest {
       String keyToBeEncrypted = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       SecretKeySpec secretKeyToBeEncrypted = new SecretKeySpec(Hex.decode(keyToBeEncrypted), "AES");
       CryptoService<SecretKeySpec> cryptoService =
-          new GCMCryptoServiceFactory(verifiableProperties, registry).getCryptoService();
+          new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
       ByteBuffer encryptedBytes = cryptoService.encryptKey(secretKeyToBeEncrypted, secretKeyToEncrypt);
       Assert.assertFalse("Encrypted key and plain key should not match",
           Arrays.equals(keyToBeEncrypted.getBytes(), encryptedBytes.array()));
@@ -120,7 +120,7 @@ public class GCMCryptoServiceTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
     CryptoService<SecretKeySpec> cryptoService =
-        new GCMCryptoServiceFactory(verifiableProperties, registry).getCryptoService();
+        new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
     int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE);
     byte[] randomData = new byte[size];
     TestUtils.RANDOM.nextBytes(randomData);
@@ -145,7 +145,7 @@ public class GCMCryptoServiceTest {
   public void testGMCryptoServiceFactory() throws Exception {
     // happy path
     VerifiableProperties verifiableProperties = new VerifiableProperties((new Properties()));
-    new GCMCryptoServiceFactory(verifiableProperties, registry).getCryptoService();
+    new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
 
     // unrecognized mode
     String key = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
@@ -154,7 +154,7 @@ public class GCMCryptoServiceTest {
     verifiableProperties = new VerifiableProperties((props));
     try {
       CryptoService<SecretKeySpec> cryptoService =
-          new GCMCryptoServiceFactory(verifiableProperties, registry).getCryptoService();
+          new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
       Assert.fail("IllegalArgumentException should have thrown for un-recognized mode ");
     } catch (IllegalArgumentException e) {
     }
