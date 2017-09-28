@@ -75,6 +75,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -98,7 +99,7 @@ public class AmbryRequests implements RequestAPI {
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private final ClusterMap clusterMap;
   private final DataNodeId currentNode;
-  private final List<PartitionId> partitionsInCurrentNode;
+  private final Collection<PartitionId> partitionsInCurrentNode;
   private final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
   private final FindTokenFactory findTokenFactory;
@@ -133,7 +134,7 @@ public class AmbryRequests implements RequestAPI {
     for (ReplicaId replicaId : clusterMap.getReplicaIds(currentNode)) {
       partitionIds.add(replicaId.getPartitionId());
     }
-    partitionsInCurrentNode = Collections.unmodifiableList(new ArrayList<>(partitionIds));
+    partitionsInCurrentNode = Collections.unmodifiableSet(partitionIds);
   }
 
   public void handleRequests(Request request) throws InterruptedException {
@@ -545,7 +546,7 @@ public class AmbryRequests implements RequestAPI {
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable
    */
-  private void controlRequestForPartitions(RequestOrResponseType requestType, List<? extends PartitionId> ids,
+  private void controlRequestForPartitions(RequestOrResponseType requestType, Collection<PartitionId> ids,
       boolean enable) {
     if (enable) {
       requestsDisableInfo.get(requestType).removeAll(ids);
@@ -660,7 +661,7 @@ public class AmbryRequests implements RequestAPI {
     RequestControlAdminRequest controlRequest = RequestControlAdminRequest.readFrom(requestStream, adminRequest);
     RequestOrResponseType toControl = controlRequest.getRequestTypeToControl();
     ServerErrorCode error;
-    List<? extends PartitionId> partitionIds;
+    Collection<PartitionId> partitionIds;
     if (!requestsDisableInfo.containsKey(toControl)) {
       metrics.badRequestError.inc();
       error = ServerErrorCode.Bad_Request;
@@ -692,7 +693,7 @@ public class AmbryRequests implements RequestAPI {
    */
   private AdminResponse handleReplicationControlRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
-    List<? extends PartitionId> partitionIds;
+    Collection<PartitionId> partitionIds;
     ServerErrorCode error = ServerErrorCode.No_Error;
     ReplicationControlAdminRequest replControlRequest =
         ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
@@ -724,7 +725,7 @@ public class AmbryRequests implements RequestAPI {
    */
   private AdminResponse handleCatchupStatusRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
-    List<? extends PartitionId> partitionIds;
+    Collection<PartitionId> partitionIds;
     ServerErrorCode error = ServerErrorCode.No_Error;
     CatchupStatusAdminRequest catchupStatusRequest = CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
     if (catchupStatusRequest.getPartitionId() != null) {
@@ -880,7 +881,7 @@ public class AmbryRequests implements RequestAPI {
    * @return {@code true} if the lag of each of the remote replicas of each of the {@link PartitionId} in
    * {@code partitionIds} <= {@code acceptableLagInBytes}. {@code false} otherwise.
    */
-  private boolean isAllRemoteLagLesserOrEqual(List<? extends PartitionId> partitionIds, long acceptableLagInBytes) {
+  private boolean isAllRemoteLagLesserOrEqual(Collection<PartitionId> partitionIds, long acceptableLagInBytes) {
     boolean isAcceptable = true;
     for (PartitionId partitionId : partitionIds) {
       List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();

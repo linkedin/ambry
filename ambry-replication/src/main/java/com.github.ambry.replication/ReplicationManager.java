@@ -43,6 +43,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -388,8 +389,7 @@ public class ReplicationManager {
    * @return {@code true} if disabling succeeded, {@code false} otherwise. Disabling fails if {@code origins} is empty
    * or contains unrecognized datacenters.
    */
-  public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
-      boolean enable) {
+  public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
     if (origins.isEmpty()) {
       origins = new ArrayList<>(replicaThreadPools.keySet());
     }
