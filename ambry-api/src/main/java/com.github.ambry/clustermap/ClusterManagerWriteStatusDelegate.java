@@ -15,7 +15,7 @@
 package com.github.ambry.clustermap;
 
 /**
- * Delegate class giving a layer of abstraction between BlobStore and HelixParticipant
+ * Delegate class giving a layer of abstraction between Store and ClusterParticipant,
  */
 public class ClusterManagerWriteStatusDelegate {
 
@@ -26,7 +26,7 @@ public class ClusterManagerWriteStatusDelegate {
   }
 
   /**
-   * Tells ClusterManager that blob store is now read only
+   * Sets replicaId to read-only status
    * @param replicaId
    */
   public void setToRO(ReplicaId replicaId) {
@@ -34,7 +34,7 @@ public class ClusterManagerWriteStatusDelegate {
   }
 
   /**
-   * Tells ClusterManager that blob store is now read write
+   * Sets replicaId to read-write status
    * @param replicaId
    */
   public void setToRW(ReplicaId replicaId) {
