@@ -64,13 +64,11 @@ public class AmbrySecurityServiceTest {
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
-  private static final InMemAccountServiceFactory.InMemAccountService accountService =
+  private static final InMemAccountServiceFactory.InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
-  private static final Account REF_ACCOUNT = accountService.createAndAddRandomAccount();
-  private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-  private static final BlobInfo DEFAULT_INFO = new BlobInfo(
-      new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1, SERVICE_ID, OWNER_ID, "image/gif", false,
-          Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId()), null);
+  private static final Account REF_ACCOUNT;
+  private static final Container REF_CONTAINER;
+  private static final BlobInfo DEFAULT_INFO;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
           Container.UNKNOWN_CONTAINER_ID), null);
@@ -79,7 +77,13 @@ public class AmbrySecurityServiceTest {
       new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()));
 
   static {
-    accountService.updateAccounts(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
+    ACCOUNT_SERVICE.clear();
+    REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    DEFAULT_INFO = new BlobInfo(
+        new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1, SERVICE_ID, OWNER_ID, "image/gif", false,
+            Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId()), null);
+    ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
   }
 
   /**
@@ -457,7 +461,7 @@ public class AmbrySecurityServiceTest {
     Account account = null;
     Container container = null;
     if (insertAccountContainer) {
-      account = accountService.getAccountById(blobInfo.getBlobProperties().getAccountId());
+      account = ACCOUNT_SERVICE.getAccountById(blobInfo.getBlobProperties().getAccountId());
       container = account.getContainerById(blobInfo.getBlobProperties().getContainerId());
       insertAccountAndContainer(restRequest, account, container);
     }

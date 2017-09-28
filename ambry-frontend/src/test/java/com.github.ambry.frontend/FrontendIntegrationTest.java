@@ -109,6 +109,7 @@ public class FrontendIntegrationTest {
       FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
       SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
       FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
+      ACCOUNT_SERVICE.clear();
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
     } catch (IOException | GeneralSecurityException e) {
       throw new IllegalStateException(e);

@@ -130,6 +130,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws IOException
    */
   public AmbryBlobStorageServiceTest() throws Exception {
+    accountService.clear();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
