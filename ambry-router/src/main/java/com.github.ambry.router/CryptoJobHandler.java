@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,8 +33,7 @@ import org.slf4j.LoggerFactory;
 class CryptoJobHandler implements Closeable {
   private final BlockingQueue<CryptoJob> jobQueue;
   private final List<CryptoWorker> workerThreads;
-  private AtomicBoolean enabled;
-  private AtomicInteger jobCount = new AtomicInteger(0);
+  private final AtomicBoolean enabled = new AtomicBoolean(false);
 
   private static final Logger logger = LoggerFactory.getLogger(CryptoJobHandler.class);
 
@@ -48,16 +46,15 @@ class CryptoJobHandler implements Closeable {
     this.jobQueue = new LinkedBlockingQueue<>();
     this.workerThreads = new ArrayList<>();
     for (int i = 0; i < workerCount; i++) {
-      workerThreads.add(new CryptoWorker(jobQueue, cryptoService, kms, "CryptoThread_" + i));
+      workerThreads.add(new CryptoWorker(jobQueue, cryptoService, kms, "CryptoWorker_" + i));
     }
-    this.enabled = new AtomicBoolean(false);
   }
 
   /**
    * Starts up {@link CryptoJobHandler} by spinning up multiple {@link CryptoWorker} threads to assist in executing
    * {@link CryptoJob}s submitted to {@link CryptoJobHandler} via {@link #submitJob(CryptoJob)}
    */
-  void startup() {
+  void start() {
     enabled.set(true);
     for (CryptoWorker worker : workerThreads) {
       Utils.newThread(worker, true).start();

@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * Thread responsible for encrypting and decrypting blob content and per-blob keys.
  * Worker Thread listens to a job queue for new jobs and processes it one by one.
  */
-public class CryptoWorker implements Runnable, Closeable {
+class CryptoWorker implements Runnable, Closeable {
   private final BlockingQueue<CryptoJob> jobQueue;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
@@ -61,7 +61,7 @@ public class CryptoWorker implements Runnable, Closeable {
       while (enabled.get()) {
         try {
           CryptoJob cryptoJob = jobQueue.take();
-          if (!(cryptoJob instanceof CryptoJob.EndMarkerJob)) {
+          if (!(cryptoJob instanceof EndMarkerJob)) {
             cryptoJob.doOperation(cryptoService, kms);
           } else {
             endMarkerSeen = true;
@@ -84,7 +84,7 @@ public class CryptoWorker implements Runnable, Closeable {
   @Override
   public void close() {
     if (enabled.compareAndSet(true, false)) {
-      jobQueue.add(new CryptoJob.EndMarkerJob());
+      jobQueue.add(new EndMarkerJob());
     }
     try {
       shutdownLatch.await(1, TimeUnit.SECONDS);
@@ -100,11 +100,27 @@ public class CryptoWorker implements Runnable, Closeable {
   private void closePendingJobs(GeneralSecurityException gse) {
     CryptoJob cryptoJob = jobQueue.poll();
     while (cryptoJob != null) {
-      if ((cryptoJob instanceof CryptoJob.EndMarkerJob)) {
+      if ((cryptoJob instanceof EndMarkerJob)) {
         break;
       }
       cryptoJob.closeJob(gse);
       cryptoJob = jobQueue.poll();
+    }
+  }
+
+  /**
+   * End Marker Job to be added to the queue during close. Any pending jobs in the queue until the EndMarker will be
+   * invoked with {@link GeneralSecurityException} that the CryptoWorker is being shutdown
+   */
+  class EndMarkerJob implements CryptoJob {
+    @Override
+    public void doOperation(CryptoService cryptoService, KeyManagementService kms) {
+      throw new IllegalStateException("EndMarkerJob should not be executed");
+    }
+
+    @Override
+    public void closeJob(GeneralSecurityException gse) {
+      throw new IllegalStateException("EndMarkerJob should not be executed");
     }
   }
 }

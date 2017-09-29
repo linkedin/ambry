@@ -36,46 +36,6 @@ public interface CryptoJob {
   void closeJob(GeneralSecurityException gse);
 
   /**
-   * End Marker Job to be added to the queue during close. Any pending jobs in the queue until the EndMarker will be
-   * invoked with {@link GeneralSecurityException} that the CryptoWorker is being shutdown
-   */
-  class EndMarkerJob implements CryptoJob {
-    @Override
-    public void doOperation(CryptoService cryptoService, KeyManagementService kms) {
-      throw new IllegalStateException("EndMarkerJob should not be executed");
-    }
-
-    @Override
-    public void closeJob(GeneralSecurityException gse) {
-      throw new IllegalStateException("EndMarkerJob should not be executed");
-    }
-  }
-
-  /**
-   * Callback to invoke for encrypt jobs
-   */
-  interface EncryptCallback extends Callback<EncryptJobResult> {
-    /**
-     * Callback to be invoked on completion of an encryption job.
-     * @param result {@link EncryptJobResult} representing the result of an encrypt job
-     * @param e {@link Exception} thrown while encrypting
-     */
-    void onCompletion(EncryptJobResult result, Exception e);
-  }
-
-  /**
-   * Callback to invoke for decrypt jobs
-   */
-  interface DecryptCallback extends Callback<DecryptJobResult> {
-    /**
-     * Callback to be invoked on completion of an decryption job.
-     * @param result {@link DecryptJobResult} representing the result of an decrypt job
-     * @param e {@link Exception} thrown while decrypting
-     */
-    void onCompletion(DecryptJobResult result, Exception e);
-  }
-
-  /**
    * Class representing encrypt job result
    */
   class EncryptJobResult {
@@ -130,16 +90,16 @@ public interface CryptoJob {
     private BlobId blobId;
     private ByteBuffer toEncrypt;
     private final Object perBlobKey;
-    private final EncryptCallback callback;
+    private final Callback<EncryptJobResult> callback;
 
     /**
-     * Instantiates {@link EncryptJob} with {@link BlobId}, content to encrypt, perBlobKey and the {@link EncryptCallback}
+     * Instantiates {@link EncryptJob} with {@link BlobId}, content to encrypt, perBlobKey and the {@link Callback}
      * @param blobId the {@link BlobId} for which encryption is requested
      * @param toEncrypt {@link ByteBuffer} to be encrypted
      * @param perBlobKey per blob key to use to encrypt the blob content
-     * @param callback {@link EncryptCallback} to be invoked on completion
+     * @param callback {@link Callback} to be invoked on completion
      */
-    EncryptJob(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, EncryptCallback callback) {
+    EncryptJob(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, Callback<EncryptJobResult> callback) {
       this.blobId = blobId;
       this.toEncrypt = toEncrypt;
       this.perBlobKey = perBlobKey;
@@ -182,17 +142,18 @@ public interface CryptoJob {
     private final BlobId blobId;
     private final ByteBuffer enryptedContent;
     private final ByteBuffer encryptedKey;
-    private final DecryptCallback callback;
+    private final Callback<DecryptJobResult> callback;
 
     /**
      * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
-     * {@link DecryptCallback}
+     * {@link Callback}
      * @param blobId the {@link BlobId} for which decryption is requested
      * @param encryptedKey encrypted per blob key
      * @param encryptedContent encrypted blob content
-     * @param callback {@link DecryptCallback} to be invoked on completion
+     * @param callback {@link Callback} to be invoked on completion
      */
-    DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent, DecryptCallback callback) {
+    DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,
+        Callback<DecryptJobResult> callback) {
       this.blobId = blobId;
       this.enryptedContent = encryptedContent;
       this.encryptedKey = encryptedKey;
