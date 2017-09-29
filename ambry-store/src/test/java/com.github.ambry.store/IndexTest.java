@@ -2397,8 +2397,7 @@ public class IndexTest {
    */
   private IndexSegment generateIndexSegmentV0(Offset startOffset, int entrySize, int valueSize) {
     MetricRegistry metricRegistry = new MetricRegistry();
-    StoreMetrics metrics =
-        new StoreMetrics(tempDir.getAbsolutePath(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     return new MockIndexSegmentV0(tempDir.getAbsolutePath(), startOffset, CuratedLogIndexState.STORE_KEY_FACTORY,
         entrySize, valueSize, config, metrics, state.time);
@@ -2413,8 +2412,7 @@ public class IndexTest {
    */
   private IndexSegment generateIndexSegmentV1(Offset startOffset, int entrySize, int valueSize) {
     MetricRegistry metricRegistry = new MetricRegistry();
-    StoreMetrics metrics =
-        new StoreMetrics(tempDir.getAbsolutePath(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     return new MockIndexSegmentV1(tempDir.getAbsolutePath(), startOffset, CuratedLogIndexState.STORE_KEY_FACTORY,
         entrySize, valueSize, config, metrics, state.time);

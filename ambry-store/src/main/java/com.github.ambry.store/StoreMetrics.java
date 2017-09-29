@@ -24,9 +24,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
- * Metrics for a specific store.
+ * Metrics for store operations
  */
 public class StoreMetrics {
+  private static final String SEPERATOR = ".";
+
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
@@ -63,6 +65,7 @@ public class StoreMetrics {
   // Compaction related metrics
   public final Counter compactionFixStateCount;
   public final Meter compactionCopyRateInBytes;
+  public final Counter compactionBytesReclaimedCount;
 
   // BlobStoreStats metrics
   public final Counter blobStoreStatsIndexScannerErrorCount;
@@ -75,15 +78,15 @@ public class StoreMetrics {
   public final Histogram statsRecentEntryQueueSize;
   public final Histogram statsForwardScanEntryCount;
 
-  public final AggregatedStoreMetrics aggregatedStoreMetrics;
-
   private final MetricRegistry registry;
-  private final String name;
 
-  public StoreMetrics(String storeId, MetricRegistry registry, AggregatedStoreMetrics aggregatedStoreMetrics) {
+  public StoreMetrics(MetricRegistry registry) {
+    this("", registry);
+  }
+
+  public StoreMetrics(String prefix, MetricRegistry registry) {
     this.registry = registry;
-    this.aggregatedStoreMetrics = aggregatedStoreMetrics;
-    name = storeId + ".";
+    String name = !prefix.isEmpty() ? prefix + SEPERATOR : "";
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
@@ -130,7 +133,9 @@ public class StoreMetrics {
     identicalPutAttemptCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
-    compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, "CopyRateInBytes"));
+    compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
+    compactionBytesReclaimedCount =
+        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBytesReclaimedCount"));
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
     blobStoreStatsQueueProcessorErrorCount =
@@ -151,79 +156,39 @@ public class StoreMetrics {
         registry.histogram(MetricRegistry.name(BlobStoreStats.class, name + "StatsForwardScanEntryCount"));
   }
 
-  MetricRegistry getRegistry() {
-    return registry;
+  void initializeIndexGauges(String storeId, final PersistentIndex index, final long capacityInBytes) {
+    String prefix = storeId + SEPERATOR;
+    Gauge<Long> currentCapacityUsed = index::getLogUsedCapacity;
+    registry.register(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed"), currentCapacityUsed);
+    Gauge<Double> percentageUsedCapacity = () -> ((double) index.getLogUsedCapacity() / capacityInBytes) * 100;
+    registry.register(MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity"), percentageUsedCapacity);
+    Gauge<Long> currentSegmentCount = index::getLogSegmentCount;
+    registry.register(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"), currentSegmentCount);
   }
 
-  void initializeIndexGauges(final PersistentIndex index, final long capacityInBytes) {
-    Gauge<Long> currentCapacityUsed = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return index.getLogUsedCapacity();
-      }
-    };
-    registry.register(MetricRegistry.name(Log.class, name + "CurrentCapacityUsed"), currentCapacityUsed);
-    Gauge<Double> percentageUsedCapacity = new Gauge<Double>() {
-      @Override
-      public Double getValue() {
-        return ((double) index.getLogUsedCapacity() / capacityInBytes) * 100;
-      }
-    };
-    registry.register(MetricRegistry.name(Log.class, name + "PercentageUsedCapacity"), percentageUsedCapacity);
-    Gauge<Long> currentSegmentCount = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return index.getLogSegmentCount();
-      }
-    };
-    registry.register(MetricRegistry.name(Log.class, name + "CurrentSegmentCount"), currentSegmentCount);
-  }
-
-  void initializeHardDeleteMetric(final HardDeleter hardDeleter, final PersistentIndex index) {
-    Gauge<Long> currentHardDeleteProgress = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return hardDeleter.getProgress();
-      }
-    };
-    registry.register(MetricRegistry.name(PersistentIndex.class, name + "CurrentHardDeleteProgress"),
+  void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
+    String prefix = storeId + SEPERATOR;
+    Gauge<Long> currentHardDeleteProgress = hardDeleter::getProgress;
+    registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "CurrentHardDeleteProgress"),
         currentHardDeleteProgress);
 
-    Gauge<Double> percentageHardDeleteCompleted = new Gauge<Double>() {
-      @Override
-      public Double getValue() {
-        return ((double) hardDeleter.getProgress() / index.getLogUsedCapacity()) * 100;
-      }
-    };
-    registry.register(MetricRegistry.name(Log.class, name + "PercentageHardDeleteCompleted"),
+    Gauge<Double> percentageHardDeleteCompleted =
+        () -> ((double) hardDeleter.getProgress() / index.getLogUsedCapacity()) * 100;
+    registry.register(MetricRegistry.name(Log.class, prefix + "PercentageHardDeleteCompleted"),
         percentageHardDeleteCompleted);
 
-    Gauge<Long> hardDeleteThreadRunning = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return hardDeleter.isRunning() ? 1L : 0L;
-      }
-    };
-    registry.register(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteThreadRunning"),
+    Gauge<Long> hardDeleteThreadRunning = () -> hardDeleter.isRunning() ? 1L : 0L;
+    registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteThreadRunning"),
         hardDeleteThreadRunning);
 
-    Gauge<Long> hardDeleteCaughtUp = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return hardDeleter.isCaughtUp() ? 1L : 0L;
-      }
-    };
-    registry.register(MetricRegistry.name(PersistentIndex.class, name + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
+    Gauge<Long> hardDeleteCaughtUp = () -> hardDeleter.isCaughtUp() ? 1L : 0L;
+    registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
   }
 
-  void initializeCompactorGauges(final AtomicBoolean compactionInProgress) {
-    Gauge<Long> compactionInProgressGauge = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return compactionInProgress.get() ? 1L : 0L;
-      }
-    };
-    registry.register(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionInProgress"),
+  void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress) {
+    String prefix = storeId + SEPERATOR;
+    Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
+    registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
         compactionInProgressGauge);
   }
 }

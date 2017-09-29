@@ -177,7 +177,7 @@ public class StoreCopier implements Closeable {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       File srcDir = new File(config.srcStoreDirPath);
       File tgtDir = new File(config.tgtStoreDirPath);
-      StorageManagerMetrics metrics = new StorageManagerMetrics(clusterMap.getMetricRegistry());
+      StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
       try (StoreCopier storeCopier = new StoreCopier("src", srcDir, tgtDir, config.storeCapacity,
           config.fetchSizeInBytes, storeConfig, metrics, storeKeyFactory, new DiskIOScheduler(null),
           Collections.EMPTY_LIST, SystemTime.getInstance())) {
@@ -193,7 +193,7 @@ public class StoreCopier implements Closeable {
    * @param storeCapacity the capacity of the store.
    * @param fetchSizeInBytes the size of each fetch from the soure store.
    * @param storeConfig {@link StoreConfig} that contains config to initiate a {@link BlobStore}.
-   * @param metrics {@link StorageManagerMetrics} to use for metrics.
+   * @param metrics {@link StoreMetrics} to use for metrics.
    * @param storeKeyFactory the {@link StoreKeyFactory} to use for {@link StoreKey}s in the {@link Store}.
    * @param diskIOScheduler the {@link DiskIOScheduler} to use.
    * @param transformers the list of {@link Transformer} functions to execute. They will be executed in order.
@@ -201,15 +201,15 @@ public class StoreCopier implements Closeable {
    * @throws StoreException
    */
   public StoreCopier(String storeId, File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes,
-      StoreConfig storeConfig, StorageManagerMetrics metrics, StoreKeyFactory storeKeyFactory,
-      DiskIOScheduler diskIOScheduler, List<Transformer> transformers, Time time) throws StoreException {
+      StoreConfig storeConfig, StoreMetrics metrics, StoreKeyFactory storeKeyFactory, DiskIOScheduler diskIOScheduler,
+      List<Transformer> transformers, Time time) throws StoreException {
     this.storeId = storeId;
     this.fetchSizeInBytes = fetchSizeInBytes;
     this.transformers = transformers;
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, metrics, srcDir.getAbsolutePath(),
+    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, metrics, metrics, srcDir.getAbsolutePath(),
         storeCapacity, storeKeyFactory, recovery, null, time);
-    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, metrics,
+    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, metrics, metrics,
         tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     src.start();
     tgt.start();

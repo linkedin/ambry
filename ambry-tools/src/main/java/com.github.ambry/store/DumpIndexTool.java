@@ -194,12 +194,10 @@ public class DumpIndexTool {
     /**
      * Processes all the index segments and dumps all or the filtered entries.
      */
-    DumpIndex,
-    /**
+    DumpIndex, /**
      * Processes the given index segment and dumps all or the filtered entries.
      */
-    DumpIndexSegment,
-    /**
+    DumpIndexSegment, /**
      * Processes all the index segments (deserialization check) and makes sure that there are no duplicate records
      * and no put after delete records.
      */
@@ -306,8 +304,7 @@ public class DumpIndexTool {
       // this tool supports only blob IDs. It can become generic if StoreKeyFactory provides a deserFromString method.
       BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
       StoreToolsMetrics metrics = new StoreToolsMetrics(clusterMap.getMetricRegistry());
-      StoreMetrics storeMetrics = new StoreMetrics("DumpIndexTool", clusterMap.getMetricRegistry(),
-          new AggregatedStoreMetrics(clusterMap.getMetricRegistry()));
+      StoreMetrics storeMetrics = new StoreMetrics("DumpIndexTool", clusterMap.getMetricRegistry());
       Time time = SystemTime.getInstance();
       DumpIndexTool dumpIndexTool = new DumpIndexTool(blobIdFactory, storeConfig, time, metrics, storeMetrics);
       Set<StoreKey> filterKeySet = new HashSet<>();

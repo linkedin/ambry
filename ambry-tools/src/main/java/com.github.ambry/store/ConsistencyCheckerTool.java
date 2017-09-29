@@ -162,8 +162,7 @@ public class ConsistencyCheckerTool {
     this.time = time;
     this.filterSet = filterSet;
     this.throttler = throttler;
-    StoreMetrics storeMetrics = new StoreMetrics("ConsistencyCheckerTool", clusterMap.getMetricRegistry(),
-        new AggregatedStoreMetrics(clusterMap.getMetricRegistry()));
+    StoreMetrics storeMetrics = new StoreMetrics("ConsistencyCheckerTool", clusterMap.getMetricRegistry());
     dumpIndexTool = new DumpIndexTool(storeKeyFactory, storeConfig, time, metrics, storeMetrics);
   }
 
