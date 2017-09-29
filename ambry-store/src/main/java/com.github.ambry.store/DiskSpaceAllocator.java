@@ -347,16 +347,14 @@ class DiskSpaceAllocator {
   /**
    * Parse the file size from a file size directory name.
    * @param fileSizeDirName the name of the file size directory.
-   * @return the parsed size in bytes, or {@code null} if the directory name was malformed.
+   * @return the parsed size in bytes, or {@code null} if the directory name did not start with the correct prefix.
+   * @throws NumberFormatException if a valid long does not follow the filename prefix.
    */
   private static Long getFileSizeForDirName(String fileSizeDirName) {
     Long sizeInBytes = null;
     if (fileSizeDirName.startsWith(FILE_SIZE_DIR_PREFIX)) {
       String sizeString = fileSizeDirName.substring(FILE_SIZE_DIR_PREFIX.length());
-      try {
-        sizeInBytes = Long.parseLong(sizeString);
-      } catch (NumberFormatException ignored) {
-      }
+      sizeInBytes = Long.parseLong(sizeString);
     }
     return sizeInBytes;
   }

@@ -95,10 +95,12 @@ public class StorageManagerTest {
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
-    assertEquals(0,
+    assertEquals("DiskSpaceAllocator should not have failed to start.", 0,
         getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
-    assertEquals(downReplicaCount, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
-    assertEquals(1, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
+    assertEquals("Unexpected number of store start failures", downReplicaCount,
+        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
+    assertEquals("Expected 1 disk mount path failure", 1,
+        getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
     checkStoreAccessibility(replicas, mountPathToDelete, storageManager);
 
     assertEquals("Compaction thread count is incorrect", mountPaths.size() - 1,
@@ -361,6 +363,7 @@ public class StorageManagerTest {
    */
   private void generateConfigs(boolean segmentedLog) {
     Properties properties = new Properties();
+    properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds().get(0).getReplicaIds().get(0).getCapacityInBytes();

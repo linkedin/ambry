@@ -73,7 +73,7 @@ class DiskManager {
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
-    diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableDiskSpaceAllocator,
+    diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     for (ReplicaId replica : replicas) {

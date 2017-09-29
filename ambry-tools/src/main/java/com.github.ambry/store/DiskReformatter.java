@@ -263,7 +263,7 @@ public class DiskReformatter {
       logger.info("Copying {} to {}", src, tgt);
       copy(partIdString, src, tgt, replicaId.getCapacityInBytes());
       logger.info("Deleting {}", src);
-      delete(src);
+      Utils.deleteFileOrDirectory(src);
       logger.info("Renaming {} to {}", tgt, src);
       if (!tgt.renameTo(src)) {
         throw new IllegalStateException("Could not rename " + tgt + " to " + src);
@@ -275,7 +275,7 @@ public class DiskReformatter {
     logger.info("Copying {} to {}", scratchTgt, scratchSrc);
     copy(toMove.getPartitionId().toString(), scratchTgt, scratchSrc, toMove.getCapacityInBytes());
     logger.info("Deleting {}", scratchTgt);
-    delete(scratchTgt);
+    Utils.deleteFileOrDirectory(scratchTgt);
     logger.info("Done reformatting {}", toMove);
   }
 
@@ -313,17 +313,6 @@ public class DiskReformatter {
     File[] replicas = {src, tgt};
     if (!consistencyChecker.checkConsistency(replicas)) {
       throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
-    }
-  }
-
-  /**
-   * Deletes {@code location}
-   * @param location the location to delete
-   * @throws IOException if there are any problems deleting {@code location}.
-   */
-  private void delete(File location) throws IOException {
-    if (location.exists() && !FileUtils.deleteQuietly(location)) {
-      throw new IOException("Could not delete " + location);
     }
   }
 }

@@ -704,24 +704,6 @@ public class BlobStoreTest {
     doDiskSpaceRequirementsTest(segmentsAllocated, 2);
   }
 
-  /**
-   * Run the {@link BlobStore#getDiskSpaceRequirements()} test.
-   * @param segmentsAllocated the number of segments currently used by the blob store.
-   * @param numSwapSegments the number of swap segments currently used by the blob store.
-   * @throws Exception
-   */
-  private void doDiskSpaceRequirementsTest(int segmentsAllocated, int numSwapSegments) throws Exception {
-    DiskSpaceRequirements requirements = store.getDiskSpaceRequirements();
-    if (!isLogSegmented) {
-      assertNull("Expected null DiskSpaceRequirements for non segmented log", requirements);
-    } else {
-      assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
-      // expect three log segments to be already allocated (from setup process)
-      assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - segmentsAllocated, requirements.getSegmentsNeeded());
-      assertEquals(numSwapSegments, requirements.getSwapSegmentsInUse());
-    }
-  }
-
   // helpers
   // general
 
@@ -1238,5 +1220,24 @@ public class BlobStoreTest {
     MessageWriteSet writeSet = new MockMessageWriteSet(messageInfoList, bufferList);
     // Put the initial two messages.
     store.put(writeSet);
+  }
+
+  // diskSpaceRequirementsTest() helpers
+
+  /**
+   * Run the {@link BlobStore#getDiskSpaceRequirements()} test.
+   * @param segmentsAllocated the number of segments currently used by the blob store.
+   * @param numSwapSegments the number of swap segments currently used by the blob store.
+   * @throws Exception
+   */
+  private void doDiskSpaceRequirementsTest(int segmentsAllocated, int numSwapSegments) throws Exception {
+    DiskSpaceRequirements requirements = store.getDiskSpaceRequirements();
+    if (!isLogSegmented) {
+      assertNull("Expected null DiskSpaceRequirements for non segmented log", requirements);
+    } else {
+      assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
+      assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - segmentsAllocated, requirements.getSegmentsNeeded());
+      assertEquals(numSwapSegments, requirements.getSwapSegmentsInUse());
+    }
   }
 }

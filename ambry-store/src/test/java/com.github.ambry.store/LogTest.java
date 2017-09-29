@@ -582,10 +582,11 @@ public class LogTest {
       }
     }
     assertNull("Next segment should be null", nextSegment);
-    assertEquals("Unexpected result for isLogSegment", log.getCapacityInBytes() != expectedSegmentCapacity,
+    assertEquals("Unexpected result for isLogSegmented()", log.getCapacityInBytes() != expectedSegmentCapacity,
         log.isLogSegmented());
-    long expectedSegmentsNeeded = (log.getCapacityInBytes() / expectedSegmentCapacity) - expectedSegmentNames.size();
-    assertEquals("DiskSpaceRequirements has wrong number of unallocated segments", expectedSegmentsNeeded,
+    long expectedUnallocatedSegments =
+        (log.getCapacityInBytes() / expectedSegmentCapacity) - expectedSegmentNames.size();
+    assertEquals("DiskSpaceRequirements has wrong number of unallocated segments", expectedUnallocatedSegments,
         log.getRemainingUnallocatedSegments());
   }
 

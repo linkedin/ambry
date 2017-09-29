@@ -181,7 +181,9 @@ class Log implements Write {
   }
 
   /**
-   * @return the number of unallocated segments for this log.
+   * This returns the number of unallocated segments for this log. However, this method can only be used when compaction
+   * is not running.
+   * @return the number of unallocated segments.
    */
   long getRemainingUnallocatedSegments() {
     return remainingUnallocatedSegments.get();
@@ -332,14 +334,9 @@ class Log implements Write {
   /**
    * @return {@code true} if the data directory contains segments that aren't old-style single segment log files.
    * This should be run after a log is initialized to get the actual log segmentation state.
-   * @throws IOException
    */
-  private boolean isExistingLogSegmented() throws IOException {
-    File[] segmentFiles = new File(dataDir).listFiles(LogSegmentNameHelper.LOG_FILE_FILTER);
-    if (segmentFiles == null) {
-      throw new IOException("Could not read from directory: " + dataDir);
-    }
-    return !(segmentFiles.length == 1 && LogSegmentNameHelper.nameFromFilename(segmentFiles[0].getName()).isEmpty());
+  private boolean isExistingLogSegmented() {
+    return !segmentsByName.firstKey().isEmpty();
   }
 
   /**
