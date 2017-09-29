@@ -116,7 +116,7 @@ class PersistentIndex {
   /**
    * Creates a new persistent index
    * @param datadir The directory to use to store the index files
-   * @param storeId The unique ID for the store that this this index represents.
+   * @param storeId The ID for the store that this index represents.
    * @param scheduler The scheduler that runs regular background tasks
    * @param log The log that is represented by this index
    * @param config The store configs for this index
@@ -149,7 +149,7 @@ class PersistentIndex {
   /**
    * Creates a new persistent index
    * @param datadir The directory to use to store the index files
-   * @param storeId The unique ID for the store that this this index represents.
+   * @param storeId The ID for the store that this index represents.
    * @param scheduler The scheduler that runs persistence tasks. {@code null} if auto-persistence is not required.
    * @param log The log that is represented by this index
    * @param config The store configs for this index
