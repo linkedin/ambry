@@ -23,16 +23,21 @@ import static com.github.ambry.account.Container.*;
  * This class is not thread safe.
  */
 public class ContainerBuilder {
-  private Short id;
+  private short id;
   private String name;
   private ContainerStatus status;
   private String description;
-  private Boolean isPrivate;
-  private Short parentAccountId;
+  private boolean encrypted;
+  private boolean cacheable;
+  private boolean mediaScanDisabled;
+  private short parentAccountId;
+  private final boolean originEncrypted;
+  private final boolean originPreviouslyEncrypted;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
-   * include all the information of the existing {@link Container}.
+   * include all the information of the existing {@link Container}. This constructor should be used when modifying an
+   * existing container.
    * @param origin The {@link Container} to build from.
    */
   public ContainerBuilder(Container origin) {
@@ -43,8 +48,13 @@ public class ContainerBuilder {
     name = origin.getName();
     status = origin.getStatus();
     description = origin.getDescription();
-    isPrivate = origin.isPrivate();
+    encrypted = origin.isEncrypted();
+    cacheable = origin.isCacheable();
+    mediaScanDisabled = origin.isMediaScanDisabled();
     parentAccountId = origin.getParentAccountId();
+    // for generating the new "previouslyEncrypted" state
+    originEncrypted = origin.isEncrypted();
+    originPreviouslyEncrypted = origin.wasPreviouslyEncrypted();
   }
 
   /**
@@ -53,17 +63,25 @@ public class ContainerBuilder {
    * @param name The name of the {@link Container}.
    * @param status The status of the {@link Container}.
    * @param description The description of the {@link Container}.
-   * @param isPrivate {@code true} if the {@link Container} is public, {@code false} otherwise.
+   * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
+   * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
+*                  this container.
+   * @param mediaScanDisabled
    * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
    */
-  public ContainerBuilder(Short id, String name, ContainerStatus status, String description, Boolean isPrivate,
-      Short parentAccountId) {
+  public ContainerBuilder(short id, String name, ContainerStatus status, String description, boolean encrypted,
+      boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.description = description;
-    this.isPrivate = isPrivate;
+    this.encrypted = encrypted;
+    this.cacheable = cacheable;
+    this.mediaScanDisabled = mediaScanDisabled;
     this.parentAccountId = parentAccountId;
+    // these are false because the usage of this constructor indicates a new container creation.
+    originEncrypted = false;
+    originPreviouslyEncrypted = false;
   }
 
   /**
@@ -71,7 +89,7 @@ public class ContainerBuilder {
    * @param id The id to set.
    * @return This builder.
    */
-  public ContainerBuilder setId(Short id) {
+  public ContainerBuilder setId(short id) {
     this.id = id;
     return this;
   }
@@ -107,12 +125,32 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets privacy setting of the {@link Account} to build.
-   * @param isPrivate The privacy setting to set.
+   * Sets the encryption setting of the {@link Container} to build.
+   * @param encrypted The encryption setting to set.
    * @return This builder.
    */
-  public ContainerBuilder setIsPrivate(Boolean isPrivate) {
-    this.isPrivate = isPrivate;
+  public ContainerBuilder setEncrypted(boolean encrypted) {
+    this.encrypted = encrypted;
+    return this;
+  }
+
+  /**
+   * Sets the caching setting of the {@link Container} to build
+   * @param cacheable The cache setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setCacheable(boolean cacheable) {
+    this.cacheable = cacheable;
+    return this;
+  }
+
+  /**
+   * Sets the media scan disabled setting of the {@link Container} to build
+   * @param mediaScanDisabled The media scan disabled setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setMediaScanDisabled(boolean mediaScanDisabled) {
+    this.mediaScanDisabled = mediaScanDisabled;
     return this;
   }
 
@@ -121,7 +159,7 @@ public class ContainerBuilder {
    * @param parentAccountId The parent {@link Account} id to set.
    * @return This builder.
    */
-  public ContainerBuilder setParentAccountId(Short parentAccountId) {
+  public ContainerBuilder setParentAccountId(short parentAccountId) {
     this.parentAccountId = parentAccountId;
     return this;
   }
@@ -133,6 +171,8 @@ public class ContainerBuilder {
    * @throws IllegalStateException If any required fields is not set.
    */
   public Container build() {
-    return new Container(id, name, status, description, isPrivate, parentAccountId);
+    boolean previouslyEncrypted = originPreviouslyEncrypted || (originEncrypted && !encrypted);
+    return new Container(id, name, status, description, encrypted, previouslyEncrypted, cacheable, mediaScanDisabled,
+        parentAccountId);
   }
 }

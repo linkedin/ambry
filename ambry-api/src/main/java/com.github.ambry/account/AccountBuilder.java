@@ -27,7 +27,7 @@ import static com.github.ambry.account.Account.*;
  * This class is not thread safe.
  */
 public class AccountBuilder {
-  private Short id;
+  private short id;
   private String name;
   private AccountStatus status;
   private Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
@@ -59,7 +59,7 @@ public class AccountBuilder {
    *           calling {@link #build()}.
    * @param containers A collection of {@link Container}s to add. Can be {@code null}.
    */
-  public AccountBuilder(Short id, String name, AccountStatus status, Collection<Container> containers) {
+  public AccountBuilder(short id, String name, AccountStatus status, Collection<Container> containers) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -75,7 +75,7 @@ public class AccountBuilder {
    * @param id The id to set.
    * @return This builder.
    */
-  public AccountBuilder setId(Short id) {
+  public AccountBuilder setId(short id) {
     this.id = id;
     return this;
   }

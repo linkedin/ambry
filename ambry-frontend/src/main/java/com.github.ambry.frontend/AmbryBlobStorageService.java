@@ -741,6 +741,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               new CallbackTracker(restRequest, OPERATION_TYPE_GET_RESPONSE_SECURITY,
                   frontendMetrics.getSecurityResponseTimeInMs,
                   frontendMetrics.getSecurityResponseCallbackProcessingTimeInMs);
+          accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest, routerResult.getBlobInfo());
           securityCallbackTracker.markOperationStart();
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {
@@ -1000,6 +1001,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               new CallbackTracker(restRequest, OPERATION_TYPE_HEAD_RESPONSE_SECURITY,
                   frontendMetrics.headSecurityResponseTimeInMs,
                   frontendMetrics.headSecurityResponseCallbackProcessingTimeInMs);
+          accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest, routerResult.getBlobInfo());
           securityCallbackTracker.markOperationStart();
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {

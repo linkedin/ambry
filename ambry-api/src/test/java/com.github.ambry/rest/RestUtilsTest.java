@@ -842,7 +842,7 @@ public class RestUtilsTest {
       expectedTTL = headers.getLong(RestUtils.Headers.TTL);
     }
     assertEquals("Blob TTL does not match", expectedTTL, blobProperties.getTimeToLiveInSeconds());
-    assertEquals("Blob isPrivate does not match", container.isPrivate(), blobProperties.isPrivate());
+    assertEquals("Blob isPrivate does not match", !container.isCacheable(), blobProperties.isPrivate());
     assertEquals("Blob service ID does not match", headers.getString(RestUtils.Headers.SERVICE_ID),
         blobProperties.getServiceId());
     assertEquals("Blob content type does not match", headers.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),

@@ -19,6 +19,7 @@ import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
@@ -118,8 +119,8 @@ public class AmbryBlobStorageServiceTest {
   private Container refContainer;
   private Container refDefaultPublicContainer;
   private Container refDefaultPrivateContainer;
-  private InMemAccountServiceFactory.InMemAccountService accountService =
-      new InMemAccountServiceFactory(false, true).getAccountService();
+  private InMemAccountService accountService;
+  private AccountAndContainerInjector accountAndContainerInjector;
   private final UrlSigningService urlSigningService;
 
   /**
@@ -128,7 +129,6 @@ public class AmbryBlobStorageServiceTest {
    * @throws IOException
    */
   public AmbryBlobStorageServiceTest() throws Exception {
-    accountService.clear();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
@@ -141,6 +141,9 @@ public class AmbryBlobStorageServiceTest {
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null, urlSigningService);
+    clusterMap = new MockClusterMap();
+    setupAccountService(false, true);
+    accountService.clear();
     refAccount = accountService.createAndAddRandomAccount();
     for (Container container : refAccount.getAllContainers()) {
       if (container.getId() == Container.DEFAULT_PUBLIC_CONTAINER_ID) {
@@ -151,7 +154,6 @@ public class AmbryBlobStorageServiceTest {
         refContainer = container;
       }
     }
-    clusterMap = new MockClusterMap();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
     referenceBlobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
@@ -397,7 +399,7 @@ public class AmbryBlobStorageServiceTest {
     // valid account and container names passed as part of POST
     for (Account testAccount : accountService.getAllAccounts()) {
       for (Container container : testAccount.getAllContainers()) {
-        doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), container.isPrivate(), testAccount,
+        doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
             container);
       }
     }
@@ -552,11 +554,11 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void accountNameMismatchTest() throws Exception {
-    accountService = new InMemAccountServiceFactory(true, false).getAccountService();
+    setupAccountService(true, false);
     ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
-        refContainer.isPrivate(), null, null, RestServiceErrorCode.InternalServerError);
+        !refContainer.isCacheable(), null, null, RestServiceErrorCode.InternalServerError);
   }
 
   /**
@@ -769,7 +771,7 @@ public class AmbryBlobStorageServiceTest {
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       doOperation(restRequest, restResponseChannel);
       JSONObject response = new JSONObject(new String(restResponseChannel.getResponseBody()));
-      String returnedReplicasStr = response.getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
+      String returnedReplicasStr = response.get(GetReplicasHandler.REPLICAS_KEY).toString().replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
           originalReplicaStr, returnedReplicasStr);
     }
@@ -817,7 +819,7 @@ public class AmbryBlobStorageServiceTest {
     String ownerId = "getAndUseSignedUrlTest";
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
-    setAmbryHeadersForPut(headers, blobTtl, refContainer.isPrivate(), serviceId, contentType, ownerId,
+    setAmbryHeadersForPut(headers, blobTtl, !refContainer.isCacheable(), serviceId, contentType, ownerId,
         refAccount.getName(), refContainer.getName());
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
@@ -990,6 +992,19 @@ public class AmbryBlobStorageServiceTest {
   // Constructor helpers
 
   /**
+   * Set {@link #accountService} and {@link #accountAndContainerInjector} to using the provided settings.
+   * @param returnOnlyUnknown Instantiate an {@link AccountService} that will only return
+   *                          {@link Account#UNKNOWN_ACCOUNT}.
+   * @param notifyConsumers if {@code true}, will notify consumers when accounts are updated. This cannot be
+   *                        {@code true} if {@code returnOnlyUnknown} is {@code true}.
+   */
+  private void setupAccountService(boolean returnOnlyUnknown, boolean notifyConsumers) {
+    accountService = new InMemAccountServiceFactory(returnOnlyUnknown, notifyConsumers).getAccountService();
+    accountAndContainerInjector =
+        new AccountAndContainerInjector(accountService, clusterMap, frontendMetrics, frontendConfig);
+  }
+
+  /**
    * Sets up and gets an instance of {@link AmbryBlobStorageService}.
    * @return an instance of {@link AmbryBlobStorageService}.
    */
@@ -1049,8 +1064,8 @@ public class AmbryBlobStorageServiceTest {
           break;
         case POST:
           JSONObject headers = new JSONObject();
-          setAmbryHeadersForPut(headers, Utils.Infinite_Time, refContainer.isPrivate(), "test-serviceID", "text/plain",
-              "test-ownerId", refAccount.getName(), refContainer.getName());
+          setAmbryHeadersForPut(headers, Utils.Infinite_Time, !refContainer.isCacheable(), "test-serviceID",
+              "text/plain", "test-ownerId", refAccount.getName(), refContainer.getName());
           restRequest = createRestRequest(restMethod, "/", headers, null);
           doOperation(restRequest, restResponseChannel);
           fail("POST should have detected a RestServiceException because of a bad router");
@@ -1206,7 +1221,7 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
-        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        expectedHeaders.get(RestUtils.Headers.BLOB_SIZE).toString(),
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals("Content-Type does not match", expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
@@ -1316,7 +1331,7 @@ public class AmbryBlobStorageServiceTest {
     assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-    verifyBlobProperties(expectedHeaders, expectedContainer.isPrivate(), restResponseChannel);
+    verifyBlobProperties(expectedHeaders, !expectedContainer.isCacheable(), restResponseChannel);
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
   }
@@ -1356,7 +1371,7 @@ public class AmbryBlobStorageServiceTest {
     }
     assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match expected", Long.toString(contentLength),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-    verifyBlobProperties(expectedHeaders, expectedContainer.isPrivate(), restResponseChannel);
+    verifyBlobProperties(expectedHeaders, !expectedContainer.isCacheable(), restResponseChannel);
     verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
   }
 
@@ -1370,7 +1385,7 @@ public class AmbryBlobStorageServiceTest {
   private void verifyBlobProperties(JSONObject expectedHeaders, boolean isPrivate,
       MockRestResponseChannel restResponseChannel) throws JSONException {
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
-        expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
+        expectedHeaders.get(RestUtils.Headers.BLOB_SIZE).toString(),
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
@@ -1383,7 +1398,7 @@ public class AmbryBlobStorageServiceTest {
     assertTrue(RestUtils.Headers.CREATION_TIME + " header missing",
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
     if (expectedHeaders.getLong(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
-      assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.getString(RestUtils.Headers.TTL),
+      assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.get(RestUtils.Headers.TTL).toString(),
           restResponseChannel.getHeader(RestUtils.Headers.TTL));
     }
     if (expectedHeaders.has(RestUtils.Headers.OWNER_ID)) {
@@ -1562,7 +1577,7 @@ public class AmbryBlobStorageServiceTest {
       JSONObject headers = new JSONObject();
       List<ByteBuffer> contents = null;
       if (restMethod.equals(RestMethod.POST)) {
-        setAmbryHeadersForPut(headers, 7200, refContainer.isPrivate(), "doExternalServicesBadInputTest",
+        setAmbryHeadersForPut(headers, 7200, !refContainer.isCacheable(), "doExternalServicesBadInputTest",
             "application/octet-stream", "doExternalServicesBadInputTest", refAccount.getName(), refContainer.getName());
         contents = new ArrayList<>(1);
         contents.add(null);
@@ -1605,7 +1620,7 @@ public class AmbryBlobStorageServiceTest {
         case POST:
           testRouter.exceptionOpType = FrontendTestRouter.OpType.PutBlob;
           JSONObject headers = new JSONObject();
-          setAmbryHeadersForPut(headers, 7200, refContainer.isPrivate(), "routerExceptionPipelineTest",
+          setAmbryHeadersForPut(headers, 7200, !refContainer.isCacheable(), "routerExceptionPipelineTest",
               "application/octet-stream", "routerExceptionPipelineTest", refAccount.getName(), refContainer.getName());
           checkRouterExceptionPipeline(exceptionMsg, createRestRequest(restMethod, "/", headers, null));
           break;
@@ -1779,143 +1794,144 @@ public class AmbryBlobStorageServiceTest {
     populateAccountService();
 
     // should succeed when serviceId-based PUT requests are allowed.
-    postBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", container.isPrivate(),
+    postBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", !container.isCacheable(),
         shouldAllowServiceIdBasedPut ? Account.UNKNOWN_ACCOUNT : null,
-        shouldAllowServiceIdBasedPut ? (container.isPrivate() ? Container.DEFAULT_PRIVATE_CONTAINER
-            : Container.DEFAULT_PUBLIC_CONTAINER) : null,
+        shouldAllowServiceIdBasedPut ? (container.isCacheable() ? Container.DEFAULT_PUBLIC_CONTAINER
+            : Container.DEFAULT_PRIVATE_CONTAINER) : null,
         shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
 
     // should fail, because accountName needs to be specified.
-    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", container.isPrivate(), null, null,
-        RestServiceErrorCode.MissingArgs);
+    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", "serviceId", !container.isCacheable(), null,
+        null, RestServiceErrorCode.MissingArgs);
 
     // should fail, because account name from serviceId could not be located in account service.
-    postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, "serviceId", container.isPrivate(),
-        null, null, RestServiceErrorCode.InvalidContainer);
+    postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, "serviceId",
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because accountName needs to be specified.
-    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), "serviceId", container.isPrivate(), null,
+    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), "serviceId", !container.isCacheable(), null,
         null, RestServiceErrorCode.MissingArgs);
 
     // should fail, because accountName is not allowed.
-    postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, null, "serviceId", container.isPrivate(),
+    postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, null, "serviceId", !container.isCacheable(),
         null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName is not allowed.
     postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, "dummyContainerName", "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName is not allowed.
     postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, Container.UNKNOWN_CONTAINER_NAME,
-        "serviceId", container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        "serviceId", !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName is not allowed.
     postBlobAndVerifyWithAccountAndContainer(Account.UNKNOWN_ACCOUNT_NAME, refContainer.getName(), "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because container name needs to be specified
-    postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), null, "serviceId", container.isPrivate(), null, null,
-        RestServiceErrorCode.MissingArgs);
+    postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), null, "serviceId", !container.isCacheable(), null,
+        null, RestServiceErrorCode.MissingArgs);
 
     // should fail, because containerName does not exist.
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), "dummyContainerName", "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidContainer);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because containerName is not allowed.
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), Container.UNKNOWN_CONTAINER_NAME, "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidContainer);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidContainer);
 
     // should succeed.
     String blobIdStr =
         postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
-            container.isPrivate(), refAccount, refContainer, null);
+            !container.isCacheable(), refAccount, refContainer, null);
     // should succeed.
     verifyAccountAndContainerFromBlobId(blobIdStr, refAccount, refContainer, null);
 
     // should fail, because containerName needs to be specified.
-    postBlobAndVerifyWithAccountAndContainer("dummyAccountName", null, "serviceId", container.isPrivate(), null, null,
-        RestServiceErrorCode.MissingArgs);
+    postBlobAndVerifyWithAccountAndContainer("dummyAccountName", null, "serviceId", !container.isCacheable(), null,
+        null, RestServiceErrorCode.MissingArgs);
 
     // should fail, because accountName does not exist.
     postBlobAndVerifyWithAccountAndContainer("dummyAccountName", "dummyContainerName", "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because container name is now allowed.
     postBlobAndVerifyWithAccountAndContainer("dummyAccountName", Container.UNKNOWN_CONTAINER_NAME, "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidContainer);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because accountName does not exist.
     postBlobAndVerifyWithAccountAndContainer("dummyAccountName", refContainer.getName(), "serviceId",
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
-    postBlobAndVerifyWithAccountAndContainer(null, null, Account.UNKNOWN_ACCOUNT_NAME, container.isPrivate(), null,
+    postBlobAndVerifyWithAccountAndContainer(null, null, Account.UNKNOWN_ACCOUNT_NAME, !container.isCacheable(), null,
         null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
     postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", Account.UNKNOWN_ACCOUNT_NAME,
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
     postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, Account.UNKNOWN_ACCOUNT_NAME,
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should fail, because accountName implicitly set by serviceId is not allowed.
     postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), Account.UNKNOWN_ACCOUNT_NAME,
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidAccount);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidAccount);
 
     // should succeed if the serviceId-based PUT requests are allowed, but this is a special case that account is
     // created without the legacy containers for public and private put.
-    postBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), container.isPrivate(),
+    postBlobAndVerifyWithAccountAndContainer(null, null, refAccount.getName(), !container.isCacheable(),
         shouldAllowServiceIdBasedPut ? refAccount : null,
-        shouldAllowServiceIdBasedPut ? (container.isPrivate() ? refDefaultPrivateContainer : refDefaultPublicContainer)
-            : null, shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
+        shouldAllowServiceIdBasedPut ? (container.isCacheable() ? refDefaultPublicContainer
+            : refDefaultPrivateContainer) : null,
+        shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
 
     // should fail, because accountName needs to be specified.
-    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), container.isPrivate(),
+    postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", refAccount.getName(), !container.isCacheable(),
         null, null, RestServiceErrorCode.MissingArgs);
 
     // should fail, because accountName implicitly set by serviceId does not have the default container.
     postBlobAndVerifyWithAccountAndContainer(null, Container.UNKNOWN_CONTAINER_NAME, refAccount.getName(),
-        container.isPrivate(), null, null, RestServiceErrorCode.InvalidContainer);
+        !container.isCacheable(), null, null, RestServiceErrorCode.InvalidContainer);
 
     // should fail, because accountName needs to be specified.
-    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), refAccount.getName(), container.isPrivate(),
-        null, null, RestServiceErrorCode.MissingArgs);
+    postBlobAndVerifyWithAccountAndContainer(null, refContainer.getName(), refAccount.getName(),
+        !container.isCacheable(), null, null, RestServiceErrorCode.MissingArgs);
 
     Container legacyContainerForPublicBlob =
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false,
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false, false, false,
             refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", true,
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", false, true, false,
             refAccount.getId()).build();
     Account accountWithTwoDefaultContainers =
         new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
             .addOrUpdateContainer(legacyContainerForPublicBlob)
             .build();
     accountService.updateAccounts(Collections.singletonList(accountWithTwoDefaultContainers));
-    if (container.isPrivate()) {
+    if (!container.isCacheable()) {
       // should succeed if serviceId-based PUT requests are allowed.
       postBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(),
-          container.isPrivate(), shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
+          !container.isCacheable(), shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
           shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers.getContainerById(
               Container.DEFAULT_PRIVATE_CONTAINER_ID) : null,
           shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
       // should fail, because accountName needs to be specified.
       postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
-          container.isPrivate(), null, null, RestServiceErrorCode.MissingArgs);
+          !container.isCacheable(), null, null, RestServiceErrorCode.MissingArgs);
     } else {
       // should succeed if serviceId-based PUT requests are allowed.
       postBlobAndVerifyWithAccountAndContainer(null, null, accountWithTwoDefaultContainers.getName(),
-          container.isPrivate(), shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
+          !container.isCacheable(), shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers : null,
           shouldAllowServiceIdBasedPut ? accountWithTwoDefaultContainers.getContainerById(
               Container.DEFAULT_PUBLIC_CONTAINER_ID) : null,
           shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);
       // should fail, because accountName needs to be specified.
       postBlobAndVerifyWithAccountAndContainer(null, "dummyContainerName", accountWithTwoDefaultContainers.getName(),
-          container.isPrivate(), null, null, RestServiceErrorCode.MissingArgs);
+          !container.isCacheable(), null, null, RestServiceErrorCode.MissingArgs);
     }
   }
 }

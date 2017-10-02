@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
@@ -49,7 +50,7 @@ import static org.junit.Assert.*;
  */
 public class GetSignedUrlHandlerTest {
 
-  private static final InMemAccountServiceFactory.InMemAccountService ACCOUNT_SERVICE =
+  private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final Account REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);

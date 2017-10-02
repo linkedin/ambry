@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -63,7 +64,7 @@ public class AmbrySecurityServiceTest {
   private static final FrontendConfig FRONTEND_CONFIG = new FrontendConfig(new VerifiableProperties(new Properties()));
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
-  private static final InMemAccountServiceFactory.InMemAccountService ACCOUNT_SERVICE =
+  private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
@@ -150,16 +151,8 @@ public class AmbrySecurityServiceTest {
     TestUtils.assertException(IllegalArgumentException.class,
         () -> securityService.processResponse(restRequest, new MockRestResponseChannel(), null).get(), null);
 
-    // without callbacks
-    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.HEAD};
-    for (RestMethod restMethod : methods) {
-      securityService.processResponse(createRestRequest(restMethod, "/", null), new MockRestResponseChannel(),
-          DEFAULT_INFO).get();
-    }
-
-    // with callbacks
     // for unsupported methods
-    methods = new RestMethod[]{RestMethod.DELETE};
+    RestMethod[] methods = {RestMethod.DELETE, RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), DEFAULT_INFO,
           RestServiceErrorCode.InternalServerError);
@@ -167,26 +160,24 @@ public class AmbrySecurityServiceTest {
 
     // HEAD
     // normal
-    testHeadBlobWithVariousRanges(DEFAULT_INFO, true);
+    testHeadBlobWithVariousRanges(DEFAULT_INFO);
     // unknown account
-    testHeadBlobWithVariousRanges(UNKNOWN_INFO, true);
-    // without account and container inserted
-    testHeadBlobWithVariousRanges(UNKNOWN_INFO, false);
+    testHeadBlobWithVariousRanges(UNKNOWN_INFO);
     // with no owner id
     BlobInfo blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
             REF_CONTAINER.getId(), false), null);
-    testHeadBlobWithVariousRanges(blobInfo, true);
+    testHeadBlobWithVariousRanges(blobInfo);
     // with no content type
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, null, false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
             REF_CONTAINER.getId(), false), null);
-    testHeadBlobWithVariousRanges(blobInfo, true);
+    testHeadBlobWithVariousRanges(blobInfo);
     // with a TTL
     blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, 10000, REF_ACCOUNT.getId(),
             REF_CONTAINER.getId(), false), null);
-    testHeadBlobWithVariousRanges(blobInfo, true);
+    testHeadBlobWithVariousRanges(blobInfo);
 
     // GET BlobInfo
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo);
@@ -218,9 +209,13 @@ public class AmbrySecurityServiceTest {
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, null, true, 10000, Account.UNKNOWN_ACCOUNT_ID,
         Container.UNKNOWN_CONTAINER_ID, false), null);
     testGetBlobWithVariousRanges(blobInfo);
-    // Get blob for a private blob
+    // Get blob in a non-cacheable container. AmbrySecurityService should not care about the isPrivate setting.
     blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time,
-        Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false), null);
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PRIVATE_CONTAINER_ID, false), null);
+    testGetBlobWithVariousRanges(blobInfo);
+    // Get blob in a cacheable container. AmbrySecurityService should not care about the isPrivate setting.
+    blobInfo = new BlobInfo(new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", true, Utils.Infinite_Time,
+        Account.UNKNOWN_ACCOUNT_ID, Container.DEFAULT_PUBLIC_CONTAINER_ID, false), null);
     testGetBlobWithVariousRanges(blobInfo);
     // not modified response
     // > creation time (in secs).
@@ -392,6 +387,8 @@ public class AmbrySecurityServiceTest {
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/", headers);
+    Pair<Account, Container> accountAndContainer = getAccountAndContainer(blobInfo.getBlobProperties());
+    insertAccountAndContainer(restRequest, accountAndContainer.getFirst(), accountAndContainer.getSecond());
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
@@ -414,11 +411,13 @@ public class AmbrySecurityServiceTest {
     String dateStr = dateFormat.format(date);
     headers.put(RestUtils.Headers.IF_MODIFIED_SINCE, dateStr);
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/abc", headers);
+    Pair<Account, Container> accountAndContainer = getAccountAndContainer(blobInfo.getBlobProperties());
+    insertAccountAndContainer(restRequest, accountAndContainer.getFirst(), accountAndContainer.getSecond());
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     if (ifModifiedSinceMs >= blobInfo.getBlobProperties().getCreationTimeInMs()) {
       Assert.assertEquals("Not modified response expected", ResponseStatus.NotModified,
           restResponseChannel.getStatus());
-      verifyHeadersForGetBlobNotModified(restResponseChannel, blobInfo.getBlobProperties().isPrivate());
+      verifyHeadersForGetBlobNotModified(restResponseChannel, accountAndContainer.getSecond().isCacheable());
     } else {
       Assert.assertEquals("Not modified response should not be returned", ResponseStatus.Ok,
           restResponseChannel.getStatus());
@@ -430,31 +429,26 @@ public class AmbrySecurityServiceTest {
    * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Head
    * request with the passed in {@link BlobInfo} and various range settings, including no set range (entire blob).
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}s
-   * @param insertAccountContainer {@code true} if the {@link Account} and {@link Container} has to be inserted in the
-   *                                          created {@link RestRequest}.
    * @throws Exception
    */
-  private void testHeadBlobWithVariousRanges(BlobInfo blobInfo, boolean insertAccountContainer) throws Exception {
+  private void testHeadBlobWithVariousRanges(BlobInfo blobInfo) throws Exception {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
-    testHeadBlob(blobInfo, null, insertAccountContainer);
+    testHeadBlob(blobInfo, null);
 
-    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0), insertAccountContainer);
+    testHeadBlob(blobInfo, ByteRange.fromLastNBytes(0));
     if (blobSize > 0) {
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0), insertAccountContainer);
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)),
-          insertAccountContainer);
-      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1), insertAccountContainer);
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(0));
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(1, blobSize - 1)));
+      testHeadBlob(blobInfo, ByteRange.fromStartOffset(blobSize - 1));
 
       long random1 = ThreadLocalRandom.current().nextLong(blobSize);
       long random2 = ThreadLocalRandom.current().nextLong(blobSize);
-      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)),
-          insertAccountContainer);
+      testHeadBlob(blobInfo, ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
 
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize), insertAccountContainer);
+      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(blobSize));
     }
     if (blobSize > 1) {
-      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)),
-          insertAccountContainer);
+      testHeadBlob(blobInfo, ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(1, blobSize)));
     }
   }
 
@@ -463,27 +457,21 @@ public class AmbrySecurityServiceTest {
    * {@link RestMethod#HEAD}.
    * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
    * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
-   * @param insertAccountContainer {@code true} if the {@link Account} and {@link Container} has to be inserted in the
-   *                                          created {@link RestRequest}.
    * @throws Exception
    */
-  private void testHeadBlob(BlobInfo blobInfo, ByteRange range, boolean insertAccountContainer) throws Exception {
+  private void testHeadBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, "/", headers);
-    Account account = null;
-    Container container = null;
-    if (insertAccountContainer) {
-      account = ACCOUNT_SERVICE.getAccountById(blobInfo.getBlobProperties().getAccountId());
-      container = account.getContainerById(blobInfo.getBlobProperties().getContainerId());
-      insertAccountAndContainer(restRequest, account, container);
-    }
+    Pair<Account, Container> accountAndContainer = getAccountAndContainer(blobInfo.getBlobProperties());
+    insertAccountAndContainer(restRequest, accountAndContainer.getFirst(), accountAndContainer.getSecond());
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForHead(blobInfo.getBlobProperties(), range, restResponseChannel);
-    verifyAccountAndContainerHeaders(restResponseChannel, account, container);
+    verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
+        accountAndContainer.getSecond());
   }
 
   /**
@@ -494,6 +482,8 @@ public class AmbrySecurityServiceTest {
   private void testGetSubResource(BlobInfo blobInfo, RestUtils.SubResource subResource) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+    Pair<Account, Container> accountAndContainer = getAccountAndContainer(blobInfo.getBlobProperties());
+    insertAccountAndContainer(restRequest, accountAndContainer.getFirst(), accountAndContainer.getSecond());
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
     Assert.assertEquals("ProcessResponse status should have been set ", ResponseStatus.Ok,
         restResponseChannel.getStatus());
@@ -503,6 +493,8 @@ public class AmbrySecurityServiceTest {
         RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED)).longValue());
     if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
       verifyBlobPropertiesHeaders(blobInfo.getBlobProperties(), restResponseChannel);
+      verifyAccountAndContainerHeaders(restResponseChannel, accountAndContainer.getFirst(),
+          accountAndContainer.getSecond());
     } else {
       verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.PRIVATE, RestUtils.Headers.TTL,
           RestUtils.Headers.SERVICE_ID, RestUtils.Headers.OWNER_ID, RestUtils.Headers.AMBRY_CONTENT_TYPE,
@@ -632,16 +624,17 @@ public class AmbrySecurityServiceTest {
       Assert.assertNull("Content length value should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     }
-    verifyCacheHeaders(blobProperties.isPrivate(), restResponseChannel);
+    ;
+    verifyCacheHeaders(getAccountAndContainer(blobProperties).getSecond().isCacheable(), restResponseChannel);
   }
 
   /**
    * Verify the headers from the response for a Not modified blob are as expected
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
-   * @param isPrivate {@code true} if blob is private, {@code false} otherwise.
+   * @param cacheable {@code true} if blob is cacheable, {@code false} otherwise.
    * @throws RestServiceException if there was any problem getting the headers.
    */
-  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, boolean isPrivate)
+  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, boolean cacheable)
       throws RestServiceException {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertNotNull("Last-Modified has not been set",
@@ -652,25 +645,17 @@ public class AmbrySecurityServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     Assert.assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-    verifyCacheHeaders(isPrivate, restResponseChannel);
+    verifyCacheHeaders(cacheable, restResponseChannel);
     verifyAbsenceOfHeaders(restResponseChannel, RestUtils.Headers.BLOB_SIZE, RestUtils.Headers.CONTENT_TYPE);
   }
 
   /**
    * Verifies that the right cache headers are returned.
-   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
+   * @param cacheable {@code true} if the blob is cacheable, {@code false} if not.
    * @param restResponseChannel the {@link RestResponseChannel} over which the response is sent.
    */
-  private void verifyCacheHeaders(boolean isPrivate, MockRestResponseChannel restResponseChannel) {
-    if (isPrivate) {
-      Assert.assertEquals("Expires value is incorrect for private blob",
-          restResponseChannel.getHeader(RestUtils.Headers.DATE),
-          restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
-      Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
-          restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
-      Assert.assertEquals("Pragma value not as expected", "no-cache",
-          restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
-    } else {
+  private void verifyCacheHeaders(boolean cacheable, MockRestResponseChannel restResponseChannel) {
+    if (cacheable) {
       Assert.assertTrue("Expires value should be in the future",
           RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.EXPIRES))
               > System.currentTimeMillis());
@@ -678,6 +663,14 @@ public class AmbrySecurityServiceTest {
           "max-age=" + FRONTEND_CONFIG.frontendCacheValiditySeconds,
           restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
       Assert.assertNull("Pragma value should not have been set",
+          restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
+    } else {
+      Assert.assertEquals("Expires value is incorrect for private blob",
+          restResponseChannel.getHeader(RestUtils.Headers.DATE),
+          restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
+      Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",
+          restResponseChannel.getHeader(RestUtils.Headers.CACHE_CONTROL));
+      Assert.assertEquals("Pragma value not as expected", "no-cache",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     }
   }
@@ -711,6 +704,16 @@ public class AmbrySecurityServiceTest {
       Assert.assertEquals("OwnerId mismatch", blobProperties.getOwnerId(),
           restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
     }
+  }
+
+  /**
+   * @param blobProperties the {@link BlobProperties} to read.
+   * @return the {@link Account} and {@link Container} objects corresponding to the IDs in the {@link BlobProperties}.
+   */
+  private Pair<Account, Container> getAccountAndContainer(BlobProperties blobProperties) {
+    Account account = ACCOUNT_SERVICE.getAccountById(blobProperties.getAccountId());
+    Container container = account.getContainerById(blobProperties.getContainerId());
+    return new Pair<>(account, container);
   }
 
   /**

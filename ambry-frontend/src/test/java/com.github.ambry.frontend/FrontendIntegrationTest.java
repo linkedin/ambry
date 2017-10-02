@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
@@ -100,7 +101,7 @@ public class FrontendIntegrationTest {
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
   private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
   private static final FrontendConfig FRONTEND_CONFIG;
-  private static final InMemAccountServiceFactory.InMemAccountService ACCOUNT_SERVICE =
+  private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
 
   static {
@@ -195,7 +196,7 @@ public class FrontendIntegrationTest {
     for (Account account : ACCOUNT_SERVICE.getAllAccounts()) {
       if (account.getId() != Account.UNKNOWN_ACCOUNT_ID) {
         for (Container container : account.getAllContainers()) {
-          doPostGetHeadDeleteTest(refContentSize, account, container, account.getName(), container.isPrivate(),
+          doPostGetHeadDeleteTest(refContentSize, account, container, account.getName(), !container.isCacheable(),
               account.getName(), container.getName(), false);
         }
       }
@@ -212,7 +213,7 @@ public class FrontendIntegrationTest {
     for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes
         - 1, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
       doPostGetHeadDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
-          publicContainer.isPrivate(), refAccount.getName(), publicContainer.getName(), false);
+          !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
   }
 
@@ -224,10 +225,10 @@ public class FrontendIntegrationTest {
   public void multipartPostGetHeadTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    doPostGetHeadDeleteTest(0, refAccount, refContainer, refAccount.getName(), refContainer.isPrivate(),
+    doPostGetHeadDeleteTest(0, refAccount, refContainer, refAccount.getName(), !refContainer.isCacheable(),
         refAccount.getName(), refContainer.getName(), true);
     doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, refAccount, refContainer,
-        refAccount.getName(), refContainer.isPrivate(), refAccount.getName(), refContainer.getName(), true);
+        refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
   }
 
   /*
@@ -291,8 +292,8 @@ public class FrontendIntegrationTest {
     String ownerId = "getAndUseSignedUrlTest";
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
-    setAmbryHeadersForPut(headers, blobTtl, container.isPrivate(), serviceId, contentType, ownerId, account.getName(),
-        container.getName());
+    setAmbryHeadersForPut(headers, blobTtl, !container.isCacheable(), serviceId, contentType, ownerId,
+        account.getName(), container.getName());
     headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
 
@@ -315,9 +316,9 @@ public class FrontendIntegrationTest {
 
     // verify POST
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
-    getBlobAndVerify(blobId, null, GetOption.None, headers, container.isPrivate(), content);
-    getBlobInfoAndVerify(blobId, GetOption.None, headers, container.isPrivate(), account.getName(), container.getName(),
-        null);
+    getBlobAndVerify(blobId, null, GetOption.None, headers, !container.isCacheable(), content);
+    getBlobInfoAndVerify(blobId, GetOption.None, headers, !container.isCacheable(), account.getName(),
+        container.getName(), null);
 
     // GET
     // Get signed URL
@@ -338,7 +339,7 @@ public class FrontendIntegrationTest {
     uri = new URI(signedGetUrl);
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    verifyGetBlobResponse(responseParts, null, headers, container.isPrivate(), content);
+    verifyGetBlobResponse(responseParts, null, headers, !container.isCacheable(), content);
   }
 
   // helpers
