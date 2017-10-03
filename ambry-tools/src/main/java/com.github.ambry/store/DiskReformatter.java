@@ -76,7 +76,7 @@ public class DiskReformatter {
   private final ClusterMap clusterMap;
   private final Time time;
   private final ConsistencyCheckerTool consistencyChecker;
-  private final StorageManagerMetrics metrics;
+  private final StoreMetrics metrics;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
 
   /**
@@ -84,15 +84,19 @@ public class DiskReformatter {
    */
   private static class DiskReformatterConfig {
     /**
-     * The path to the hardware layout file.
+     * The path to the hardware layout file. Needed if using
+     * {@link com.github.ambry.clustermap.StaticClusterAgentsFactory}.
      */
     @Config("hardware.layout.file.path")
+    @Default("")
     final String hardwareLayoutFilePath;
 
     /**
-     * The path to the partition layout file.
+     * The path to the partition layout file. Needed if using
+     * {@link com.github.ambry.clustermap.StaticClusterAgentsFactory}.
      */
     @Config("partition.layout.file.path")
+    @Default("")
     final String partitionLayoutFilePath;
 
     /**
@@ -132,8 +136,8 @@ public class DiskReformatter {
      * @param verifiableProperties the props to use to load the config.
      */
     DiskReformatterConfig(VerifiableProperties verifiableProperties) {
-      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
-      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
+      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path", "");
+      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path", "");
       datanodeHostname = verifiableProperties.getString("datanode.hostname");
       datanodePort = verifiableProperties.getIntInRange("datanode.port", 1, 65535);
       diskMountPaths = verifiableProperties.getString("disk.mount.paths").split(",");
@@ -207,9 +211,9 @@ public class DiskReformatter {
     this.storeKeyFactory = storeKeyFactory;
     this.clusterMap = clusterMap;
     this.time = time;
-    consistencyChecker =
-        new ConsistencyCheckerTool(clusterMap, new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
-    metrics = new StorageManagerMetrics(clusterMap.getMetricRegistry());
+    consistencyChecker = new ConsistencyCheckerTool(clusterMap, storeKeyFactory, storeConfig, null, null,
+        new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
+    metrics = new StoreMetrics(clusterMap.getMetricRegistry());
   }
 
   /**
@@ -289,7 +293,7 @@ public class DiskReformatter {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     Store store =
         new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler, metrics,
-            srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+            metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     store.start();
     store.shutdown();
   }

@@ -168,7 +168,7 @@ class CuratedLogIndexState {
     this.tempDir = tempDir;
     tempDirStr = tempDir.getAbsolutePath();
     long segmentCapacity = isLogSegmented ? CuratedLogIndexState.SEGMENT_CAPACITY : CuratedLogIndexState.LOG_CAPACITY;
-    metrics = new StoreMetrics(tempDirStr, metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    metrics = new StoreMetrics(metricRegistry);
     log = new Log(tempDirStr, CuratedLogIndexState.LOG_CAPACITY, segmentCapacity, metrics);
     properties.put("store.index.max.number.of.inmem.elements",
         Integer.toString(CuratedLogIndexState.MAX_IN_MEM_ELEMENTS));
@@ -627,9 +627,9 @@ class CuratedLogIndexState {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     sessionId = UUID.randomUUID();
     metricRegistry = new MetricRegistry();
-    metrics = new StoreMetrics(tempDirStr, metricRegistry, new AggregatedStoreMetrics(metricRegistry));
-    index = new PersistentIndex(tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY, recovery,
-        hardDelete, DISK_IO_SCHEDULER, metrics, time, sessionId, incarnationId);
+    metrics = new StoreMetrics(metricRegistry);
+    index = new PersistentIndex(tempDirStr, tempDirStr, scheduler, log, config, CuratedLogIndexState.STORE_KEY_FACTORY,
+        recovery, hardDelete, DISK_IO_SCHEDULER, metrics, time, sessionId, incarnationId);
   }
 
   /**

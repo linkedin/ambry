@@ -82,6 +82,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -421,7 +422,7 @@ public class AmbryRequestsTest {
         case PutRequest:
           BlobProperties properties = new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId());
           request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
-              ByteBuffer.allocate(0), 0, BlobType.DataBlob);
+              ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
           break;
         case DeleteRequest:
           request = new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds());
@@ -532,7 +533,7 @@ public class AmbryRequestsTest {
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
     Response response = sendRequestGetResponse(controlRequest, expectedServerErrorCode);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    List<? extends PartitionId> idsVal;
+    List<PartitionId> idsVal;
     if (id == null) {
       idsVal = clusterMap.getAllPartitionIds();
     } else {
@@ -541,7 +542,8 @@ public class AmbryRequestsTest {
     if (!expectedServerErrorCode.equals(ServerErrorCode.Unknown_Error)) {
       assertEquals("Origins not as provided in request", origins, replicationManager.originsVal);
       assertEquals("Enable not as provided in request", enable, replicationManager.enableVal);
-      assertEquals("Ids not as provided in request", idsVal, replicationManager.idsVal);
+      assertEquals("Ids not as provided in request", idsVal.size(), replicationManager.idsVal.size());
+      assertTrue("Ids not as provided in request", replicationManager.idsVal.containsAll(idsVal));
     }
   }
 
@@ -816,7 +818,7 @@ public class AmbryRequestsTest {
     RuntimeException exceptionToThrow = null;
     // Variables for controlling and examining the values provided to controlReplicationForPartitions()
     Boolean controlReplicationReturnVal;
-    List<? extends PartitionId> idsVal;
+    Collection<PartitionId> idsVal;
     List<String> originsVal;
     Boolean enableVal;
     // Variables for controlling getRemoteReplicaLagFromLocalInBytes()
@@ -861,8 +863,7 @@ public class AmbryRequestsTest {
     }
 
     @Override
-    public boolean controlReplicationForPartitions(List<? extends PartitionId> ids, List<String> origins,
-        boolean enable) {
+    public boolean controlReplicationForPartitions(Collection<PartitionId> ids, List<String> origins, boolean enable) {
       failIfRequired();
       if (controlReplicationReturnVal == null) {
         throw new IllegalStateException("Return val not set. Don't know what to return");

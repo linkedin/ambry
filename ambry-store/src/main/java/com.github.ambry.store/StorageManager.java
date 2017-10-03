@@ -59,6 +59,8 @@ public class StorageManager {
       MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
+    StoreMetrics storeMainMetrics = new StoreMetrics(registry);
+    StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
     this.time = time;
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -74,7 +76,8 @@ public class StorageManager {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager =
-          new DiskManager(disk, replicasForDisk, config, scheduler, metrics, keyFactory, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+          new DiskManager(disk, replicasForDisk, config, scheduler, metrics, storeMainMetrics,
+          storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);

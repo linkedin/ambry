@@ -314,6 +314,7 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
             }
         }
     }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF','META-INF/*.DSA' 
 }
 
 task codeCoverageReport(type: JacocoReport) {

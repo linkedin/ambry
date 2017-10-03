@@ -301,8 +301,8 @@ public class BlobStoreTest {
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
       ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
     MetricRegistry registry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
-    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, STORE_KEY_FACTORY,
+    StoreMetrics metrics = new StoreMetrics(registry);
+    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, STORE_KEY_FACTORY,
         recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
   }
 
@@ -387,6 +387,7 @@ public class BlobStoreTest {
     String badPath = new File(nonExistentDir, UtilsTest.getRandomString(10)).getAbsolutePath();
 
     BlobStore blobStore = createBlobStore(getMockReplicaId(badPath));
+
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
 
     ReplicaId replicaIdWithNonExistentDir = getMockReplicaId(nonExistentDir);

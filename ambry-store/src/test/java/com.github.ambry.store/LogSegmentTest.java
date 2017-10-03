@@ -53,7 +53,7 @@ public class LogSegmentTest {
     tempDir = Files.createTempDirectory("logSegmentDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     MetricRegistry metricRegistry = new MetricRegistry();
-    metrics = new StoreMetrics(tempDir.getName(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    metrics = new StoreMetrics(metricRegistry);
   }
 
   /**

@@ -54,6 +54,7 @@ class BlobStore implements Store {
   private final MessageStoreRecovery recovery;
   private final MessageStoreHardDelete hardDelete;
   private final StoreMetrics metrics;
+  private final StoreMetrics storeUnderCompactionMetrics;
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
 
@@ -88,11 +89,11 @@ class BlobStore implements Store {
   //Ctor used in ambry-server
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
-      StorageManagerMetrics storageManagerMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate,
       Time time) {
     this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler,
-        storageManagerMetrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory,
+        metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory,
         recovery, hardDelete, time);
     this.replicaId = replicaId;
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
@@ -100,10 +101,11 @@ class BlobStore implements Store {
 
   //Ctor used in ambry-tools
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
-      StorageManagerMetrics storageManagerMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
+      StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this.metrics = storageManagerMetrics.createStoreMetrics(storeId);
+    this.metrics = metrics;
+    this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
@@ -150,13 +152,12 @@ class BlobStore implements Store {
 
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
         log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
-        compactor =
-            new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, diskIOScheduler, log, time, sessionId,
-                storeDescriptor.getIncarnationId());
-        index = new PersistentIndex(dataDir, taskScheduler, log, config, factory, recovery, hardDelete, diskIOScheduler,
-            metrics, time, sessionId, storeDescriptor.getIncarnationId());
+        compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
+            diskIOScheduler, log, time, sessionId, storeDescriptor.getIncarnationId());
+        index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
+            diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
-        metrics.initializeIndexGauges(index, capacityInBytes);
+        metrics.initializeIndexGauges(storeId, index, capacityInBytes);
         long logSegmentForecastOffsetMs = TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays);
         long bucketSpanInMs = TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes);
         long queueProcessingPeriodInMs =

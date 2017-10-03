@@ -56,8 +56,7 @@ public class BlobStoreStatsTest {
   private static final long TEST_TIME_INTERVAL_IN_MS = CuratedLogIndexState.DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS / 2;
   private static final long BUCKET_SPAN_IN_MS = Time.MsPerSec;
   private static final long QUEUE_PROCESSOR_PERIOD_IN_Ms = 100;
-  private static final StoreMetrics METRICS =
-      new StoreMetrics("test", new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry()));
+  private static final StoreMetrics METRICS = new StoreMetrics(new MetricRegistry());
   private static final long DEFAULT_WAIT_TIMEOUT_SECS = Time.SecsPerMin;
   private final Map<String, Throttler> throttlers = new HashMap<>();
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(throttlers);

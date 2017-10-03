@@ -951,7 +951,7 @@ class PutOperation {
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
           chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
-          BlobType.DataBlob);
+          BlobType.DataBlob, null);
     }
 
     /**
@@ -1228,7 +1228,7 @@ class PutOperation {
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
           chunkBlobId, finalBlobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
-          BlobType.MetadataBlob);
+          BlobType.MetadataBlob, null);
     }
   }
 

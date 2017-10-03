@@ -155,8 +155,7 @@ public class HardDeleterTest {
     }
     scheduler = Utils.newScheduler(1, false);
     MetricRegistry metricRegistry = new MetricRegistry();
-    StoreMetrics metrics =
-        new StoreMetrics(rootDirectory.getAbsolutePath(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     log = new Log(rootDirectory.getAbsolutePath(), 10000, 10000, metrics);
     Properties props = new Properties();
     // the test will set the tokens, so disable the index persistor.
@@ -325,10 +324,8 @@ public class HardDeleterTest {
 
     MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config, StoreKeyFactory factory,
         MessageStoreHardDelete messageStoreHardDelete, Time time, UUID incarnationId) throws StoreException {
-      super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
-          new DiskIOScheduler(null),
-          new StoreMetrics(datadir, new MetricRegistry(), new AggregatedStoreMetrics(new MetricRegistry())), time,
-          new UUID(1, 1), incarnationId);
+      super(datadir, datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
+          new DiskIOScheduler(null), new StoreMetrics(new MetricRegistry()), time, new UUID(1, 1), incarnationId);
     }
 
     /**

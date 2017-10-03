@@ -106,24 +106,28 @@ public class ServerAdminTool implements Closeable {
   private static class ServerAdminToolConfig {
 
     /**
-     * The path to the hardware layout file.
-     */
-    @Config("hardware.layout.file.path")
-    final String hardwareLayoutFilePath;
-
-    /**
-     * The path to the partition layout file.
-     */
-    @Config("partition.layout.file.path")
-    final String partitionLayoutFilePath;
-
-    /**
      * The type of operation.
      * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl,ReplicationControl,
      * CatchupStatus
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
+
+    /**
+     * The path to the hardware layout file. Needed if using
+     * {@link com.github.ambry.clustermap.StaticClusterAgentsFactory}.
+     */
+    @Config("hardware.layout.file.path")
+    @Default("")
+    final String hardwareLayoutFilePath;
+
+    /**
+     * The path to the partition layout file. Needed if using
+     * {@link com.github.ambry.clustermap.StaticClusterAgentsFactory}.
+     */
+    @Config("partition.layout.file.path")
+    @Default("")
+    final String partitionLayoutFilePath;
 
     /**
      * The hostname of the target server as it appears in the partition layout.
@@ -210,9 +214,9 @@ public class ServerAdminTool implements Closeable {
      * @param verifiableProperties the props to use to load the config.
      */
     ServerAdminToolConfig(VerifiableProperties verifiableProperties) {
-      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path");
-      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path");
       typeOfOperation = Operation.valueOf(verifiableProperties.getString("type.of.operation"));
+      hardwareLayoutFilePath = verifiableProperties.getString("hardware.layout.file.path", "");
+      partitionLayoutFilePath = verifiableProperties.getString("partition.layout.file.path", "");
       hostname = verifiableProperties.getString("hostname", "localhost");
       port = verifiableProperties.getIntInRange("port", 6667, 1, 65535);
       blobId = verifiableProperties.getString("blob.id", "");
@@ -337,7 +341,7 @@ public class ServerAdminTool implements Closeable {
             Pair<ServerErrorCode, Boolean> response =
                 serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes, clusterMap);
             if (response.getFirst() == ServerErrorCode.No_Error) {
-              LOGGER.info("Replicas are {} within {} for {}", response.getSecond() ? "" : "NOT",
+              LOGGER.info("Replicas are {} within {} bytes for {}", response.getSecond() ? "" : "NOT",
                   config.acceptableLagInBytes, partitionId);
             } else {
               LOGGER.error("From {}, received server error code {} for request for catchup status of {}", dataNodeId,
