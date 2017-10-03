@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,10 @@ import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Test;
 
@@ -59,6 +61,7 @@ public class LogTest {
 
   private final File tempDir;
   private final StoreMetrics metrics;
+  private final Set<Long> positionsGenerated = new HashSet<>();
 
   /**
    * Creates a temporary directory to store the segment files.
@@ -68,7 +71,7 @@ public class LogTest {
     tempDir = Files.createTempDirectory("logDir-" + UtilsTest.getRandomString(10)).toFile();
     tempDir.deleteOnExit();
     MetricRegistry metricRegistry = new MetricRegistry();
-    metrics = new StoreMetrics(tempDir.getName(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    metrics = new StoreMetrics(metricRegistry);
   }
 
   /**
@@ -473,7 +476,10 @@ public class LogTest {
       segmentNames.add(name);
     } else {
       for (int i = 0; i < numToCreate; i++) {
-        long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+        long pos;
+        do {
+          pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+        } while (positionsGenerated.contains(pos));
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         String name = LogSegmentNameHelper.getName(pos, gen);
         File file = create(LogSegmentNameHelper.nameToFilename(name));
@@ -556,17 +562,22 @@ public class LogTest {
     LogSegment nextSegment = log.getFirstSegment();
     assertNull("Prev segment should be null", log.getPrevSegment(nextSegment));
     for (String segmentName : expectedSegmentNames) {
-      assertEquals("Next segment is not as expected", segmentName, nextSegment.getName());
+      assertEquals("Next segment is not as expected - expectedSegmentNames=" + expectedSegmentNames, segmentName,
+          nextSegment.getName());
       LogSegment segment = log.getSegment(segmentName);
-      assertEquals("Segment name is not as expected", segmentName, segment.getName());
+      assertEquals("Segment name is not as expected - expectedSegmentNames=" + expectedSegmentNames, segmentName,
+          segment.getName());
       assertEquals("Segment capacity not as expected", expectedSegmentCapacity, segment.getCapacityInBytes());
       assertEquals("Segment returned by getSegment() is incorrect", segment, log.getSegment(segment.getName()));
       nextSegment = log.getNextSegment(segment);
       if (nextSegment != null) {
-        assertEquals("Prev segment not as expected", segment, log.getPrevSegment(nextSegment));
+        assertEquals("Prev segment not as expected - expectedSegmentNames=" + expectedSegmentNames, segment,
+            log.getPrevSegment(nextSegment));
       }
     }
-    assertNull("Next segment should be null", nextSegment);
+    assertNull(
+        "Next segment should be null - expectedSegmentNames=" + expectedSegmentNames + ", nextSegment=" + nextSegment,
+        nextSegment);
   }
 
   /**

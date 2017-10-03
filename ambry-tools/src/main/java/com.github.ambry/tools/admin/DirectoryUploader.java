@@ -229,7 +229,7 @@ public class DirectoryUploader {
       ByteBufferInputStream blobStream = new ByteBufferInputStream(stream, size);
       PutRequest putRequest =
           new PutRequest(correlationId.incrementAndGet(), "consumerThread", blobId, blobProperties, userMetaData,
-              blobStream.getByteBuffer(), size, BlobType.DataBlob);
+              blobStream.getByteBuffer(), size, BlobType.DataBlob, null);
 
       if (enableVerboseLogging) {
         System.out.println("Put Request to a replica : " + putRequest + " for blobId " + blobId);

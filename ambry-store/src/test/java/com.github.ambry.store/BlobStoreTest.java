@@ -304,32 +304,32 @@ public class BlobStoreTest {
     // fail if attempt to create directory fails
     String badPath = new File(nonExistentDir, UtilsTest.getRandomString(10)).getAbsolutePath();
     MetricRegistry registry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(registry);
+    StoreMetrics metrics = new StoreMetrics(registry);
     BlobStore blobStore =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, badPath, LOG_CAPACITY,
-            STORE_KEY_FACTORY, recovery, hardDelete, time);
+        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, badPath,
+            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
 
     // create directory if it does not exist
     registry = new MetricRegistry();
-    metrics = new StorageManagerMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, nonExistentDir,
-        LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    metrics = new StoreMetrics(registry);
+    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+        nonExistentDir, LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     verifyStartupSuccess(blobStore);
     File createdDir = new File(nonExistentDir);
     assertTrue("Directory should now exist", createdDir.exists() && createdDir.isDirectory());
 
     // should not be able to start two stores at the same path
     registry = new MetricRegistry();
-    metrics = new StorageManagerMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, nonExistentDir,
-        LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    metrics = new StoreMetrics(registry);
+    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+        nonExistentDir, LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     blobStore.start();
     registry = new MetricRegistry();
-    metrics = new StorageManagerMetrics(registry);
+    metrics = new StoreMetrics(registry);
     BlobStore secondStore =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, nonExistentDir,
-            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+            nonExistentDir, LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     verifyStartupFailure(secondStore, StoreErrorCodes.Initialization_Error);
     blobStore.shutdown();
 
@@ -345,10 +345,9 @@ public class BlobStoreTest {
     assertTrue("Test file could not be created", file.createNewFile());
     file.deleteOnExit();
     registry = new MetricRegistry();
-    metrics = new StorageManagerMetrics(registry);
-    blobStore =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, file.getAbsolutePath(),
-            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    metrics = new StoreMetrics(registry);
+    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+        file.getAbsolutePath(), LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
   }
 
@@ -665,10 +664,11 @@ public class BlobStoreTest {
     store.shutdown();
     // no operations should be possible if store is not up or has been shutdown
     verifyOperationFailuresOnInactiveStore(store);
-    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    StoreMetrics metrics = new StoreMetrics(new MetricRegistry());
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, tempDirStr,
-        LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    store =
+        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, tempDirStr,
+            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     verifyOperationFailuresOnInactiveStore(store);
   }
 
@@ -802,12 +802,13 @@ public class BlobStoreTest {
   private void setupTestState() throws InterruptedException, StoreException {
     long segmentCapacity = isLogSegmented ? SEGMENT_CAPACITY : LOG_CAPACITY;
     metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, tempDirStr,
-        LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    store =
+        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, tempDirStr,
+            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     store.start();
     // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
@@ -972,10 +973,11 @@ public class BlobStoreTest {
     }
     assertFalse("Store should be shutdown", store.isStarted());
     metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, tempDirStr,
-        LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    store =
+        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, tempDirStr,
+            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
     assertFalse("Store should not be started", store.isStarted());
     store.start();
     assertTrue("Store should be started", store.isStarted());

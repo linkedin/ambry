@@ -88,7 +88,7 @@ public class IndexSegmentTest {
   public IndexSegmentTest(short version) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("indexSegmentDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
-    metrics = new StoreMetrics(tempDir.getName(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    metrics = new StoreMetrics(metricRegistry);
     this.version = version;
   }
 

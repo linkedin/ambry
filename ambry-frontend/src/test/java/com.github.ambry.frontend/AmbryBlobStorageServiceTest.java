@@ -19,6 +19,7 @@ import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -73,7 +74,6 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -89,11 +89,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import javax.net.ssl.SSLSession;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -103,10 +103,7 @@ import static org.junit.Assert.*;
  * Unit tests for {@link AmbryBlobStorageService}.
  */
 public class AmbryBlobStorageServiceTest {
-  private static final Account refAccount;
-  private static final Container refContainer;
-  private static final Container refDefaultPublicContainer;
-  private static final Container refDefaultPrivateContainer;
+  private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
   private final FrontendMetrics frontendMetrics = new FrontendMetrics(metricRegistry);
@@ -120,22 +117,12 @@ public class AmbryBlobStorageServiceTest {
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
-  private AccountService accountService = new FrontendTestAccountService();
   private AmbryBlobStorageService ambryBlobStorageService;
-
-  /**
-   * Randomly generates a reference {@link Account} and {@link Container}s.
-   */
-  static {
-    short refAccountId = Utils.getRandomShort(TestUtils.RANDOM);
-    String refAccountName = UtilsTest.getRandomString(10);
-    Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
-    refContainer = getRandomContainer(refAccountId);
-    refDefaultPublicContainer = getDefaultContainer(refAccountId, false);
-    refDefaultPrivateContainer = getDefaultContainer(refAccountId, true);
-    refAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
-        Arrays.asList(refDefaultPublicContainer, refDefaultPrivateContainer, refContainer)).build();
-  }
+  private Container refContainer;
+  private Container refDefaultPublicContainer;
+  private Container refDefaultPrivateContainer;
+  private InMemAccountServiceFactory.InMemAccountService accountService =
+      new InMemAccountServiceFactory(false, true).getAccountService();
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -143,6 +130,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws IOException
    */
   public AmbryBlobStorageServiceTest() throws Exception {
+    accountService.clear();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
@@ -150,7 +138,16 @@ public class AmbryBlobStorageServiceTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null);
-    accountService.updateAccounts(Collections.singletonList(refAccount));
+    refAccount = accountService.createAndAddRandomAccount();
+    for (Container container : refAccount.getAllContainers()) {
+      if (container.getId() == Container.DEFAULT_PUBLIC_CONTAINER_ID) {
+        refDefaultPublicContainer = container;
+      } else if (container.getId() == Container.DEFAULT_PRIVATE_CONTAINER_ID) {
+        refDefaultPrivateContainer = container;
+      } else {
+        refContainer = container;
+      }
+    }
     clusterMap = new MockClusterMap();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
@@ -393,19 +390,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void postGetHeadDeleteTest() throws Exception {
     // add another account
-    short accountId;
-    String accountName;
-    do {
-      accountId = Utils.getRandomShort(TestUtils.RANDOM);
-      accountName = UtilsTest.getRandomString(10);
-    } while (accountId == refAccount.getId() || accountName.equals(refAccount.getName()));
-    Container randomContainer = getRandomContainer(accountId);
-    Container defaultPublicContainer = getDefaultContainer(accountId, false);
-    Container defaultPrivateContainer = getDefaultContainer(accountId, true);
-    Account account = new AccountBuilder(accountId, accountName, Account.AccountStatus.ACTIVE,
-        Arrays.asList(defaultPublicContainer, defaultPrivateContainer, randomContainer)).build();
-    accountService.updateAccounts(Collections.singletonList(account));
-
+    accountService.createAndAddRandomAccount();
     // valid account and container names passed as part of POST
     for (Account testAccount : accountService.getAllAccounts()) {
       for (Container container : testAccount.getAllContainers()) {
@@ -564,7 +549,7 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void accountNameMismatchTest() throws Exception {
-    accountService = new FrontendTestAccountService(true);
+    accountService = new InMemAccountServiceFactory(true, false).getAccountService();
     ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
@@ -818,41 +803,6 @@ public class AmbryBlobStorageServiceTest {
   // general
 
   /**
-   * Creates and returns default public/private container for {@code accountId}.
-   * @param accountId the account id for the container
-   * @param isPrivate {@code true} if private container is required. {@code false} for public.
-   * @return default public/private container for {@code accountId}.
-   */
-  private static Container getDefaultContainer(short accountId, boolean isPrivate) {
-    Container container;
-    if (isPrivate) {
-      container = new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, Container.DEFAULT_PRIVATE_CONTAINER_NAME,
-          Container.DEFAULT_PRIVATE_CONTAINER_STATUS, Container.DEFAULT_PRIVATE_CONTAINER_DESCRIPTION,
-          Container.DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING, accountId).build();
-    } else {
-      container = new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, Container.DEFAULT_PUBLIC_CONTAINER_NAME,
-          Container.DEFAULT_PUBLIC_CONTAINER_STATUS, Container.DEFAULT_PUBLIC_CONTAINER_DESCRIPTION,
-          Container.DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING, accountId).build();
-    }
-    return container;
-  }
-
-  /**
-   * Creates and returns a random {@link Container} for {@code accountId}.
-   * @param accountId the account id for the container
-   * @return returns a random {@link Container} for {@code accountId}
-   */
-  private static Container getRandomContainer(short accountId) {
-    short refContainerId = Utils.getRandomShort(TestUtils.RANDOM);
-    String refContainerName = UtilsTest.getRandomString(10);
-    Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
-    String refContainerDescription = UtilsTest.getRandomString(10);
-    boolean refContainerPrivacy = TestUtils.RANDOM.nextBoolean();
-    return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerPrivacy, accountId).build();
-  }
-
-  /**
    * Method to easily create {@link RestRequest} objects containing a specific request.
    * @param restMethod the {@link RestMethod} desired.
    * @param uri string representation of the desired URI.
@@ -893,9 +843,10 @@ public class AmbryBlobStorageServiceTest {
    */
   private void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
       String contentType, String ownerId, String targetAccountName, String targetContainerName) throws JSONException {
-    if (headers != null && ttlInSecs >= -1 && serviceId != null && contentType != null) {
-      headers.put(RestUtils.Headers.TTL, ttlInSecs);
-      headers.put(RestUtils.Headers.PRIVATE, isPrivate);
+    if (headers != null && serviceId != null && contentType != null) {
+      if (ttlInSecs > -1) {
+        headers.put(RestUtils.Headers.TTL, ttlInSecs);
+      }
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
       headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
       if (targetAccountName != null) {
@@ -903,6 +854,8 @@ public class AmbryBlobStorageServiceTest {
       }
       if (targetContainerName != null) {
         headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+      } else {
+        headers.put(RestUtils.Headers.PRIVATE, isPrivate);
       }
       if (ownerId != null) {
         headers.put(RestUtils.Headers.OWNER_ID, ownerId);
@@ -1057,26 +1010,26 @@ public class AmbryBlobStorageServiceTest {
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, expectedAccount, expectedContainer);
     getBlobAndVerify(blobId, null, GetOption.None, headers, content, expectedAccount, expectedContainer);
-    getHeadAndVerify(blobId, null, null, headers);
-    getHeadAndVerify(blobId, null, GetOption.None, headers);
+    getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
+    getHeadAndVerify(blobId, null, GetOption.None, headers, expectedAccount, expectedContainer);
 
     ByteRange range = ByteRange.fromStartOffset(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH));
     getBlobAndVerify(blobId, range, null, headers, content, expectedAccount, expectedContainer);
-    getHeadAndVerify(blobId, range, null, headers);
+    getHeadAndVerify(blobId, range, null, headers, expectedAccount, expectedContainer);
 
     range = ByteRange.fromLastNBytes(ThreadLocalRandom.current().nextLong(CONTENT_LENGTH + 1));
     getBlobAndVerify(blobId, range, null, headers, content, expectedAccount, expectedContainer);
-    getHeadAndVerify(blobId, range, null, headers);
+    getHeadAndVerify(blobId, range, null, headers, expectedAccount, expectedContainer);
 
     long random1 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     long random2 = ThreadLocalRandom.current().nextLong(CONTENT_LENGTH);
     range = ByteRange.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2));
     getBlobAndVerify(blobId, range, null, headers, content, expectedAccount, expectedContainer);
-    getHeadAndVerify(blobId, range, null, headers);
+    getHeadAndVerify(blobId, range, null, headers, expectedAccount, expectedContainer);
 
     getNotModifiedBlobAndVerify(blobId, null);
     getUserMetadataAndVerify(blobId, null, headers);
-    getBlobInfoAndVerify(blobId, null, headers);
+    getBlobInfoAndVerify(blobId, null, headers, expectedAccount, expectedContainer);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
@@ -1228,9 +1181,12 @@ public class AmbryBlobStorageServiceTest {
    * @param blobId the blob ID of the blob to HEAD.
    * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
+   * @param expectedAccount the expected account in the rest request.
+   * @param expectedContainer the expected container in the rest request.
    * @throws Exception
    */
-  private void getBlobInfoAndVerify(String blobId, GetOption getOption, JSONObject expectedHeaders) throws Exception {
+  private void getBlobInfoAndVerify(String blobId, GetOption getOption, JSONObject expectedHeaders,
+      Account expectedAccount, Container expectedContainer) throws Exception {
     JSONObject headers = new JSONObject();
     if (getOption != null) {
       headers.put(RestUtils.Headers.GET_OPTION, getOption.toString());
@@ -1245,8 +1201,9 @@ public class AmbryBlobStorageServiceTest {
     assertNull("Accept-Ranges should not be set", restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
     assertNull("Content-Range header should not be set",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
-    verifyBlobProperties(expectedHeaders, restResponseChannel);
+    verifyBlobProperties(expectedHeaders, expectedContainer.isPrivate(), restResponseChannel);
     verifyUserMetadataHeaders(expectedHeaders, restResponseChannel);
+    verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
   }
 
   /**
@@ -1255,10 +1212,12 @@ public class AmbryBlobStorageServiceTest {
    * @param range the optional {@link ByteRange} for the request.
    * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
+   * @param expectedAccount the expected account in the rest request.
+   * @param expectedContainer the expected container in the rest request.
    * @throws Exception
    */
-  private void getHeadAndVerify(String blobId, ByteRange range, GetOption getOption, JSONObject expectedHeaders)
-      throws Exception {
+  private void getHeadAndVerify(String blobId, ByteRange range, GetOption getOption, JSONObject expectedHeaders,
+      Account expectedAccount, Container expectedContainer) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.HEAD, blobId, createRequestHeaders(range, getOption), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
@@ -1282,25 +1241,27 @@ public class AmbryBlobStorageServiceTest {
     }
     assertEquals(RestUtils.Headers.CONTENT_LENGTH + " does not match expected", Long.toString(contentLength),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
-    verifyBlobProperties(expectedHeaders, restResponseChannel);
+    verifyBlobProperties(expectedHeaders, expectedContainer.isPrivate(), restResponseChannel);
+    verifyAccountAndContainerHeaders(restResponseChannel, expectedAccount, expectedContainer);
   }
 
   /**
    * Verifies blob properties from output, to that sent in during input
    * @param expectedHeaders the expected headers in the response.
+   * @param isPrivate {@code true} if the blob is expected to be private
    * @param restResponseChannel the {@link RestResponseChannel} which contains the response.
    * @throws JSONException
    */
-  private void verifyBlobProperties(JSONObject expectedHeaders, MockRestResponseChannel restResponseChannel)
-      throws JSONException {
+  private void verifyBlobProperties(JSONObject expectedHeaders, boolean isPrivate,
+      MockRestResponseChannel restResponseChannel) throws JSONException {
     assertEquals(RestUtils.Headers.BLOB_SIZE + " does not match",
         expectedHeaders.getString(RestUtils.Headers.BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
     assertEquals(RestUtils.Headers.SERVICE_ID + " does not match",
         expectedHeaders.getString(RestUtils.Headers.SERVICE_ID),
         restResponseChannel.getHeader(RestUtils.Headers.SERVICE_ID));
-    assertEquals(RestUtils.Headers.PRIVATE + " does not match", expectedHeaders.getString(RestUtils.Headers.PRIVATE),
-        restResponseChannel.getHeader(RestUtils.Headers.PRIVATE));
+    assertEquals(RestUtils.Headers.PRIVATE + " does not match", isPrivate,
+        Boolean.valueOf(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
     assertEquals(RestUtils.Headers.AMBRY_CONTENT_TYPE + " does not match",
         expectedHeaders.getString(RestUtils.Headers.AMBRY_CONTENT_TYPE),
         restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
@@ -1314,6 +1275,22 @@ public class AmbryBlobStorageServiceTest {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match",
           expectedHeaders.getString(RestUtils.Headers.OWNER_ID),
           restResponseChannel.getHeader(RestUtils.Headers.OWNER_ID));
+    }
+  }
+
+  /**
+   * Verify that the account and container headers in the response are correct.
+   * @param restResponseChannel the {@link MockRestResponseChannel} to get headers from.
+   * @param expectedAccount the expected {@link Account}.
+   * @param expectedContainer the expected {@link Container}.
+   */
+  private void verifyAccountAndContainerHeaders(MockRestResponseChannel restResponseChannel, Account expectedAccount,
+      Container expectedContainer) {
+    if (expectedAccount.getId() != Account.UNKNOWN_ACCOUNT_ID) {
+      Assert.assertEquals("Account name not as expected", expectedAccount.getName(),
+          restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
+      Assert.assertEquals("Container name not as expected", expectedContainer.getName(),
+          restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
     }
   }
 
@@ -1370,8 +1347,8 @@ public class AmbryBlobStorageServiceTest {
       getBlobAndVerify(blobId, null, option, expectedHeaders, expectedContent, expectedAccount, expectedContainer);
       getNotModifiedBlobAndVerify(blobId, option);
       getUserMetadataAndVerify(blobId, option, expectedHeaders);
-      getBlobInfoAndVerify(blobId, option, expectedHeaders);
-      getHeadAndVerify(blobId, null, option, expectedHeaders);
+      getBlobInfoAndVerify(blobId, option, expectedHeaders, expectedAccount, expectedContainer);
+      getHeadAndVerify(blobId, null, option, expectedHeaders, expectedAccount, expectedContainer);
     }
   }
 
@@ -1647,7 +1624,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   private void populateAccountService() throws Exception {
-    ((FrontendTestAccountService) accountService).clear();
+    accountService.clear();
     accountService.updateAccounts(Lists.newArrayList(refAccount, Account.UNKNOWN_ACCOUNT));
   }
 
@@ -2225,74 +2202,3 @@ class FrontendTestRouter implements Router {
   }
 }
 
-/**
- * Implementation of {@link AccountService} for test. This implementation is not thread-safe.
- */
-class FrontendTestAccountService implements AccountService {
-  private final Map<Short, Account> idToAccountMap = new HashMap<>();
-  private final Map<String, Account> nameToAccountMap = new HashMap<>();
-  private boolean shouldReturnUnknownAccountByName = false;
-
-  /**
-   * Constructor.
-   * @param shouldReturnUnknownAccountByName {@code true} if always returns {@link Account#UNKNOWN_ACCOUNT} when queried
-   *                                                     by account name; {@code false} to do the actual query.
-   */
-  FrontendTestAccountService(boolean shouldReturnUnknownAccountByName) {
-    this.shouldReturnUnknownAccountByName = shouldReturnUnknownAccountByName;
-  }
-
-  /**
-   * Constructor with {@link #shouldReturnUnknownAccountByName} set to {@code false}.
-   */
-  FrontendTestAccountService() {
-    this(false);
-  }
-
-  @Override
-  public Account getAccountById(short accountId) {
-    return idToAccountMap.get(accountId);
-  }
-
-  @Override
-  public Account getAccountByName(String accountName) {
-    return shouldReturnUnknownAccountByName ? Account.UNKNOWN_ACCOUNT : nameToAccountMap.get(accountName);
-  }
-
-  @Override
-  public boolean updateAccounts(Collection<Account> accounts) {
-    for (Account account : accounts) {
-      idToAccountMap.put(account.getId(), account);
-      nameToAccountMap.put(account.getName(), account);
-    }
-    return true;
-  }
-
-  @Override
-  public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    throw new UnsupportedOperationException("Not implemented");
-  }
-
-  @Override
-  public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    throw new UnsupportedOperationException("Not implemented");
-  }
-
-  @Override
-  public Collection<Account> getAllAccounts() {
-    return idToAccountMap.values();
-  }
-
-  @Override
-  public void close() throws IOException {
-    // no op
-  }
-
-  /**
-   * Clears all the accounts in this {@code AccountService}.
-   */
-  void clear() {
-    idToAccountMap.clear();
-    nameToAccountMap.clear();
-  }
-}
