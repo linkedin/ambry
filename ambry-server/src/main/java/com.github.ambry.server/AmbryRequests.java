@@ -737,7 +737,8 @@ public class AmbryRequests implements RequestAPI {
     boolean isCaughtUp = false;
     if (!error.equals(ServerErrorCode.Partition_Unknown)) {
       error = ServerErrorCode.No_Error;
-      isCaughtUp = isAllRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes());
+      isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes(),
+          catchupStatusRequest.getNumReplicasCaughtUpPerPartition());
     }
     AdminResponse adminResponse = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     return new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
@@ -878,25 +879,34 @@ public class AmbryRequests implements RequestAPI {
    * Provides catch up status of all the remote replicas of {@code partitionIds}.
    * @param partitionIds the {@link PartitionId}s for which lag has to be <= {@code acceptableLagInBytes}.
    * @param acceptableLagInBytes the maximum lag in bytes that is considered "acceptable".
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within {@code acceptableLagInBytes}
+   *                                        (per partition). The min of this value or the total count of replicas - 1 is
+   *                                        considered.
    * @return {@code true} if the lag of each of the remote replicas of each of the {@link PartitionId} in
    * {@code partitionIds} <= {@code acceptableLagInBytes}. {@code false} otherwise.
    */
-  private boolean isAllRemoteLagLesserOrEqual(Collection<PartitionId> partitionIds, long acceptableLagInBytes) {
+  private boolean isRemoteLagLesserOrEqual(Collection<PartitionId> partitionIds, long acceptableLagInBytes,
+      short numReplicasCaughtUpPerPartition) {
     boolean isAcceptable = true;
     for (PartitionId partitionId : partitionIds) {
       List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();
+      int caughtUpCount = 0;
       for (ReplicaId replicaId : replicaIds) {
         if (!replicaId.getDataNodeId().equals(currentNode)) {
           long lagInBytes = replicationManager.getRemoteReplicaLagFromLocalInBytes(partitionId,
               replicaId.getDataNodeId().getHostname(), replicaId.getReplicaPath());
           logger.debug("Lag of {} is {}", replicaId, lagInBytes);
-          if (lagInBytes > acceptableLagInBytes) {
-            isAcceptable = false;
+          if (lagInBytes <= acceptableLagInBytes) {
+            caughtUpCount++;
+          }
+          if (caughtUpCount >= numReplicasCaughtUpPerPartition) {
             break;
           }
         }
       }
-      if (!isAcceptable) {
+      // -1 because we shouldn't consider the replica hosted on this node.
+      if (caughtUpCount < Math.min(replicaIds.size() - 1, numReplicasCaughtUpPerPartition)) {
+        isAcceptable = false;
         break;
       }
     }

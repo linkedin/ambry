@@ -494,8 +494,10 @@ public class RequestResponseTest {
     String clientId = "client";
     // request
     long acceptableLag = Utils.getRandomLong(TestUtils.RANDOM, 10000);
+    short numCaughtUpPerPartition = (short) TestUtils.RANDOM.nextInt(Short.MAX_VALUE);
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
-    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLag, adminRequest);
+    CatchupStatusAdminRequest catchupStatusRequest =
+        new CatchupStatusAdminRequest(acceptableLag, numCaughtUpPerPartition, adminRequest);
     DataInputStream requestStream = serAndPrepForRead(catchupStatusRequest, -1, true);
     AdminRequest deserializedAdminRequest =
         deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
@@ -504,6 +506,8 @@ public class RequestResponseTest {
         CatchupStatusAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     Assert.assertEquals("Acceptable lag not as set", acceptableLag,
         deserializedCatchupStatusRequest.getAcceptableLagInBytes());
+    Assert.assertEquals("Num caught up per partition not as set", numCaughtUpPerPartition,
+        deserializedCatchupStatusRequest.getNumReplicasCaughtUpPerPartition());
     // response
     boolean isCaughtUp = TestUtils.RANDOM.nextBoolean();
     ServerErrorCode[] values = ServerErrorCode.values();
