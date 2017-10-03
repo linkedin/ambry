@@ -48,6 +48,7 @@ class HelixParticipant implements ClusterParticipant {
   private final HelixFactory helixFactory;
   private HelixManager manager;
   private String instanceName;
+
   /**
    * Instantiate a HelixParticipant.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
@@ -96,6 +97,10 @@ class HelixParticipant implements ClusterParticipant {
 
   @Override
   public void setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+    if (!(replicaId instanceof AmbryReplica)) {
+      throw new IllegalArgumentException(
+          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+    }
     HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
@@ -106,8 +111,7 @@ class HelixParticipant implements ClusterParticipant {
 
     if (!isSealed) {
       sealedReplicas.remove(partitionId);
-    }
-    else if (!sealedReplicas.contains(partitionId)) {
+    } else if (!sealedReplicas.contains(partitionId)) {
       sealedReplicas.add(partitionId);
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);

@@ -57,6 +57,7 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -79,19 +80,6 @@ public class HelixParticipantTest {
     helixManagerFactory = new MockHelixManagerFactory();
   }
 
-  private ReplicaId createMockReplicaId(String partitionIdString) {
-    ReplicaId replicaId = Mockito.mock(ReplicaId.class);
-    PartitionId partitionId = Mockito.mock(PartitionId.class);
-    Mockito.when(partitionId.toPathString()).thenReturn(partitionIdString);
-    Mockito.when(replicaId.getPartitionId()).thenReturn(partitionId);
-    return replicaId;
-  }
-
-  private void listIsExpectedSize(List list, int expectedSize, String name) {
-    assertNotNull(name + " is null", list);
-    assertEquals(name + " is not size " + expectedSize, expectedSize, list.size());
-  }
-
   /**
    * Tests setReplicaSealedState method for {@link HelixParticipant}
    * @throws IOException
@@ -99,10 +87,10 @@ public class HelixParticipantTest {
   @Test
   public void testSetReplicaSealedState() throws IOException {
     //setup HelixParticipant and dependencies
-    String partitionId = "somePartitionId";
-    String partitionId2 = "someOtherPartitionId";
-    ReplicaId replicaId = createMockReplicaId(partitionId);
-    ReplicaId replicaId2 = createMockReplicaId(partitionId2);
+    String partitionIdStr = "somePartitionId";
+    String partitionIdStr2 = "someOtherPartitionId";
+    ReplicaId replicaId = createMockAmbryReplica(partitionIdStr);
+    ReplicaId replicaId2 = createMockAmbryReplica(partitionIdStr2);
     String hostname = "localhost";
     int port = 2200;
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
@@ -122,36 +110,54 @@ public class HelixParticipantTest {
 
     String listName = "sealedReplicas";
 
+    //Check that invoking setReplicaSealedState with a non-AmbryReplica ReplicaId throws an IllegalArgumentException
+    ReplicaId notAmbryReplica = createMockNotAmbryReplica(partitionIdStr);
+    try {
+      helixParticipant.setReplicaSealedState(notAmbryReplica, true);
+      fail("Expected an IllegalArgumentException here");
+    }
+    catch (Exception e) {
+      assertTrue(e instanceof IllegalArgumentException);
+    }
+
     //Check that invoking setReplicaSealedState adds the partition to the list of sealed replicas
     helixParticipant.setReplicaSealedState(replicaId, true);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 1, listName);
-    assertEquals(partitionId, sealedReplicas.get(0));
+    assertTrue(sealedReplicas.contains(partitionIdStr));
 
     //Seal another replicaId
     helixParticipant.setReplicaSealedState(replicaId2, true);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 2, listName);
-    assertEquals(partitionId2, sealedReplicas.get(1));
+    assertTrue(sealedReplicas.contains(partitionIdStr2));
+    assertTrue(sealedReplicas.contains(partitionIdStr));
 
-    //Check that sealed replica list doesn't take duplicates
+    //Check that sealed replica list doesn't take duplicates (and that dups are detected by partitionId comparison, not
+    //replicaId object comparison
+    ReplicaId dup = createMockAmbryReplica(partitionIdStr);
+    helixParticipant.setReplicaSealedState(dup, true);
     helixParticipant.setReplicaSealedState(replicaId2, true);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 2, listName);
-    assertEquals(partitionId2, sealedReplicas.get(1));
+    assertTrue(sealedReplicas.contains(partitionIdStr2));
+    assertTrue(sealedReplicas.contains(partitionIdStr));
 
     //Check that invoking setReplicaSealedState with isSealed == false removes partition from list of sealed replicas
     helixParticipant.setReplicaSealedState(replicaId, false);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 1, listName);
+    assertTrue(sealedReplicas.contains(partitionIdStr2));
+    assertFalse(sealedReplicas.contains(partitionIdStr));
 
     //Removing a replicaId that's already been removed doesn't hurt anything
     helixParticipant.setReplicaSealedState(replicaId, false);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 1, listName);
 
-    //Removing all replicas yields expected behavior
-    helixParticipant.setReplicaSealedState(replicaId2, false);
+    //Removing all replicas yields expected behavior (and removal works by partitionId, not replicaId itself)
+    dup = createMockAmbryReplica(partitionIdStr2);
+    helixParticipant.setReplicaSealedState(dup, false);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 0, listName);
   }
@@ -235,6 +241,27 @@ public class HelixParticipantTest {
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       return helixManager;
     }
+  }
+
+  private ReplicaId createMockAmbryReplica(String partitionIdString) {
+    return createMockReplicaId(partitionIdString, AmbryReplica.class, AmbryPartition.class);
+  }
+
+  private ReplicaId createMockNotAmbryReplica(String partitionIdString) {
+    return createMockReplicaId(partitionIdString, ReplicaId.class, PartitionId.class);
+  }
+
+  private ReplicaId createMockReplicaId(String partitionIdString, Class<? extends ReplicaId> replica, Class<? extends PartitionId> partition) {
+    ReplicaId replicaId = Mockito.mock(replica);
+    PartitionId partitionId = Mockito.mock(partition);
+    when(partitionId.toPathString()).thenReturn(partitionIdString);
+    when(replicaId.getPartitionId()).thenReturn(partitionId);
+    return replicaId;
+  }
+
+  private void listIsExpectedSize(List list, int expectedSize, String listName) {
+    assertNotNull(listName + " is null", list);
+    assertEquals(listName + " is not size " + expectedSize, expectedSize, list.size());
   }
 
   /**

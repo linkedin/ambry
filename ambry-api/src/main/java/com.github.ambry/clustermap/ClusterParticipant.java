@@ -34,7 +34,7 @@ public interface ClusterParticipant extends AutoCloseable {
   void initialize(String hostname, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException;
 
   /**
-   * Set or reset the sealed state of the replica for the given partition on the given instance.
+   * Set or reset the sealed state of the given replica.
    * @param replicaId the {@link ReplicaId}
    * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
    */

@@ -125,6 +125,7 @@ class Partition extends PartitionId {
    *
    * @return string representation of the Partition's ID for use as part of file system path.
    */
+  @Override
   public String toPathString() {
     return Long.toString(id);
   }

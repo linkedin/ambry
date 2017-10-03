@@ -183,21 +183,21 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   /**
-   * Specifies the size threshold (as percentage of maximum size) of a chunk for converting the chunk to RO from RW
+   * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW
    */
-  @Config(storeDataReadOnlySizeThresholdPercentageName)
+  @Config(storeReadOnlyEnableSizeThresholdPercentageName)
   @Default("95")
-  public final int storeDataReadOnlySizeThresholdPercentage;
-  public static final String storeDataReadOnlySizeThresholdPercentageName = "store.data.readonly.size.threshold.percentage";
+  public final int storeReadOnlyEnableSizeThresholdPercentage;
+  public static final String storeReadOnlyEnableSizeThresholdPercentageName = "store.read.only.enable.size.threshold.percentage";
 
   /**
-   * Specifies the size threshold delta below {@link #storeDataReadOnlySizeThresholdPercentageName} that a chunk will be
+   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
    * converted from RO to RW
    */
-  @Config(storeDataReadWriteSizeThresholdPercentageDeltaName)
+  @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
   @Default("5")
-  public final int storeDataReadWriteSizeThresholdPercentageDelta;
-  public static final String storeDataReadWriteSizeThresholdPercentageDeltaName = "store.data.readwrite.size.threshold.percentage.delta";
+  public final int storeReadWriteEnableSizeThresholdPercentageDelta;
+  public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName = "store.read.write.enable.size.threshold.percentage.delta";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -236,8 +236,10 @@ public class StoreConfig {
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
     storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
-    storeDataReadOnlySizeThresholdPercentage = verifiableProperties.getInt(storeDataReadOnlySizeThresholdPercentageName, 95);
-    storeDataReadWriteSizeThresholdPercentageDelta = verifiableProperties.getInt(storeDataReadWriteSizeThresholdPercentageDeltaName, 5);
+    storeReadOnlyEnableSizeThresholdPercentage = verifiableProperties.getInt(
+        storeReadOnlyEnableSizeThresholdPercentageName, 95);
+    storeReadWriteEnableSizeThresholdPercentageDelta = verifiableProperties.getInt(
+        storeReadWriteEnableSizeThresholdPercentageDeltaName, 5);
   }
 }
 

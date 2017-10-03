@@ -243,14 +243,14 @@ class BlobStore implements Store {
   private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity) {
     if (clusterManagerWriteStatusDelegate != null) {
       double percentFilled = (index.getLogUsedCapacity() / (double) log.getCapacityInBytes()) * 100;
-      if (percentFilled > config.storeDataReadOnlySizeThresholdPercentage && writeState != WriteState.READ_ONLY) {
-        clusterManagerWriteStatusDelegate.setToRO(replicaId);
+      if (percentFilled > config.storeReadOnlyEnableSizeThresholdPercentage && writeState != WriteState.READ_ONLY) {
+        clusterManagerWriteStatusDelegate.seal(replicaId);
         writeState = WriteState.READ_ONLY;
       } else if (percentFilled
-          <= config.storeDataReadOnlySizeThresholdPercentage - config.storeDataReadWriteSizeThresholdPercentageDelta
+          <= config.storeReadOnlyEnableSizeThresholdPercentage - config.storeReadWriteEnableSizeThresholdPercentageDelta
           && writeState != WriteState.READ_WRITE
-          || percentFilled <= config.storeDataReadOnlySizeThresholdPercentage && writeState == WriteState.IDLE) {
-        clusterManagerWriteStatusDelegate.setToRW(replicaId);
+          || percentFilled <= config.storeReadOnlyEnableSizeThresholdPercentage && writeState == WriteState.IDLE) {
+        clusterManagerWriteStatusDelegate.unseal(replicaId);
         writeState = WriteState.READ_WRITE;
       }
     } else {
