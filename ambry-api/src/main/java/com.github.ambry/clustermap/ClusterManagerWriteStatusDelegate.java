@@ -15,7 +15,7 @@
 package com.github.ambry.clustermap;
 
 /**
- * Delegate class giving a layer of abstraction between Store and ClusterParticipant,
+ * Delegate class giving a layer of abstraction between the client and ClusterParticipant
  */
 public class ClusterManagerWriteStatusDelegate {
 
@@ -29,7 +29,7 @@ public class ClusterManagerWriteStatusDelegate {
    * Sets replicaId to read-only status
    * @param replicaId
    */
-  public void setToRO(ReplicaId replicaId) {
+  public void seal(ReplicaId replicaId) {
     clusterParticipant.setReplicaSealedState(replicaId, true);
   }
 
@@ -37,7 +37,7 @@ public class ClusterManagerWriteStatusDelegate {
    * Sets replicaId to read-write status
    * @param replicaId
    */
-  public void setToRW(ReplicaId replicaId) {
+  public void unseal(ReplicaId replicaId) {
     clusterParticipant.setReplicaSealedState(replicaId, false);
   }
 }

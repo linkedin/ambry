@@ -32,10 +32,13 @@ public class ClusterManagerWriteStatusDelegateTest {
     ClusterManagerWriteStatusDelegate delegate = new ClusterManagerWriteStatusDelegate(clusterParticipant);
 
     //Checks that the right underlying ClusterParticipant methods are called
-    delegate.setToRO(replicaId);
+    verifyZeroInteractions(clusterParticipant);
+    delegate.seal(replicaId);
     verify(clusterParticipant).setReplicaSealedState(replicaId, true);
-    delegate.setToRW(replicaId);
+    verifyNoMoreInteractions(clusterParticipant);
+    delegate.unseal(replicaId);
     verify(clusterParticipant).setReplicaSealedState(replicaId, false);
+    verifyNoMoreInteractions(clusterParticipant);
   }
 
 }
