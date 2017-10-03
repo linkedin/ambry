@@ -309,15 +309,20 @@ public class DiskReformatter {
    * @throws Exception
    */
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
+    boolean sourceHasProblems;
     try (
         StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig, metrics,
             storeKeyFactory, diskIOScheduler, diskSpaceAllocator, transformers, time)) {
-      copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
+      sourceHasProblems = copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken()).getSecond();
     }
-    // verify that the stores are equivalent
-    File[] replicas = {src, tgt};
-    if (!consistencyChecker.checkConsistency(replicas)) {
-      throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
+    if (!sourceHasProblems) {
+      // verify that the stores are equivalent
+      File[] replicas = {src, tgt};
+      if (!consistencyChecker.checkConsistency(replicas)) {
+        throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
+      }
+    } else {
+      logger.warn("{} had problems so did not run consistency checker", src);
     }
   }
 }

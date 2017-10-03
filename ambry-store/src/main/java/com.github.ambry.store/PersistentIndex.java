@@ -1496,7 +1496,8 @@ class PersistentIndex {
       final Timer.Context context = metrics.indexFlushTime.time();
       try {
         ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-        if (indexSegments.size() > 0) {
+        int indexSegmentsSize = indexSegments.size();
+        if (indexSegmentsSize > 0) {
           // before iterating the map, get the current file end pointer
           Map.Entry<Offset, IndexSegment> lastEntry = indexSegments.lastEntry();
           IndexSegment currentInfo = lastEntry.getValue();
@@ -1519,7 +1520,8 @@ class PersistentIndex {
           }
 
           IndexSegment prevInfo =
-              indexSegments.size() > 1 ? indexSegments.lowerEntry(lastEntry.getKey()).getValue() : null;
+              indexSegmentsSize > 1 ? indexSegments.lowerEntry(lastEntry.getKey()).getValue() : null;
+          List<IndexSegment> prevInfosToWrite = new ArrayList<>();
           Offset currentLogEndPointer = log.getEndOffset();
           while (prevInfo != null && !prevInfo.isMapped()) {
             if (prevInfo.getEndOffset().compareTo(currentLogEndPointer) > 0) {
@@ -1527,11 +1529,15 @@ class PersistentIndex {
                   + " greater than the log end offset " + currentLogEndPointer;
               throw new StoreException(message, StoreErrorCodes.IOError);
             }
-            logger.trace("Index : " + dataDir + " writing prev index with end offset " + prevInfo.getEndOffset());
-            prevInfo.writeIndexSegmentToFile(prevInfo.getEndOffset());
-            prevInfo.map(true);
+            prevInfosToWrite.add(prevInfo);
             Map.Entry<Offset, IndexSegment> infoEntry = indexSegments.lowerEntry(prevInfo.getStartOffset());
             prevInfo = infoEntry != null ? infoEntry.getValue() : null;
+          }
+          for (int i = prevInfosToWrite.size() - 1; i >= 0; i--) {
+            IndexSegment toWrite = prevInfosToWrite.get(i);
+            logger.trace("Index : {} writing prev index with end offset {}", dataDir, toWrite.getEndOffset());
+            toWrite.writeIndexSegmentToFile(toWrite.getEndOffset());
+            toWrite.map(true);
           }
           currentInfo.writeIndexSegmentToFile(indexEndOffsetBeforeFlush);
         }

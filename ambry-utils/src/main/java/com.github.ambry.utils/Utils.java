@@ -813,8 +813,8 @@ public class Utils {
     executorService.shutdown();
     try {
       if (!executorService.awaitTermination(shutdownTimeout, timeUnit)) {
-        logger.warn("ExecutorService is not shut down successfully within {} ms, forcing an immediate shutdown.",
-            shutdownTimeout);
+        logger.warn("ExecutorService is not shut down successfully within {} {}, forcing an immediate shutdown.",
+            shutdownTimeout, timeUnit);
         executorService.shutdownNow();
         if (!executorService.awaitTermination(shutdownTimeout, timeUnit)) {
           logger.error("ExecutorService cannot be shut down successfully.");

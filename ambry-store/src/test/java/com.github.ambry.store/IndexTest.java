@@ -1117,6 +1117,12 @@ public class IndexTest {
    */
   @Test
   public void indexPersistorTest() throws InterruptedException, IOException, StoreException {
+    // make sure persistor is persisting all segments
+    int numIndexSegments = state.index.getIndexSegments().size();
+    state.index.persistIndex();
+    int numIndexFiles = tempDir.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER).length;
+    assertEquals("Not as many files written as there were index segments", numIndexSegments, numIndexFiles);
+
     // add new entries which may not be persisted
     // call persist and reload the index (index.close() is never called)
     Offset indexEndOffset = state.index.getCurrentEndOffset();
