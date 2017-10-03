@@ -195,7 +195,7 @@ public class CompactionPolicyTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     time.sleep(2 * TimeUnit.DAYS.toMillis(config.storeDeletedMessageRetentionDays));
     MetricRegistry metricRegistry = new MetricRegistry();
-    StorageManagerMetrics metrics = new StorageManagerMetrics(metricRegistry);
+    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(maxBlobSize);
     MockBlobStore blobStore =
         new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, SEGMENT_CAPACITY_IN_BYTES, SEGMENT_HEADER_SIZE,
@@ -307,9 +307,9 @@ class MockBlobStore extends BlobStore {
   List<String> logSegmentsNotInJournal = null;
   MockBlobStoreStats mockBlobStoreStats;
 
-  MockBlobStore(StoreConfig config, StorageManagerMetrics metrics, Time time, long capacityInBytes,
-      long segmentCapacity, long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
-    super("", config, null, null, null, null, metrics, null, 0, null, null, null, time);
+  MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
+      long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
+    super("", config, null, null, null, null, metrics, metrics, null, 0, null, null, null, time);
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;
     this.segmentHeaderSize = segmentHeaderSize;

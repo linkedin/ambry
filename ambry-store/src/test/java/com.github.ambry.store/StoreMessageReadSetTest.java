@@ -63,7 +63,7 @@ public class StoreMessageReadSetTest {
   public StoreMessageReadSetTest() throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
-    metrics = new StoreMetrics(tempDir.getName(), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+    metrics = new StoreMetrics(metricRegistry);
   }
 
   /**

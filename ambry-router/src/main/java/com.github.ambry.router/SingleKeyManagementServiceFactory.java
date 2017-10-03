@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.security.GeneralSecurityException;
@@ -31,7 +32,14 @@ public class SingleKeyManagementServiceFactory implements KeyManagementServiceFa
   private final KMSConfig kmsConfig;
   private final String kmsDefaultContainerKey;
 
-  SingleKeyManagementServiceFactory(VerifiableProperties verifiableProperties) {
+  /**
+   * Instantiates {@link SingleKeyManagementServiceFactory}
+   * @param verifiableProperties {@link VerifiableProperties} to load configs from
+   * @param clusterName Cluster name for which {@link KeyManagementService} is requested for
+   * @param registry {@link MetricRegistry} to use
+   */
+  SingleKeyManagementServiceFactory(VerifiableProperties verifiableProperties, String clusterName,
+      MetricRegistry registry) {
     kmsConfig = new KMSConfig(verifiableProperties);
     kmsDefaultContainerKey = verifiableProperties.getString("kms.default.container.key");
   }

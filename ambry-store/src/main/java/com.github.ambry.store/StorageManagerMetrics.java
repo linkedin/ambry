@@ -48,7 +48,6 @@ public class StorageManagerMetrics {
 
   private final Counter compactionCount;
   private final AtomicLong compactionsInProgress = new AtomicLong(0);
-  private final AggregatedStoreMetrics aggregatedStoreMetrics;
 
   /**
    * Create a {@link StorageManagerMetrics} object for handling metrics related to the stores on a node.
@@ -56,7 +55,6 @@ public class StorageManagerMetrics {
    */
   public StorageManagerMetrics(MetricRegistry registry) {
     this.registry = registry;
-    aggregatedStoreMetrics = new AggregatedStoreMetrics(registry);
     storageManagerStartTimeMs =
         registry.histogram(MetricRegistry.name(StorageManager.class, "StorageManagerStartTimeMs"));
     storageManagerShutdownTimeMs =
@@ -84,12 +82,7 @@ public class StorageManagerMetrics {
     compactionExecutorErrorCount =
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionExecutorErrorCount"));
 
-    Gauge<Long> compactionsInProgressGauge = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return compactionsInProgress.longValue();
-      }
-    };
+    Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
     registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
         compactionsInProgressGauge);
   }
@@ -100,19 +93,9 @@ public class StorageManagerMetrics {
    * @param diskCount the number of disks that the {@link StorageManager} handles.
    */
   void initializeCompactionThreadsTracker(final StorageManager storageManager, final int diskCount) {
-    Gauge<Integer> compactionThreadsCountGauge = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return storageManager.getCompactionThreadCount();
-      }
-    };
+    Gauge<Integer> compactionThreadsCountGauge = storageManager::getCompactionThreadCount;
     registry.register(MetricRegistry.name(StorageManager.class, "CompactionThreadsAlive"), compactionThreadsCountGauge);
-    Gauge<Integer> compactionHealthGauge = new Gauge<Integer>() {
-      @Override
-      public Integer getValue() {
-        return storageManager.getCompactionThreadCount() == diskCount ? 1 : 0;
-      }
-    };
+    Gauge<Integer> compactionHealthGauge = () -> storageManager.getCompactionThreadCount() == diskCount ? 1 : 0;
     registry.register(MetricRegistry.name(StorageManager.class, "CompactionHealth"), compactionHealthGauge);
   }
 
@@ -133,14 +116,5 @@ public class StorageManagerMetrics {
    */
   void markCompactionStop() {
     compactionsInProgress.decrementAndGet();
-  }
-
-  /**
-   * Create a {@link StoreMetrics} object for handling metrics related to a specific store.
-   * @param storeId the name of the store.
-   * @return the {@link StoreMetrics}
-   */
-  public StoreMetrics createStoreMetrics(String storeId) {
-    return new StoreMetrics(storeId, registry, aggregatedStoreMetrics);
   }
 }

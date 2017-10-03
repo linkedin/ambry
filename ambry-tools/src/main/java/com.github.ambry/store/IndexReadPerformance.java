@@ -143,8 +143,7 @@ public class IndexReadPerformance {
       final HashMap<String, IndexPayload> hashes = new HashMap<String, IndexPayload>();
       String line;
       MetricRegistry metricRegistry = new MetricRegistry();
-      StoreMetrics metrics =
-          new StoreMetrics(System.getProperty("user.dir"), metricRegistry, new AggregatedStoreMetrics(metricRegistry));
+      StoreMetrics metrics = new StoreMetrics(metricRegistry);
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
       DiskSpaceAllocator diskSpaceAllocator =
           new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));

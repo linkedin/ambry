@@ -55,6 +55,7 @@ import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -142,7 +143,7 @@ class ReplicaThread implements Runnable {
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable.
    */
-  void controlReplicationForPartitions(List<? extends PartitionId> ids, boolean enable) {
+  void controlReplicationForPartitions(Collection<PartitionId> ids, boolean enable) {
     lock.lock();
     try {
       for (PartitionId id : ids) {

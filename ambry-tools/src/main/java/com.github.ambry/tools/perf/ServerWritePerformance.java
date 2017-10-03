@@ -347,7 +347,7 @@ public class ServerWritePerformance {
                 props.getContainerId(), partitionId);
             PutRequest putRequest =
                 new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
-                    props.getBlobSize(), BlobType.DataBlob);
+                    props.getBlobSize(), BlobType.DataBlob, null);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
             Port port = replicaId.getDataNodeId().getPortToConnectTo();
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);

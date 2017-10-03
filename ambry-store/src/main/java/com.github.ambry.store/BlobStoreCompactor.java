@@ -61,7 +61,6 @@ class BlobStoreCompactor {
   };
 
   private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
-  private static final String METRICS_SUFFIX = BlobStore.SEPARATOR + "temp";
 
   private final File dataDir;
   private final String storeId;
@@ -94,7 +93,8 @@ class BlobStoreCompactor {
    * @param storeId the unique ID of the store.
    * @param storeKeyFactory the {@link StoreKeyFactory} to generate {@link StoreKey} instances.
    * @param config the {@link StoreConfig} that defines configuration parameters.
-   * @param metrics the {@link StoreMetrics} to use to record metrics.
+   * @param srcMetrics the {@link StoreMetrics} to use to record metrics for the compactor.
+   * @param tgtMetrics the {@link StoreMetrics} to use to record metrics for the temporarily created log and index.
    * @param diskIOScheduler the {@link DiskIOScheduler} to schedule I/O.
    * @param srcLog the {@link Log} to copy data from.
    * @param time the {@link Time} instance to use.
@@ -104,14 +104,15 @@ class BlobStoreCompactor {
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
-      StoreMetrics metrics, DiskIOScheduler diskIOScheduler, DiskSpaceAllocator diskSpaceAllocator, Log srcLog,
-      Time time, UUID sessionId, UUID incarnationId) throws IOException, StoreException {
+      StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId)
+      throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
     this.config = config;
-    this.srcMetrics = metrics;
-    tgtMetrics = new StoreMetrics(storeId + METRICS_SUFFIX, metrics.getRegistry(), metrics.aggregatedStoreMetrics);
+    this.srcMetrics = srcMetrics;
+    this.tgtMetrics = tgtMetrics;
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
     this.diskSpaceAllocator = diskSpaceAllocator;
@@ -134,7 +135,7 @@ class BlobStoreCompactor {
       srcIndex.hardDeleter.resume();
     }
     isActive = true;
-    srcMetrics.initializeCompactorGauges(compactionInProgress);
+    srcMetrics.initializeCompactorGauges(storeId, compactionInProgress);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -371,7 +372,7 @@ class BlobStoreCompactor {
       long segmentCountDiff =
           compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().size() - numSwapsUsed;
       long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff;
-      srcMetrics.aggregatedStoreMetrics.compactionBytesReclaimedCount.inc(savedBytes);
+      srcMetrics.compactionBytesReclaimedCount.inc(savedBytes);
     }
     tgtIndex.close();
     tgtLog.close();
@@ -461,8 +462,10 @@ class BlobStoreCompactor {
         tgtMetrics, true, existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
-    tgtIndex = new PersistentIndex(dataDir.getAbsolutePath(), null, tgtLog, config, storeKeyFactory, null, null,
-        diskIOScheduler, tgtMetrics, journal, time, sessionId, incarnationId, TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
+    tgtIndex =
+        new PersistentIndex(dataDir.getAbsolutePath(), storeId, null, tgtLog, config, storeKeyFactory, null, null,
+            diskIOScheduler, tgtMetrics, journal, time, sessionId, incarnationId,
+            TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME);
     if (srcIndex.hardDeleter != null && !srcIndex.hardDeleter.isPaused()) {
       logger.debug("Pausing hard delete for {}", storeId);
       srcIndex.hardDeleter.pause();

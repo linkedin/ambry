@@ -273,9 +273,8 @@ public class ReplicationTest {
         allStopped = false;
         onlyOneResumed = true;
       } else if (!allReenabled) {
-        List<? extends PartitionId> idsToEnable = new ArrayList<>(clusterMap.getAllPartitionIds());
         // not removing the first partition
-        replicaThread.controlReplicationForPartitions(idsToEnable, true);
+        replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), true);
         onlyOneResumed = false;
         allReenabled = true;
         expectedPaused.clear();

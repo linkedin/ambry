@@ -63,7 +63,7 @@ public class StoreCopierTest {
 
   private final File srcDir;
   private final File tgtDir;
-  private final StoreCopier _storeCopier;
+  private final StoreCopier storeCopier;
   private final StoreConfig storeConfig;
   private final ClusterMap clusterMap = new MockClusterMap();
   private final Time time = new MockTime();
@@ -89,9 +89,10 @@ public class StoreCopierTest {
     storeConfig = new StoreConfig(verifiableProperties);
     setupTestState();
     time.sleep(1000);
-    _storeCopier = new StoreCopier("test_store", srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig,
-        clusterMap.getMetricRegistry(), STORE_KEY_FACTORY, DISK_IO_SCHEDULER,
-        StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, Collections.emptyList(), time);
+    StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
+    storeCopier = new StoreCopier("test_store", srcDir, tgtDir, STORE_CAPACITY, 4 * 1024 * 1024, storeConfig, metrics,
+        STORE_KEY_FACTORY, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, Collections.EMPTY_LIST,
+        time);
   }
 
   /**
@@ -100,7 +101,7 @@ public class StoreCopierTest {
    */
   @After
   public void cleanup() throws IOException {
-    _storeCopier.close();
+    storeCopier.close();
     assertTrue(srcDir + " could not be deleted", StoreTestUtils.cleanDirectory(srcDir, true));
     assertTrue(tgtDir + " could not be deleted", StoreTestUtils.cleanDirectory(tgtDir, true));
   }
@@ -112,15 +113,15 @@ public class StoreCopierTest {
    */
   @Test
   public void copyTest() throws IOException, StoreException {
-    _storeCopier.copy(new StoreFindTokenFactory(STORE_KEY_FACTORY).getNewFindToken());
-    _storeCopier.close();
+    storeCopier.copy(new StoreFindTokenFactory(STORE_KEY_FACTORY).getNewFindToken());
+    storeCopier.close();
     // copy the store descriptor file over
+    StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
     Files.copy(new File(srcDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(),
         new File(tgtDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
     BlobStore tgt =
         new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            new StorageManagerMetrics(new MetricRegistry()), tgtDir.getAbsolutePath(), STORE_CAPACITY,
-            STORE_KEY_FACTORY, null, null, time);
+            storeMetrics, storeMetrics, tgtDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time);
     tgt.start();
     try {
       // should not be able to get expired or deleted ids
@@ -153,10 +154,10 @@ public class StoreCopierTest {
    * @throws StoreException
    */
   private void setupTestState() throws IOException, StoreException {
+    StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
     BlobStore src =
         new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            new StorageManagerMetrics(clusterMap.getMetricRegistry()), srcDir.getAbsolutePath(), STORE_CAPACITY,
-            STORE_KEY_FACTORY, null, null, time);
+            metrics, metrics, srcDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time);
     src.start();
     try {
       deletedId = new MockId("deletedId");

@@ -117,7 +117,7 @@ public final class ServerTestUtil {
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       BlockingChannel channel =
           getBlockingChannelBasedOnPortType(targetPort, "localhost", clientSSLSocketFactory, clientSSLConfig);
       channel.connect();
@@ -129,7 +129,7 @@ public final class ServerTestUtil {
       // put blob 2
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       channel.send(putRequest2);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -138,7 +138,7 @@ public final class ServerTestUtil {
       // put blob 3
       PutRequest putRequest3 =
           new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       channel.send(putRequest3);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -149,7 +149,7 @@ public final class ServerTestUtil {
           new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId);
       PutRequest putRequest4 =
           new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       channel.send(putRequest4);
       putResponseStream = channel.receive().getInputStream();
       PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -320,13 +320,13 @@ public final class ServerTestUtil {
     // Send put requests for an existing blobId for the exact blob to simulate a request arriving late.
     PutRequest latePutRequest1 =
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-            properties.getBlobSize(), BlobType.DataBlob);
+            properties.getBlobSize(), BlobType.DataBlob, null);
     PutRequest latePutRequest2 =
         new PutRequest(1, "client2", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-            properties.getBlobSize(), BlobType.DataBlob);
+            properties.getBlobSize(), BlobType.DataBlob, null);
     PutRequest latePutRequest3 =
         new PutRequest(1, "client3", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-            properties.getBlobSize(), BlobType.DataBlob);
+            properties.getBlobSize(), BlobType.DataBlob, null);
     channelToDatanode1.send(latePutRequest1);
     InputStream putResponseStream = channelToDatanode1.receive().getInputStream();
     PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -912,7 +912,7 @@ public final class ServerTestUtil {
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId1, ByteBuffer.wrap(usermetadata), data);
 
       BlockingChannel channel1 =
@@ -932,7 +932,7 @@ public final class ServerTestUtil {
       // put blob 2
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
@@ -942,7 +942,7 @@ public final class ServerTestUtil {
       // put blob 3
       PutRequest putRequest3 =
           new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
@@ -953,7 +953,7 @@ public final class ServerTestUtil {
       // put blob 4
       putRequest =
           new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId4, ByteBuffer.wrap(usermetadata), data);
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel1.send(putRequest);
@@ -964,7 +964,7 @@ public final class ServerTestUtil {
       // put blob 5
       putRequest2 =
           new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId5, ByteBuffer.wrap(usermetadata), data);
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
@@ -975,7 +975,7 @@ public final class ServerTestUtil {
       // put blob 6
       putRequest3 =
           new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId6, ByteBuffer.wrap(usermetadata), data);
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
@@ -1127,7 +1127,7 @@ public final class ServerTestUtil {
       // put blob 7
       putRequest2 =
           new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId7, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
@@ -1137,7 +1137,7 @@ public final class ServerTestUtil {
       // put blob 8
       putRequest3 =
           new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId8, ByteBuffer.wrap(usermetadata), data);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
@@ -1147,7 +1147,7 @@ public final class ServerTestUtil {
       // put blob 9
       putRequest2 =
           new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId9, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
@@ -1157,7 +1157,7 @@ public final class ServerTestUtil {
       // put blob 10
       putRequest3 =
           new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId10, ByteBuffer.wrap(usermetadata), data);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
@@ -1167,7 +1167,7 @@ public final class ServerTestUtil {
       // put blob 11
       putRequest2 =
           new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob);
+              properties.getBlobSize(), BlobType.DataBlob, null);
       expectedTokenSize += getPutRecordSize(properties, blobId11, ByteBuffer.wrap(usermetadata), data);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();

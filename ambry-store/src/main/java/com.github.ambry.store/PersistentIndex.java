@@ -116,6 +116,7 @@ class PersistentIndex {
   /**
    * Creates a new persistent index
    * @param datadir The directory to use to store the index files
+   * @param storeId The ID for the store that this index represents.
    * @param scheduler The scheduler that runs regular background tasks
    * @param log The log that is represented by this index
    * @param config The store configs for this index
@@ -129,7 +130,7 @@ class PersistentIndex {
    * @param incarnationId to uniquely identify the store's incarnation
    * @throws StoreException
    */
-  PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
+  PersistentIndex(String datadir, String storeId, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Time time, UUID sessionId, UUID incarnationId)
       throws StoreException {
@@ -139,7 +140,7 @@ class PersistentIndex {
     elements held by the latest segment, the journal needs to be able to hold twice the max number of elements a
     segment can hold.
     */
-    this(datadir, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
+    this(datadir, storeId, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
         new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
             config.storeMaxNumberOfEntriesToReturnFromJournal), time, sessionId, incarnationId,
         CLEAN_SHUTDOWN_FILENAME);
@@ -148,6 +149,7 @@ class PersistentIndex {
   /**
    * Creates a new persistent index
    * @param datadir The directory to use to store the index files
+   * @param storeId The ID for the store that this index represents.
    * @param scheduler The scheduler that runs persistence tasks. {@code null} if auto-persistence is not required.
    * @param log The log that is represented by this index
    * @param config The store configs for this index
@@ -164,7 +166,7 @@ class PersistentIndex {
    * @param cleanShutdownFileName the name of the file that will be stored on clean shutdown.
    * @throws StoreException
    */
-  PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
+  PersistentIndex(String datadir, String storeId, ScheduledExecutorService scheduler, Log log, StoreConfig config,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Journal journal, Time time, UUID sessionId,
       UUID incarnationId, String cleanShutdownFileName) throws StoreException {
@@ -216,7 +218,7 @@ class PersistentIndex {
         hardDeleter = new HardDeleter(config, metrics, datadir, log, this, hardDelete, factory, diskIOScheduler, time);
         hardDeleter.performRecovery();
         logger.info("Index : " + datadir + " Finished performing hard delete recovery");
-        metrics.initializeHardDeleteMetric(hardDeleter, this);
+        metrics.initializeHardDeleteMetric(storeId, hardDeleter, this);
       } else {
         hardDeleter = null;
       }

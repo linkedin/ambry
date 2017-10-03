@@ -58,7 +58,9 @@ class DiskManager {
    * @param replicas all the replicas on this disk.
    * @param storeConfig the settings for store configuration.
    * @param diskManagerConfig the settings for disk manager configuration.
-   * @param metrics the {@link StorageManagerMetrics} object used for store-related metrics.
+   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   * @param storeMainMetrics the {@link StoreMetrics} object used for store-related metrics.
+   * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
@@ -66,8 +68,9 @@ class DiskManager {
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
-      StorageManagerMetrics metrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService scheduler) {
+      StorageManagerMetrics metrics, StoreMetrics storeMainMetrics, StoreMetrics storeUnderCompactionMetrics,
+      StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time,
+      ScheduledExecutorService scheduler) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
@@ -81,8 +84,8 @@ class DiskManager {
         String storeId = replica.getPartitionId().toString();
         BlobStore store =
             new BlobStore(storeId, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                metrics, replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory, recovery, hardDelete,
-                time);
+                storeMainMetrics, storeUnderCompactionMetrics, replica.getReplicaPath(), replica.getCapacityInBytes(),
+                keyFactory, recovery, hardDelete, time);
         stores.put(replica.getPartitionId(), store);
       }
     }

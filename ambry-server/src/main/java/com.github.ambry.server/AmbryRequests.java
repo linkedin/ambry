@@ -75,8 +75,10 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -97,6 +99,7 @@ public class AmbryRequests implements RequestAPI {
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private final ClusterMap clusterMap;
   private final DataNodeId currentNode;
+  private final Collection<PartitionId> partitionsInCurrentNode;
   private final ServerMetrics metrics;
   private final MessageFormatMetrics messageFormatMetrics;
   private final FindTokenFactory findTokenFactory;
@@ -126,6 +129,12 @@ public class AmbryRequests implements RequestAPI {
     requestsDisableInfo.put(RequestOrResponseType.DeleteRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     requestsDisableInfo.put(RequestOrResponseType.ReplicaMetadataRequest,
         Collections.newSetFromMap(new ConcurrentHashMap<>()));
+
+    Set<PartitionId> partitionIds = new HashSet<>();
+    for (ReplicaId replicaId : clusterMap.getReplicaIds(currentNode)) {
+      partitionIds.add(replicaId.getPartitionId());
+    }
+    partitionsInCurrentNode = Collections.unmodifiableSet(partitionIds);
   }
 
   public void handleRequests(Request request) throws InterruptedException {
@@ -537,7 +546,7 @@ public class AmbryRequests implements RequestAPI {
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable
    */
-  private void controlRequestForPartitions(RequestOrResponseType requestType, List<? extends PartitionId> ids,
+  private void controlRequestForPartitions(RequestOrResponseType requestType, Collection<PartitionId> ids,
       boolean enable) {
     if (enable) {
       requestsDisableInfo.get(requestType).removeAll(ids);
@@ -652,7 +661,7 @@ public class AmbryRequests implements RequestAPI {
     RequestControlAdminRequest controlRequest = RequestControlAdminRequest.readFrom(requestStream, adminRequest);
     RequestOrResponseType toControl = controlRequest.getRequestTypeToControl();
     ServerErrorCode error;
-    List<? extends PartitionId> partitionIds;
+    Collection<PartitionId> partitionIds;
     if (!requestsDisableInfo.containsKey(toControl)) {
       metrics.badRequestError.inc();
       error = ServerErrorCode.Bad_Request;
@@ -662,7 +671,7 @@ public class AmbryRequests implements RequestAPI {
         error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
         partitionIds = Collections.singletonList(controlRequest.getPartitionId());
       } else {
-        partitionIds = clusterMap.getAllPartitionIds();
+        partitionIds = partitionsInCurrentNode;
       }
       if (!error.equals(ServerErrorCode.Partition_Unknown)) {
         controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
@@ -684,7 +693,7 @@ public class AmbryRequests implements RequestAPI {
    */
   private AdminResponse handleReplicationControlRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
-    List<? extends PartitionId> partitionIds;
+    Collection<PartitionId> partitionIds;
     ServerErrorCode error = ServerErrorCode.No_Error;
     ReplicationControlAdminRequest replControlRequest =
         ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
@@ -692,7 +701,7 @@ public class AmbryRequests implements RequestAPI {
       error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
       partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
     } else {
-      partitionIds = clusterMap.getAllPartitionIds();
+      partitionIds = partitionsInCurrentNode;
     }
     if (!error.equals(ServerErrorCode.Partition_Unknown)) {
       if (replicationManager.controlReplicationForPartitions(partitionIds, replControlRequest.getOrigins(),
@@ -716,14 +725,14 @@ public class AmbryRequests implements RequestAPI {
    */
   private AdminResponse handleCatchupStatusRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
-    List<? extends PartitionId> partitionIds;
+    Collection<PartitionId> partitionIds;
     ServerErrorCode error = ServerErrorCode.No_Error;
     CatchupStatusAdminRequest catchupStatusRequest = CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
     if (catchupStatusRequest.getPartitionId() != null) {
       error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
       partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
     } else {
-      partitionIds = clusterMap.getAllPartitionIds();
+      partitionIds = partitionsInCurrentNode;
     }
     boolean isCaughtUp = false;
     if (!error.equals(ServerErrorCode.Partition_Unknown)) {
@@ -832,14 +841,7 @@ public class AmbryRequests implements RequestAPI {
     }
     // 2. check if partition exists on this node and that the store for this partition has been started
     if (storageManager.getStore(partition) == null) {
-      boolean partitionPresent = false;
-      for (ReplicaId replica : partition.getReplicaIds()) {
-        if (replica.getDataNodeId().equals(currentNode)) {
-          partitionPresent = true;
-          break;
-        }
-      }
-      if (partitionPresent) {
+      if (partitionsInCurrentNode.contains(partition)) {
         metrics.diskUnavailableError.inc();
         return ServerErrorCode.Disk_Unavailable;
       } else {
@@ -879,7 +881,7 @@ public class AmbryRequests implements RequestAPI {
    * @return {@code true} if the lag of each of the remote replicas of each of the {@link PartitionId} in
    * {@code partitionIds} <= {@code acceptableLagInBytes}. {@code false} otherwise.
    */
-  private boolean isAllRemoteLagLesserOrEqual(List<? extends PartitionId> partitionIds, long acceptableLagInBytes) {
+  private boolean isAllRemoteLagLesserOrEqual(Collection<PartitionId> partitionIds, long acceptableLagInBytes) {
     boolean isAcceptable = true;
     for (PartitionId partitionId : partitionIds) {
       List<? extends ReplicaId> replicaIds = partitionId.getReplicaIds();

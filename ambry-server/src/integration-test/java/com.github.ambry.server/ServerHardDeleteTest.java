@@ -333,7 +333,7 @@ public class ServerHardDeleteTest {
       throws IOException {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-            properties.getBlobSize(), BlobType.DataBlob);
+            properties.getBlobSize(), BlobType.DataBlob, null);
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
     PutResponse response0 = PutResponse.readFrom(new DataInputStream(putResponseStream));
