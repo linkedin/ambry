@@ -188,7 +188,8 @@ public class StoreConfig {
   @Config(storeReadOnlyEnableSizeThresholdPercentageName)
   @Default("95")
   public final int storeReadOnlyEnableSizeThresholdPercentage;
-  public static final String storeReadOnlyEnableSizeThresholdPercentageName = "store.read.only.enable.size.threshold.percentage";
+  public static final String storeReadOnlyEnableSizeThresholdPercentageName =
+      "store.read.only.enable.size.threshold.percentage";
 
   /**
    * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
@@ -197,7 +198,8 @@ public class StoreConfig {
   @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
   @Default("5")
   public final int storeReadWriteEnableSizeThresholdPercentageDelta;
-  public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName = "store.read.write.enable.size.threshold.percentage.delta";
+  public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
+      "store.read.write.enable.size.threshold.percentage.delta";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -236,10 +238,10 @@ public class StoreConfig {
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
     storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
-    storeReadOnlyEnableSizeThresholdPercentage = verifiableProperties.getInt(
-        storeReadOnlyEnableSizeThresholdPercentageName, 95);
-    storeReadWriteEnableSizeThresholdPercentageDelta = verifiableProperties.getInt(
-        storeReadWriteEnableSizeThresholdPercentageDeltaName, 5);
+    storeReadOnlyEnableSizeThresholdPercentage =
+        verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
+    storeReadWriteEnableSizeThresholdPercentageDelta =
+        verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0, 100);
   }
 }
 
