@@ -21,6 +21,7 @@ import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -30,19 +31,22 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
 import static com.github.ambry.router.CryptoTestUtils.*;
-import static com.github.ambry.router.CryptoWorkerTest.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
  * Tests {@link CryptoJobExecutorService}
  */
 public class CryptoJobExecutorServiceTest {
+  private static final int MAX_DATA_SIZE_IN_BYTES = 10000;
   private static final int DEFAULT_KEY_SIZE = 64;
   private static final int RANDOM_KEY_SIZE_IN_BITS = 256;
   private static final int DEFAULT_THREAD_COUNT = 2;
@@ -122,8 +126,7 @@ public class CryptoJobExecutorServiceTest {
   @Test
   public void testEncryptionFailure() throws InterruptedException, GeneralSecurityException {
     cryptoJobExecutorService.close();
-    CryptoWorkerTest.MockCryptoService mockCryptoService =
-        new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
+    MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
     mockCryptoService.exceptionOnEncryption.set(
         new GeneralSecurityException("Exception to test", new IllegalStateException()));
     cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
@@ -132,8 +135,7 @@ public class CryptoJobExecutorServiceTest {
     testFailureOnEncryption(perBlobSecretKey, mockCryptoService, kms);
     mockCryptoService.clearStates();
     cryptoJobExecutorService.close();
-    CryptoWorkerTest.MockKeyManagementService mockKms =
-        new CryptoWorkerTest.MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
+    MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
     mockKms.exceptionToThrow.set(new GeneralSecurityException("Exception to test", new IllegalStateException()));
     cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
     cryptoJobExecutorService.start();
@@ -173,21 +175,22 @@ public class CryptoJobExecutorServiceTest {
     int testDataCount = 10;
     int closeOnCount = 4;
     CountDownLatch encryptCallBackCount = new CountDownLatch(testDataCount);
-    List<EncryptJobES> encryptJobs = new ArrayList<>();
+    List<EncryptJob> encryptJobs = new ArrayList<>();
     SecretKeySpec perBlobKey = kms.getRandomKey();
     for (int i = 0; i < testDataCount; i++) {
       Pair<BlobId, ByteBuffer> randomData = getRandomBlob(referenceClusterMap);
       if (i < closeOnCount) {
-        cryptoJobExecutorService.submitJob(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
-            (EncryptJobES.EncryptJobResult result, Exception exception) -> {
-              encryptCallBackCount.countDown();
-              Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), result.getBlobId());
-              Assert.assertNotNull("Encrypted content should not be null", result.getEncryptedContent());
-              Assert.assertNotNull("Encrypted key should not be null", result.getEncryptedKey());
-            }));
+        cryptoJobExecutorService.submitJob(
+            new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+                (EncryptJob.EncryptJobResult result, Exception exception) -> {
+                  encryptCallBackCount.countDown();
+                  Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), result.getBlobId());
+                  Assert.assertNotNull("Encrypted content should not be null", result.getEncryptedContent());
+                  Assert.assertNotNull("Encrypted key should not be null", result.getEncryptedKey());
+                }));
       } else {
-        encryptJobs.add(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
-            (EncryptJobES.EncryptJobResult result, Exception exception) -> {
+        encryptJobs.add(new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+            (EncryptJob.EncryptJobResult result, Exception exception) -> {
               encryptCallBackCount.countDown();
               Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), result.getBlobId());
               if (exception == null) {
@@ -204,13 +207,14 @@ public class CryptoJobExecutorServiceTest {
     }
     // add special job that will close the thread. Add all the encrypt jobs to the queue before closing the thread.
     Pair<BlobId, ByteBuffer> probeData = getRandomBlob(referenceClusterMap);
-    cryptoJobExecutorService.submitJob(new EncryptJobES(probeData.getFirst(), probeData.getSecond(), perBlobKey, cryptoService, kms,
-        (EncryptJobES.EncryptJobResult result, Exception exception) -> {
-          for (EncryptJobES encryptJob : encryptJobs) {
-            cryptoJobExecutorService.submitJob(encryptJob);
-          }
-          new Thread(new ThreadToCloseCryptoHandler(cryptoJobExecutorService)).start();
-        }));
+    cryptoJobExecutorService.submitJob(
+        new EncryptJob(probeData.getFirst(), probeData.getSecond(), perBlobKey, cryptoService, kms,
+            (EncryptJob.EncryptJobResult result, Exception exception) -> {
+              for (EncryptJob encryptJob : encryptJobs) {
+                cryptoJobExecutorService.submitJob(encryptJob);
+              }
+              new Thread(new ThreadToCloseCryptoHandler(cryptoJobExecutorService)).start();
+            }));
 
     awaitCountDownLatch(encryptCallBackCount, ENCRYPT_JOB_TYPE);
   }
@@ -226,34 +230,39 @@ public class CryptoJobExecutorServiceTest {
     CountDownLatch encryptCallBackCount = new CountDownLatch(testDataCount);
     CountDownLatch decryptCallBackCount = new CountDownLatch(testDataCount);
     SecretKeySpec perBlobKey = kms.getRandomKey();
-    List<DecryptJobES> decryptJobs = new CopyOnWriteArrayList<>();
+    List<DecryptJob> decryptJobs = new CopyOnWriteArrayList<>();
     for (int i = 0; i < testDataCount; i++) {
       Pair<BlobId, ByteBuffer> randomData = getRandomBlob(referenceClusterMap);
-      cryptoJobExecutorService.submitJob(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
-          (EncryptJobES.EncryptJobResult encryptJobResult, Exception exception) -> {
-            Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), encryptJobResult.getBlobId());
-            Assert.assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedContent());
-            Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
-            decryptJobs.add(new DecryptJobES(randomData.getFirst(), encryptJobResult.getEncryptedKey(),
-                encryptJobResult.getEncryptedContent(), cryptoService, kms, (DecryptJobES.DecryptJobResult decryptJobResult, Exception e) -> {
-              Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), decryptJobResult.getBlobId());
-              if (e == null) {
-                Assert.assertNull(
-                    "Exception shouldn't have been thrown to decrypt contents for " + randomData.getFirst(), exception);
-                Assert.assertNotNull("Decrypted contents should not be null", decryptJobResult.getDecryptedContent());
-                Assert.assertArrayEquals("Decrypted bytes and plain bytes should match", randomData.getSecond().array(),
-                    decryptJobResult.getDecryptedContent().array());
-              } else {
-                Assert.assertNotNull(
-                    "Exception should have been thrown to decrypt contents for " + randomData.getFirst(), e);
-                Assert.assertTrue("Exception cause should have been GeneralSecurityException",
-                    e instanceof GeneralSecurityException);
-                Assert.assertNull("Decrypted contents should have been null", decryptJobResult.getDecryptedContent());
-              }
-              decryptCallBackCount.countDown();
-            }));
-            encryptCallBackCount.countDown();
-          }));
+      cryptoJobExecutorService.submitJob(
+          new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+              (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
+                Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), encryptJobResult.getBlobId());
+                Assert.assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedContent());
+                Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
+                decryptJobs.add(new DecryptJob(randomData.getFirst(), encryptJobResult.getEncryptedKey(),
+                    encryptJobResult.getEncryptedContent(), cryptoService, kms,
+                    (DecryptJob.DecryptJobResult decryptJobResult, Exception e) -> {
+                      Assert.assertEquals("BlobId mismatch ", randomData.getFirst(), decryptJobResult.getBlobId());
+                      if (e == null) {
+                        Assert.assertNull(
+                            "Exception shouldn't have been thrown to decrypt contents for " + randomData.getFirst(),
+                            exception);
+                        Assert.assertNotNull("Decrypted contents should not be null",
+                            decryptJobResult.getDecryptedContent());
+                        Assert.assertArrayEquals("Decrypted bytes and plain bytes should match",
+                            randomData.getSecond().array(), decryptJobResult.getDecryptedContent().array());
+                      } else {
+                        Assert.assertNotNull(
+                            "Exception should have been thrown to decrypt contents for " + randomData.getFirst(), e);
+                        Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+                            e instanceof GeneralSecurityException);
+                        Assert.assertNull("Decrypted contents should have been null",
+                            decryptJobResult.getDecryptedContent());
+                      }
+                      decryptCallBackCount.countDown();
+                    }));
+                encryptCallBackCount.countDown();
+              }));
     }
 
     // wait for all encryption to complete
@@ -261,13 +270,14 @@ public class CryptoJobExecutorServiceTest {
 
     // add special job that will close the thread. Add all the decrypt jobs to the queue before closing the thread.
     Pair<BlobId, ByteBuffer> probeData = getRandomBlob(referenceClusterMap);
-    cryptoJobExecutorService.submitJob(new EncryptJobES(probeData.getFirst(), probeData.getSecond(), perBlobKey, cryptoService, kms,
-        (EncryptJobES.EncryptJobResult result, Exception exception) -> {
-          for (DecryptJobES decryptJob : decryptJobs) {
-            cryptoJobExecutorService.submitJob(decryptJob);
-          }
-          new Thread(new ThreadToCloseCryptoHandler(cryptoJobExecutorService)).start();
-        }));
+    cryptoJobExecutorService.submitJob(
+        new EncryptJob(probeData.getFirst(), probeData.getSecond(), perBlobKey, cryptoService, kms,
+            (EncryptJob.EncryptJobResult result, Exception exception) -> {
+              for (DecryptJob decryptJob : decryptJobs) {
+                cryptoJobExecutorService.submitJob(decryptJob);
+              }
+              new Thread(new ThreadToCloseCryptoHandler(cryptoJobExecutorService)).start();
+            }));
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
   }
 
@@ -281,14 +291,15 @@ public class CryptoJobExecutorServiceTest {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob(referenceClusterMap);
     cryptoJobExecutorService.close();
 
-    cryptoJobExecutorService.submitJob(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
-        (EncryptJobES.EncryptJobResult result, Exception exception) -> {
-          Assert.fail("Callback should not have been called since CryptoWorker is closed");
-        }));
+    cryptoJobExecutorService.submitJob(
+        new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+            (EncryptJob.EncryptJobResult result, Exception exception) -> {
+              Assert.fail("Callback should not have been called since CryptoWorker is closed");
+            }));
 
     cryptoJobExecutorService.submitJob(
-        new DecryptJobES(randomData.getFirst(), randomData.getSecond(), randomData.getSecond(), cryptoService, kms,
-            (DecryptJobES.DecryptJobResult result, Exception exception) -> {
+        new DecryptJob(randomData.getFirst(), randomData.getSecond(), randomData.getSecond(), cryptoService, kms,
+            (DecryptJob.DecryptJobResult result, Exception exception) -> {
               Assert.fail("Callback should not have been called since CryptoWorker is closed");
             }));
   }
@@ -318,9 +329,11 @@ public class CryptoJobExecutorServiceTest {
   private void testEncryptDecryptFlow(SecretKeySpec perBlobKey, CountDownLatch encryptCallBackCount,
       CountDownLatch decryptCallBackCount) {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob(referenceClusterMap);
-    cryptoJobExecutorService.submitJob(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey,
-        cryptoService, kms, new EncryptCallbackVerifier(randomData.getFirst(), false, encryptCallBackCount,
-            new DecryptCallbackVerifier(randomData.getFirst(), randomData.getSecond(), false, decryptCallBackCount))));
+    cryptoJobExecutorService.submitJob(
+        new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+            new EncryptCallbackVerifier(randomData.getFirst(), false, encryptCallBackCount,
+                new DecryptCallbackVerifier(randomData.getFirst(), randomData.getSecond(), false,
+                    decryptCallBackCount))));
   }
 
   /**
@@ -328,11 +341,13 @@ public class CryptoJobExecutorServiceTest {
    * @param perBlobKey the {@link SecretKeySpec} representing the per blob key
    * @throws InterruptedException
    */
-  private void testFailureOnEncryption(SecretKeySpec perBlobKey, CryptoService cryptoService, KeyManagementService kms) throws InterruptedException {
+  private void testFailureOnEncryption(SecretKeySpec perBlobKey, CryptoService cryptoService, KeyManagementService kms)
+      throws InterruptedException {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob(referenceClusterMap);
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
-    cryptoJobExecutorService.submitJob(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
-        new EncryptCallbackVerifier(randomData.getFirst(), true, encryptCallBackCount, null)));
+    cryptoJobExecutorService.submitJob(
+        new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+            new EncryptCallbackVerifier(randomData.getFirst(), true, encryptCallBackCount, null)));
     awaitCountDownLatch(encryptCallBackCount, ENCRYPT_JOB_TYPE);
   }
 
@@ -349,31 +364,34 @@ public class CryptoJobExecutorServiceTest {
     Pair<BlobId, ByteBuffer> randomData = getRandomBlob(referenceClusterMap);
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     CountDownLatch decryptCallBackCount = new CountDownLatch(1);
-    cryptoJobExecutorService.submitJob(new EncryptJobES(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
-        (EncryptJobES.EncryptJobResult encryptJobResult, Exception exception) -> {
-          encryptCallBackCount.countDown();
-          Assert.assertNull("Exception shouldn't have been thrown to encrypt contents for " + randomData.getFirst(),
-              exception);
-          Assert.assertNotNull("Encrypted contents should not be null", encryptJobResult.getEncryptedContent());
-          Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
-          Assert.assertEquals("BlobId mismatch", randomData.getFirst(), encryptJobResult.getBlobId());
+    cryptoJobExecutorService.submitJob(
+        new EncryptJob(randomData.getFirst(), randomData.getSecond(), perBlobKey, cryptoService, kms,
+            (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
+              encryptCallBackCount.countDown();
+              Assert.assertNull("Exception shouldn't have been thrown to encrypt contents for " + randomData.getFirst(),
+                  exception);
+              Assert.assertNotNull("Encrypted contents should not be null", encryptJobResult.getEncryptedContent());
+              Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
+              Assert.assertEquals("BlobId mismatch", randomData.getFirst(), encryptJobResult.getBlobId());
 
-          // set exception using MockKMS
-          if (setExceptionForKMS) {
-            mockKMS.exceptionToThrow.set(
-                new GeneralSecurityException("Exception to test", new IllegalStateException()));
-          }
-          cryptoJobExecutorService.submitJob(new DecryptJobES(randomData.getFirst(), encryptJobResult.getEncryptedKey(),
-              encryptJobResult.getEncryptedContent(), cryptoService, kms, (DecryptJobES.DecryptJobResult result, Exception e) -> {
-            decryptCallBackCount.countDown();
-            Assert.assertNotNull("Exception should have been thrown to decrypt contents for " + randomData.getFirst(),
-                e);
-            Assert.assertTrue("Exception cause should have been GeneralSecurityException",
-                e instanceof GeneralSecurityException);
-            Assert.assertNull("Decrypted contents should have been null", result.getDecryptedContent());
-            Assert.assertEquals("BlobId mismatch", randomData.getFirst(), result.getBlobId());
-          }));
-        }));
+              // set exception using MockKMS
+              if (setExceptionForKMS) {
+                mockKMS.exceptionToThrow.set(
+                    new GeneralSecurityException("Exception to test", new IllegalStateException()));
+              }
+              cryptoJobExecutorService.submitJob(
+                  new DecryptJob(randomData.getFirst(), encryptJobResult.getEncryptedKey(),
+                      encryptJobResult.getEncryptedContent(), cryptoService, kms,
+                      (DecryptJob.DecryptJobResult result, Exception e) -> {
+                        decryptCallBackCount.countDown();
+                        Assert.assertNotNull(
+                            "Exception should have been thrown to decrypt contents for " + randomData.getFirst(), e);
+                        Assert.assertTrue("Exception cause should have been GeneralSecurityException",
+                            e instanceof GeneralSecurityException);
+                        Assert.assertNull("Decrypted contents should have been null", result.getDecryptedContent());
+                        Assert.assertEquals("BlobId mismatch", randomData.getFirst(), result.getBlobId());
+                      }));
+            }));
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
   }
 
@@ -381,7 +399,7 @@ public class CryptoJobExecutorServiceTest {
    * Encrypt callback verifier. Verifies non null for arguments and adds a decrypt job to the jobQueue on successful completion.
    * Else, verifies the exception is set correctly.
    */
-  private class EncryptCallbackVerifier implements Callback<EncryptJobES.EncryptJobResult> {
+  private class EncryptCallbackVerifier implements Callback<EncryptJob.EncryptJobResult> {
     private final BlobId blobId;
     private final boolean expectException;
     private final CountDownLatch countDownLatch;
@@ -396,7 +414,7 @@ public class CryptoJobExecutorServiceTest {
     }
 
     @Override
-    public void onCompletion(EncryptJobES.EncryptJobResult encryptJobResult, Exception exception) {
+    public void onCompletion(EncryptJob.EncryptJobResult encryptJobResult, Exception exception) {
       Assert.assertEquals("BlobId mismatch ", blobId, encryptJobResult.getBlobId());
       if (countDownLatch != null) {
         countDownLatch.countDown();
@@ -406,8 +424,8 @@ public class CryptoJobExecutorServiceTest {
         Assert.assertNotNull("Encrypted content should not be null", encryptJobResult.getEncryptedContent());
         Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
         cryptoJobExecutorService.submitJob(
-            new DecryptJobES(blobId, encryptJobResult.getEncryptedKey(), encryptJobResult.getEncryptedContent(),
-               cryptoService, kms, decryptCallBackVerifier));
+            new DecryptJob(blobId, encryptJobResult.getEncryptedKey(), encryptJobResult.getEncryptedContent(),
+                cryptoService, kms, decryptCallBackVerifier));
       } else {
         Assert.assertNotNull("Exception should have been thrown to encrypt contents for " + blobId, exception);
         Assert.assertTrue("Exception cause should have been GeneralSecurityException",
@@ -422,7 +440,7 @@ public class CryptoJobExecutorServiceTest {
    * Decrypt callback verifier. Verifies the decrypted content matches raw content on successful completion.
    * Else, verifies the exception is set correctly.
    */
-  private class DecryptCallbackVerifier implements Callback<DecryptJobES.DecryptJobResult> {
+  private class DecryptCallbackVerifier implements Callback<DecryptJob.DecryptJobResult> {
     private final BlobId blobId;
     private final boolean expectException;
     private final ByteBuffer unencryptedContent;
@@ -437,7 +455,7 @@ public class CryptoJobExecutorServiceTest {
     }
 
     @Override
-    public void onCompletion(DecryptJobES.DecryptJobResult result, Exception exception) {
+    public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
       if (countDownLatch != null) {
         countDownLatch.countDown();
       }
@@ -452,6 +470,99 @@ public class CryptoJobExecutorServiceTest {
         Assert.assertTrue("Exception cause should have been GeneralSecurityException",
             exception instanceof GeneralSecurityException);
         Assert.assertNull("Decrypted contents should have been null", result.getDecryptedContent());
+      }
+    }
+  }
+
+  /**
+   * Awaits for {@code countDownLatch} to count down to 0.
+   * @param countDownLatch the {@link CountDownLatch} that needs to be awaited against
+   * @param jobType the job type of the count down latch
+   * @throws InterruptedException
+   */
+  static void awaitCountDownLatch(CountDownLatch countDownLatch, String jobType) throws InterruptedException {
+    if (!countDownLatch.await(10, TimeUnit.SECONDS)) {
+      Assert.fail("Not all " + jobType + " callbacks have been returned. Pending count: " + countDownLatch.getCount());
+    }
+  }
+
+  /**
+   * Generate and return random data (i.e. BlobId and ByteBuffer)
+   * @param referenceClusterMap clusterMap from which partition info to be fetched
+   * @return a Pair of BlobId and ByteBuffer with random data
+   */
+  static Pair<BlobId, ByteBuffer> getRandomBlob(ClusterMap referenceClusterMap) {
+    BlobId blobId = getNewBlobId(referenceClusterMap);
+    int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE_IN_BYTES);
+    byte[] data = new byte[size];
+    TestUtils.RANDOM.nextBytes(data);
+    ByteBuffer toEncrypt = ByteBuffer.wrap(data);
+    return new Pair<>(blobId, toEncrypt);
+  }
+
+  /**
+   * Generate new {@link BlobId}
+   * @param referenceClusterMap clusterMap from which partition info to be fetched
+   * @return newly generated {@link BlobId}
+   */
+  private static BlobId getNewBlobId(ClusterMap referenceClusterMap) {
+    byte[] bytes = new byte[2];
+    TestUtils.RANDOM.nextBytes(bytes);
+    return new BlobId(bytes[0], bytes[1], getRandomShort(TestUtils.RANDOM), getRandomShort(TestUtils.RANDOM),
+        referenceClusterMap.getWritablePartitionIds().get(0));
+  }
+
+  /**
+   * MockCryptoService to assist in testing exception cases
+   */
+  static class MockCryptoService extends GCMCryptoService {
+
+    AtomicReference<GeneralSecurityException> exceptionOnEncryption = new AtomicReference<>();
+    AtomicReference<GeneralSecurityException> exceptionOnDecryption = new AtomicReference<>();
+
+    MockCryptoService(CryptoServiceConfig cryptoServiceConfig) {
+      super(cryptoServiceConfig);
+    }
+
+    @Override
+    public ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
+      if (exceptionOnEncryption.get() != null) {
+        throw exceptionOnEncryption.get();
+      }
+      return super.encrypt(toEncrypt, key);
+    }
+
+    @Override
+    public ByteBuffer decrypt(ByteBuffer toDecrypt, SecretKeySpec key) throws GeneralSecurityException {
+      if (exceptionOnDecryption.get() != null) {
+        throw exceptionOnDecryption.get();
+      }
+      return super.decrypt(toDecrypt, key);
+    }
+
+    void clearStates() {
+      exceptionOnEncryption = new AtomicReference<>();
+      exceptionOnDecryption = new AtomicReference<>();
+    }
+  }
+
+  /**
+   * MockKeyManagementService to assist in testing exception cases
+   */
+  static class MockKeyManagementService extends SingleKeyManagementService {
+
+    AtomicReference<GeneralSecurityException> exceptionToThrow = new AtomicReference<>();
+
+    MockKeyManagementService(KMSConfig KMSConfig, String defaultKey) throws GeneralSecurityException {
+      super(KMSConfig, defaultKey);
+    }
+
+    @Override
+    public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
+      if (exceptionToThrow.get() != null) {
+        throw exceptionToThrow.get();
+      } else {
+        return super.getKey(accountId, containerId);
       }
     }
   }

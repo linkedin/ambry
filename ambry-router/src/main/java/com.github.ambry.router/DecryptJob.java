@@ -21,7 +21,7 @@ import java.security.GeneralSecurityException;
 /**
  * Class representing an decrypt Job.
  */
-class DecryptJobES implements CryptoJobES {
+class DecryptJob implements CryptoJob {
   private final BlobId blobId;
   private final ByteBuffer enryptedContent;
   private final ByteBuffer encryptedKey;
@@ -30,16 +30,15 @@ class DecryptJobES implements CryptoJobES {
   private final KeyManagementService kms;
 
   /**
-   * Instantiates {@link DecryptJobES} with {@link BlobId}, key to be decrypted, content to be decrypted and the
+   * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
    * {@link Callback}
    * @param blobId the {@link BlobId} for which decryption is requested
    * @param encryptedKey encrypted per blob key
    * @param encryptedContent encrypted blob content
    * @param callback {@link Callback} to be invoked on completion
    */
-  DecryptJobES(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent,CryptoService cryptoService,
-      KeyManagementService kms,
-      Callback<DecryptJobResult> callback) {
+  DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent, CryptoService cryptoService,
+      KeyManagementService kms, Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
     this.enryptedContent = encryptedContent;
     this.encryptedKey = encryptedKey;
@@ -55,7 +54,7 @@ class DecryptJobES implements CryptoJobES {
    * 3. Decrypt encryptedContent using perBlobKey
    * 4. Invoke callback with the decryptedContent
    */
-  public void run(){
+  public void run() {
     try {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
       Object perBlobKey = cryptoService.decryptKey(encryptedKey, containerKey);

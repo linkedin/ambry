@@ -18,23 +18,25 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
 
-public class EncryptJobES implements CryptoJobES  {
-
-  private BlobId blobId;
-  private ByteBuffer toEncrypt;
+/**
+ * Class representing an Encrypt Job
+ */
+public class EncryptJob implements CryptoJob {
+  private final BlobId blobId;
+  private final ByteBuffer toEncrypt;
   private final Object perBlobKey;
   private final Callback<EncryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
 
   /**
-   * Instantiates {@link EncryptJobES} with {@link BlobId}, content to encrypt, perBlobKey and the {@link Callback}
+   * Instantiates {@link EncryptJob} with {@link BlobId}, content to encrypt, perBlobKey and the {@link Callback}
    * @param blobId the {@link BlobId} for which encryption is requested
    * @param toEncrypt {@link ByteBuffer} to be encrypted
    * @param perBlobKey per blob key to use to encrypt the blob content
    * @param callback {@link Callback} to be invoked on completion
    */
-  EncryptJobES(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, CryptoService cryptoService,
+  EncryptJob(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, CryptoService cryptoService,
       KeyManagementService kms, Callback<EncryptJobResult> callback) {
     this.blobId = blobId;
     this.toEncrypt = toEncrypt;

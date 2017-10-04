@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsible for handling crypto jobs. {@link Router} instantiates this {@link CryptoJobExecutorService} and gives a
  * reference of the same to PutManager, GetBlobOperation and GetBlobInfoOperation which will add jobs via
- * {@link #submitJob(CryptoJobES)}. On close, all pending jobs will be processed(either successfully or exception is set)
+ * {@link #submitJob(CryptoJob)}. On close, all pending jobs will be processed(either successfully or exception is set)
  * and any new jobs submitted after close will be ignored.
  */
 class CryptoJobExecutorService implements Closeable {
@@ -56,9 +56,9 @@ class CryptoJobExecutorService implements Closeable {
    * Submits new job to the {@link CryptoJobExecutorService}
    * @param cryptoJob the {@link CryptoJob} that needs to be executed
    */
-  void submitJob(CryptoJobES cryptoJob) {
+  void submitJob(CryptoJob cryptoJob) {
     if (enabled.get()) {
-        scheduler.execute(cryptoJob);
+      scheduler.execute(cryptoJob);
     }
   }
 
@@ -69,9 +69,12 @@ class CryptoJobExecutorService implements Closeable {
   public void close() {
     if (enabled.compareAndSet(true, false)) {
       List<Runnable> pendingTasks = scheduler.shutdownNow();
-      for(Runnable task: pendingTasks){
-        CryptoJobES cryptoJobES = (CryptoJobES) task;
-        cryptoJobES.closeJob(GSE);
+      for (Runnable task : pendingTasks) {
+        if (task instanceof CryptoJob) {
+          ((CryptoJob) task).closeJob(GSE);
+        } else {
+          logger.error("Unknown type of job seen");
+        }
       }
     }
   }
