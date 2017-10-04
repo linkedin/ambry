@@ -59,6 +59,14 @@ public class Utils {
    * time).
    */
   public static final long Infinite_Time = -1;
+  /**
+   * The lowest possible port number.
+   */
+  public static final int MIN_PORT_NUM = 1;
+  /**
+   * The highest possible port number.
+   */
+  public static final int MAX_PORT_NUM = 65535;
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
   // The read*String methods assume that the underlying stream is blocking
