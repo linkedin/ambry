@@ -101,8 +101,6 @@ public class HelixParticipantTest {
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
     helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
-    instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    InstanceConfig ic = helixAdmin.getInstanceConfig(clusterName, instanceName);
 
     //Make sure the current sealedReplicas list is null
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
@@ -115,9 +113,8 @@ public class HelixParticipantTest {
     try {
       helixParticipant.setReplicaSealedState(notAmbryReplica, true);
       fail("Expected an IllegalArgumentException here");
-    }
-    catch (Exception e) {
-      assertTrue(e instanceof IllegalArgumentException);
+    } catch (IllegalArgumentException e) {
+      //Expected exception
     }
 
     //Check that invoking setReplicaSealedState adds the partition to the list of sealed replicas
@@ -251,9 +248,10 @@ public class HelixParticipantTest {
     return createMockReplicaId(partitionIdString, ReplicaId.class, PartitionId.class);
   }
 
-  private ReplicaId createMockReplicaId(String partitionIdString, Class<? extends ReplicaId> replica, Class<? extends PartitionId> partition) {
-    ReplicaId replicaId = Mockito.mock(replica);
-    PartitionId partitionId = Mockito.mock(partition);
+  private ReplicaId createMockReplicaId(String partitionIdString, Class<? extends ReplicaId> replicaClass,
+      Class<? extends PartitionId> partitionClass) {
+    ReplicaId replicaId = Mockito.mock(replicaClass);
+    PartitionId partitionId = Mockito.mock(partitionClass);
     when(partitionId.toPathString()).thenReturn(partitionIdString);
     when(replicaId.getPartitionId()).thenReturn(partitionId);
     return replicaId;
@@ -272,7 +270,7 @@ public class HelixParticipantTest {
     private StateModelFactory stateModelFactory;
     private boolean isConnected;
     boolean beBad;
-    private HelixAdmin helixAdmin = new MockHelixAdmin();
+    private final HelixAdmin helixAdmin = new MockHelixAdmin();
 
     @Override
     public StateMachineEngine getStateMachineEngine() {
