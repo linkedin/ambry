@@ -320,8 +320,7 @@ public class BlobStoreTest {
     properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName, "5");
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     ReplicaId replicaId = getMockReplicaId(tempDirStr);
-    ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate =
-        Mockito.mock(ClusterManagerWriteStatusDelegate.class);
+    ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = mock(ClusterManagerWriteStatusDelegate.class);
 
     //Restart store with new threshold properties, mock delegate
     store.shutdown();
@@ -329,11 +328,10 @@ public class BlobStoreTest {
     store.start();
 
     //Check that after start, because StoreDescriptor file already exists, delegate is not called
-    verify(clusterManagerWriteStatusDelegate, times(0)).unseal(replicaId);
-    verify(clusterManagerWriteStatusDelegate, times(0)).seal(replicaId);
+    verifyZeroInteractions(clusterManagerWriteStatusDelegate);
 
     //Verify that after putting in enough data, the store goes to read only
-    List<MockId> addedIds = put(5, 900, Utils.Infinite_Time, store);
+    List<MockId> addedIds = put(5, 900, Utils.Infinite_Time);
     verify(clusterManagerWriteStatusDelegate, times(1)).seal(replicaId);
 
     //Delete added data
@@ -346,7 +344,7 @@ public class BlobStoreTest {
     store.shutdown();
     store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
     store.start();
-    verify(clusterManagerWriteStatusDelegate, times(0)).unseal(replicaId);
+    verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
 
     //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
     //that the store is now read-write
@@ -761,19 +759,6 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private List<MockId> put(int count, long size, long expiresAtMs) throws StoreException {
-    return put(count, size, expiresAtMs, store);
-  }
-
-  /**
-   * Puts some blobs into the {@link BlobStore}.
-   * @param count the number of blobs to PUT.
-   * @param size the size of each blob.
-   * @param expiresAtMs the expiry time (in ms) of each blob.
-   * @param blobStore the blob store that blob will be put into
-   * @return the {@link MockId}s of the blobs created.
-   * @throws StoreException
-   */
-  private List<MockId> put(int count, long size, long expiresAtMs, BlobStore blobStore) throws StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
     }
@@ -796,7 +781,7 @@ public class BlobStoreTest {
         liveKeys.add(id);
       }
     }
-    blobStore.put(new MockMessageWriteSet(infos, buffers));
+    store.put(new MockMessageWriteSet(infos, buffers));
     return ids;
   }
 
