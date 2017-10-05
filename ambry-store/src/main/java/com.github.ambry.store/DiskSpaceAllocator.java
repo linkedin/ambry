@@ -58,11 +58,12 @@ class DiskSpaceAllocator {
   private final File reserveDir;
   private final long requiredSwapSegmentsPerSize;
   private final StorageManagerMetrics metrics;
-  private ReserveFileMap reserveFiles;
+  private final ReserveFileMap reserveFiles = new ReserveFileMap();
   private PoolState poolState = PoolState.NOT_INVENTORIED;
+  private Exception inventoryException = null;
 
   /**
-   * This constructor will inventory any existing reserve files in the pool (adding them to the in-memory map) but not
+   * This constructor will inventory any existing reserve files in the pool (adding them to the in-memory map) and
    * create the reserve directory if it does not exist. Any files that already exist in the pool can be checked out
    * prior to calling {@link #initializePool(Collection)}. If a file of the correct size does not yet exist, a new file
    * will be allocated at runtime.
@@ -81,11 +82,13 @@ class DiskSpaceAllocator {
     this.requiredSwapSegmentsPerSize = requiredSwapSegmentsPerSize;
     this.metrics = metrics;
     try {
-      if (enablePooling && reserveDir.isDirectory()) {
-        reserveFiles = inventoryExistingReserveFiles();
+      if (enablePooling) {
+        prepareDirectory(reserveDir);
+        inventoryExistingReserveFiles();
         poolState = PoolState.INVENTORIED;
       }
     } catch (Exception e) {
+      inventoryException = e;
       logger.error("Could not inventory preexisting reserve directory", e);
     }
   }
@@ -124,9 +127,7 @@ class DiskSpaceAllocator {
     try {
       if (enablePooling) {
         if (poolState == PoolState.NOT_INVENTORIED) {
-          prepareDirectory(reserveDir);
-          reserveFiles = inventoryExistingReserveFiles();
-          poolState = PoolState.INVENTORIED;
+          throw inventoryException;
         }
         Map<Long, Long> overallRequirements = getOverallRequirements(requirementsList);
         deleteExtraSegments(overallRequirements);
@@ -166,19 +167,21 @@ class DiskSpaceAllocator {
     if (destinationFile.exists()) {
       throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
     }
-    if (poolState == PoolState.NOT_INVENTORIED) {
-      // If the pool is not yet created or otherwise unusable, just allocate the file at the destination location.
+    File reserveFile = null;
+    if (poolState != PoolState.NOT_INVENTORIED) {
+      reserveFile = reserveFiles.remove(sizeInBytes);
+    }
+    if (reserveFile == null) {
+      if (enablePooling) {
+        logger.info("Segment of size {} not found in pool; attempting to create a new preallocated file; poolState: {}",
+            sizeInBytes, poolState);
+        metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
+      }
       Utils.preAllocateFileIfNeeded(destinationFile, sizeInBytes);
     } else {
-      File reserveFile = reserveFiles.remove(sizeInBytes);
-      if (reserveFile == null) {
-        logger.info("Segment of size {} not found in pool; attempting to create a new preallocated file", sizeInBytes);
-        metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
-        reserveFile = createReserveFile(sizeInBytes);
-      }
       try {
         Files.move(reserveFile.toPath(), destinationFile.toPath());
-      } catch (IOException e) {
+      } catch (Exception e) {
         reserveFiles.add(sizeInBytes, reserveFile);
         throw e;
       }
@@ -209,11 +212,10 @@ class DiskSpaceAllocator {
   }
 
   /**
-   * Inventory existing reserve directories and generate a {@link ReserveFileMap}.
+   * Inventory existing reserve directories and add entries to {@link #reserveFiles}
    * @return a populated {@link ReserveFileMap}
    */
-  private ReserveFileMap inventoryExistingReserveFiles() throws IOException {
-    ReserveFileMap reserveFiles = new ReserveFileMap();
+  private void inventoryExistingReserveFiles() throws IOException {
     File[] fileSizeDirs = reserveDir.listFiles(FILE_SIZE_DIR_FILTER);
     if (fileSizeDirs == null) {
       throw new IOException("Error while listing directories in " + reserveDir.getAbsolutePath());
@@ -228,7 +230,6 @@ class DiskSpaceAllocator {
         reserveFiles.add(sizeInBytes, reserveFile);
       }
     }
-    return reserveFiles;
   }
 
   /**

@@ -75,7 +75,8 @@ public class DiskSpaceAllocatorTest {
     File f3 = allocateAndVerify("file3", 20);
     // free one file before initializing pool
     freeAndVerify(f3, 20);
-    assertFalse("reserveFileDir should not exist before first initialize", reserveFileDir.exists());
+    // expect the pool to still be empty
+    verifyPoolState(new ExpectedState());
 
     alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)));
     // return files that were allocated before initialization to the pool
@@ -128,7 +129,7 @@ public class DiskSpaceAllocatorTest {
     alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)));
     verifyPoolState(new ExpectedState().add(50, 2).add(21, 1));
     File f1 = allocateAndVerify("file1", 25);
-    verifyPoolState(new ExpectedState().add(50, 2).add(21, 1).add(25, 0));
+    verifyPoolState(new ExpectedState().add(50, 2).add(21, 1));
     freeAndVerify(f1, 25);
     verifyPoolState(new ExpectedState().add(50, 2).add(21, 1).add(25, 1));
     // try checking out same file again
@@ -252,30 +253,13 @@ public class DiskSpaceAllocatorTest {
     alloc = constructAllocator();
     alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 2, 0)));
     verifyPoolState(new ExpectedState().add(50, 2));
-    File fileSizeDir = new File(reserveFileDir, DiskSpaceAllocator.generateFileSizeDirName(50));
     // test a failure while deleting an unneeded directory
-    alloc = constructAllocator();
-    assertTrue("Could not make non-writable", fileSizeDir.setWritable(false));
-    try {
-      alloc.initializePool(Collections.emptyList());
-      fail("Expected StoreException");
-    } catch (StoreException e) {
-      assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
-    } finally {
-      assertTrue("Could not make writable again", fileSizeDir.setWritable(true));
-    }
-
+    runInitFailureTest(reserveFileDir, false);
     // test a failure while deleting an unneeded individual file
-    alloc = constructAllocator();
-    assertTrue("Could not make non-writable", fileSizeDir.setWritable(false));
-    try {
-      alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, 0)));
-      fail("Expected StoreException");
-    } catch (StoreException e) {
-      assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
-    } finally {
-      assertTrue("Could not make writable again", fileSizeDir.setWritable(true));
-    }
+    File fileSizeDir = new File(reserveFileDir, DiskSpaceAllocator.generateFileSizeDirName(50));
+    runInitFailureTest(fileSizeDir, false, new DiskSpaceRequirements(50, 1, 0));
+    // test that an inventory failure during DSA construction results in an exception thrown by initializePool
+    runInitFailureTest(reserveFileDir, true);
   }
 
   /**
@@ -354,6 +338,35 @@ public class DiskSpaceAllocatorTest {
     }
     for (Future<Void> future : exec.invokeAll(tasks)) {
       future.get(10, TimeUnit.SECONDS);
+    }
+  }
+
+  /**
+   * Assert that an initialization error occurs when permissions on a reserve directory are modified.
+   * @param directoryToRestrict the directory to make unreadable or unwritable.
+   * @param restrictReadOrWrite {@code true} to make the directory unreadable, or {@code false} to make it unwritable
+   * @param requirements the {@link DiskSpaceRequirements} to provide to
+   *                     {@link DiskSpaceAllocator#initializePool(Collection)}
+   */
+  private void runInitFailureTest(File directoryToRestrict, boolean restrictReadOrWrite,
+      DiskSpaceRequirements... requirements) {
+    if (restrictReadOrWrite) {
+      assertTrue("Could not make unreadable", directoryToRestrict.setReadable(false));
+    } else {
+      assertTrue("Could not make unwritable", directoryToRestrict.setWritable(false));
+    }
+    alloc = constructAllocator();
+    try {
+      alloc.initializePool(Arrays.asList(requirements));
+      fail("Expected StoreException");
+    } catch (StoreException e) {
+      assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
+    } finally {
+      if (restrictReadOrWrite) {
+        assertTrue("Could not make readable again", directoryToRestrict.setReadable(true));
+      } else {
+        assertTrue("Could not make writable again", directoryToRestrict.setWritable(true));
+      }
     }
   }
 
