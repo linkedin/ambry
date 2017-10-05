@@ -48,7 +48,7 @@ public class StorageManager {
    * @param config the settings for store configuration.
    * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param registry the {@link MetricRegistry} used for store-related metrics.
-   * @param replicas all the replicas on this node.
+   * @param replicas all the replicas on this disk.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
