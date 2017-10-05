@@ -42,6 +42,7 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
@@ -73,6 +74,7 @@ class NettyResponseChannel implements RestResponseChannel {
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST or PUT, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
+  static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
 
   private final ChannelHandlerContext ctx;
   private final NettyMetrics nettyMetrics;
@@ -386,6 +388,10 @@ class NettyResponseChannel implements RestResponseChannel {
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
       }
+    } else if (isPossibleClientTerminate(cause)) {
+      nettyMetrics.clientEarlyTerminateCount.inc();
+      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      errorResponseStatus = ResponseStatus.InternalServerError;
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -538,12 +544,15 @@ class NettyResponseChannel implements RestResponseChannel {
         RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
         ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
         if (responseStatus == ResponseStatus.InternalServerError) {
-          logger.error("Internal error handling request {} with method {}.", uri, restMethod, exception);
+          logger.error("Internal error handling request {} with method {}", uri, restMethod, exception);
         } else {
-          logger.trace("Error handling request {} with method {}.", uri, restMethod, exception);
+          logger.trace("Error handling request {} with method {}", uri, restMethod, exception);
         }
+      } else if (isPossibleClientTerminate(exception)) {
+        logger.trace("Client likely terminated connection while handling request {} with method {}", uri, restMethod,
+            exception);
       } else {
-        logger.error("Unexpected error handling request {} with method {}.", uri, restMethod, exception);
+        logger.error("Unexpected error handling request {} with method {}", uri, restMethod, exception);
       }
     } else {
       logger.debug("Exception encountered after channel {} became inactive", ctx.channel(), exception);
@@ -567,6 +576,14 @@ class NettyResponseChannel implements RestResponseChannel {
       chunk.resolveChunk(exception);
       chunk = chunksToWrite.poll();
     }
+  }
+
+  /**
+   * @param cause the problem cause.
+   * @return {@code true} this cause indicates a possible early terminate from the client. {@code false} otherwise.
+   */
+  private boolean isPossibleClientTerminate(Throwable cause) {
+    return cause instanceof IOException && CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage());
   }
 
   // helper classes
@@ -608,7 +625,7 @@ class NettyResponseChannel implements RestResponseChannel {
      * @param buffer the {@link ByteBuffer} that forms the data of this chunk.
      * @param callback the {@link Callback} to invoke when {@link #writeCompleteThreshold} is reached.
      */
-    public Chunk(ByteBuffer buffer, Callback<Long> callback) {
+    Chunk(ByteBuffer buffer, Callback<Long> callback) {
       this.buffer = buffer;
       bytesToBeWritten = buffer.remaining();
       this.callback = callback;
@@ -623,7 +640,7 @@ class NettyResponseChannel implements RestResponseChannel {
     /**
      * Does tasks (like tracking) that need to be done when a chunk is dequeued for processing.
      */
-    public void onDequeue() {
+    void onDequeue() {
       chunksToWriteCount.decrementAndGet();
       chunkWriteStartTime = System.currentTimeMillis();
       long chunkQueueTime = chunkWriteStartTime - chunkQueueStartTime;
@@ -638,7 +655,7 @@ class NettyResponseChannel implements RestResponseChannel {
      * resolved, the data inside it is considered void.
      * @param exception the reason for chunk handling failure.
      */
-    public void resolveChunk(Exception exception) {
+    void resolveChunk(Exception exception) {
       long chunkWriteFinishTime = System.currentTimeMillis();
       long bytesWritten = 0;
       if (exception == null) {
