@@ -32,7 +32,8 @@ import org.slf4j.LoggerFactory;
 class CryptoJobExecutorService implements Closeable {
   private final int threadCount;
   private final AtomicBoolean enabled = new AtomicBoolean(false);
-  private final GeneralSecurityException GSE = new GeneralSecurityException("CryptoJobExecutorService closed");
+  private static final GeneralSecurityException CLOSED_EXCEPTION =
+      new GeneralSecurityException("CryptoJobExecutorService closed");
   private ExecutorService scheduler;
 
   private static final Logger logger = LoggerFactory.getLogger(CryptoJobExecutorService.class);
@@ -71,9 +72,9 @@ class CryptoJobExecutorService implements Closeable {
       List<Runnable> pendingTasks = scheduler.shutdownNow();
       for (Runnable task : pendingTasks) {
         if (task instanceof CryptoJob) {
-          ((CryptoJob) task).closeJob(GSE);
+          ((CryptoJob) task).closeJob(CLOSED_EXCEPTION);
         } else {
-          logger.error("Unknown type of job seen");
+          logger.error("Unknown type of job seen : " + task.getClass());
         }
       }
     }
