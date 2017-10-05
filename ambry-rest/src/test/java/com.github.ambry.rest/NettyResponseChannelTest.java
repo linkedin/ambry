@@ -478,8 +478,8 @@ public class NettyResponseChannelTest {
 
     String iseMetricName = MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount");
     long iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
-    String citMetricName = MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminateCount");
-    long citBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(citMetricName).getCount();
+    String cetMetricName = MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminateCount");
+    long cetBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount();
 
     channel.writeInbound(httpRequest);
     // first outbound has to be response.
@@ -493,8 +493,8 @@ public class NettyResponseChannelTest {
 
     assertEquals("Client terminates should not count towards InternalServerError count", iseBeforeCount,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
-    assertEquals("Client terminate should have been tracked", citBeforeCount + 1,
-        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(citMetricName).getCount());
+    assertEquals("Client terminate should have been tracked", cetBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount());
   }
 
   /**
