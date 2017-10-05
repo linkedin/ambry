@@ -56,7 +56,8 @@ public class StorageManager {
    */
   public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
       List<? extends ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) throws StoreException {
+      MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time)
+      throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
@@ -75,8 +76,7 @@ public class StorageManager {
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
-      DiskManager diskManager =
-          new DiskManager(disk, replicasForDisk, config, scheduler, metrics, storeMainMetrics,
+      DiskManager diskManager = new DiskManager(disk, replicasForDisk, config, scheduler, metrics, storeMainMetrics,
           storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {

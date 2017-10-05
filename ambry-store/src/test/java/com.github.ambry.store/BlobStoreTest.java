@@ -302,8 +302,8 @@ public class BlobStoreTest {
       ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
-    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, STORE_KEY_FACTORY,
-        recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
   }
 
   /**

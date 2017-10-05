@@ -75,13 +75,13 @@ class DiskManager {
     longLivedTaskScheduler = Utils.newScheduler(1, true);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-          BlobStore store =
+        BlobStore store =
             new BlobStore(replica, config, scheduler, longLivedTaskScheduler, diskIOScheduler, storeMainMetrics,
-                storeUnderCompactionMetrics, keyFactory,
-                recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+                storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
         stores.put(replica.getPartitionId(), store);
       }
-    } compactionManager = new CompactionManager(disk.getMountPath(), config, stores.values(), metrics, time);
+    }
+    compactionManager = new CompactionManager(disk.getMountPath(), config, stores.values(), metrics, time);
   }
 
   /**

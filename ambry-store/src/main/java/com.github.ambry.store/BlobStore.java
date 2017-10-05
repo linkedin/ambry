@@ -88,13 +88,13 @@ class BlobStore implements Store {
 
   //Ctor used in ambry-server
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
-      StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
+      StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate,
       Time time) {
-    this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler,
-        metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory,
-        recovery, hardDelete, time);
+    this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
+        storeUnderCompactionMetrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory, recovery,
+        hardDelete, time);
     this.replicaId = replicaId;
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
   }
