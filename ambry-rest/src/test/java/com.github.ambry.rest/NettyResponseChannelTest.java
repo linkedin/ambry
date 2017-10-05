@@ -467,6 +467,37 @@ public class NettyResponseChannelTest {
   }
 
   /**
+   * Tests that client initiated terminates don't count towards {@link HttpResponseStatus#INTERNAL_SERVER_ERROR}.
+   */
+  @Test
+  public void clientEarlyTerminateTest() throws Exception {
+    EmbeddedChannel channel = createEmbeddedChannel();
+    TestingUri uri = TestingUri.OnResponseCompleteWithEarlyClientTerminate;
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, uri.toString(), null);
+    HttpUtil.setKeepAlive(httpRequest, false);
+
+    String iseMetricName = MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount");
+    long iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
+    String citMetricName = MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminateCount");
+    long citBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(citMetricName).getCount();
+
+    channel.writeInbound(httpRequest);
+    // first outbound has to be response.
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.INTERNAL_SERVER_ERROR, response.status());
+    if (!(response instanceof FullHttpResponse)) {
+      // empty the channel
+      while (channel.readOutbound() != null) {
+      }
+    }
+
+    assertEquals("Client terminates should not count towards InternalServerError count", iseBeforeCount,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
+    assertEquals("Client terminate should have been tracked", citBeforeCount + 1,
+        MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(citMetricName).getCount());
+  }
+
+  /**
    * Tests that the underlying network channel is closed when {@link NettyResponseChannel#close()} is called.
    */
   @Test
@@ -520,9 +551,7 @@ public class NettyResponseChannelTest {
    * @throws Exception
    */
   private void verifyCallbacks(MockNettyMessageProcessor processor) throws Exception {
-    if (processor == null) {
-      assertNotNull("There is no MockNettyMessageProcessor in the channel", processor);
-    }
+    assertNotNull("There is no MockNettyMessageProcessor in the channel", processor);
     for (ChannelWriteCallback callback : processor.writeCallbacksToVerify) {
       callback.compareWithFuture();
       if (callback.exception != null) {
@@ -760,6 +789,10 @@ enum TestingUri {
    * immediately with a {@link RuntimeException} as {@code cause}. The exception message is the URI string.
    */
   OnResponseCompleteWithNonRestException, /**
+   * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
+   * immediately with an {@link IOException} with message {@link NettyResponseChannel#CLIENT_RESET_EXCEPTION_MSG}.
+   */
+  OnResponseCompleteWithEarlyClientTerminate, /**
    * Response sending fails midway through a write.
    */
   ResponseFailureMidway, /**
@@ -933,6 +966,12 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
       case OnResponseCompleteWithNonRestException:
         restResponseChannel.onResponseComplete(
             new RuntimeException(TestingUri.OnResponseCompleteWithNonRestException.toString()));
+        assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
+            restResponseChannel.getStatus());
+        assertFalse("Request channel is not closed", request.isOpen());
+        break;
+      case OnResponseCompleteWithEarlyClientTerminate:
+        restResponseChannel.onResponseComplete(new IOException(NettyResponseChannel.CLIENT_RESET_EXCEPTION_MSG));
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
