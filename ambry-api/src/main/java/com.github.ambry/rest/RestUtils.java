@@ -260,7 +260,7 @@ public class RestUtils {
     }
 
     return new BlobProperties(-1, serviceId, ownerId, contentType, container.isPrivate(), ttl, account.getId(),
-        container.getId());
+        container.getId(), false);
   }
 
   /**

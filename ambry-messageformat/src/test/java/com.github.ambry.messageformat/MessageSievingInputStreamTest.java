@@ -52,6 +52,8 @@ public class MessageSievingInputStreamTest {
     short accountId1 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId1 = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1);
+    byte[] encryptionKey1 = new byte[100];
+    new Random().nextBytes(encryptionKey1);
     byte[] usermetadata1 = new byte[1000];
     new Random().nextBytes(usermetadata1);
     int blobContentSize = 2000;
@@ -72,8 +74,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1, prop1,
-            ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1,
+            ByteBuffer.wrap(encryptionKey1), prop1, ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
@@ -85,6 +87,8 @@ public class MessageSievingInputStreamTest {
     short accountId2 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId2 = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop2 = new BlobProperties(10, "servid2", accountId2, containerId2);
+    byte[] encryptionKey2 = new byte[100];
+    new Random().nextBytes(encryptionKey2);
     byte[] usermetadata2 = new byte[1000];
     new Random().nextBytes(usermetadata2);
     blobContentSize = 2000;
@@ -98,8 +102,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key2, prop2,
-            ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key2,
+            ByteBuffer.wrap(encryptionKey2), prop2, ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
@@ -111,6 +115,8 @@ public class MessageSievingInputStreamTest {
     short accountId3 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId3 = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3);
+    byte[] encryptionKey3 = new byte[100];
+    new Random().nextBytes(encryptionKey3);
     byte[] usermetadata3 = new byte[1000];
     new Random().nextBytes(usermetadata3);
     blobContentSize = 2000;
@@ -124,8 +130,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3, prop3,
-            ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3,
+            ByteBuffer.wrap(encryptionKey3), prop3, ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
@@ -203,6 +209,8 @@ public class MessageSievingInputStreamTest {
     short accountId1 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId1 = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1);
+    byte[] encryptionKey1 = new byte[100];
+    new Random().nextBytes(encryptionKey1);
     byte[] usermetadata1 = new byte[1000];
     new Random().nextBytes(usermetadata1);
     int blobContentSize = 2000;
@@ -224,8 +232,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
     MessageFormatInputStream messageFormatStream1 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1, prop1,
-            ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1,
+            ByteBuffer.wrap(encryptionKey1), prop1, ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
                 blobContentSize, blobType);
 
@@ -237,6 +245,8 @@ public class MessageSievingInputStreamTest {
     short accountId2 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId2 = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop2 = new BlobProperties(10, "servid2", accountId2, containerId2);
+    byte[] encryptionKey2 = new byte[100];
+    new Random().nextBytes(encryptionKey2);
     byte[] usermetadata2 = new byte[1000];
     new Random().nextBytes(usermetadata2);
     blobContentSize = 2000;
@@ -250,8 +260,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream2 = new ByteBufferInputStream(ByteBuffer.wrap(data2));
 
     MessageFormatInputStream messageFormatStream2 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key2, prop2,
-            ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key2,
+            ByteBuffer.wrap(encryptionKey2), prop2, ByteBuffer.wrap(usermetadata2), stream2, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key2, prop2, ByteBuffer.wrap(usermetadata2), stream2,
                 blobContentSize, blobType);
 
@@ -269,6 +279,8 @@ public class MessageSievingInputStreamTest {
     short accountId3 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId3 = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3);
+    byte[] encryptionKey3 = new byte[100];
+    new Random().nextBytes(encryptionKey3);
     byte[] usermetadata3 = new byte[1000];
     new Random().nextBytes(usermetadata3);
     blobContentSize = 2000;
@@ -282,8 +294,8 @@ public class MessageSievingInputStreamTest {
     ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
     MessageFormatInputStream messageFormatStream3 =
-        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3, prop3,
-            ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
+        (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3,
+            ByteBuffer.wrap(encryptionKey3), prop3, ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
             : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
                 blobContentSize, blobType);
 
@@ -357,6 +369,8 @@ public class MessageSievingInputStreamTest {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       BlobProperties prop1 = new BlobProperties(10, "servid1", accountId, containerId);
+      byte[] encryptionKey1 = new byte[100];
+      new Random().nextBytes(encryptionKey1);
       byte[] usermetadata1 = new byte[1000];
       new Random().nextBytes(usermetadata1);
       int blobContentSize = 2000;
@@ -370,10 +384,10 @@ public class MessageSievingInputStreamTest {
       ByteBufferInputStream stream1 = new ByteBufferInputStream(ByteBuffer.wrap(data1));
 
       MessageFormatInputStream messageFormatStream1 =
-          (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1, prop1,
-              ByteBuffer.wrap(usermetadata1), stream1, blobContentSize, blobType)
-              : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
-                  blobContentSize, blobType);
+          (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key1,
+              ByteBuffer.wrap(encryptionKey1), prop1, ByteBuffer.wrap(usermetadata1), stream1, blobContentSize,
+              blobType) : new PutMessageFormatBlobV1InputStream(key1, prop1, ByteBuffer.wrap(usermetadata1), stream1,
+              blobContentSize, blobType);
       MessageInfo msgInfo1 =
           new MessageInfo(key1, messageFormatStream1.getSize(), accountId, containerId, prop1.getCreationTimeInMs());
 
@@ -393,6 +407,8 @@ public class MessageSievingInputStreamTest {
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
       BlobProperties prop3 = new BlobProperties(10, "servid3", accountId, containerId);
+      byte[] encryptionKey3 = new byte[100];
+      new Random().nextBytes(encryptionKey3);
       byte[] usermetadata3 = new byte[1000];
       new Random().nextBytes(usermetadata3);
       blobContentSize = 2000;
@@ -406,10 +422,10 @@ public class MessageSievingInputStreamTest {
       ByteBufferInputStream stream3 = new ByteBufferInputStream(ByteBuffer.wrap(data3));
 
       MessageFormatInputStream messageFormatStream3 =
-          (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3, prop3,
-              ByteBuffer.wrap(usermetadata3), stream3, blobContentSize, blobType)
-              : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
-                  blobContentSize, blobType);
+          (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key3,
+              ByteBuffer.wrap(encryptionKey3), prop3, ByteBuffer.wrap(usermetadata3), stream3, blobContentSize,
+              blobType) : new PutMessageFormatBlobV1InputStream(key3, prop3, ByteBuffer.wrap(usermetadata3), stream3,
+              blobContentSize, blobType);
 
       MessageInfo msgInfo3 =
           new MessageInfo(key3, messageFormatStream3.getSize(), accountId, containerId, prop3.getCreationTimeInMs());

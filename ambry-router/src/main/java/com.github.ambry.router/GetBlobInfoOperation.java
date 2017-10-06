@@ -22,14 +22,17 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
@@ -244,7 +247,17 @@ class GetBlobInfoOperation extends GetOperation {
       } else {
         getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
         if (getError == ServerErrorCode.No_Error) {
-          handleBody(getResponse.getInputStream());
+          PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
+          int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
+          if (objectsInPartitionResponse != 1) {
+            setOperationException(new RouterException(
+                "Unexpected number of messages in a partition response, expected: 1, " + "received: "
+                    + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError));
+            onErrorResponse(getRequestInfo.replicaId);
+          }
+
+          MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
+          handleBody(getResponse.getInputStream(), messageMetadata);
           operationTracker.onResponse(getRequestInfo.replicaId, true);
           if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
             logger.trace("Cross colo request successful for remote replica in {} ",
@@ -287,10 +300,14 @@ class GetBlobInfoOperation extends GetOperation {
   /**
    * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return.
    * @param payload the body of the response.
+   * @param messageMetadata the {@link MessageMetadata} associated with the message.
    * @throws IOException if there is an IOException while deserializing the body.
    * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
    */
-  private void handleBody(InputStream payload) throws IOException, MessageFormatException {
+  private void handleBody(InputStream payload, MessageMetadata messageMetadata)
+      throws IOException, MessageFormatException {
+    ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
+    // @todo use the encryption key for decryption.
     if (operationResult == null) {
       operationResult = new GetBlobResultInternal(new GetBlobResult(
           new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),

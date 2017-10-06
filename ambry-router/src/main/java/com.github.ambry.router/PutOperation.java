@@ -790,11 +790,12 @@ class PutOperation {
         chunkBlobId =
             new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
                 passedInBlobProperties.getContainerId(), partitionId);
+        // @todo: set encrypted flag as appropriate.
         chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId());
+            passedInBlobProperties.getContainerId(), false);
         operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
             routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
@@ -1193,11 +1194,12 @@ class PutOperation {
      * for sending if this blob is composite, or marking the operation complete if this is a simple blob.
      */
     private void finalizeMetadataChunk() {
+      // @todo: set encrypted flag as appropriate.
       finalBlobProperties =
           new BlobProperties(getBlobSize(), passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
               passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
-              passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId());
+              passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), false);
       if (getNumDataChunks() > 1) {
         // values returned are in the right order as TreeMap returns them in key-order.
         List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());

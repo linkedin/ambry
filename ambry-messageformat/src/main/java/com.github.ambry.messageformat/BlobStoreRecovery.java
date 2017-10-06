@@ -52,7 +52,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         headerVersion.flip();
         short version = headerVersion.getShort();
         switch (version) {
-          case MessageFormatRecord.Message_Header_Version_V1:
+          case MessageFormatRecord.Message_Header_Version_V1: {
             ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
             header.putShort(version);
             if (startOffset + (MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() - headerVersion.capacity())
@@ -90,7 +90,52 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               messageRecovered.add(info);
             }
             startOffset = stream.getCurrentPosition();
-            break;
+          }
+          break;
+          case MessageFormatRecord.Message_Header_Version_V2: {
+            ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize());
+            header.putShort(version);
+            if (startOffset + (MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() - headerVersion.capacity())
+                > endOffset) {
+              throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
+            }
+            read.readInto(header, startOffset);
+            startOffset += header.capacity() - headerVersion.capacity();
+            header.flip();
+            MessageFormatRecord.MessageHeader_Format_V2 headerFormat =
+                new MessageFormatRecord.MessageHeader_Format_V2(header);
+            headerFormat.verifyHeader();
+            ReadInputStream stream = new ReadInputStream(read, startOffset, endOffset);
+            StoreKey key = factory.getStoreKey(new DataInputStream(stream));
+            boolean hasEncryptionKey = headerFormat.getBlobEncryptionKeyRecordRelativeOffset()
+                != MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
+            // read the appropriate type of message based on the relative offset that is set
+            if (headerFormat.getBlobPropertiesRecordRelativeOffset()
+                != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+              // we do not use blob encryption key, user metadata or blob during recovery but we still deserialize
+              // them to check for validity
+              if (hasEncryptionKey) {
+                MessageFormatRecord.deserializeBlobEncryptionKey(stream);
+              }
+              BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
+              MessageFormatRecord.deserializeUserMetadata(stream);
+              MessageFormatRecord.deserializeBlob(stream);
+              MessageInfo info =
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+                      Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(),
+                          properties.getTimeToLiveInSeconds()), properties.getAccountId(), properties.getContainerId(),
+                      properties.getCreationTimeInMs());
+              messageRecovered.add(info);
+            } else {
+              DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);
+              MessageInfo info =
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+                      deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
+              messageRecovered.add(info);
+            }
+            startOffset = stream.getCurrentPosition();
+          }
+          break;
           default:
             throw new MessageFormatException("Version not known while reading message - " + version,
                 MessageFormatErrorCodes.Unknown_Format_Version);

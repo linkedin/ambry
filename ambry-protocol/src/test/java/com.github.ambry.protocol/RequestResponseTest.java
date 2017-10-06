@@ -23,6 +23,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
@@ -208,9 +209,9 @@ public class RequestResponseTest {
           Assert.assertEquals(blobSize, deserializedPutRequest.getBlobSize());
           Assert.assertEquals(blobType, deserializedPutRequest.getBlobType());
           if (expectedKey == null) {
-            Assert.assertNull(deserializedPutRequest.getBlobKey());
+            Assert.assertNull(deserializedPutRequest.getBlobEncryptionKey());
           } else {
-            Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobKey().array());
+            Assert.assertArrayEquals(expectedKey, deserializedPutRequest.getBlobEncryptionKey().array());
           }
           byte[] blobRead = new byte[blobSize];
           deserializedPutRequest.getBlobStream().read(blobRead);
@@ -240,7 +241,7 @@ public class RequestResponseTest {
 
     BlobProperties blobProperties =
         new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
     doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
@@ -249,21 +250,21 @@ public class RequestResponseTest {
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
 
     // Put Request with size in blob properties different from the data size and blob type: Metadata blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
         blob, blobSize, blobKey);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
         blob, blobSize, blobKey);
 
@@ -298,10 +299,12 @@ public class RequestResponseTest {
 
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
-    ArrayList<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
+    ArrayList<MessageInfo> messageInfoList = new ArrayList<>();
+    ArrayList<MessageMetadata> messageMetadataList = new ArrayList<>();
     messageInfoList.add(messageInfo);
+    messageMetadataList.add(null); // @todo take a look.
     PartitionResponseInfo partitionResponseInfo =
-        new PartitionResponseInfo(clusterMap.getWritablePartitionIds().get(0), messageInfoList);
+        new PartitionResponseInfo(clusterMap.getWritablePartitionIds().get(0), messageInfoList, messageMetadataList);
     List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
     partitionResponseInfoList.add(partitionResponseInfo);
     byte[] buf = new byte[1000];
@@ -319,7 +322,8 @@ public class RequestResponseTest {
     Assert.assertEquals(msgInfo.getSize(), 1000);
     Assert.assertEquals(msgInfo.getStoreKey(), id1);
     Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
-    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_3) {
+    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_3
+        || GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_4) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());

@@ -15,6 +15,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
+import java.nio.ByteBuffer;
 
 
 /**
@@ -24,14 +25,18 @@ public class BlobAll {
   private final StoreKey storeKey;
   private final BlobInfo blobInfo;
   private final BlobData blobData;
+  private final ByteBuffer encryptionKey;
 
   /**
    * Construct an object containing the store key, blob properties, user metadata, and data for a blob.
+   * @param storeKey the {@link StoreKey} for this blob.
+   * @param encryptionKey the encryption key for this blob.
    * @param blobInfo the {@link BlobInfo} for this blob.
    * @param blobData the {@link BlobData} for this blob.
    */
-  public BlobAll(StoreKey storeKey, BlobInfo blobInfo, BlobData blobData) {
+  public BlobAll(StoreKey storeKey, ByteBuffer encryptionKey, BlobInfo blobInfo, BlobData blobData) {
     this.storeKey = storeKey;
+    this.encryptionKey = encryptionKey;
     this.blobInfo = blobInfo;
     this.blobData = blobData;
   }
@@ -55,5 +60,12 @@ public class BlobAll {
    */
   public BlobData getBlobData() {
     return blobData;
+  }
+
+  /**
+   * @return the encryption key for this blob (or null if there is not one).
+   */
+  public ByteBuffer getBlobEncryptionKey() {
+    return encryptionKey;
   }
 }

@@ -71,6 +71,7 @@ public class ServerHardDeleteTest {
   private MockClusterAgentsFactory mockClusterAgentsFactory;
   private MockClusterMap mockClusterMap;
   private ArrayList<BlobProperties> properties;
+  private ArrayList<byte[]> encryptionKey;
   private ArrayList<byte[]> usermetadata;
   private ArrayList<byte[]> data;
   private ArrayList<BlobId> blobIdList;
@@ -219,12 +220,15 @@ public class ServerHardDeleteTest {
   @Test
   public void endToEndTestHardDeletes() throws Exception {
     DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
+    encryptionKey = new ArrayList<>(9);
     usermetadata = new ArrayList<>(9);
     data = new ArrayList<>(9);
     Random random = new Random();
     for (int i = 0; i < 9; i++) {
+      encryptionKey.add(new byte[100 + i]);
       usermetadata.add(new byte[1000 + i]);
       data.add(new byte[31870 + i]);
+      random.nextBytes(encryptionKey.get(i));
       random.nextBytes(usermetadata.get(i));
       random.nextBytes(data.get(i));
     }
@@ -238,12 +242,12 @@ public class ServerHardDeleteTest {
         Utils.getRandomShort(TestUtils.RANDOM)));
     properties.add(
         new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM)));
+            Utils.getRandomShort(TestUtils.RANDOM), false));
     properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM)));
     properties.add(
         new BlobProperties(31875, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM)));
+            Utils.getRandomShort(TestUtils.RANDOM), false));
     properties.add(new BlobProperties(31876, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM)));
     properties.add(new BlobProperties(31877, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
@@ -266,7 +270,7 @@ public class ServerHardDeleteTest {
     channel.connect();
     for (int i = 0; i < 6; i++) {
       // blob 3 and 5 are expired among these
-      putBlob(blobIdList.get(i), properties.get(i), usermetadata.get(i), data.get(i), channel);
+      putBlob(blobIdList.get(i), properties.get(i), encryptionKey.get(i), usermetadata.get(i), data.get(i), channel);
     }
 
     notificationSystem.awaitBlobCreations(blobIdList.get(0).getID());
@@ -290,11 +294,11 @@ public class ServerHardDeleteTest {
     getAndVerify(channel, 6);
 
     // put blob 6
-    putBlob(blobIdList.get(6), properties.get(6), usermetadata.get(6), data.get(6), channel);
+    putBlob(blobIdList.get(6), properties.get(6), encryptionKey.get(6), usermetadata.get(6), data.get(6), channel);
     // put blob 7
-    putBlob(blobIdList.get(7), properties.get(7), usermetadata.get(7), data.get(7), channel);
+    putBlob(blobIdList.get(7), properties.get(7), encryptionKey.get(7), usermetadata.get(7), data.get(7), channel);
     // put blob 8
-    putBlob(blobIdList.get(8), properties.get(8), usermetadata.get(8), data.get(8), channel);
+    putBlob(blobIdList.get(8), properties.get(8), encryptionKey.get(8), usermetadata.get(8), data.get(8), channel);
 
     notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
     notificationSystem.awaitBlobCreations(blobIdList.get(7).getID());
@@ -329,11 +333,11 @@ public class ServerHardDeleteTest {
    * @param channel the {@link BlockingChannel} to use to send and receive data
    * @throws IOException
    */
-  void putBlob(BlobId blobId, BlobProperties properties, byte[] usermetadata, byte[] data, BlockingChannel channel)
-      throws IOException {
+  void putBlob(BlobId blobId, BlobProperties properties, byte[] encryptionKey, byte[] usermetadata, byte[] data,
+      BlockingChannel channel) throws IOException {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-            properties.getBlobSize(), BlobType.DataBlob, null);
+            properties.getBlobSize(), BlobType.DataBlob, ByteBuffer.wrap(encryptionKey));
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
     PutResponse response0 = PutResponse.readFrom(new DataInputStream(putResponseStream));
