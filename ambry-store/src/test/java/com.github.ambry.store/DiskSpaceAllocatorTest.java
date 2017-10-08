@@ -344,13 +344,13 @@ public class DiskSpaceAllocatorTest {
   /**
    * Assert that an initialization error occurs when permissions on a reserve directory are modified.
    * @param directoryToRestrict the directory to make unreadable or unwritable.
-   * @param restrictReadOrWrite {@code true} to make the directory unreadable, or {@code false} to make it unwritable
+   * @param restrictRead {@code true} to make the directory unreadable, or {@code false} to make it unwritable
    * @param requirements the {@link DiskSpaceRequirements} to provide to
    *                     {@link DiskSpaceAllocator#initializePool(Collection)}
    */
-  private void runInitFailureTest(File directoryToRestrict, boolean restrictReadOrWrite,
+  private void runInitFailureTest(File directoryToRestrict, boolean restrictRead,
       DiskSpaceRequirements... requirements) {
-    if (restrictReadOrWrite) {
+    if (restrictRead) {
       assertTrue("Could not make unreadable", directoryToRestrict.setReadable(false));
     } else {
       assertTrue("Could not make unwritable", directoryToRestrict.setWritable(false));
@@ -362,7 +362,7 @@ public class DiskSpaceAllocatorTest {
     } catch (StoreException e) {
       assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
     } finally {
-      if (restrictReadOrWrite) {
+      if (restrictRead) {
         assertTrue("Could not make readable again", directoryToRestrict.setReadable(true));
       } else {
         assertTrue("Could not make writable again", directoryToRestrict.setWritable(true));
