@@ -16,7 +16,6 @@ package com.github.ambry.account;
 
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
-import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -41,37 +40,33 @@ public class ServiceIdAccountGenTool {
    * @param args the command line arguments.
    */
   @SuppressWarnings("unchecked")
-  public static void main(String[] args) {
-    try {
-      OptionParser parser = new OptionParser();
+  public static void main(String[] args) throws Exception {
+    OptionParser parser = new OptionParser();
 
-      ArgumentAcceptingOptionSpec<String> accountJsonFilePathOpt =
-          parser.accepts("jsonPath", "The path to the account json file to write to")
-              .withRequiredArg()
-              .describedAs("account_json_file_path")
-              .ofType(String.class);
-      ArgumentAcceptingOptionSpec<Short> firstAccountIdOpt = parser.accepts("firstAccountId",
-          "The account ID to assign to the first account generated. "
-              + "The account ID will be incremented by one for each additional account")
-          .withRequiredArg()
-          .describedAs("first_account_id")
-          .ofType(Short.class);
-      NonOptionArgumentSpec<String> serviceIdsArg =
-          parser.nonOptions("The service IDs to create accounts for").ofType(String.class);
-      parser.accepts("help", "print this help message.");
-      parser.accepts("h", "print this help message.");
+    ArgumentAcceptingOptionSpec<String> accountJsonFilePathOpt =
+        parser.accepts("jsonPath", "The path to the account json file to write to")
+            .withRequiredArg()
+            .describedAs("account_json_file_path")
+            .ofType(String.class);
+    ArgumentAcceptingOptionSpec<Short> firstAccountIdOpt = parser.accepts("firstAccountId",
+        "The account ID to assign to the first account generated. "
+            + "The account ID will be incremented by one for each additional account")
+        .withRequiredArg()
+        .describedAs("first_account_id")
+        .ofType(Short.class);
+    NonOptionArgumentSpec<String> serviceIdsArg =
+        parser.nonOptions("The service IDs to create accounts for").ofType(String.class);
+    parser.accepts("help", "print this help message.");
+    parser.accepts("h", "print this help message.");
 
-      OptionSet options = parser.parse(args);
-      if (options.has("help") || options.has("h")) {
-        parser.printHelpOn(System.out);
-        System.exit(0);
-      }
-      ToolUtils.ensureOrExit(Arrays.asList(accountJsonFilePathOpt, firstAccountIdOpt, serviceIdsArg), options, parser);
-      generateAccounts((List<String>) options.nonOptionArguments(), options.valueOf(accountJsonFilePathOpt),
-          options.valueOf(firstAccountIdOpt));
-    } catch (Exception e) {
-      e.printStackTrace();
+    OptionSet options = parser.parse(args);
+    if (options.has("help") || options.has("h")) {
+      parser.printHelpOn(System.out);
+      System.exit(0);
     }
+    ToolUtils.ensureOrExit(Arrays.asList(accountJsonFilePathOpt, firstAccountIdOpt, serviceIdsArg), options, parser);
+    generateAccounts((List<String>) options.nonOptionArguments(), options.valueOf(accountJsonFilePathOpt),
+        options.valueOf(firstAccountIdOpt));
   }
 
   /**
