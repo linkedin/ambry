@@ -25,13 +25,14 @@ class CryptoTestUtils {
   /**
    * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
    * the {@link SingleKeyManagementService}.
-   * @param keySize kms key size property value
+   * @param key the single default key to be set
+   * @param randomKeySizeInBits random key size in bits value
    * @return the created Properties instance.
    */
-  static Properties getKMSProperties(String key, int keySize) {
+  static Properties getKMSProperties(String key, int randomKeySizeInBits) {
     Properties properties = new Properties();
     properties.setProperty("kms.default.container.key", key);
-    properties.setProperty("kms.random.key.size.in.bits", Integer.toString(keySize));
+    properties.setProperty("kms.random.key.size.in.bits", Integer.toString(randomKeySizeInBits));
     properties.setProperty("clustermap.cluster.name", "dev");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
