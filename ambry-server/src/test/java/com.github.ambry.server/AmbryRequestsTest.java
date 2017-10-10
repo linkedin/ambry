@@ -259,7 +259,7 @@ public class AmbryRequestsTest {
     assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
 
     long acceptableLagInBytes = 100;
-    
+
     // cases with a given partition id
     // all replicas of given partition < acceptableLag
     generateLagOverrides(0, acceptableLagInBytes - 1);
@@ -286,8 +286,6 @@ public class AmbryRequestsTest {
     // all replicas of this partition > acceptableLag
     generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
     doCatchupStatusTest(id, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, false);
-    // if num expected replicas == 0, this succeeds
-    doCatchupStatusTest(id, acceptableLagInBytes, (short) 0, ServerErrorCode.No_Error, true);
 
     // cases with no partition id provided
     // all replicas of all partitions < acceptableLag
@@ -310,8 +308,6 @@ public class AmbryRequestsTest {
     // all replicas of all partitions > acceptableLag
     generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
     doCatchupStatusTest(null, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, false);
-    // if num expected replicas == 0, this succeeds
-    doCatchupStatusTest(null, acceptableLagInBytes, (short) 0, ServerErrorCode.No_Error, true);
   }
 
   /**
@@ -320,6 +316,12 @@ public class AmbryRequestsTest {
    */
   @Test
   public void catchupStatusFailureTest() throws InterruptedException, IOException {
+    // acceptableLagInBytes < 0
+    doCatchupStatusTest(null, -1, Short.MAX_VALUE, ServerErrorCode.Bad_Request, false);
+    // numReplicasCaughtUpPerPartition = 0
+    doCatchupStatusTest(null, 0, (short) 0, ServerErrorCode.Bad_Request, false);
+    // numReplicasCaughtUpPerPartition < 0
+    doCatchupStatusTest(null, 0, (short) -1, ServerErrorCode.Bad_Request, false);
     // replication manager error
     replicationManager.reset();
     replicationManager.exceptionToThrow = new IllegalStateException();

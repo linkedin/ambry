@@ -727,18 +727,24 @@ public class AmbryRequests implements RequestAPI {
       throws IOException {
     Collection<PartitionId> partitionIds;
     ServerErrorCode error = ServerErrorCode.No_Error;
-    CatchupStatusAdminRequest catchupStatusRequest = CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
-    if (catchupStatusRequest.getPartitionId() != null) {
-      error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
-      partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
-    } else {
-      partitionIds = partitionsInCurrentNode;
-    }
     boolean isCaughtUp = false;
-    if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-      error = ServerErrorCode.No_Error;
-      isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes(),
-          catchupStatusRequest.getNumReplicasCaughtUpPerPartition());
+    CatchupStatusAdminRequest catchupStatusRequest = CatchupStatusAdminRequest.readFrom(requestStream, adminRequest);
+    if (catchupStatusRequest.getAcceptableLagInBytes() < 0) {
+      error = ServerErrorCode.Bad_Request;
+    } else if (catchupStatusRequest.getNumReplicasCaughtUpPerPartition() <= 0) {
+      error = ServerErrorCode.Bad_Request;
+    } else {
+      if (catchupStatusRequest.getPartitionId() != null) {
+        error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+        partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
+      } else {
+        partitionIds = partitionsInCurrentNode;
+      }
+      if (!error.equals(ServerErrorCode.Partition_Unknown)) {
+        error = ServerErrorCode.No_Error;
+        isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, catchupStatusRequest.getAcceptableLagInBytes(),
+            catchupStatusRequest.getNumReplicasCaughtUpPerPartition());
+      }
     }
     AdminResponse adminResponse = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     return new CatchupStatusAdminResponse(isCaughtUp, adminResponse);

@@ -494,7 +494,7 @@ public class RequestResponseTest {
     String clientId = "client";
     // request
     long acceptableLag = Utils.getRandomLong(TestUtils.RANDOM, 10000);
-    short numCaughtUpPerPartition = (short) TestUtils.RANDOM.nextInt(Short.MAX_VALUE);
+    short numCaughtUpPerPartition = Utils.getRandomShort(TestUtils.RANDOM);
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
     CatchupStatusAdminRequest catchupStatusRequest =
         new CatchupStatusAdminRequest(acceptableLag, numCaughtUpPerPartition, adminRequest);
