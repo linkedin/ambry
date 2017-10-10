@@ -42,7 +42,6 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
@@ -74,7 +73,6 @@ class NettyResponseChannel implements RestResponseChannel {
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST or PUT, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
-  static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
 
   private final ChannelHandlerContext ctx;
   private final NettyMetrics nettyMetrics;
@@ -388,7 +386,7 @@ class NettyResponseChannel implements RestResponseChannel {
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
       }
-    } else if (isPossibleClientTerminate(cause)) {
+    } else if (Utils.isPossibleClientTerminate(cause)) {
       nettyMetrics.clientEarlyTerminateCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
@@ -517,6 +515,9 @@ class NettyResponseChannel implements RestResponseChannel {
           ctx.fireExceptionCaught(cause);
           nettyMetrics.throwableCount.inc();
         }
+      } else if (cause instanceof ClosedChannelException) {
+        // wrap the exception in something we recognize as a client terminate
+        exception = Utils.convertToClientTerminateException(cause);
       } else {
         exception = (Exception) cause;
       }
@@ -548,7 +549,7 @@ class NettyResponseChannel implements RestResponseChannel {
         } else {
           logger.trace("Error handling request {} with method {}", uri, restMethod, exception);
         }
-      } else if (isPossibleClientTerminate(exception)) {
+      } else if (Utils.isPossibleClientTerminate(exception)) {
         logger.trace("Client likely terminated connection while handling request {} with method {}", uri, restMethod,
             exception);
       } else {
@@ -576,14 +577,6 @@ class NettyResponseChannel implements RestResponseChannel {
       chunk.resolveChunk(exception);
       chunk = chunksToWrite.poll();
     }
-  }
-
-  /**
-   * @param cause the problem cause.
-   * @return {@code true} this cause indicates a possible early terminate from the client. {@code false} otherwise.
-   */
-  private boolean isPossibleClientTerminate(Throwable cause) {
-    return cause instanceof IOException && CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage());
   }
 
   // helper classes

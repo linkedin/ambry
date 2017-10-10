@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -223,7 +224,7 @@ public class NettyResponseChannelTest {
   @Test
   public void badStateTransitionsTest() throws Exception {
     // write after close.
-    doBadStateTransitionTest(TestingUri.WriteAfterClose, ClosedChannelException.class);
+    doBadStateTransitionTest(TestingUri.WriteAfterClose, IOException.class);
 
     // modify response data after it has been written to the channel
     doBadStateTransitionTest(TestingUri.ModifyResponseMetadataAfterWrite, IllegalStateException.class);
@@ -249,18 +250,34 @@ public class NettyResponseChannelTest {
     onResponseCompleteUnderWriteFailureTest(TestingUri.OnResponseCompleteWithNonRestException);
 
     // writing to channel with a outbound handler that generates an Exception
+    String message = UtilsTest.getRandomString(10);
     try {
       String content = "@@randomContent@@@";
       MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-      ChannelOutboundHandler badOutboundHandler = new ExceptionOutboundHandler();
+      ChannelOutboundHandler badOutboundHandler = new ExceptionOutboundHandler(new Exception(message));
       EmbeddedChannel channel = new EmbeddedChannel(badOutboundHandler, processor);
       channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
-      // channel gets closed because of write failure
+      // channel has been closed because of write failure
       channel.writeInbound(createContent(content, true));
       verifyCallbacks(processor);
       fail("Callback for write would have thrown an Exception");
     } catch (Exception e) {
-      assertEquals("Exception not as expected", ExceptionOutboundHandler.EXCEPTION_MESSAGE, e.getMessage());
+      assertEquals("Exception not as expected", message, e.getMessage());
+    }
+
+    // writing to channel with a outbound handler that encounters a ClosedChannelException
+    try {
+      String content = "@@randomContent@@@";
+      MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
+      ChannelOutboundHandler badOutboundHandler = new ExceptionOutboundHandler(new ClosedChannelException());
+      EmbeddedChannel channel = new EmbeddedChannel(badOutboundHandler, processor);
+      channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, "/", null));
+      // channel has been closed because of write failure
+      channel.writeInbound(createContent(content, true));
+      verifyCallbacks(processor);
+      fail("Callback for write would have thrown an Exception");
+    } catch (IOException e) {
+      assertTrue("Should be recognized as a client terminate", Utils.isPossibleClientTerminate(e));
     }
 
     // writing to channel with a outbound handler that generates an Error
@@ -606,7 +623,7 @@ public class NettyResponseChannelTest {
    */
   private void onResponseCompleteUnderWriteFailureTest(TestingUri uri) {
     MockNettyMessageProcessor processor = new MockNettyMessageProcessor();
-    ExceptionOutboundHandler exceptionOutboundHandler = new ExceptionOutboundHandler();
+    ExceptionOutboundHandler exceptionOutboundHandler = new ExceptionOutboundHandler(new Exception());
     EmbeddedChannel channel = new EmbeddedChannel(exceptionOutboundHandler, processor);
     // no exception because onResponseComplete() swallows it.
     channel.writeInbound(RestTestUtils.createRequest(HttpMethod.GET, uri.toString(), null));
@@ -790,7 +807,7 @@ enum TestingUri {
    */
   OnResponseCompleteWithNonRestException, /**
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
-   * immediately with an {@link IOException} with message {@link NettyResponseChannel#CLIENT_RESET_EXCEPTION_MSG}.
+   * immediately with an {@link IOException} with message {@link Utils#CLIENT_RESET_EXCEPTION_MSG}.
    */
   OnResponseCompleteWithEarlyClientTerminate, /**
    * Response sending fails midway through a write.
@@ -971,7 +988,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         assertFalse("Request channel is not closed", request.isOpen());
         break;
       case OnResponseCompleteWithEarlyClientTerminate:
-        restResponseChannel.onResponseComplete(new IOException(NettyResponseChannel.CLIENT_RESET_EXCEPTION_MSG));
+        restResponseChannel.onResponseComplete(Utils.convertToClientTerminateException(new Exception()));
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
@@ -1213,11 +1230,15 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
  * A {@link ChannelOutboundHandler} that throws exceptions on write.
  */
 class ExceptionOutboundHandler extends ChannelOutboundHandlerAdapter {
-  protected static String EXCEPTION_MESSAGE = "@@randomExceptionMessage@@";
+  private final Exception exceptionToThrow;
+
+  public ExceptionOutboundHandler(Exception exceptionToThrow) {
+    this.exceptionToThrow = exceptionToThrow;
+  }
 
   @Override
   public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-    throw new Exception(EXCEPTION_MESSAGE);
+    throw exceptionToThrow;
   }
 }
 

@@ -420,6 +420,27 @@ public class UtilsTest {
     }
   }
 
+  /**
+   * Tests for {@link Utils#isPossibleClientTerminate(Throwable)} and
+   * {@link Utils#convertToClientTerminateException(Throwable)}.
+   */
+  @Test
+  public void clientTerminateWrapAndRecognizeTest() {
+    Exception exception = new IOException("Connection reset by peer");
+    assertTrue("Should be declared as a client terminate", Utils.isPossibleClientTerminate(exception));
+
+    exception = new IOException("Connection not reset by peer");
+    assertFalse("Should not be declared as a client terminate", Utils.isPossibleClientTerminate(exception));
+    exception = Utils.convertToClientTerminateException(exception);
+    assertTrue("Should be declared as a client terminate", Utils.isPossibleClientTerminate(exception));
+
+    exception = new Exception("Connection reset by peer");
+    // debatable but this is the current implmentation.
+    assertFalse("Should not be declared as a client terminate", Utils.isPossibleClientTerminate(exception));
+    exception = Utils.convertToClientTerminateException(exception);
+    assertTrue("Should be declared as a client terminate", Utils.isPossibleClientTerminate(exception));
+  }
+
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 

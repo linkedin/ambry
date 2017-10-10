@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +83,8 @@ class RouterUtils {
           isSystemHealthError = false;
           break;
       }
+    } else if (Utils.isPossibleClientTerminate(exception)) {
+      isSystemHealthError = false;
     }
     if (isSystemHealthError) {
       logger.error("Router operation met with a system health error: ", exception);
