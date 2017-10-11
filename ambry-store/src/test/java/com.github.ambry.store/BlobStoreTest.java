@@ -253,10 +253,6 @@ public class BlobStoreTest {
     return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
-  private ReplicaId getMockReplicaId(String filePath) {
-    return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
-  }
-
   /**
    * Creates a temporary directory and sets up some test state.
    * @throws InterruptedException
@@ -286,26 +282,6 @@ public class BlobStoreTest {
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
   }
 
-  private void shutdownStoreAndDeleteFiles() throws IOException, StoreException {
-    if (store.isStarted()) {
-      store.shutdown();
-    }
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
-  }
-
-  private BlobStore createBlobStore(ReplicaId replicaId) {
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    return createBlobStore(replicaId, config, null);
-  }
-
-  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
-      ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
-    MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
-    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
-  }
-
   /**
    * Tests blob store use of {@link ClusterManagerWriteStatusDelegate}
    * @throws StoreException
@@ -321,6 +297,8 @@ public class BlobStoreTest {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     ReplicaId replicaId = getMockReplicaId(tempDirStr);
     ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = mock(ClusterManagerWriteStatusDelegate.class);
+    when(clusterManagerWriteStatusDelegate.unseal(anyObject())).thenReturn(true);
+    when(clusterManagerWriteStatusDelegate.seal(anyObject())).thenReturn(true);
 
     //Restart store with new threshold properties, mock delegate
     store.shutdown();
@@ -333,6 +311,9 @@ public class BlobStoreTest {
     //Verify that after putting in enough data, the store goes to read only
     List<MockId> addedIds = put(5, 900, Utils.Infinite_Time);
     verify(clusterManagerWriteStatusDelegate, times(1)).seal(replicaId);
+
+    //Assumes ClusterParticipant sets replicaId status to true
+    replicaId.setSealedState(true);
 
     //Delete added data
     for (MockId addedId : addedIds) {
@@ -352,7 +333,8 @@ public class BlobStoreTest {
     store.compact(store.getCompactionDetails(new CompactAllPolicy(config, time)));
     verify(clusterManagerWriteStatusDelegate, times(1)).unseal(replicaId);
 
-    //Test when StoreDescriptor is deleted that it updates the status upon startup
+    //Test when StoreDescriptor is deleted and replicaId is erroneously true that it updates the status upon startup
+    replicaId.setSealedState(true);
     shutdownStoreAndDeleteFiles();
     store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
     store.start();
@@ -1244,4 +1226,29 @@ public class BlobStoreTest {
     // Put the initial two messages.
     store.put(writeSet);
   }
+
+  private void shutdownStoreAndDeleteFiles() throws IOException, StoreException {
+    if (store.isStarted()) {
+      store.shutdown();
+    }
+    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+  }
+
+  private BlobStore createBlobStore(ReplicaId replicaId) {
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    return createBlobStore(replicaId, config, null);
+  }
+
+  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
+      ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+  }
+
+  private ReplicaId getMockReplicaId(String filePath) {
+    return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
+  }
+
 }

@@ -94,6 +94,16 @@ class Replica implements ReplicaId {
         || getDiskId().getState() == HardwareState.UNAVAILABLE;
   }
 
+  @Override
+  public boolean isSealed() {
+    return partition.getPartitionState().equals(PartitionState.READ_ONLY);
+  }
+
+  @Override
+  public void setSealedState(boolean isSealed) {
+    throw new IllegalStateException("Unsupported method.  'Replica' implementation will be removed soon.");
+  }
+
   Partition getPartition() {
     return partition;
   }

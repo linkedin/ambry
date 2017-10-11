@@ -74,4 +74,15 @@ public interface ReplicaId {
    * Returns true if the replica is down
    */
   boolean isDown();
+
+  /**
+   * @return true if this replica is in sealed state.
+   */
+  boolean isSealed();
+
+  /**
+   * Set the sealed state of this replica.
+   * @param isSealed true if the replica is to be set as sealed; false otherwise.
+   */
+  void setSealedState(boolean isSealed);
 }

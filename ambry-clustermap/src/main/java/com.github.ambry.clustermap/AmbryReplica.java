@@ -86,18 +86,13 @@ class AmbryReplica implements ReplicaId {
     return capacityBytes;
   }
 
-  /**
-   * @return true if this replica is in sealed state.
-   */
-  boolean isSealed() {
+  @Override
+  public boolean isSealed() {
     return isSealed;
   }
 
-  /**
-   * Set the sealed state of this replica.
-   * @param isSealed true if the replica is to be set as sealed; false otherwise.
-   */
-  void setSealedState(boolean isSealed) {
+  @Override
+  public void setSealedState(boolean isSealed) {
     this.isSealed = isSealed;
   }
 

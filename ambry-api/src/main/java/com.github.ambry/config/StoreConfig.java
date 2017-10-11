@@ -241,7 +241,7 @@ public class StoreConfig {
     storeReadOnlyEnableSizeThresholdPercentage =
         verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
     storeReadWriteEnableSizeThresholdPercentageDelta =
-        verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0, 100);
+        verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0, storeReadOnlyEnableSizeThresholdPercentage);
   }
 }
 

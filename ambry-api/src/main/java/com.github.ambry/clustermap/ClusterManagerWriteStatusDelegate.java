@@ -29,15 +29,15 @@ public class ClusterManagerWriteStatusDelegate {
    * Sets replicaId to read-only status
    * @param replicaId
    */
-  public void seal(ReplicaId replicaId) {
-    clusterParticipant.setReplicaSealedState(replicaId, true);
+  public boolean seal(ReplicaId replicaId) {
+    return clusterParticipant.setReplicaSealedState(replicaId, true);
   }
 
   /**
    * Sets replicaId to read-write status
    * @param replicaId
    */
-  public void unseal(ReplicaId replicaId) {
-    clusterParticipant.setReplicaSealedState(replicaId, false);
+  public boolean unseal(ReplicaId replicaId) {
+    return clusterParticipant.setReplicaSealedState(replicaId, false);
   }
 }

@@ -27,6 +27,7 @@ public class MockReplicaId implements ReplicaId {
   private MockDataNodeId dataNodeId;
   private MockDiskId diskId;
   private boolean isMarkedDown = false;
+  private volatile boolean isSealed;
 
   public MockReplicaId() {
   }
@@ -41,6 +42,7 @@ public class MockReplicaId implements ReplicaId {
     replicaFile.deleteOnExit();
     replicaPath = replicaFile.getAbsolutePath();
     diskId = new MockDiskId(dataNodeId, mountPath);
+    isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
   }
 
   @Override
@@ -94,6 +96,16 @@ public class MockReplicaId implements ReplicaId {
   public boolean isDown() {
     return isMarkedDown || getDataNodeId().getState() == HardwareState.UNAVAILABLE
         || getDiskId().getState() == HardwareState.UNAVAILABLE;
+  }
+
+  @Override
+  public boolean isSealed() {
+    return isSealed;
+  }
+
+  @Override
+  public void setSealedState(boolean isSealed) {
+    this.isSealed = isSealed;
   }
 
   @Override

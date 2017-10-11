@@ -93,7 +93,7 @@ class StoreDescriptor {
    * Returns whether StoreDescriptor already existed prior to ctor invocation
    * @return whether StoreDescriptor already existed prior to ctor invocation
    */
-  public boolean alreadyExisted() {
+  boolean alreadyExisted() {
     return alreadyExisted;
   }
 

@@ -57,9 +57,9 @@ class BlobStore implements Store {
   private final StoreMetrics storeUnderCompactionMetrics;
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
+  private final ReplicaId replicaId;
+  private final ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
 
-  private ReplicaId replicaId;
-  private ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
   private WriteState writeState = WriteState.IDLE;
   private Log log;
   private BlobStoreCompactor compactor;
@@ -92,9 +92,19 @@ class BlobStore implements Store {
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate,
       Time time) {
-    this(replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
-        storeUnderCompactionMetrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(), factory, recovery,
-        hardDelete, time);
+    this.metrics = metrics;
+    this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
+    this.storeId = replicaId.getPartitionId().toString();
+    this.dataDir = replicaId.getReplicaPath();
+    this.taskScheduler = taskScheduler;
+    this.longLivedTaskScheduler = longLivedTaskScheduler;
+    this.diskIOScheduler = diskIOScheduler;
+    this.config = config;
+    this.capacityInBytes = replicaId.getCapacityInBytes();
+    this.factory = factory;
+    this.recovery = recovery;
+    this.hardDelete = hardDelete;
+    this.time = time;
     this.replicaId = replicaId;
     this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
   }
@@ -117,6 +127,8 @@ class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.time = time;
+    this.replicaId = null;
+    this.clusterManagerWriteStatusDelegate = null;
   }
 
   @Override
@@ -167,7 +179,7 @@ class BlobStore implements Store {
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
         if (!storeDescriptor.alreadyExisted()) {
-          checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
+          checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), true);
         }
         started = true;
       } catch (Exception e) {
@@ -241,21 +253,30 @@ class BlobStore implements Store {
     }
   }
 
-  private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity) {
+  /**
+   * Checks the used capacity of the store against the configured percentage thresholds to see if the store
+   * should be read-only or read-write
+   * @param totalCapacity total capacity of the store in bytes
+   * @param usedCapacity total used capacity of the store in bytes
+   * @param justStarted whether the store was just started or not (set to true in the initializer)
+   */
+  private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity, boolean justStarted) {
     if (clusterManagerWriteStatusDelegate != null) {
       double percentFilled = (index.getLogUsedCapacity() / (double) log.getCapacityInBytes()) * 100;
-      if (percentFilled > config.storeReadOnlyEnableSizeThresholdPercentage && writeState != WriteState.READ_ONLY) {
-        clusterManagerWriteStatusDelegate.seal(replicaId);
-        writeState = WriteState.READ_ONLY;
+      if (percentFilled > config.storeReadOnlyEnableSizeThresholdPercentage && !replicaId.isSealed()) {
+        if (!clusterManagerWriteStatusDelegate.seal(replicaId)) {
+          metrics.sealSetError.inc();
+        }
       } else if (percentFilled
           <= config.storeReadOnlyEnableSizeThresholdPercentage - config.storeReadWriteEnableSizeThresholdPercentageDelta
-          && writeState != WriteState.READ_WRITE
-          || percentFilled <= config.storeReadOnlyEnableSizeThresholdPercentage && writeState == WriteState.IDLE) {
-        clusterManagerWriteStatusDelegate.unseal(replicaId);
-        writeState = WriteState.READ_WRITE;
+          && replicaId.isSealed() || percentFilled <= config.storeReadOnlyEnableSizeThresholdPercentage && justStarted
+          && replicaId.isSealed()) {
+        if (!clusterManagerWriteStatusDelegate.unseal(replicaId)) {
+          metrics.sealSetError.inc();
+        }
       }
     } else {
-      logger.warn("ClusterManagerWriteStatusDelegate not set, dynamic helix write status turned off");
+      logger.info("ClusterManagerWriteStatusDelegate not set, dynamic helix write status turned off");
     }
   }
 
@@ -300,7 +321,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
-            checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
+            checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), false);
           }
         }
       }
@@ -494,7 +515,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details);
-    checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
+    checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), false);
   }
 
   /**
@@ -506,7 +527,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
-      checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
+      checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), false);
     }
   }
 

@@ -96,26 +96,33 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   @Override
-  public void setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+  public synchronized boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
     if (!(replicaId instanceof AmbryReplica)) {
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
     HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
     List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
     if (sealedReplicas == null) {
       sealedReplicas = new ArrayList<>();
     }
     String partitionId = replicaId.getPartitionId().toPathString();
 
-    if (!isSealed) {
+    if (!isSealed && sealedReplicas.contains(partitionId)) {
       sealedReplicas.remove(partitionId);
-    } else if (!sealedReplicas.contains(partitionId)) {
+    } else if (isSealed && !sealedReplicas.contains(partitionId)) {
       sealedReplicas.add(partitionId);
     }
+    else {
+      return true;
+    }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
-    helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 
   /**

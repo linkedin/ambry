@@ -38,7 +38,7 @@ public interface ClusterParticipant extends AutoCloseable {
    * @param replicaId the {@link ReplicaId}
    * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
    */
-  void setReplicaSealedState(ReplicaId replicaId, boolean isSealed);
+  boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed);
 
   /**
    * Terminate the participant.
