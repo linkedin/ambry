@@ -60,7 +60,6 @@ class BlobStore implements Store {
   private final ReplicaId replicaId;
   private final ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
 
-  private WriteState writeState = WriteState.IDLE;
   private Log log;
   private BlobStoreCompactor compactor;
   private PersistentIndex index;
@@ -80,10 +79,6 @@ class BlobStore implements Store {
     COLLIDING, // At least one message in the write set has the same key as another, different message in the store.
     ALL_DUPLICATE, // The messages are all duplicates - every one of them already exist in the store.
     SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
-  }
-
-  private enum WriteState {
-    IDLE, READ_ONLY, READ_WRITE;
   }
 
   //Ctor used in ambry-server
