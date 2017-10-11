@@ -98,5 +98,6 @@ public class RouterUtilsTest {
       }
     }
     Assert.assertTrue(RouterUtils.isSystemHealthError(new Exception()));
+    Assert.assertFalse(RouterUtils.isSystemHealthError(Utils.convertToClientTerminationException(new Exception())));
   }
 }
