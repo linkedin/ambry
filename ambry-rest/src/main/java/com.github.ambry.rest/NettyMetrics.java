@@ -110,7 +110,7 @@ public class NettyMetrics {
   public final Counter processorUnknownExceptionCount;
 
   // NettyResponseChannel
-  public final Counter clientEarlyTerminateCount;
+  public final Counter clientEarlyTerminationCount;
   public final Counter acceptedCount;
   public final Counter createdCount;
   public final Counter okCount;
@@ -272,8 +272,8 @@ public class NettyMetrics {
     processorUnknownExceptionCount =
         metricRegistry.counter(MetricRegistry.name(NettyMessageProcessor.class, "UnknownExceptionCount"));
     // NettyResponseChannel
-    clientEarlyTerminateCount =
-        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminateCount"));
+    clientEarlyTerminationCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminationCount"));
     acceptedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "AcceptedCount"));
     createdCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "CreatedCount"));
     okCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OkCount"));

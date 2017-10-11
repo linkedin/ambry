@@ -277,7 +277,7 @@ public class NettyResponseChannelTest {
       verifyCallbacks(processor);
       fail("Callback for write would have thrown an Exception");
     } catch (IOException e) {
-      assertTrue("Should be recognized as a client terminate", Utils.isPossibleClientTermination(e));
+      assertTrue("Should be recognized as a client termination", Utils.isPossibleClientTermination(e));
     }
 
     // writing to channel with a outbound handler that generates an Error
@@ -484,18 +484,18 @@ public class NettyResponseChannelTest {
   }
 
   /**
-   * Tests that client initiated terminates don't count towards {@link HttpResponseStatus#INTERNAL_SERVER_ERROR}.
+   * Tests that client initiated terminations don't count towards {@link HttpResponseStatus#INTERNAL_SERVER_ERROR}.
    */
   @Test
-  public void clientEarlyTerminateTest() throws Exception {
+  public void clientEarlyTerminationTest() throws Exception {
     EmbeddedChannel channel = createEmbeddedChannel();
-    TestingUri uri = TestingUri.OnResponseCompleteWithEarlyClientTerminate;
+    TestingUri uri = TestingUri.OnResponseCompleteWithEarlyClientTermination;
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, uri.toString(), null);
     HttpUtil.setKeepAlive(httpRequest, false);
 
     String iseMetricName = MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount");
     long iseBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount();
-    String cetMetricName = MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminateCount");
+    String cetMetricName = MetricRegistry.name(NettyResponseChannel.class, "ClientEarlyTerminationCount");
     long cetBeforeCount = MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount();
 
     channel.writeInbound(httpRequest);
@@ -508,9 +508,9 @@ public class NettyResponseChannelTest {
       }
     }
 
-    assertEquals("Client terminates should not count towards InternalServerError count", iseBeforeCount,
+    assertEquals("Client terminations should not count towards InternalServerError count", iseBeforeCount,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(iseMetricName).getCount());
-    assertEquals("Client terminate should have been tracked", cetBeforeCount + 1,
+    assertEquals("Client terminations should have been tracked", cetBeforeCount + 1,
         MockNettyMessageProcessor.METRIC_REGISTRY.getCounters().get(cetMetricName).getCount());
   }
 
@@ -809,7 +809,7 @@ enum TestingUri {
    * When this request is received, {@link RestResponseChannel#onResponseComplete(Exception)} is called
    * immediately with an {@link IOException} with message {@link Utils#CLIENT_RESET_EXCEPTION_MSG}.
    */
-  OnResponseCompleteWithEarlyClientTerminate, /**
+  OnResponseCompleteWithEarlyClientTermination, /**
    * Response sending fails midway through a write.
    */
   ResponseFailureMidway, /**
@@ -987,8 +987,8 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
         break;
-      case OnResponseCompleteWithEarlyClientTerminate:
-        restResponseChannel.onResponseComplete(Utils.convertToClientTerminateException(new Exception()));
+      case OnResponseCompleteWithEarlyClientTermination:
+        restResponseChannel.onResponseComplete(Utils.convertToClientTerminationException(new Exception()));
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.InternalServerError,
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());

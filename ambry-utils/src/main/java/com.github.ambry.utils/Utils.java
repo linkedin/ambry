@@ -833,7 +833,7 @@ public class Utils {
    * @param cause the {@link Throwable} to include.
    * @return wrapped {@code cause} such that {@link #isPossibleClientTermination(Throwable)} recognizes it.
    */
-  public static IOException convertToClientTerminateException(Throwable cause) {
+  public static IOException convertToClientTerminationException(Throwable cause) {
     return new IOException(CLIENT_RESET_EXCEPTION_MSG, cause);
   }
 

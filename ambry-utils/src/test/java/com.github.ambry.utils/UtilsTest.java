@@ -422,7 +422,7 @@ public class UtilsTest {
 
   /**
    * Tests for {@link Utils#isPossibleClientTermination(Throwable)} and
-   * {@link Utils#convertToClientTerminateException(Throwable)}.
+   * {@link Utils#convertToClientTerminationException(Throwable)}.
    */
   @Test
   public void clientTerminationWrapAndRecognizeTest() {
@@ -431,13 +431,13 @@ public class UtilsTest {
 
     exception = new IOException("Connection not reset by peer");
     assertFalse("Should not be declared as a client termination", Utils.isPossibleClientTermination(exception));
-    exception = Utils.convertToClientTerminateException(exception);
+    exception = Utils.convertToClientTerminationException(exception);
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
 
     exception = new Exception("Connection reset by peer");
     // debatable but this is the current implementation.
     assertFalse("Should not be declared as a client termination", Utils.isPossibleClientTermination(exception));
-    exception = Utils.convertToClientTerminateException(exception);
+    exception = Utils.convertToClientTerminationException(exception);
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
   }
 

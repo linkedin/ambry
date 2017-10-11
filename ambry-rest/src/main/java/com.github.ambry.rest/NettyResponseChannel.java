@@ -387,7 +387,7 @@ class NettyResponseChannel implements RestResponseChannel {
             StandardCharsets.US_ASCII);
       }
     } else if (Utils.isPossibleClientTermination(cause)) {
-      nettyMetrics.clientEarlyTerminateCount.inc();
+      nettyMetrics.clientEarlyTerminationCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
     } else {
@@ -516,8 +516,8 @@ class NettyResponseChannel implements RestResponseChannel {
           nettyMetrics.throwableCount.inc();
         }
       } else if (cause instanceof ClosedChannelException) {
-        // wrap the exception in something we recognize as a client terminate
-        exception = Utils.convertToClientTerminateException(cause);
+        // wrap the exception in something we recognize as a client termination
+        exception = Utils.convertToClientTerminationException(cause);
       } else {
         exception = (Exception) cause;
       }
