@@ -277,7 +277,7 @@ public class NettyResponseChannelTest {
       verifyCallbacks(processor);
       fail("Callback for write would have thrown an Exception");
     } catch (IOException e) {
-      assertTrue("Should be recognized as a client terminate", Utils.isPossibleClientTerminate(e));
+      assertTrue("Should be recognized as a client terminate", Utils.isPossibleClientTermination(e));
     }
 
     // writing to channel with a outbound handler that generates an Error

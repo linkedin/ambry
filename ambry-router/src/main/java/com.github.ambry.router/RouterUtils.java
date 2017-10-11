@@ -83,7 +83,7 @@ class RouterUtils {
           isSystemHealthError = false;
           break;
       }
-    } else if (Utils.isPossibleClientTerminate(exception)) {
+    } else if (Utils.isPossibleClientTermination(exception)) {
       isSystemHealthError = false;
     }
     if (isSystemHealthError) {

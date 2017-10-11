@@ -386,7 +386,7 @@ class NettyResponseChannel implements RestResponseChannel {
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
       }
-    } else if (Utils.isPossibleClientTerminate(cause)) {
+    } else if (Utils.isPossibleClientTermination(cause)) {
       nettyMetrics.clientEarlyTerminateCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
       errorResponseStatus = ResponseStatus.InternalServerError;
@@ -549,7 +549,7 @@ class NettyResponseChannel implements RestResponseChannel {
         } else {
           logger.trace("Error handling request {} with method {}", uri, restMethod, exception);
         }
-      } else if (Utils.isPossibleClientTerminate(exception)) {
+      } else if (Utils.isPossibleClientTermination(exception)) {
         logger.trace("Client likely terminated connection while handling request {} with method {}", uri, restMethod,
             exception);
       } else {

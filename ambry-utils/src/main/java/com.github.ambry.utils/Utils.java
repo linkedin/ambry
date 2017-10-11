@@ -822,16 +822,16 @@ public class Utils {
 
   /**
    * @param cause the problem cause.
-   * @return {@code true} this cause indicates a possible early terminate from the client. {@code false} otherwise.
+   * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
-  public static boolean isPossibleClientTerminate(Throwable cause) {
+  public static boolean isPossibleClientTermination(Throwable cause) {
     return cause instanceof IOException && CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage());
   }
 
   /**
-   * Wraps the given {@code cause} such that {@link #isPossibleClientTerminate(Throwable)} recognizes it.
+   * Wraps the given {@code cause} such that {@link #isPossibleClientTermination(Throwable)} recognizes it.
    * @param cause the {@link Throwable} to include.
-   * @return wrapped {@code cause} such that {@link #isPossibleClientTerminate(Throwable)} recognizes it.
+   * @return wrapped {@code cause} such that {@link #isPossibleClientTermination(Throwable)} recognizes it.
    */
   public static IOException convertToClientTerminateException(Throwable cause) {
     return new IOException(CLIENT_RESET_EXCEPTION_MSG, cause);
