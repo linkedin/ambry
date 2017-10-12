@@ -31,10 +31,9 @@ import java.util.ListIterator;
 
 
 /**
- * A serde for serializing and deserializing list of message info
+ * A serde for serializing and deserializing {@link MessageInfo} and {@link MessageMetadata} lists.
  */
 class MessageInfoAndMetadataListSerde {
-
   private final List<MessageInfo> messageInfoList;
   private final List<MessageMetadata> messageMetadataList;
   static final short VERSION_1 = 1;
@@ -44,12 +43,13 @@ class MessageInfoAndMetadataListSerde {
 
   private final short version;
 
-  private static final byte CRC_PRESENT = (byte) 1;
+  private static final byte FIELD_PRESENT = (byte) 1;
   private static final byte DELETED = (byte) 1;
 
   MessageInfoAndMetadataListSerde(List<MessageInfo> messageInfoList, List<MessageMetadata> messageMetadataList,
       short version) {
-    if (messageMetadataList != null && messageInfoList.size() != messageMetadataList.size()) {
+    if (messageInfoList != null && messageMetadataList != null
+        && messageInfoList.size() != messageMetadataList.size()) {
       throw new IllegalArgumentException(
           "Mismatch in the number of messages in message Info list: " + messageInfoList.size()
               + " and message metadata list: " + messageMetadataList.size());
@@ -119,11 +119,10 @@ class MessageInfoAndMetadataListSerde {
           size += Short.BYTES;
           // operationTime
           size += Long.BYTES;
+          // whether message metadata is present.
+          size += Byte.BYTES;
           if (messageMetadata != null) {
-            size += Integer.BYTES;
             size += messageMetadata.sizeInBytes();
-          } else {
-            size += Integer.BYTES;
           }
           break;
 
@@ -152,10 +151,10 @@ class MessageInfoAndMetadataListSerde {
         if (version > VERSION_1) {
           Long crc = messageInfo.getCrc();
           if (crc != null) {
-            outputBuffer.put(CRC_PRESENT);
+            outputBuffer.put(FIELD_PRESENT);
             outputBuffer.putLong(crc);
           } else {
-            outputBuffer.put((byte) ~CRC_PRESENT);
+            outputBuffer.put((byte) ~FIELD_PRESENT);
           }
         }
         if (version > VERSION_2) {
@@ -164,10 +163,11 @@ class MessageInfoAndMetadataListSerde {
           outputBuffer.putLong(messageInfo.getOperationTimeMs());
         }
         if (version > VERSION_3) {
-          if (messageMetadata == null) {
-            outputBuffer.putInt(0);
-          } else {
+          if (messageMetadata != null) {
+            outputBuffer.put(FIELD_PRESENT);
             messageMetadata.serializeMessageMetadata(outputBuffer);
+          } else {
+            outputBuffer.put((byte) ~FIELD_PRESENT);
           }
         }
       }
@@ -192,7 +192,7 @@ class MessageInfoAndMetadataListSerde {
         throw new IllegalArgumentException("Unknown version to deserialize MessageInfoList " + versionToDeserializeIn);
       }
       if (versionToDeserializeIn > VERSION_1) {
-        crc = stream.readByte() == CRC_PRESENT ? stream.readLong() : null;
+        crc = stream.readByte() == FIELD_PRESENT ? stream.readLong() : null;
       }
       if (versionToDeserializeIn > VERSION_2) {
         accountId = stream.readShort();
@@ -203,9 +203,9 @@ class MessageInfoAndMetadataListSerde {
       messageInfoList.add(new MessageInfo(id, size, isDeleted, ttl, crc, accountId, containerId, operationTime));
 
       if (versionToDeserializeIn > VERSION_3) {
-        ByteBuffer serializedMessageMetadata = Utils.readIntBuffer(stream);
-        messageMetadataList.add(
-            serializedMessageMetadata.remaining() > 0 ? MessageMetadata.deserializeMessageMetadata(stream) : null);
+        MessageMetadata messageMetadata =
+            stream.readByte() == FIELD_PRESENT ? MessageMetadata.deserializeMessageMetadata(stream) : null;
+        messageMetadataList.add(messageMetadata);
       } else {
         messageMetadataList.add(null);
       }

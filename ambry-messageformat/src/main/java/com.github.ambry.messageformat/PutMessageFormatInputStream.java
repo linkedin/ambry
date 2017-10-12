@@ -42,10 +42,10 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
       throws MessageFormatException {
     if (MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2) {
-      createStreamWithEncryptionKeyRecord(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
+      createStreamWithMessageHeaderV2(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
           blobType);
     } else {
-      createStreamWithoutEncryptionKeyRecord(key, blobProperties, userMetadata, blobStream, streamSize, blobType);
+      createStreamWithMessageHeaderV1(key, blobProperties, userMetadata, blobStream, streamSize, blobType);
     }
   }
 
@@ -58,7 +58,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
    * Helper method to create a stream with encryption key record. This will be the standard once all nodes in a cluster
    * understand reading messages with encryption key record.
    */
-  private void createStreamWithEncryptionKeyRecord(StoreKey key, ByteBuffer blobEncryptionKey,
+  private void createStreamWithMessageHeaderV2(StoreKey key, ByteBuffer blobEncryptionKey,
       BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobStream, long streamSize,
       BlobType blobType) throws MessageFormatException {
     int headerSize = MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize();
@@ -106,9 +106,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
    * once all nodes in a cluster understand reading messages with encryption key record, and writing in the new format
    * is enabled, this method can be removed.
    */
-  private void createStreamWithoutEncryptionKeyRecord(StoreKey key, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
-      throws MessageFormatException {
+  private void createStreamWithMessageHeaderV1(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
+      InputStream blobStream, long streamSize, BlobType blobType) throws MessageFormatException {
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);

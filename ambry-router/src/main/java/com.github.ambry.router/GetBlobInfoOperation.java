@@ -248,11 +248,11 @@ class GetBlobInfoOperation extends GetOperation {
         getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
         if (getError == ServerErrorCode.No_Error) {
           PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
-          int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
-          if (objectsInPartitionResponse != 1) {
+          int msgsInResponse = partitionResponseInfo.getMessageInfoList().size();
+          if (msgsInResponse != 1) {
             setOperationException(new RouterException(
-                "Unexpected number of messages in a partition response, expected: 1, " + "received: "
-                    + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError));
+                "Unexpected number of messages in a partition response, expected: 1, " + "received: " + msgsInResponse,
+                RouterErrorCode.UnexpectedInternalError));
             onErrorResponse(getRequestInfo.replicaId);
           }
 

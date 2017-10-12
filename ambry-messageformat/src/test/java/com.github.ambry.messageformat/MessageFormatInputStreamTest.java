@@ -14,6 +14,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
@@ -31,15 +32,18 @@ import org.junit.Test;
 public class MessageFormatInputStreamTest {
 
   @Test
-  public void messageFormatBlobPropertiesTest() throws IOException, MessageFormatException {
-    messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob);
-    messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob);
-    messageFormatBlobPropertiesTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob);
+  public void messageFormatRecordsTest() throws IOException, MessageFormatException {
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob, false);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, false);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, false);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, true);
+    messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, true);
   }
 
-  private void messageFormatBlobPropertiesTest(short blobVersion, BlobType blobType)
+  private void messageFormatRecordsTest(short blobVersion, BlobType blobType, boolean useV2Header)
       throws IOException, MessageFormatException {
     StoreKey key = new MockId("id1");
+    StoreKeyFactory keyFactory = new MockIdFactory();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId);
@@ -51,19 +55,18 @@ public class MessageFormatInputStreamTest {
     byte[] data = new byte[blobContentSize];
     new Random().nextBytes(data);
     long blobSize = -1;
-    boolean useV2Header = false;
-
+    MessageFormatRecord.HEADER_VERSION_TO_USE =
+        useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
       blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
       useV2Header = false;
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
-      useV2Header = MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2;
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
       ByteBuffer byteBufferBlob = MessageFormatTestUtils.getBlobContentForMetadataBlob(blobContentSize);
       data = byteBufferBlob.array();
+      blobContentSize = data.length;
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
-      useV2Header = MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2;
     }
 
     ByteBufferInputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
@@ -181,6 +184,36 @@ public class MessageFormatInputStreamTest {
     }
     long crcVal = crcstream.getValue();
     Assert.assertEquals(crcVal, streamData.readLong());
+
+    // Verify Blob All
+    stream = new ByteBufferInputStream(ByteBuffer.wrap(data));
+
+    messageFormatStream = (blobVersion == MessageFormatRecord.Blob_Version_V2) ? new PutMessageFormatInputStream(key,
+        ByteBuffer.wrap(encryptionKey), prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize, blobType)
+        : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
+            blobType);
+
+    int totalSize;
+    if (useV2Header) {
+      totalSize = headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize
+          + (int) blobSize;
+    } else {
+      totalSize = headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) blobSize;
+    }
+    ByteBuffer allBuf = ByteBuffer.allocate(totalSize);
+    messageFormatStream.read(allBuf.array());
+
+    BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(new ByteBufferInputStream(allBuf), keyFactory);
+    Assert.assertEquals(key, blobAll.getStoreKey());
+    Assert.assertArrayEquals(usermetadata, blobAll.getBlobInfo().getUserMetadata());
+    Assert.assertEquals(blobContentSize, blobAll.getBlobData().getSize());
+    Assert.assertEquals(blobType, blobAll.getBlobData().getBlobType());
+    if (useV2Header) {
+      Assert.assertEquals(ByteBuffer.wrap(encryptionKey), blobAll.getBlobEncryptionKey());
+    } else {
+      Assert.assertEquals(null, blobAll.getBlobEncryptionKey());
+    }
+    Assert.assertEquals(ByteBuffer.wrap(data), blobAll.getBlobData().getStream().getByteBuffer());
   }
 
   @Test

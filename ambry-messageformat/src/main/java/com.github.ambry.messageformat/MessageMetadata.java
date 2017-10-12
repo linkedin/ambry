@@ -45,7 +45,7 @@ public class MessageMetadata {
    * @return The number of bytes in the serialized form of this instance of MessageMetadata.
    */
   public int sizeInBytes() {
-    return Short.BYTES + Integer.BYTES + encryptionKey.remaining();
+    return Short.BYTES + Integer.BYTES + (encryptionKey == null ? 0 : encryptionKey.remaining());
   }
 
   /**
@@ -55,7 +55,12 @@ public class MessageMetadata {
   public void serializeMessageMetadata(ByteBuffer outputBuffer) {
     switch (version) {
       case MESSAGE_METADATA_VERSION_V1:
-        outputBuffer.putShort(version).putInt(encryptionKey.remaining()).put(encryptionKey);
+        outputBuffer.putShort(version);
+        if (encryptionKey != null) {
+          outputBuffer.putInt(encryptionKey.remaining()).put(encryptionKey);
+        } else {
+          outputBuffer.putInt(0);
+        }
         break;
       default:
         throw new IllegalStateException("Unknown MessageMetadata version");
@@ -74,6 +79,8 @@ public class MessageMetadata {
     switch (version) {
       case MESSAGE_METADATA_VERSION_V1:
         ByteBuffer encryptionKey = Utils.readIntBuffer(stream);
+        // An empty encryption key could mean that the original before serialization was null or empty. Either way
+        // denotes the absence of a key.
         messageMetadata = new MessageMetadata(version, encryptionKey);
         break;
       default:

@@ -50,8 +50,8 @@ public class ReplicaMetadataResponseInfo {
     }
     this.partitionId = partitionId;
     this.remoteReplicaLagInBytes = remoteReplicaLagInBytes;
-    messageInfoAndMetadataListSerde =
-        new MessageInfoAndMetadataListSerde(messageInfoList, getMessageInfoListVersion(replicaMetadataResponseVersion));
+    messageInfoAndMetadataListSerde = new MessageInfoAndMetadataListSerde(messageInfoList,
+        getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
     messageInfoListSize = messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize();
     this.token = findToken;
     this.errorCode = ServerErrorCode.No_Error;
@@ -104,7 +104,7 @@ public class ReplicaMetadataResponseInfo {
       FindToken token = factory.getFindToken(stream);
       Pair<List<MessageInfo>, List<MessageMetadata>> messageInfoAndMetadataList =
           MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, clusterMap,
-              getMessageInfoListVersion(replicaMetadataResponseVersion));
+              getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
       long remoteReplicaLag = stream.readLong();
       return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoAndMetadataList.getFirst(),
           remoteReplicaLag, replicaMetadataResponseVersion);
@@ -140,11 +140,11 @@ public class ReplicaMetadataResponseInfo {
   }
 
   /**
-   * Return the MessageInfoList version to use for the given {@link ReplicaMetadataResponse} version
+   * Return the MessageInfoAndMetadataList SerDe version to use for the given {@link ReplicaMetadataResponse} version
    * @param replicaMetadataResponseVersion the {@link ReplicaMetadataResponse} version
-   * @return the MessageInfoList version to use for the given {@link ReplicaMetadataResponse} version
+   * @return the MessageInfoAndMetadataList SerDe version to use for the given {@link ReplicaMetadataResponse} version
    */
-  private static short getMessageInfoListVersion(short replicaMetadataResponseVersion) {
+  private static short getMessageInfoAndMetadataListSerDeVersion(short replicaMetadataResponseVersion) {
     switch (replicaMetadataResponseVersion) {
       case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_1:
         return MessageInfoAndMetadataListSerde.VERSION_1;

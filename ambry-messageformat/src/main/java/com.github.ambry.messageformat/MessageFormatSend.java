@@ -41,7 +41,7 @@ public class MessageFormatSend implements Send {
 
   private MessageReadSet readSet;
   private MessageFormatFlags flag;
-  private ArrayList<SendInfo> infoList;
+  private ArrayList<SendInfo> sendInfoList;
   private ArrayList<MessageMetadata> messageMetadataList;
   private long totalSizeToWrite;
   private long sizeWritten;
@@ -89,7 +89,7 @@ public class MessageFormatSend implements Send {
       // get size
       int messageCount = readSet.count();
       // for each message, determine the offset and size that needs to be sent based on the flag
-      infoList = new ArrayList<>(messageCount);
+      sendInfoList = new ArrayList<>(messageCount);
       messageMetadataList = new ArrayList<>(messageCount);
       logger.trace("Calculate offsets of messages for one partition, MessageFormatFlag : {} number of messages : {}",
           flag, messageCount);
@@ -98,7 +98,7 @@ public class MessageFormatSend implements Send {
           // just copy over the total size and use relative offset to be 0
           // We do not have to check any version in this case as we dont
           // have to read any data to deserialize anything.
-          infoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
+          sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
           messageMetadataList.add(i, null);
           totalSizeToWrite += readSet.sizeInBytes(i);
         } else {
@@ -216,41 +216,41 @@ public class MessageFormatSend implements Send {
 
           startTime = SystemTime.getInstance().milliseconds();
           if (flag == MessageFormatFlags.BlobProperties) {
-            infoList.add(i, new SendInfo(blobPropertiesRecordRelativeOffset, blobPropertiesRecordSize));
+            sendInfoList.add(i, new SendInfo(blobPropertiesRecordRelativeOffset, blobPropertiesRecordSize));
             messageMetadataList.add(null);
             totalSizeToWrite += blobPropertiesRecordSize;
             logger.trace("Calculate offsets, get total size of blob properties time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
             logger.trace("Sending blob properties for message relativeOffset : {} size : {}",
-                infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
+                sendInfoList.get(i).relativeOffset(), sendInfoList.get(i).sizetoSend());
           } else if (flag == MessageFormatFlags.BlobUserMetadata) {
             messageMetadataList.add(hasEncryptionKey ? new MessageMetadata(
                 extractEncryptionKey(i, blobEncryptionKeyRecordRelativeOffset, blobEncryptionKeyRecordSize)) : null);
-            infoList.add(i, new SendInfo(userMetadataRecordRelativeOffset, userMetadataRecordSize));
+            sendInfoList.add(i, new SendInfo(userMetadataRecordRelativeOffset, userMetadataRecordSize));
             totalSizeToWrite += userMetadataRecordSize;
             logger.trace("Calculate offsets, get total size of user metadata time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
             logger.trace("Sending user metadata for message relativeOffset : {} size : {}",
-                infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
+                sendInfoList.get(i).relativeOffset(), sendInfoList.get(i).sizetoSend());
           } else if (flag == MessageFormatFlags.BlobInfo) {
             messageMetadataList.add(hasEncryptionKey ? new MessageMetadata(
                 extractEncryptionKey(i, blobEncryptionKeyRecordRelativeOffset, blobEncryptionKeyRecordSize)) : null);
-            infoList.add(i, new SendInfo(blobPropertiesRecordRelativeOffset, blobInfoSize));
+            sendInfoList.add(i, new SendInfo(blobPropertiesRecordRelativeOffset, blobInfoSize));
             totalSizeToWrite += blobInfoSize;
             logger.trace("Calculate offsets, get total size of blob info time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
             logger.trace(
                 "Sending blob info (blob properties + user metadata) for message relativeOffset : {} " + "size : {}",
-                infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
+                sendInfoList.get(i).relativeOffset(), sendInfoList.get(i).sizetoSend());
           } else if (flag == MessageFormatFlags.Blob) {
             messageMetadataList.add(hasEncryptionKey ? new MessageMetadata(
                 extractEncryptionKey(i, blobEncryptionKeyRecordRelativeOffset, blobEncryptionKeyRecordSize)) : null);
-            infoList.add(i, new SendInfo(blobRecordRelativeOffset, blobRecordSize));
+            sendInfoList.add(i, new SendInfo(blobRecordRelativeOffset, blobRecordSize));
             totalSizeToWrite += blobRecordSize;
             logger.trace("Calculate offsets, get total size of blob time: {}",
                 SystemTime.getInstance().milliseconds() - startTime);
-            logger.trace("Sending data for message relativeOffset : {} size : {}", infoList.get(i).relativeOffset(),
-                infoList.get(i).sizetoSend());
+            logger.trace("Sending data for message relativeOffset : {} size : {}", sendInfoList.get(i).relativeOffset(),
+                sendInfoList.get(i).sizetoSend());
           } else {
             throw new MessageFormatException("Unknown flag in request " + flag, MessageFormatErrorCodes.IO_Error);
           }
@@ -280,15 +280,15 @@ public class MessageFormatSend implements Send {
     long written = 0;
     if (!isSendComplete()) {
       written = readSet.writeTo(currentWriteIndex, channel,
-          infoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
-          infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex);
+          sendInfoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
+          sendInfoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex);
       logger.trace("writeindex {} relativeOffset {} maxSize {} written {}", currentWriteIndex,
-          infoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
-          infoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex, written);
+          sendInfoList.get(currentWriteIndex).relativeOffset() + sizeWrittenFromCurrentIndex,
+          sendInfoList.get(currentWriteIndex).sizetoSend() - sizeWrittenFromCurrentIndex, written);
       sizeWritten += written;
       sizeWrittenFromCurrentIndex += written;
       logger.trace("size written in this loop : {} size written till now : {}", written, sizeWritten);
-      if (sizeWrittenFromCurrentIndex == infoList.get(currentWriteIndex).sizetoSend()) {
+      if (sizeWrittenFromCurrentIndex == sendInfoList.get(currentWriteIndex).sizetoSend()) {
         currentWriteIndex++;
         sizeWrittenFromCurrentIndex = 0;
       }

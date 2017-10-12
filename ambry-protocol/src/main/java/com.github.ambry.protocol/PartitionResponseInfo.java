@@ -42,7 +42,7 @@ public class PartitionResponseInfo {
   private PartitionResponseInfo(PartitionId partitionId, List<MessageInfo> messageInfoList,
       List<MessageMetadata> messageMetadataList, ServerErrorCode serverErrorCode, short getResponseVersion) {
     this.messageInfoAndMetadataListSerde = new MessageInfoAndMetadataListSerde(messageInfoList, messageMetadataList,
-        getMessageInfoListVersion(getResponseVersion));
+        getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
     this.messageInfoAndMetadataListSize = messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize();
     this.partitionId = partitionId;
     this.errorCode = serverErrorCode;
@@ -78,15 +78,15 @@ public class PartitionResponseInfo {
     PartitionId partitionId = map.getPartitionIdFromStream(stream);
     Pair<List<MessageInfo>, List<MessageMetadata>> messageInfoAndMetadataList =
         MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, map,
-            getMessageInfoListVersion(getResponseVersion));
+            getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     if (error != ServerErrorCode.No_Error) {
       return new PartitionResponseInfo(partitionId, new ArrayList<>(), new ArrayList<>(), error,
-          getMessageInfoListVersion(getResponseVersion));
+          getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
     } else {
       return new PartitionResponseInfo(partitionId, messageInfoAndMetadataList.getFirst(),
           messageInfoAndMetadataList.getSecond(), ServerErrorCode.No_Error,
-          getMessageInfoListVersion(getResponseVersion));
+          getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
     }
   }
 
@@ -112,11 +112,11 @@ public class PartitionResponseInfo {
   }
 
   /**
-   * Return the MessageInfoList version to use for the given {@link GetResponse} version
+   * Return the SerDe version for MessageInfoAndMetadataList to use for the given {@link GetResponse} version
    * @param getResponseVersion the GetResponse version
-   * @return the MessageInfoList version to use for the given GetResponse version
+   * @return the MessageInfoAndMetadataList SerDe version to use for the given GetResponse version
    */
-  private static short getMessageInfoListVersion(short getResponseVersion) {
+  private static short getMessageInfoAndMetadataListSerDeVersion(short getResponseVersion) {
     switch (getResponseVersion) {
       case GetResponse.GET_RESPONSE_VERSION_V_1:
         return MessageInfoAndMetadataListSerde.VERSION_1;

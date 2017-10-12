@@ -220,11 +220,11 @@ public class MessageFormatRecord {
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
     StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(stream));
-    BlobProperties blobProperties = deserializeBlobProperties(stream);
     ByteBuffer blobEncryptionKey = null;
     if (hasEncryptionKeyRecord) {
       blobEncryptionKey = deserializeBlobEncryptionKey(stream);
     }
+    BlobProperties blobProperties = deserializeBlobProperties(stream);
     byte[] userMetadata = deserializeUserMetadata(stream).array();
     BlobData blobData = deserializeBlob(stream);
     return new BlobAll(storeKey, blobEncryptionKey, new BlobInfo(blobProperties, userMetadata), blobData);

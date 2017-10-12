@@ -1194,7 +1194,6 @@ class PutOperation {
      * for sending if this blob is composite, or marking the operation complete if this is a simple blob.
      */
     private void finalizeMetadataChunk() {
-      // @todo: set encrypted flag as appropriate.
       finalBlobProperties =
           new BlobProperties(getBlobSize(), passedInBlobProperties.getServiceId(), passedInBlobProperties.getOwnerId(),
               passedInBlobProperties.getContentType(), passedInBlobProperties.isPrivate(),
