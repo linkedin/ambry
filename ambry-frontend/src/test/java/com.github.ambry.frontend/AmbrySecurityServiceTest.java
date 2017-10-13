@@ -31,7 +31,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
@@ -72,9 +71,11 @@ public class AmbrySecurityServiceTest {
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
           Container.UNKNOWN_CONTAINER_ID), null);
-
+  private static final FrontendTestUrlSigningServiceFactory URL_SIGNING_SERVICE_FACTORY =
+      new FrontendTestUrlSigningServiceFactory();
   private final SecurityService securityService =
-      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()));
+      new AmbrySecurityService(FRONTEND_CONFIG, new FrontendMetrics(new MetricRegistry()),
+          URL_SIGNING_SERVICE_FACTORY.getUrlSigningService());
 
   static {
     ACCOUNT_SERVICE.clear();
@@ -112,11 +113,19 @@ public class AmbrySecurityServiceTest {
       securityService.postProcessRequest(restRequest).get();
     }
 
+    // with UrlSigningService denying the request
+    URL_SIGNING_SERVICE_FACTORY.isRequestSigned = true;
+    URL_SIGNING_SERVICE_FACTORY.verifySignedRequestException =
+        new RestServiceException("Msg", RestServiceErrorCode.Unauthorized);
+    testExceptionCasesProcessRequest(createRestRequest(RestMethod.GET, "/", null), RestServiceErrorCode.Unauthorized,
+        false);
+
+    URL_SIGNING_SERVICE_FACTORY.isRequestSigned = false;
     // security service closed
     securityService.close();
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessRequest(createRestRequest(restMethod, "/", null),
-          RestServiceErrorCode.ServiceUnavailable);
+          RestServiceErrorCode.ServiceUnavailable, true);
     }
   }
 
@@ -179,11 +188,11 @@ public class AmbrySecurityServiceTest {
     testHeadBlobWithVariousRanges(blobInfo, true);
 
     // GET BlobInfo
-    testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo, true);
-    testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo, true);
-    testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo, false);
+    testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo);
+    testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
+    testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
     // GET UserMetadata
-    testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.UserMetadata, true);
+    testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.UserMetadata);
 
     // POST
     testPostBlob();
@@ -311,10 +320,12 @@ public class AmbrySecurityServiceTest {
    * {@link SecurityService#postProcessRequest(RestRequest)}
    * @param restRequest the {@link RestRequest} to provide as input.
    * @param expectedErrorCode the {@link RestServiceErrorCode} expected in the exception returned.
+   * @param includePostProcessRequest {@code true} if
+   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)} needs to be tested for the same behavior.
    * @throws Exception
    */
-  private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode)
-      throws Exception {
+  private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode,
+      boolean includePostProcessRequest) throws Exception {
     TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
       Assert.assertTrue("Exception should have been an instance of RestServiceException",
           e.getCause() instanceof RestServiceException);
@@ -324,8 +335,10 @@ public class AmbrySecurityServiceTest {
 
     TestUtils.assertException(ExecutionException.class, () -> securityService.processRequest(restRequest).get(),
         errorAction);
-    TestUtils.assertException(ExecutionException.class, () -> securityService.postProcessRequest(restRequest).get(),
-        errorAction);
+    if (includePostProcessRequest) {
+      TestUtils.assertException(ExecutionException.class, () -> securityService.postProcessRequest(restRequest).get(),
+          errorAction);
+    }
   }
 
   /**
@@ -477,8 +490,7 @@ public class AmbrySecurityServiceTest {
    * @param subResource the {@link RestUtils.SubResource}  to test.
    * @throws Exception
    */
-  private void testGetSubResource(BlobInfo blobInfo, RestUtils.SubResource subResource,
-      boolean shouldInsertAccountAndContainer) throws Exception {
+  private void testGetSubResource(BlobInfo blobInfo, RestUtils.SubResource subResource) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
     securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();

@@ -26,7 +26,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -46,10 +45,13 @@ class AmbrySecurityService implements SecurityService {
   private boolean isOpen;
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
+  private final UrlSigningService urlSigningService;
 
-  public AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics) {
+  AmbrySecurityService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
+      UrlSigningService urlSigningService) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
+    this.urlSigningService = urlSigningService;
     isOpen = true;
   }
 
@@ -62,6 +64,12 @@ class AmbrySecurityService implements SecurityService {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null) {
       throw new IllegalArgumentException("RestRequest is null");
+    } else if (urlSigningService.isRequestSigned(restRequest)) {
+      try {
+        urlSigningService.verifySignedRequest(restRequest);
+      } catch (RestServiceException e) {
+        exception = e;
+      }
     }
     frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);

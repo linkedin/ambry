@@ -13,6 +13,7 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.router.RouterErrorCode;
 
 

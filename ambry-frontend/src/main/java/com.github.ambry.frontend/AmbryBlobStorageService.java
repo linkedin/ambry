@@ -25,8 +25,6 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.IdConverter;
-import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -36,8 +34,6 @@ import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.rest.SecurityService;
-import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -93,11 +89,13 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
+  private final UrlSigningService urlSigningService;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
   private final AccountService accountService;
   private GetPeersHandler getPeersHandler;
+  private GetSignedUrlHandler getSignedUrlHandler;
   private boolean isUp = false;
 
   /**
@@ -111,10 +109,12 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
    * @param accountService the {@link AccountService} to use to query for target {@link Account} of a {@link RestRequest}.
+   * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, AccountService accountService) {
+      SecurityServiceFactory securityServiceFactory, AccountService accountService,
+      UrlSigningService urlSigningService) {
     this.accountService = Objects.requireNonNull(accountService, "accountService cannot be null.");
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
@@ -123,6 +123,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.clusterMap = clusterMap;
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
+    this.urlSigningService = urlSigningService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
@@ -133,6 +134,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
+    getSignedUrlHandler = new GetSignedUrlHandler(urlSigningService, securityService, frontendMetrics);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -176,6 +178,9 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       if (operationOrBlobId.equalsIgnoreCase(Operations.GET_PEERS)) {
         getPeersHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (operationOrBlobId.endsWith(Operations.GET_SIGNED_URL)) {
+        getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         GetBlobOptions options =

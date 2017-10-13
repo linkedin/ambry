@@ -15,7 +15,6 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.SecurityService;
 import java.util.Properties;
 import junit.framework.Assert;
 import org.junit.Test;
@@ -33,7 +32,7 @@ public class AmbrySecurityServiceFactoryTest {
   @Test
   public void getAmbrySecurityServiceFactoryTest() throws InstantiationException {
     SecurityService securityService =
-        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry(),
+        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry(), null,
             null).getSecurityService();
     Assert.assertNotNull(securityService);
   }

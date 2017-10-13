@@ -15,7 +15,6 @@ package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.IdConverter;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;

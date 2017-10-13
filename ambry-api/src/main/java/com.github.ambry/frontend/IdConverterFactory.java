@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.rest;
+package com.github.ambry.frontend;
 
 /**
  * IdConverterFactory is a factory to generate all the supporting cast required to instantiate a {@link IdConverter}.

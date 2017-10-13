@@ -11,9 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.rest;
+package com.github.ambry.frontend;
 
 import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import java.io.Closeable;

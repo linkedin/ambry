@@ -17,8 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.SecurityService;
-import com.github.ambry.rest.SecurityServiceFactory;
 
 
 /**
@@ -30,15 +28,17 @@ public class AmbrySecurityServiceFactory implements SecurityServiceFactory {
 
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
+  private final UrlSigningService urlSigningService;
 
   public AmbrySecurityServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      AccountService accountService) {
+      AccountService accountService, UrlSigningService urlSigningService) {
     frontendConfig = new FrontendConfig(verifiableProperties);
     frontendMetrics = new FrontendMetrics(metricRegistry);
+    this.urlSigningService = urlSigningService;
   }
 
   @Override
   public SecurityService getSecurityService() throws InstantiationException {
-    return new AmbrySecurityService(frontendConfig, frontendMetrics);
+    return new AmbrySecurityService(frontendConfig, frontendMetrics, urlSigningService);
   }
 }

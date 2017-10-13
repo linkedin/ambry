@@ -496,9 +496,11 @@ public class RestUtilsTest {
   public void getOperationOrBlobIdFromUriTest() throws JSONException, UnsupportedEncodingException, URISyntaxException {
     String baseId = "expectedOp";
     String queryString = "?queryParam1=queryValue1&queryParam2=queryParam2=queryValue2";
-    String[] validIdUris = {"/" + baseId, "/" + baseId + "/random/extra", baseId, baseId + "/random/extra"};
+    String[] validIdUris = {"/", "/" + baseId, "/" + baseId + "/random/extra", "", baseId, baseId + "/random/extra"};
     List<String> prefixesToTestOn = Arrays.asList("", "/media", "/toRemove", "/orNotToRemove");
     List<String> prefixesToRemove = Arrays.asList("/media", "/toRemove");
+    String blobId = UtilsTest.getRandomString(10);
+    String blobIdQuery = RestUtils.Headers.BLOB_ID + "=" + blobId;
 
     // construct test cases
     Map<String, String> testCases = new HashMap<>();
@@ -507,12 +509,17 @@ public class RestUtilsTest {
       testCases.put(validIdUri, validIdUri);
       // the uri with a query string (e.g. "/expectedOp?param=value").
       testCases.put(validIdUri + queryString, validIdUri);
-      for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
-        String subResourceStr = "/" + subResource.name();
-        // the uri with a sub-resource (e.g. "/expectedOp/BlobInfo").
-        testCases.put(validIdUri + subResourceStr, validIdUri);
-        // the uri with a sub-resource and query string (e.g. "/expectedOp/BlobInfo?param=value").
-        testCases.put(validIdUri + subResourceStr + queryString, validIdUri);
+      if (validIdUri.length() > 1) {
+        for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
+          String subResourceStr = "/" + subResource.name();
+          // the uri with a sub-resource (e.g. "/expectedOp/BlobInfo").
+          testCases.put(validIdUri + subResourceStr, validIdUri);
+          // the uri with a sub-resource and query string (e.g. "/expectedOp/BlobInfo?param=value").
+          testCases.put(validIdUri + subResourceStr + queryString, validIdUri);
+        }
+      } else {
+        testCases.put(validIdUri + "?" + blobIdQuery, blobId);
+        testCases.put(validIdUri + queryString + "&" + blobIdQuery, blobId);
       }
     }
 
@@ -524,11 +531,15 @@ public class RestUtilsTest {
         if (prefixToTestOn.isEmpty() || testPath.startsWith("/")) {
           String realTestPath = prefixToTestOn + testPath;
           String expectedOutput = testCase.getValue();
-          expectedOutput = prefixesToRemove.contains(prefixToTestOn) ? expectedOutput : prefixToTestOn + expectedOutput;
-          RestRequest restRequest = createRestRequest(RestMethod.GET, realTestPath, null);
-          assertEquals("Unexpected operation/blob id for: " + realTestPath, expectedOutput,
-              RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
-                  prefixesToRemove));
+          // skip the ones where the prefix will not be removed and the expected output is the blobId
+          if (prefixesToRemove.contains(prefixToTestOn) || !expectedOutput.equals(blobId)) {
+            expectedOutput =
+                prefixesToRemove.contains(prefixToTestOn) ? expectedOutput : prefixToTestOn + expectedOutput;
+            RestRequest restRequest = createRestRequest(RestMethod.GET, realTestPath, null);
+            assertEquals("Unexpected operation/blob id for: " + realTestPath, expectedOutput,
+                RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+                    prefixesToRemove));
+          }
         }
       }
     }
@@ -673,6 +684,58 @@ public class RestUtilsTest {
     try {
       RestUtils.getGetOption(restRequest);
       fail("Should have failed to get GetOption because value of header is invalid");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Tests {@link RestUtils#getHeader(Map, String, boolean)}.
+   * @throws RestServiceException
+   */
+  @Test
+  public void getHeaderTest() throws RestServiceException {
+    Map<String, Object> args = new HashMap<>();
+    args.put("HeaderA", "ValueA");
+    args.put("HeaderB", null);
+
+    // get HeaderA
+    assertEquals("Header value does not match", args.get("HeaderA"), RestUtils.getHeader(args, "HeaderA", true));
+    assertEquals("Header value does not match", args.get("HeaderA"), RestUtils.getHeader(args, "HeaderA", false));
+    // get HeaderB
+    assertNull("There should be no value for HeaderB", RestUtils.getHeader(args, "HeaderB", false));
+    try {
+      RestUtils.getHeader(args, "HeaderB", true);
+      fail("Getting HeaderB as required should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
+    }
+
+    // get HeaderC
+    assertNull("There should be no value for HeaderC", RestUtils.getHeader(args, "HeaderB", false));
+    try {
+      RestUtils.getHeader(args, "Headerc", true);
+      fail("Getting HeaderB as required should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MissingArgs, e.getErrorCode());
+    }
+  }
+
+  /**
+   * Tests for {@link RestUtils#getLongHeader(Map, String, boolean)}.
+   * @throws RestServiceException
+   */
+  @Test
+  public void getLongHeaderTest() throws RestServiceException {
+    Map<String, Object> args = new HashMap<>();
+    args.put("HeaderA", 1000L);
+    args.put("HeaderB", "NotLong");
+    // getLongHeader() calls getHeader() and in the interest of keeping tests short, tests for that functionality
+    // are not repeated here. If that changes, these tests need to change.
+    assertEquals("Header value does not match", args.get("HeaderA"), RestUtils.getLongHeader(args, "HeaderA", true));
+    try {
+      RestUtils.getLongHeader(args, "HeaderB", true);
+      fail("Getting HeaderB as required should have failed");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }

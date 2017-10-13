@@ -21,9 +21,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
 import com.github.ambry.rest.BlobStorageServiceFactory;
-import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.RestResponseHandler;
-import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
@@ -85,11 +83,15 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       AccountService accountService = accountServiceFactory.getAccountService();
       IdConverterFactory idConverterFactory =
           Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
+      UrlSigningServiceFactory urlSigningServiceFactory =
+          Utils.getObj(frontendConfig.frontendUrlSigningServiceFactory, verifiableProperties,
+              clusterMap.getMetricRegistry());
+      UrlSigningService urlSigningService = urlSigningServiceFactory.getUrlSigningService();
       SecurityServiceFactory securityServiceFactory =
           Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
-              clusterMap.getMetricRegistry(), accountService);
+              clusterMap.getMetricRegistry(), accountService, urlSigningService);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-          idConverterFactory, securityServiceFactory, accountService);
+          idConverterFactory, securityServiceFactory, accountService, urlSigningService);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
     }
