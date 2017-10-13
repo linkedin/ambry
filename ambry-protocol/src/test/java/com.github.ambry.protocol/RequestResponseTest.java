@@ -40,7 +40,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -278,6 +277,12 @@ public class RequestResponseTest {
 
   @Test
   public void getRequestResponseTest() throws IOException {
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_4);
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_3);
+  }
+
+  private void testGetRequestResponse(short getVersionToUse) throws IOException {
+    GetResponse.getResponseVersionToUse = getVersionToUse;
     MockClusterMap clusterMap = new MockClusterMap();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -298,17 +303,18 @@ public class RequestResponseTest {
     Assert.assertEquals(deserializedGetRequest.getPartitionInfoList().get(0).getBlobIds().get(0), id1);
 
     long operationTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    byte[] encryptionKey = TestUtils.getRandomBytes(256);
     MessageInfo messageInfo = new MessageInfo(id1, 1000, 1000, accountId, containerId, operationTimeMs);
+    MessageMetadata messageMetadata = new MessageMetadata(ByteBuffer.wrap(encryptionKey));
     ArrayList<MessageInfo> messageInfoList = new ArrayList<>();
     ArrayList<MessageMetadata> messageMetadataList = new ArrayList<>();
     messageInfoList.add(messageInfo);
-    messageMetadataList.add(null); // @todo take a look.
+    messageMetadataList.add(messageMetadata);
     PartitionResponseInfo partitionResponseInfo =
         new PartitionResponseInfo(clusterMap.getWritablePartitionIds().get(0), messageInfoList, messageMetadataList);
     List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
     partitionResponseInfoList.add(partitionResponseInfo);
-    byte[] buf = new byte[1000];
-    new Random().nextBytes(buf);
+    byte[] buf = TestUtils.getRandomBytes(1000);
     ByteArrayInputStream byteStream = new ByteArrayInputStream(buf);
     GetResponse response =
         new GetResponse(1234, "clientId", partitionResponseInfoList, byteStream, ServerErrorCode.No_Error);
@@ -322,6 +328,15 @@ public class RequestResponseTest {
     Assert.assertEquals(msgInfo.getSize(), 1000);
     Assert.assertEquals(msgInfo.getStoreKey(), id1);
     Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
+    Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().size(),
+        1);
+    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_4) {
+      MessageMetadata messageMetadataInResponse =
+          deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0);
+      Assert.assertEquals(messageMetadata.getEncryptionKey().rewind(), messageMetadataInResponse.getEncryptionKey());
+    } else {
+      Assert.assertNull(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
+    }
     if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_3
         || GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_4) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
