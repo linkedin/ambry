@@ -99,11 +99,6 @@ class Replica implements ReplicaId {
     return partition.getPartitionState().equals(PartitionState.READ_ONLY);
   }
 
-  @Override
-  public void setSealedState(boolean isSealed) {
-    throw new IllegalStateException("Unsupported method.  'Replica' implementation will be removed soon.");
-  }
-
   Partition getPartition() {
     return partition;
   }

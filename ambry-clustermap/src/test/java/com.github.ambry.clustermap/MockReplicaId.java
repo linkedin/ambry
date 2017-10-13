@@ -23,7 +23,7 @@ public class MockReplicaId implements ReplicaId {
   private String mountPath;
   private String replicaPath;
   private List<ReplicaId> peerReplicas;
-  private PartitionId partitionId;
+  private MockPartitionId partitionId;
   private MockDataNodeId dataNodeId;
   private MockDiskId diskId;
   private boolean isMarkedDown = false;
@@ -32,7 +32,7 @@ public class MockReplicaId implements ReplicaId {
   public MockReplicaId() {
   }
 
-  public MockReplicaId(int port, PartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
+  public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
     mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
@@ -103,9 +103,9 @@ public class MockReplicaId implements ReplicaId {
     return isSealed;
   }
 
-  @Override
   public void setSealedState(boolean isSealed) {
     this.isSealed = isSealed;
+    partitionId.resolvePartitionStatus();
   }
 
   @Override

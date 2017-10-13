@@ -288,14 +288,11 @@ public class BlobStoreTest {
    */
   @Test
   public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
-    //Test only relevant for stores with segmented logs
-    assumeTrue(isLogSegmented);
-
     //Setup threshold test properties, replicaId, mock write status delegate
     properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName, "65");
     properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName, "5");
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    ReplicaId replicaId = getMockReplicaId(tempDirStr);
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = mock(ClusterManagerWriteStatusDelegate.class);
     when(clusterManagerWriteStatusDelegate.unseal(anyObject())).thenReturn(true);
     when(clusterManagerWriteStatusDelegate.seal(anyObject())).thenReturn(true);
@@ -315,30 +312,33 @@ public class BlobStoreTest {
     //Assumes ClusterParticipant sets replicaId status to true
     replicaId.setSealedState(true);
 
-    //Delete added data
-    for (MockId addedId : addedIds) {
-      delete(addedId);
+    //Remaining tests only relevant for segmented logs
+    if (isLogSegmented) {
+      //Delete added data
+      for (MockId addedId : addedIds) {
+        delete(addedId);
+      }
+
+      //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
+      //By restarting, only last segment will be in journal
+      store.shutdown();
+      store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
+      store.start();
+      verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
+
+      //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
+      //that the store is now read-write
+      time.sleep(TimeUnit.DAYS.toMillis(8));
+      store.compact(store.getCompactionDetails(new CompactAllPolicy(config, time)));
+      verify(clusterManagerWriteStatusDelegate, times(1)).unseal(replicaId);
+
+      //Test when StoreDescriptor is deleted and replicaId is erroneously true that it updates the status upon startup
+      replicaId.setSealedState(true);
+      shutdownStoreAndDeleteFiles();
+      store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
+      store.start();
+      verify(clusterManagerWriteStatusDelegate, times(2)).unseal(replicaId);
     }
-
-    //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
-    //By restarting, only last segment will be in journal
-    store.shutdown();
-    store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
-    store.start();
-    verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
-
-    //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
-    //that the store is now read-write
-    time.sleep(TimeUnit.DAYS.toMillis(8));
-    store.compact(store.getCompactionDetails(new CompactAllPolicy(config, time)));
-    verify(clusterManagerWriteStatusDelegate, times(1)).unseal(replicaId);
-
-    //Test when StoreDescriptor is deleted and replicaId is erroneously true that it updates the status upon startup
-    replicaId.setSealedState(true);
-    shutdownStoreAndDeleteFiles();
-    store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
-    store.start();
-    verify(clusterManagerWriteStatusDelegate, times(2)).unseal(replicaId);
     store.shutdown();
   }
 
@@ -1247,8 +1247,7 @@ public class BlobStoreTest {
         STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
   }
 
-  private ReplicaId getMockReplicaId(String filePath) {
+  private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
     return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
   }
-
 }

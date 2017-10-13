@@ -48,7 +48,7 @@ class StoreTestUtils {
   /**
    * Need mock ReplicaId to get and set isSealed state
    */
-  private static class MockReplicaId implements ReplicaId {
+  public static class MockReplicaId implements ReplicaId {
 
     private String storeId;
     private long capacity;
@@ -56,7 +56,7 @@ class StoreTestUtils {
     private PartitionId partitionId;
     private boolean isSealed = false;
 
-    public MockReplicaId(String storeId, long capacity, String filePath) {
+    MockReplicaId(String storeId, long capacity, String filePath) {
       this.storeId = storeId;
       this.capacity = capacity;
       this.filePath = filePath;
@@ -109,7 +109,6 @@ class StoreTestUtils {
       return isSealed;
     }
 
-    @Override
     public void setSealedState(boolean isSealed) {
       this.isSealed = isSealed;
     }
@@ -122,7 +121,7 @@ class StoreTestUtils {
    * @param filePath replicaId.getReplicaPath() will output this
    * @return mock replicaId
    */
-  static ReplicaId createMockReplicaId(String storeId, long capacity, String filePath) {
+  static MockReplicaId createMockReplicaId(String storeId, long capacity, String filePath) {
     return new MockReplicaId(storeId, capacity, filePath);
   }
 

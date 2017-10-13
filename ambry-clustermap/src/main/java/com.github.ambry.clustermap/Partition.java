@@ -48,7 +48,6 @@ class Partition extends PartitionId {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  // For constructing new Partition
   Partition(long id, PartitionState partitionState, long replicaCapacityInBytes) {
     logger.trace("Partition " + id + ", " + partitionState + ", " + replicaCapacityInBytes);
     this.id = id;

@@ -173,9 +173,7 @@ class BlobStore implements Store {
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
-        if (!storeDescriptor.alreadyExisted()) {
-          checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), true);
-        }
+        checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -253,23 +251,24 @@ class BlobStore implements Store {
    * should be read-only or read-write
    * @param totalCapacity total capacity of the store in bytes
    * @param usedCapacity total used capacity of the store in bytes
-   * @param justStarted whether the store was just started or not (set to true in the initializer)
    */
-  private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity, boolean justStarted) {
+  private void checkCapacityAndUpdateHelix(long totalCapacity, long usedCapacity) {
     if (clusterManagerWriteStatusDelegate != null) {
+
+      int threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
+      int delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
       double percentFilled = (index.getLogUsedCapacity() / (double) log.getCapacityInBytes()) * 100;
-      if (percentFilled > config.storeReadOnlyEnableSizeThresholdPercentage && !replicaId.isSealed()) {
+
+      if (percentFilled > threshold && !replicaId.isSealed()) {
         if (!clusterManagerWriteStatusDelegate.seal(replicaId)) {
           metrics.sealSetError.inc();
         }
-      } else if (percentFilled
-          <= config.storeReadOnlyEnableSizeThresholdPercentage - config.storeReadWriteEnableSizeThresholdPercentageDelta
-          && replicaId.isSealed() || percentFilled <= config.storeReadOnlyEnableSizeThresholdPercentage && justStarted
-          && replicaId.isSealed()) {
+      } else if (percentFilled <= threshold - delta && replicaId.isSealed()) {
         if (!clusterManagerWriteStatusDelegate.unseal(replicaId)) {
           metrics.sealSetError.inc();
         }
       }
+      //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
     } else {
       logger.info("ClusterManagerWriteStatusDelegate not set, dynamic helix write status turned off");
     }
@@ -316,7 +315,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
-            checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), false);
+            checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
           }
         }
       }
@@ -510,7 +509,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details);
-    checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), false);
+    checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
   /**
@@ -522,7 +521,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
-      checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity(), false);
+      checkCapacityAndUpdateHelix(log.getCapacityInBytes(), index.getLogUsedCapacity());
     }
   }
 

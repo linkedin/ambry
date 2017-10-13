@@ -33,7 +33,6 @@ import java.util.UUID;
  */
 class StoreDescriptor {
   private final UUID incarnationId;
-  private final boolean alreadyExisted;
   static final short VERSION_0 = 0;
   static final int VERSION_SIZE = 2;
   static final int INCARNATION_ID_LENGTH_SIZE = 4;
@@ -47,8 +46,7 @@ class StoreDescriptor {
    */
   StoreDescriptor(String dataDir) throws IOException {
     File storeDescriptorFile = new File(dataDir, STORE_DESCRIPTOR_FILENAME);
-    alreadyExisted = storeDescriptorFile.exists();
-    if (alreadyExisted) {
+    if (storeDescriptorFile.exists()) {
       CrcInputStream crcStream = new CrcInputStream(new FileInputStream(storeDescriptorFile));
       DataInputStream stream = new DataInputStream(crcStream);
       short version = stream.readShort();
@@ -87,14 +85,6 @@ class StoreDescriptor {
         throw new IllegalStateException("File " + tempFile.getAbsolutePath() + " creation failed ");
       }
     }
-  }
-
-  /**
-   * Returns whether StoreDescriptor already existed prior to ctor invocation
-   * @return whether StoreDescriptor already existed prior to ctor invocation
-   */
-  boolean alreadyExisted() {
-    return alreadyExisted;
   }
 
   /**

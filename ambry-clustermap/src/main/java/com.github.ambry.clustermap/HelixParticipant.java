@@ -95,34 +95,43 @@ class HelixParticipant implements ClusterParticipant {
     }
   }
 
-  @Override
-  public synchronized boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
-    if (!(replicaId instanceof AmbryReplica)) {
-      throw new IllegalArgumentException(
-          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
-    }
+  private List<String> getSealedReplicas() {
     HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(
           "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
-    List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    return ClusterMapUtils.getSealedReplicas(instanceConfig);
+  }
+
+  private boolean setSealedReplicas(List<String> sealedReplicas) {
+    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+  }
+
+  @Override
+  public synchronized boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+    if (!(replicaId instanceof AmbryReplica)) {
+      throw new IllegalArgumentException(
+          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+    }
+    List<String> sealedReplicas = getSealedReplicas();
     if (sealedReplicas == null) {
       sealedReplicas = new ArrayList<>();
     }
     String partitionId = replicaId.getPartitionId().toPathString();
-
+    boolean success = true;
     if (!isSealed && sealedReplicas.contains(partitionId)) {
       sealedReplicas.remove(partitionId);
+      success = setSealedReplicas(sealedReplicas);
     } else if (isSealed && !sealedReplicas.contains(partitionId)) {
       sealedReplicas.add(partitionId);
+      success = setSealedReplicas(sealedReplicas);
     }
-    else {
-      return true;
-    }
-    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
-    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    return success;
   }
 
   /**
