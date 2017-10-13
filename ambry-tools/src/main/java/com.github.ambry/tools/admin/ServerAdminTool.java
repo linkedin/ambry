@@ -202,6 +202,15 @@ public class ServerAdminTool implements Closeable {
     final long acceptableLagInBytes;
 
     /**
+     * The number of replicas of each partition that have to be within "acceptable.lag.in.bytes" in case of catchup
+     * status requests. The min of this value or the total count of replicas -1 is considered.
+     * Applicable for: CatchupStatus
+     */
+    @Config("num.replicas.caught.up.per.partition")
+    @Default("Short.MAX_VALUE")
+    final short numReplicasCaughtUpPerPartition;
+
+    /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
      * user metadata from GetUserMetadata will be written into this file.
      */
@@ -227,6 +236,9 @@ public class ServerAdminTool implements Closeable {
       enableState = verifiableProperties.getBoolean("enable.state", true);
       origins = verifiableProperties.getString("replication.origins", "").split(",");
       acceptableLagInBytes = verifiableProperties.getLongInRange("acceptable.lag.in.bytes", 0, 0, Long.MAX_VALUE);
+      numReplicasCaughtUpPerPartition =
+          verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 1,
+              Short.MAX_VALUE);
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -324,7 +336,10 @@ public class ServerAdminTool implements Closeable {
         }
         break;
       case ReplicationControl:
-        List<String> origins = Arrays.asList(config.origins);
+        List<String> origins = Collections.EMPTY_LIST;
+        if (config.origins.length > 0 && !config.origins[0].isEmpty()) {
+          origins = Arrays.asList(config.origins);
+        }
         if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
           for (String partitionIdStr : config.partitionIds) {
             PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
@@ -332,7 +347,7 @@ public class ServerAdminTool implements Closeable {
           }
         } else {
           LOGGER.info("No partition list provided. Requesting enable status for replication from {} to be set to {} on "
-              + "all partitions", origins, config.enableState);
+              + "all partitions", origins.isEmpty() ? "all DCs" : origins, config.enableState);
           sendReplicationControlRequest(serverAdminTool, dataNodeId, null, origins, config.enableState);
         }
         break;
@@ -341,7 +356,8 @@ public class ServerAdminTool implements Closeable {
           for (String partitionIdStr : config.partitionIds) {
             PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
             Pair<ServerErrorCode, Boolean> response =
-                serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes);
+                serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes,
+                    config.numReplicasCaughtUpPerPartition);
             if (response.getFirst() == ServerErrorCode.No_Error) {
               LOGGER.info("Replicas are {} within {} bytes for {}", response.getSecond() ? "" : "NOT",
                   config.acceptableLagInBytes, partitionId);
@@ -352,7 +368,8 @@ public class ServerAdminTool implements Closeable {
           }
         } else {
           Pair<ServerErrorCode, Boolean> response =
-              serverAdminTool.isCaughtUp(dataNodeId, null, config.acceptableLagInBytes);
+              serverAdminTool.isCaughtUp(dataNodeId, null, config.acceptableLagInBytes,
+                  config.numReplicasCaughtUpPerPartition);
           if (response.getFirst() == ServerErrorCode.No_Error) {
             LOGGER.info("Replicas are {} within {} for all partitions", response.getSecond() ? "" : "NOT",
                 config.acceptableLagInBytes);
@@ -446,7 +463,8 @@ public class ServerAdminTool implements Closeable {
       PartitionId partitionId, List<String> origins, boolean enable) throws IOException, TimeoutException {
     ServerErrorCode errorCode = serverAdminTool.controlReplication(dataNodeId, partitionId, origins, enable);
     if (errorCode == ServerErrorCode.No_Error) {
-      LOGGER.info("Enable state of replication from {} has been set to {} for {} on {}", origins, enable, partitionId,
+      LOGGER.info("Enable state of replication from {} has been set to {} for {} on {}",
+          origins.isEmpty() ? "all DCs" : origins, enable, partitionId == null ? "all partitions" : partitionId,
           dataNodeId);
     } else {
       LOGGER.error(
@@ -621,17 +639,21 @@ public class ServerAdminTool implements Closeable {
    * @param partitionId the {@link PartitionId} to check catchup status for. If {@code null}, status is for all
    *                    partitions on {@code dataNodeId}
    * @param acceptableLagInBytes that lag in bytes that is considered OK.
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within {@code acceptableLagInBytes}
+   *                                        (per partition). The min of this value or the total count of replicas - 1 is
+   *                                        considered.
    * @return the {@link ServerErrorCode} and the catchup status that is returned if the error code is
    *          {@link ServerErrorCode#No_Error}, otherwise {@code false}.
    * @throws IOException
    * @throws TimeoutException
    */
   public Pair<ServerErrorCode, Boolean> isCaughtUp(DataNodeId dataNodeId, PartitionId partitionId,
-      long acceptableLagInBytes) throws IOException, TimeoutException {
+      long acceptableLagInBytes, short numReplicasCaughtUpPerPartition) throws IOException, TimeoutException {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.CatchupStatus, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
-    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLagInBytes, adminRequest);
+    CatchupStatusAdminRequest catchupStatusRequest =
+        new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, catchupStatusRequest);
     CatchupStatusAdminResponse response =
         CatchupStatusAdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));

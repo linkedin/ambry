@@ -22,8 +22,10 @@ import java.io.IOException;
  */
 public class CatchupStatusAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;
+  private static final short VERSION_V2 = 2;
 
   private final long acceptableLagInBytes;
+  private final short numReplicasCaughtUpPerPartition;
   private final long sizeInBytes;
 
   /**
@@ -36,24 +38,38 @@ public class CatchupStatusAdminRequest extends AdminRequest {
   public static CatchupStatusAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)
       throws IOException {
     Short versionId = stream.readShort();
-    if (!versionId.equals(VERSION_V1)) {
-      throw new IllegalStateException("Unrecognized version for CatchupStatusAdminRequest: " + versionId);
+    long acceptableLagInBytes;
+    short numReplicasCaughtUpPerPartition = Short.MAX_VALUE;
+    switch (versionId) {
+      case VERSION_V1:
+        acceptableLagInBytes = stream.readLong();
+        break;
+      case VERSION_V2:
+        acceptableLagInBytes = stream.readLong();
+        numReplicasCaughtUpPerPartition = stream.readShort();
+        break;
+      default:
+        throw new IllegalStateException("Unrecognized version for CatchupStatusAdminRequest: " + versionId);
     }
-    long acceptableLagInBytes = stream.readLong();
-    return new CatchupStatusAdminRequest(acceptableLagInBytes, adminRequest);
+    return new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
   }
 
   /**
    * Construct a CatchupStatusAdminRequest
    * @param acceptableLagInBytes the number of bytes that the remote can lag by which is considered OK.
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within {@code acceptableLagInBytes}
+   *                                        (per partition). The min of this value or the total count of replicas - 1 is
+   *                                        considered.
    * @param adminRequest the {@link AdminRequest} that contains common admin request related information.
    */
-  public CatchupStatusAdminRequest(long acceptableLagInBytes, AdminRequest adminRequest) {
+  public CatchupStatusAdminRequest(long acceptableLagInBytes, short numReplicasCaughtUpPerPartition,
+      AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.CatchupStatus, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.acceptableLagInBytes = acceptableLagInBytes;
-    // parent size + version size + acceptableLagInBytes size
-    sizeInBytes = super.sizeInBytes() + Short.BYTES + Long.BYTES;
+    this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
+    // parent size + version size + acceptableLagInBytes size + numReplicasCaughtUpPerPartition size
+    sizeInBytes = super.sizeInBytes() + Short.BYTES + Long.BYTES + Short.BYTES;
   }
 
   /**
@@ -61,6 +77,13 @@ public class CatchupStatusAdminRequest extends AdminRequest {
    */
   public long getAcceptableLagInBytes() {
     return acceptableLagInBytes;
+  }
+
+  /**
+   * @return the least number of replicas that have to be within {@link #getAcceptableLagInBytes()} for each partition.
+   */
+  public short getNumReplicasCaughtUpPerPartition() {
+    return numReplicasCaughtUpPerPartition;
   }
 
   @Override
@@ -77,7 +100,8 @@ public class CatchupStatusAdminRequest extends AdminRequest {
   @Override
   protected void serializeIntoBuffer() {
     super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V1);
+    bufferToSend.putShort(VERSION_V2);
     bufferToSend.putLong(acceptableLagInBytes);
+    bufferToSend.putShort(numReplicasCaughtUpPerPartition);
   }
 }

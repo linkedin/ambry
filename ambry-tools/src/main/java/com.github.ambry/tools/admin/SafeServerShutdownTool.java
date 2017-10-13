@@ -98,6 +98,14 @@ public class SafeServerShutdownTool {
     final long logGrowthPauseLagThresholdBytes;
 
     /**
+     * The number of replicas of each partition that have to be caught up during catchup status checks.
+     * The min of this value or the total count of replicas -1 is considered.
+     */
+    @Config("num.replicas.caught.up.per.partition")
+    @Default("Short.MAX_VALUE")
+    final short numReplicasCaughtUpPerPartition;
+
+    /**
      * The amount of time in (seconds) to wait before declaring safe shutdown as not possible.
      */
     @Config("timeout.secs")
@@ -124,6 +132,9 @@ public class SafeServerShutdownTool {
           Utils.MAX_PORT_NUM);
       logGrowthPauseLagThresholdBytes = verifiableProperties.getLongInRange("log.growth.pause.lag.threshold.bytes",
           DEFAULT_LOG_GROWTH_PAUSE_THRESHOLD, 0, Long.MAX_VALUE);
+      numReplicasCaughtUpPerPartition =
+          verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 1,
+              Short.MAX_VALUE);
       timeoutSecs = verifiableProperties.getLongInRange("timeout.secs", Long.MAX_VALUE, 0, Long.MAX_VALUE);
       checkRepeatDelaySecs = verifiableProperties.getLongInRange("check.repeat.delay.secs",
           Long.valueOf(DEFAULT_CHECK_REPEAT_DELAY_SECS_STRING), 0, Long.MAX_VALUE);
@@ -149,7 +160,7 @@ public class SafeServerShutdownTool {
             new SafeServerShutdownTool(serverAdminTool, SystemTime.getInstance());
         int exitStatus =
             safeServerShutdownTool.prepareServerForShutdown(dataNodeId, config.logGrowthPauseLagThresholdBytes,
-                config.timeoutSecs, config.checkRepeatDelaySecs) ? 0 : 1;
+                config.numReplicasCaughtUpPerPartition, config.timeoutSecs, config.checkRepeatDelaySecs) ? 0 : 1;
         System.exit(exitStatus);
       }
     }
@@ -176,6 +187,9 @@ public class SafeServerShutdownTool {
    * @param dataNodeId the {@link DataNodeId} that has to be prepared for shutdown.
    * @param logGrowthPauseLagThresholdBytes the peer lag (in bytes) at which PUT, DELETE and inbound replication will
    *                                        be shut off on {@code dataNodeId}.
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within {@code acceptableLagInBytes}
+   *                                        (per partition). The min of this value or the total count of replicas - 1 is
+   *                                        considered.
    * @param timeoutSecs the number of seconds after which the operation will be considered failed.
    * @param checkRepeatDelaySecs the number of seconds after which the catchup status will be checked again if the
    *                             previous check did not succeed.
@@ -185,21 +199,23 @@ public class SafeServerShutdownTool {
    * @throws IOException if there is any I/O error.
    * @throws TimeoutException if there are timeout errors while making network requests.
    */
-  public boolean prepareServerForShutdown(DataNodeId dataNodeId, long logGrowthPauseLagThresholdBytes, long timeoutSecs,
-      long checkRepeatDelaySecs) throws InterruptedException, IOException, TimeoutException {
+  public boolean prepareServerForShutdown(DataNodeId dataNodeId, long logGrowthPauseLagThresholdBytes,
+      short numReplicasCaughtUpPerPartition, long timeoutSecs, long checkRepeatDelaySecs)
+      throws InterruptedException, IOException, TimeoutException {
     long startTimeSecs = time.seconds();
     boolean success = false;
     // 1. Make sure the peers of the node have caught up till the logGrowthPauseLagThresholdBytes
     LOGGER.info("Waiting until peers of {} are within {} bytes for all partitions", dataNodeId,
         logGrowthPauseLagThresholdBytes);
-    if (waitTillCatchupOrTimeout(dataNodeId, logGrowthPauseLagThresholdBytes, startTimeSecs + timeoutSecs,
-        checkRepeatDelaySecs)) {
+    if (waitTillCatchupOrTimeout(dataNodeId, logGrowthPauseLagThresholdBytes, numReplicasCaughtUpPerPartition,
+        startTimeSecs + timeoutSecs, checkRepeatDelaySecs)) {
       // 2. Disable all requests that result in log growth (PUT, DELETE and inbound replication).
       LOGGER.info("Disabling PUT, DELETE and inbound replication on {} for all partitions", dataNodeId);
       if (controlLogGrowth(dataNodeId, false)) {
         // 3. Make sure the peers of the node have completely caught up
         LOGGER.info("Waiting until peers of {} have completely caught up for all partitions", dataNodeId);
-        success = waitTillCatchupOrTimeout(dataNodeId, 0, startTimeSecs + timeoutSecs, checkRepeatDelaySecs);
+        success = waitTillCatchupOrTimeout(dataNodeId, 0, numReplicasCaughtUpPerPartition, startTimeSecs + timeoutSecs,
+            checkRepeatDelaySecs);
       }
     }
     LOGGER.info("Server safe for shutdown: {}", success);
@@ -214,6 +230,9 @@ public class SafeServerShutdownTool {
    * {@code acceptableLagInBytes} or until time moves past {@code timeoutAtSecs}.
    * @param dataNodeId the {@link DataNodeId} to ask for peer lag details.
    * @param acceptableLagInBytes that lag in bytes that is considered "caught up".
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within {@code acceptableLagInBytes}
+   *                                        (per partition). The min of this value or the total count of replicas - 1 is
+   *                                        considered.
    * @param timeoutAtSecs the absolute time (in secs) at which the wait is considered failed.
    * @param checkRepeatDelaySecs the number of seconds after which the catchup status will be checked again if the
    *                             previous check did not succeed.
@@ -222,11 +241,13 @@ public class SafeServerShutdownTool {
    * @throws IOException if there is any I/O error.
    * @throws TimeoutException if there are timeout errors while making network requests.
    */
-  private boolean waitTillCatchupOrTimeout(DataNodeId dataNodeId, long acceptableLagInBytes, long timeoutAtSecs,
-      long checkRepeatDelaySecs) throws InterruptedException, IOException, TimeoutException {
+  private boolean waitTillCatchupOrTimeout(DataNodeId dataNodeId, long acceptableLagInBytes,
+      short numReplicasCaughtUpPerPartition, long timeoutAtSecs, long checkRepeatDelaySecs)
+      throws InterruptedException, IOException, TimeoutException {
     boolean isCaughtUp;
     do {
-      isCaughtUp = serverAdminTool.isCaughtUp(dataNodeId, null, acceptableLagInBytes).getSecond();
+      isCaughtUp = serverAdminTool.isCaughtUp(dataNodeId, null, acceptableLagInBytes, numReplicasCaughtUpPerPartition)
+          .getSecond();
       if (!isCaughtUp) {
         // sleep for a configured amount of time before trying again.
         time.sleep(TimeUnit.SECONDS.toMillis(checkRepeatDelaySecs));
