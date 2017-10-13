@@ -40,5 +40,4 @@ public class ClusterManagerWriteStatusDelegateTest {
     verify(clusterParticipant).setReplicaSealedState(replicaId, false);
     verifyNoMoreInteractions(clusterParticipant);
   }
-
 }

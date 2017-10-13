@@ -108,7 +108,7 @@ public class MockPartitionId extends PartitionId {
       }
     }
     partitionState = isReadWrite ? PartitionState.READ_WRITE : PartitionState.READ_ONLY;
-   }
+  }
 
   @Override
   public int hashCode() {
