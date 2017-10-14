@@ -20,6 +20,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.TestUtils;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -85,23 +86,23 @@ public class MessageFormatSendTest {
   }
 
   @Test
-  public void sendWriteTest() throws MessageFormatException, IOException {
+  public void sendWriteSingleMessageTest() throws MessageFormatException, IOException {
     if (putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
       ByteBuffer encryptionKey = ByteBuffer.wrap(TestUtils.getRandomBytes(256));
       MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
-      doSendWriteTest(null, null);
-      doSendWriteTest(encryptionKey.duplicate(), null);
+      doSendWriteSingleMessageTest(null, null);
+      doSendWriteSingleMessageTest(encryptionKey.duplicate(), null);
       MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V2;
-      doSendWriteTest(null, null);
-      doSendWriteTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0));
-      doSendWriteTest(encryptionKey.duplicate(), encryptionKey.duplicate());
+      doSendWriteSingleMessageTest(null, null);
+      doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0));
+      doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate());
       MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
     } else {
-      doSendWriteTest(null, null);
+      doSendWriteSingleMessageTest(null, null);
     }
   }
 
-  private void doSendWriteTest(ByteBuffer encryptionKey, ByteBuffer expectedEncryptionKey)
+  private void doSendWriteSingleMessageTest(ByteBuffer encryptionKey, ByteBuffer expectedEncryptionKey)
       throws MessageFormatException, IOException {
     String serviceId = "serviceId";
     String ownerId = "owner";
@@ -242,6 +243,259 @@ public class MessageFormatSendTest {
     } else {
       Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
     }
+  }
+
+  @Test
+  public void sendWriteCompositeMessagesTest() throws MessageFormatException, IOException {
+    if (!putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
+      return;
+    }
+
+    String putFormat1 = PutMessageFormatBlobV1InputStream.class.getSimpleName();
+    String putFormat2 = PutMessageFormatInputStream.class.getSimpleName();
+    short headerFormatV1 = MessageFormatRecord.Message_Header_Version_V1;
+    short headerFormatV2 = MessageFormatRecord.Message_Header_Version_V2;
+
+    byte[][] blob = {TestUtils.getRandomBytes(1000), TestUtils.getRandomBytes(2000), TestUtils.getRandomBytes(
+        10000), TestUtils.getRandomBytes(20000), TestUtils.getRandomBytes(40000)};
+    byte[][] userMetadata = {TestUtils.getRandomBytes(200), TestUtils.getRandomBytes(400), TestUtils.getRandomBytes(
+        2000), TestUtils.getRandomBytes(4000), TestUtils.getRandomBytes(8000)};
+    StoreKey[] storeKeys = {new MockId("64"), new MockId("32"), new MockId("16"), new MockId("08"), new MockId("04")};
+    ByteBuffer[] encryptionKeys =
+        {ByteBuffer.wrap(TestUtils.getRandomBytes(64)), ByteBuffer.wrap(TestUtils.getRandomBytes(128)), ByteBuffer.wrap(
+            TestUtils.getRandomBytes(256)), ByteBuffer.wrap(TestUtils.getRandomBytes(512)), ByteBuffer.wrap(
+            TestUtils.getRandomBytes(1024))};
+    String putFormat1s[] = {putFormat1, putFormat1, putFormat1, putFormat1, putFormat1};
+    String putFormat2s[] = {putFormat2, putFormat2, putFormat2, putFormat2, putFormat2};
+    String putFormatComposite1[] = {putFormat1, putFormat2, putFormat2, putFormat2, putFormat1};
+    String putFormatComposite2[] = {putFormat2, putFormat1, putFormat1, putFormat2, putFormat2};
+
+    short headerFormat1s[] = {headerFormatV1, headerFormatV1, headerFormatV1, headerFormatV1, headerFormatV1};
+    short headerFormat2s[] = {headerFormatV2, headerFormatV2, headerFormatV2, headerFormatV2, headerFormatV2};
+    short headerFormatComposite1[] = {headerFormatV1, headerFormatV2, headerFormatV2, headerFormatV1, headerFormatV1};
+    short headerFormatComposite2[] = {headerFormatV2, headerFormatV1, headerFormatV1, headerFormatV2, headerFormatV2};
+
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat1s, headerFormat1s);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s, headerFormat1s);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s, headerFormat2s);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s,
+        headerFormatComposite1);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormat2s,
+        headerFormatComposite2);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormatComposite1,
+        headerFormatComposite1);
+    doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormatComposite2,
+        headerFormatComposite2);
+
+    MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
+  }
+
+  private void doSendWriteCompositeMessagesTest(byte[][] blob, byte[][] userMetadata, StoreKey[] storeKeys,
+      ByteBuffer[] encryptionKeys, String[] putFormats, short[] headerVersions)
+      throws MessageFormatException, IOException {
+    String serviceIdPrefix = "serviceId";
+    String ownerIdPrefix = "owner";
+    String contentTypePrefix = "bin";
+    short accountIdBase = 10;
+    short containerIdBase = 2;
+    BlobProperties[] properties = new BlobProperties[5];
+    for (int i = 0; i < 5; i++) {
+      properties[i] =
+          new BlobProperties(blob[i].length, serviceIdPrefix + i, ownerIdPrefix + i, contentTypePrefix + i, false, 100,
+              (short) (accountIdBase + i), (short) (containerIdBase + i), encryptionKeys[i] != null);
+    }
+
+    MessageFormatInputStream[] putStreams = new MessageFormatInputStream[5];
+    for (int i = 0; i < 5; i++) {
+      MessageFormatRecord.HEADER_VERSION_TO_USE = headerVersions[i];
+      if (putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName())) {
+        putStreams[i] =
+            new PutMessageFormatInputStream(storeKeys[i], (ByteBuffer) encryptionKeys[i].rewind(), properties[i],
+                ByteBuffer.wrap(userMetadata[i]), new ByteBufferInputStream(ByteBuffer.wrap(blob[i])), blob[i].length,
+                BlobType.DataBlob);
+      } else {
+        putStreams[i] =
+            new PutMessageFormatBlobV1InputStream(storeKeys[i], properties[i], ByteBuffer.wrap(userMetadata[i]),
+                new ByteBufferInputStream(ByteBuffer.wrap(blob[i])), blob[i].length, BlobType.DataBlob);
+      }
+    }
+
+    int totalStreamSize = (int) Arrays.stream(putStreams).mapToLong(MessageFormatInputStream::getSize).sum();
+    ByteBuffer compositeBuf = ByteBuffer.allocate(totalStreamSize);
+
+    ArrayList<ByteBuffer> listbuf = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      ByteBuffer buf = ByteBuffer.allocate((int) putStreams[i].getSize());
+      putStreams[i].read(buf.array());
+      compositeBuf.put(buf.array());
+      listbuf.add(buf);
+    }
+    MessageReadSet readSet = new MockMessageReadSet(listbuf, new ArrayList<>(Arrays.asList(storeKeys)));
+
+    MetricRegistry registry = new MetricRegistry();
+    MessageFormatMetrics metrics = new MessageFormatMetrics(registry);
+
+    // get all
+    MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics, new MockIdFactory());
+    Assert.assertEquals(send.sizeInBytes(), totalStreamSize);
+    Assert.assertEquals(5, send.getMessageMetadataList().size());
+    for (int i = 0; i < 5; i++) { Assert.assertEquals(null, send.getMessageMetadataList().get(i)); }
+    ByteBuffer bufresult = ByteBuffer.allocate(totalStreamSize);
+    WritableByteChannel channel = Channels.newChannel(new ByteBufferOutputStream(bufresult));
+    while (!send.isSendComplete()) {
+      send.writeTo(channel);
+    }
+    Assert.assertArrayEquals(compositeBuf.array(), bufresult.array());
+
+    // get blob
+    send = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
+    int blobRecordSizes[] = new int[5];
+    for (int i = 0; i < 5; i++) {
+      blobRecordSizes[i] = (int) (putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName())
+          ? MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob[i].length)
+          : MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blob[i].length));
+    }
+    Assert.assertEquals(send.sizeInBytes(), (long) Arrays.stream(blobRecordSizes).sum());
+    bufresult.clear();
+    channel = Channels.newChannel(new ByteBufferOutputStream(bufresult));
+    while (!send.isSendComplete()) {
+      send.writeTo(channel);
+    }
+
+    int startOffset = 0;
+    for (int i = 0; i < 5; i++) {
+      DeserializedBlob deserializedBlob = MessageFormatRecord.deserializeAndGetBlobWithVersion(
+          new ByteArrayInputStream(bufresult.array(), startOffset, blobRecordSizes[i]));
+      Assert.assertEquals(
+          putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName()) ? MessageFormatRecord.Blob_Version_V2
+              : MessageFormatRecord.Blob_Version_V1, deserializedBlob.getVersion());
+      Assert.assertEquals(BlobType.DataBlob, deserializedBlob.getBlobData().getBlobType());
+      Assert.assertEquals(blob[i].length, deserializedBlob.getBlobData().getSize());
+      byte[] readBlob = new byte[blob[i].length];
+      deserializedBlob.getBlobData().getStream().read(readBlob);
+      Assert.assertArrayEquals(blob[i], readBlob);
+
+      if (headerVersions[i] == MessageFormatRecord.Message_Header_Version_V1) {
+        Assert.assertEquals(null, send.getMessageMetadataList().get(i));
+      } else {
+        Assert.assertEquals(encryptionKeys[i].rewind(), send.getMessageMetadataList().get(i).getEncryptionKey());
+      }
+      startOffset += blobRecordSizes[i];
+    }
+
+    /*
+    // get user metadata
+    send = new
+
+        MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata, metrics, new MockIdFactory());
+    long userMetadataRecordSize =
+        MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(userMetadata));
+    Assert.assertEquals(send.sizeInBytes(), userMetadataRecordSize);
+    bufresult.clear();
+    channel = Channels.newChannel(new
+
+        ByteBufferOutputStream(bufresult));
+    while (!send.isSendComplete())
+
+    {
+      send.writeTo(channel);
+    }
+
+    bufresult.flip();
+    // read off the header.
+    for (int i = 0; i < userMetadataRecordSize - MessageFormatRecord.Crc_Size - userMetadata.length; i++)
+
+    {
+      bufresult.get();
+    }
+
+    verifyBlobUserMetadata(userMetadata, bufresult);
+    if (expectedEncryptionKey == null)
+
+    {
+      Assert.assertEquals(null, send.getMessageMetadataList().get(0));
+    } else
+
+    {
+      Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
+    }
+
+    // get blob properties
+    send = new
+
+        MessageFormatSend(readSet, MessageFormatFlags.BlobProperties, metrics, new MockIdFactory());
+    long blobPropertiesRecordSize =
+        MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties);
+    Assert.assertEquals(send.sizeInBytes(), blobPropertiesRecordSize);
+    bufresult.clear();
+    channel = Channels.newChannel(new
+
+        ByteBufferOutputStream(bufresult));
+    while (!send.isSendComplete())
+
+    {
+      send.writeTo(channel);
+    }
+
+    bufresult.flip();
+    // read off the header.
+    for (int i = 0;
+        i < blobPropertiesRecordSize - MessageFormatRecord.Crc_Size - BlobPropertiesSerDe.getBlobPropertiesSerDeSize(
+            properties); i++)
+
+    {
+      bufresult.get();
+    }
+
+    verifyBlobProperties(properties,
+        BlobPropertiesSerDe.getBlobPropertiesFromStream(new DataInputStream(new ByteBufferInputStream(bufresult))));
+    Assert.assertEquals(null, send.getMessageMetadataList().
+
+        get(0));
+
+    // get blob info
+    send = new
+
+        MessageFormatSend(readSet, MessageFormatFlags.BlobInfo, metrics, new MockIdFactory());
+    Assert.assertEquals(send.sizeInBytes(), blobPropertiesRecordSize + userMetadataRecordSize);
+    bufresult.clear();
+    channel = Channels.newChannel(new
+
+        ByteBufferOutputStream(bufresult));
+    while (!send.isSendComplete())
+
+    {
+      send.writeTo(channel);
+    }
+
+    bufresult.flip();
+    for (int i = 0;
+        i < blobPropertiesRecordSize - MessageFormatRecord.Crc_Size - BlobPropertiesSerDe.getBlobPropertiesSerDeSize(
+            properties); i++)
+
+    {
+      bufresult.get();
+    }
+
+    verifyBlobProperties(properties,
+        BlobPropertiesSerDe.getBlobPropertiesFromStream(new DataInputStream(new ByteBufferInputStream(bufresult))));
+    for (int i = 0; i < userMetadataRecordSize - userMetadata.length; i++)
+
+    {
+      bufresult.get();
+    }
+
+    verifyBlobUserMetadata(userMetadata, bufresult);
+    if (expectedEncryptionKey == null)
+
+    {
+      Assert.assertEquals(null, send.getMessageMetadataList().get(0));
+    } else
+
+    {
+      Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
+    }
+    */
   }
 
   @Test
