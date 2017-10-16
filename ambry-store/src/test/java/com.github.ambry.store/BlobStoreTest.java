@@ -1249,7 +1249,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Change threshold levels for dynamic ClusterManager block sealing
+   * Change threshold levels for dynamic replica sealing
    * @param readOnlyThreshold new storeReadOnlyEnableSizeThresholdPercentageName value
    * @param readWriteDeltaThreshold new storeReadWriteEnableSizeThresholdPercentageDeltaName value
    * @return StoreConfig object with new threshold values
