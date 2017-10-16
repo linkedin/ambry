@@ -1248,6 +1248,12 @@ public class BlobStoreTest {
     return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
   }
 
+  /**
+   * Change threshold levels for dynamic ClusterManager block sealing
+   * @param readOnlyThreshold new storeReadOnlyEnableSizeThresholdPercentageName value
+   * @param readWriteDeltaThreshold new storeReadWriteEnableSizeThresholdPercentageDeltaName value
+   * @return StoreConfig object with new threshold values
+   */
   private StoreConfig changeThreshold(int readOnlyThreshold, int readWriteDeltaThreshold) {
     properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName,
         Integer.toString(readOnlyThreshold));
