@@ -54,10 +54,8 @@ import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -289,27 +287,37 @@ public class BlobStoreTest {
   @Test
   public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
     //Setup threshold test properties, replicaId, mock write status delegate
-    properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName, "65");
-    properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName, "5");
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    StoreConfig defaultConfig = changeThreshold(65, 5);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = mock(ClusterManagerWriteStatusDelegate.class);
     when(clusterManagerWriteStatusDelegate.unseal(anyObject())).thenReturn(true);
     when(clusterManagerWriteStatusDelegate.seal(anyObject())).thenReturn(true);
 
-    //Restart store with new threshold properties, mock delegate
-    store.shutdown();
-    store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
-    store.start();
+    //Restart store
+    restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
 
-    //Check that after start, because StoreDescriptor file already exists, delegate is not called
+    //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
     verifyZeroInteractions(clusterManagerWriteStatusDelegate);
 
+    //Verify that putting in data that doesn't go over the threshold doesn't trigger the delegate
+    put(1, 50, Utils.Infinite_Time);
+    verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
+
     //Verify that after putting in enough data, the store goes to read only
-    List<MockId> addedIds = put(5, 900, Utils.Infinite_Time);
+    List<MockId> addedIds = put(4, 900, Utils.Infinite_Time);
     verify(clusterManagerWriteStatusDelegate, times(1)).seal(replicaId);
 
     //Assumes ClusterParticipant sets replicaId status to true
+    replicaId.setSealedState(true);
+
+    //Change config threshold to higher, see that it gets changed to unsealed on reset
+    restartStore(changeThreshold(99, 1), replicaId, clusterManagerWriteStatusDelegate);
+    verify(clusterManagerWriteStatusDelegate, times(1)).unseal(replicaId);
+    replicaId.setSealedState(false);
+
+    //Reset thresholds, verify that it changed back
+    restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
+    verify(clusterManagerWriteStatusDelegate, times(2)).seal(replicaId);
     replicaId.setSealedState(true);
 
     //Remaining tests only relevant for segmented logs
@@ -321,23 +329,19 @@ public class BlobStoreTest {
 
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
-      store.shutdown();
-      store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
-      store.start();
+      restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
       verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
       //that the store is now read-write
       time.sleep(TimeUnit.DAYS.toMillis(8));
-      store.compact(store.getCompactionDetails(new CompactAllPolicy(config, time)));
-      verify(clusterManagerWriteStatusDelegate, times(1)).unseal(replicaId);
-
-      //Test when StoreDescriptor is deleted and replicaId is erroneously true that it updates the status upon startup
-      replicaId.setSealedState(true);
-      shutdownStoreAndDeleteFiles();
-      store = createBlobStore(replicaId, config, clusterManagerWriteStatusDelegate);
-      store.start();
+      store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)));
       verify(clusterManagerWriteStatusDelegate, times(2)).unseal(replicaId);
+
+      //Test if replicaId is erroneously true that it updates the status upon startup
+      replicaId.setSealedState(true);
+      restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
+      verify(clusterManagerWriteStatusDelegate, times(3)).unseal(replicaId);
     }
     store.shutdown();
   }
@@ -1227,13 +1231,6 @@ public class BlobStoreTest {
     store.put(writeSet);
   }
 
-  private void shutdownStoreAndDeleteFiles() throws IOException, StoreException {
-    if (store.isStarted()) {
-      store.shutdown();
-    }
-    assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
-  }
-
   private BlobStore createBlobStore(ReplicaId replicaId) {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     return createBlobStore(replicaId, config, null);
@@ -1249,5 +1246,20 @@ public class BlobStoreTest {
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
     return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
+  }
+
+  private StoreConfig changeThreshold(int readOnlyThreshold, int readWriteDeltaThreshold) {
+    properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName,
+        Integer.toString(readOnlyThreshold));
+    properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName,
+        Integer.toString(readWriteDeltaThreshold));
+    return new StoreConfig(new VerifiableProperties(properties));
+  }
+
+  private void restartStore(StoreConfig config, ReplicaId replicaId, ClusterManagerWriteStatusDelegate delegate)
+      throws StoreException {
+    store.shutdown();
+    store = createBlobStore(replicaId, config, delegate);
+    store.start();
   }
 }

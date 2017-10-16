@@ -91,7 +91,7 @@ class AmbryReplica implements ReplicaId {
     return isSealed;
   }
 
-  public void setSealedState(boolean isSealed) {
+  void setSealedState(boolean isSealed) {
     this.isSealed = isSealed;
   }
 

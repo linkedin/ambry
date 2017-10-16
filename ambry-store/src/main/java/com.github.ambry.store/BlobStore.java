@@ -270,7 +270,7 @@ class BlobStore implements Store {
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
     } else {
-      logger.info("ClusterManagerWriteStatusDelegate not set, dynamic helix write status turned off");
+      logger.info("ClusterManagerWriteStatusDelegate not set, dynamic write status turned off");
     }
   }
 
