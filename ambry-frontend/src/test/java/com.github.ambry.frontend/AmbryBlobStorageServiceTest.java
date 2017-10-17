@@ -97,7 +97,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link AmbryBlobStorageService}.
+ * Unit tests for {@link AmbryBlobStorageService}. Also tests {@link AccountAndContainerInjector}.
  */
 public class AmbryBlobStorageServiceTest {
   private final Account refAccount;
@@ -829,6 +829,10 @@ public class AmbryBlobStorageServiceTest {
     RestRequest getSignedUrlRequest = createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, headers, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(getSignedUrlRequest, restResponseChannel);
+    assertEquals("Account not as expected", refAccount,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
+    assertEquals("Container not as expected", refContainer,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     String signedPostUrl = restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
@@ -856,6 +860,10 @@ public class AmbryBlobStorageServiceTest {
     getSignedUrlRequest = createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(getSignedUrlRequest, restResponseChannel);
+    assertEquals("Account not as expected", refAccount,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
+    assertEquals("Container not as expected", refContainer,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     String signedGetUrl = restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
@@ -2085,6 +2093,7 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
 class FrontendTestIdConverterFactory implements IdConverterFactory {
   public Exception exceptionToReturn = null;
   public RuntimeException exceptionToThrow = null;
+  public String translation = null;
 
   @Override
   public IdConverter getIdConverter() {
@@ -2117,9 +2126,10 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
         throw exceptionToThrow;
       }
       FutureResult<String> futureResult = new FutureResult<String>();
-      futureResult.done(null, exceptionToReturn);
+      String toReturn = exceptionToReturn == null ? translation : null;
+      futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
-        callback.onCompletion(null, exceptionToReturn);
+        callback.onCompletion(toReturn, exceptionToReturn);
       }
       return futureResult;
     }

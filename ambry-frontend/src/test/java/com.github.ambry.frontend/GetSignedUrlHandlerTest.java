@@ -14,8 +14,18 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountServiceFactory;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -23,6 +33,8 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.UtilsTest;
+import java.io.IOException;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,16 +49,34 @@ import static org.junit.Assert.*;
  */
 public class GetSignedUrlHandlerTest {
 
-  private final FrontendTestSecurityServiceFactory securityServiceFactory;
-  private final FrontendTestUrlSigningServiceFactory urlSigningServiceFactory;
+  private static final InMemAccountServiceFactory.InMemAccountService ACCOUNT_SERVICE =
+      new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final Account REF_ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount();
+  private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+  private static final ClusterMap CLUSTER_MAP;
+
+  static {
+    try {
+      CLUSTER_MAP = new MockClusterMap();
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  private final FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
+  private final FrontendTestUrlSigningServiceFactory urlSigningServiceFactory =
+      new FrontendTestUrlSigningServiceFactory();
+  private final FrontendTestIdConverterFactory idConverterFactory = new FrontendTestIdConverterFactory();
   private final GetSignedUrlHandler getSignedUrlHandler;
 
   public GetSignedUrlHandlerTest() {
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
-    securityServiceFactory = new FrontendTestSecurityServiceFactory();
-    urlSigningServiceFactory = new FrontendTestUrlSigningServiceFactory();
+    FrontendConfig config = new FrontendConfig(new VerifiableProperties(new Properties()));
+    AccountAndContainerInjector accountAndContainerInjector =
+        new AccountAndContainerInjector(ACCOUNT_SERVICE, CLUSTER_MAP, metrics, config);
     getSignedUrlHandler = new GetSignedUrlHandler(urlSigningServiceFactory.getUrlSigningService(),
-        securityServiceFactory.getSecurityService(), metrics);
+        securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), accountAndContainerInjector,
+        metrics);
   }
 
   /**
@@ -56,14 +86,22 @@ public class GetSignedUrlHandlerTest {
   @Test
   public void handleGoodCaseTest() throws Exception {
     urlSigningServiceFactory.signedUrlToReturn = UtilsTest.getRandomString(10);
+    // POST
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
-    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    sendRequestGetResponse(restRequest, restResponseChannel);
-    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
-    assertEquals("Content-length is not as expected", 0,
-        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
-    assertEquals("Signed URL is not as expected", urlSigningServiceFactory.signedUrlToReturn,
-        restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL));
+    restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
+    restRequest.setArg(RestUtils.Headers.TARGET_ACCOUNT_NAME, REF_ACCOUNT.getName());
+    restRequest.setArg(RestUtils.Headers.TARGET_CONTAINER_NAME, REF_CONTAINER.getName());
+    verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
+
+    BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(),
+        REF_CONTAINER.getId(), CLUSTER_MAP.getWritablePartitionIds().get(0));
+    idConverterFactory.translation = blobId.getID();
+    // GET (also makes sure that the IDConverter is used)
+    restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
+    restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
+    // add a random string. IDConverter will convert it
+    restRequest.setArg(RestUtils.Headers.BLOB_ID, UtilsTest.getRandomString(10));
+    verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
   }
 
   /**
@@ -118,6 +156,8 @@ public class GetSignedUrlHandlerTest {
     }
   }
 
+  // helpers
+
   /**
    * Verifies that attempting to get peers of any datanode fails with the provided {@code msg}.
    * @param msg the message in the {@link Exception} that will be thrown.
@@ -125,11 +165,39 @@ public class GetSignedUrlHandlerTest {
    */
   private void verifyFailureWithMsg(String msg) throws Exception {
     RestRequest restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);
+    restRequest.setArg(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
+    restRequest.setArg(RestUtils.Headers.TARGET_ACCOUNT_NAME, REF_ACCOUNT.getName());
+    restRequest.setArg(RestUtils.Headers.TARGET_CONTAINER_NAME, REF_CONTAINER.getName());
     try {
       sendRequestGetResponse(restRequest, new MockRestResponseChannel());
       fail("Request should have failed");
     } catch (Exception e) {
       assertEquals("Unexpected Exception", msg, e.getMessage());
     }
+  }
+
+  // handleGoodCaseTest() helpers
+
+  /**
+   * Verifies that a singed URL is returned and it matches what is expected
+   * @param restRequest the {@link RestRequest} to get a signed URL.
+   * @param urlExpected the URL that should be returned.
+   * @param expectedAccount the {@link Account} that should be populated in {@link RestRequest}.
+   * @param expectedContainer the {@link Container} that should be populated in {@link RestRequest}.
+   * @throws Exception
+   */
+  private void verifySigningUrl(RestRequest restRequest, String urlExpected, Account expectedAccount,
+      Container expectedContainer) throws Exception {
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    sendRequestGetResponse(restRequest, restResponseChannel);
+    Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
+    assertEquals("Content-length is not as expected", 0,
+        Integer.parseInt((String) restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Signed URL is not as expected", urlExpected,
+        restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL));
+    assertEquals("Account not as expected", expectedAccount,
+        restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
+    assertEquals("Container not as expected", expectedContainer,
+        restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
   }
 }
