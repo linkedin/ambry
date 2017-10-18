@@ -205,7 +205,7 @@ class BlobStore implements Store {
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
-        checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
+        checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -284,7 +284,7 @@ class BlobStore implements Store {
    * @param totalCapacity total capacity of the store in bytes
    * @param usedCapacity total used capacity of the store in bytes
    */
-  private void checkCapacityAndUpdateClusterParticipant(long totalCapacity, long usedCapacity) {
+  private void checkCapacityAndUpdateWriteStatusDelegate(long totalCapacity, long usedCapacity) {
     if (writeStatusDelegate != null) {
       if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
         if (!writeStatusDelegate.seal(replicaId)) {
@@ -342,7 +342,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
-            checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
+            checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
           }
         }
       }
@@ -536,7 +536,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details);
-    checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
+    checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
   /**
@@ -548,7 +548,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
-      checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
+      checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
     }
   }
 
