@@ -254,6 +254,11 @@ class MockHelixManager implements HelixManager {
   }
 
   @Override
+  public Long getSessionStartTime() {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public boolean isLeader() {
     throw new IllegalStateException("Not implemented");
   }
