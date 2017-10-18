@@ -14,7 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -281,7 +281,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests blob store use of {@link ClusterManagerWriteStatusDelegate}
+   * Tests blob store use of {@link WriteStatusDelegate}
    * @throws StoreException
    */
   @Test
@@ -289,35 +289,35 @@ public class BlobStoreTest {
     //Setup threshold test properties, replicaId, mock write status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
-    ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate = mock(ClusterManagerWriteStatusDelegate.class);
-    when(clusterManagerWriteStatusDelegate.unseal(anyObject())).thenReturn(true);
-    when(clusterManagerWriteStatusDelegate.seal(anyObject())).thenReturn(true);
+    WriteStatusDelegate writeStatusDelegate = mock(WriteStatusDelegate.class);
+    when(writeStatusDelegate.unseal(anyObject())).thenReturn(true);
+    when(writeStatusDelegate.seal(anyObject())).thenReturn(true);
 
     //Restart store
-    restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
+    restartStore(defaultConfig, replicaId, writeStatusDelegate);
 
     //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
-    verifyZeroInteractions(clusterManagerWriteStatusDelegate);
+    verifyZeroInteractions(writeStatusDelegate);
 
     //Verify that putting in data that doesn't go over the threshold doesn't trigger the delegate
     put(1, 50, Utils.Infinite_Time);
-    verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
+    verifyNoMoreInteractions(writeStatusDelegate);
 
     //Verify that after putting in enough data, the store goes to read only
     List<MockId> addedIds = put(4, 900, Utils.Infinite_Time);
-    verify(clusterManagerWriteStatusDelegate, times(1)).seal(replicaId);
+    verify(writeStatusDelegate, times(1)).seal(replicaId);
 
     //Assumes ClusterParticipant sets replicaId status to true
     replicaId.setSealedState(true);
 
     //Change config threshold to higher, see that it gets changed to unsealed on reset
-    restartStore(changeThreshold(99, 1), replicaId, clusterManagerWriteStatusDelegate);
-    verify(clusterManagerWriteStatusDelegate, times(1)).unseal(replicaId);
+    restartStore(changeThreshold(99, 1), replicaId, writeStatusDelegate);
+    verify(writeStatusDelegate, times(1)).unseal(replicaId);
     replicaId.setSealedState(false);
 
     //Reset thresholds, verify that it changed back
-    restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
-    verify(clusterManagerWriteStatusDelegate, times(2)).seal(replicaId);
+    restartStore(defaultConfig, replicaId, writeStatusDelegate);
+    verify(writeStatusDelegate, times(2)).seal(replicaId);
     replicaId.setSealedState(true);
 
     //Remaining tests only relevant for segmented logs
@@ -329,19 +329,19 @@ public class BlobStoreTest {
 
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
-      restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
-      verifyNoMoreInteractions(clusterManagerWriteStatusDelegate);
+      restartStore(defaultConfig, replicaId, writeStatusDelegate);
+      verifyNoMoreInteractions(writeStatusDelegate);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
       //that the store is now read-write
       time.sleep(TimeUnit.DAYS.toMillis(8));
       store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)));
-      verify(clusterManagerWriteStatusDelegate, times(2)).unseal(replicaId);
+      verify(writeStatusDelegate, times(2)).unseal(replicaId);
 
       //Test if replicaId is erroneously true that it updates the status upon startup
       replicaId.setSealedState(true);
-      restartStore(defaultConfig, replicaId, clusterManagerWriteStatusDelegate);
-      verify(clusterManagerWriteStatusDelegate, times(3)).unseal(replicaId);
+      restartStore(defaultConfig, replicaId, writeStatusDelegate);
+      verify(writeStatusDelegate, times(3)).unseal(replicaId);
     }
     store.shutdown();
   }
@@ -1237,11 +1237,11 @@ public class BlobStoreTest {
   }
 
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
-      ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate) {
+      WriteStatusDelegate writeStatusDelegate) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
     return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-        STORE_KEY_FACTORY, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+        STORE_KEY_FACTORY, recovery, hardDelete, writeStatusDelegate, time);
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
@@ -1262,7 +1262,7 @@ public class BlobStoreTest {
     return new StoreConfig(new VerifiableProperties(properties));
   }
 
-  private void restartStore(StoreConfig config, ReplicaId replicaId, ClusterManagerWriteStatusDelegate delegate)
+  private void restartStore(StoreConfig config, ReplicaId replicaId, WriteStatusDelegate delegate)
       throws StoreException {
     store.shutdown();
     store = createBlobStore(replicaId, config, delegate);

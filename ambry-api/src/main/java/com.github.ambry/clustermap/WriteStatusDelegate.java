@@ -15,13 +15,13 @@
 package com.github.ambry.clustermap;
 
 /**
- * Delegate class giving a layer of abstraction between the client and ClusterParticipant
+ * Delegate class allowing BlobStore to set the replica sealed status
  */
-public class ClusterManagerWriteStatusDelegate {
+public class WriteStatusDelegate {
 
   private final ClusterParticipant clusterParticipant;
 
-  public ClusterManagerWriteStatusDelegate(ClusterParticipant clusterParticipant) {
+  public WriteStatusDelegate(ClusterParticipant clusterParticipant) {
     this.clusterParticipant = clusterParticipant;
   }
 

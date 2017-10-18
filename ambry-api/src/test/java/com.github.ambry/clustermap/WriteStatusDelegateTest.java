@@ -19,17 +19,17 @@ import org.junit.Test;
 import static org.mockito.Mockito.*;
 
 
-public class ClusterManagerWriteStatusDelegateTest {
+public class WriteStatusDelegateTest {
 
   /**
-   * Tests ClusterManagerWriteStatusDelegate
+   * Tests WriteStatusDelegate
    */
   @Test
   public void testDelegate() {
     //Initializes delegate and arguments
     ClusterParticipant clusterParticipant = mock(ClusterParticipant.class);
     ReplicaId replicaId = mock(ReplicaId.class);
-    ClusterManagerWriteStatusDelegate delegate = new ClusterManagerWriteStatusDelegate(clusterParticipant);
+    WriteStatusDelegate delegate = new WriteStatusDelegate(clusterParticipant);
 
     //Checks that the right underlying ClusterParticipant methods are called
     verifyZeroInteractions(clusterParticipant);

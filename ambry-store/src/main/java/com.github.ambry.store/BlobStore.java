@@ -14,7 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
-import com.github.ambry.clustermap.ClusterManagerWriteStatusDelegate;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
@@ -58,7 +58,7 @@ class BlobStore implements Store {
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
   private final ReplicaId replicaId;
-  private final ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate;
+  private final WriteStatusDelegate writeStatusDelegate;
   private final long thresholdBytesHigh;
   private final long thresholdBytesLow;
 
@@ -83,18 +83,47 @@ class BlobStore implements Store {
     SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
   }
 
-  //Ctor used in ambry-server
+  /**
+   * Constructor for BlobStore, used in ambry-server
+   * @param replicaId replica associated with BlobStore.  BlobStore id, data directory, and capacity derived from this
+   * @param config the settings for store configuration.
+   * @param taskScheduler the {@link ScheduledExecutorService} for executing short period background tasks.
+   * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
+   * @param diskIOScheduler schedules disk IO operations
+   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
+   * @param factory the {@link StoreKeyFactory} for parsing store keys.
+   * @param recovery the {@link MessageStoreRecovery} instance to use.
+   * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
+   * @param writeStatusDelegate delegate used to communicate BlobStore write status (sealed or unsealed)
+   * @param time the {@link Time} instance to use.
+   */
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate,
+      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate,
       Time time) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
-        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, clusterManagerWriteStatusDelegate, time);
+        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, writeStatusDelegate, time);
   }
 
-  //Ctor used in ambry-tools
+  /**
+   * Constructor for BlobStore, used in ambry-tools
+   * @param storeId id of the BlobStore
+   * @param config the settings for store configuration.
+   * @param taskScheduler the {@link ScheduledExecutorService} for executing background tasks.
+   * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
+   * @param diskIOScheduler schedules disk IO operations
+   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
+   * @param dataDir directory that will be used by the BlobStore for data
+   * @param capacityInBytes capacity of the BlobStore
+   * @param factory the {@link StoreKeyFactory} for parsing store keys.
+   * @param recovery the {@link MessageStoreRecovery} instance to use.
+   * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
+   * @param time the {@link Time} instance to use.
+   */
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
       StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
@@ -107,7 +136,7 @@ class BlobStore implements Store {
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
       StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      ClusterManagerWriteStatusDelegate clusterManagerWriteStatusDelegate, Time time) {
+      WriteStatusDelegate writeStatusDelegate, Time time) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
@@ -121,7 +150,7 @@ class BlobStore implements Store {
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
-    this.clusterManagerWriteStatusDelegate = clusterManagerWriteStatusDelegate;
+    this.writeStatusDelegate = writeStatusDelegate;
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
@@ -176,7 +205,7 @@ class BlobStore implements Store {
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
-        checkCapacityAndUpdateClusterManager(log.getCapacityInBytes(), index.getLogUsedCapacity());
+        checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -255,20 +284,20 @@ class BlobStore implements Store {
    * @param totalCapacity total capacity of the store in bytes
    * @param usedCapacity total used capacity of the store in bytes
    */
-  private void checkCapacityAndUpdateClusterManager(long totalCapacity, long usedCapacity) {
-    if (clusterManagerWriteStatusDelegate != null) {
+  private void checkCapacityAndUpdateClusterParticipant(long totalCapacity, long usedCapacity) {
+    if (writeStatusDelegate != null) {
       if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
-        if (!clusterManagerWriteStatusDelegate.seal(replicaId)) {
+        if (!writeStatusDelegate.seal(replicaId)) {
           metrics.sealSetError.inc();
         }
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
-        if (!clusterManagerWriteStatusDelegate.unseal(replicaId)) {
+        if (!writeStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
         }
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
     } else {
-      logger.info("ClusterManagerWriteStatusDelegate not set, dynamic write status turned off");
+      logger.info("WriteStatusDelegate not set, dynamic write status turned off");
     }
   }
 
@@ -313,7 +342,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
-            checkCapacityAndUpdateClusterManager(log.getCapacityInBytes(), index.getLogUsedCapacity());
+            checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
           }
         }
       }
@@ -507,7 +536,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details);
-    checkCapacityAndUpdateClusterManager(log.getCapacityInBytes(), index.getLogUsedCapacity());
+    checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
   /**
@@ -519,7 +548,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
-      checkCapacityAndUpdateClusterManager(log.getCapacityInBytes(), index.getLogUsedCapacity());
+      checkCapacityAndUpdateClusterParticipant(log.getCapacityInBytes(), index.getLogUsedCapacity());
     }
   }
 
