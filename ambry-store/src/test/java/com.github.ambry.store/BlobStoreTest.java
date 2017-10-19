@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.WriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -54,6 +56,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -238,8 +241,6 @@ public class BlobStoreTest {
   private MessageStoreRecovery recovery = new DummyMessageStoreRecovery();
   // The MessageStoreHardDelete that is used with the BlobStore
   private MessageStoreHardDelete hardDelete = new MockMessageStoreHardDelete();
-  // The MetricRegistry that is used with the index
-  private MetricRegistry metricRegistry;
 
   /**
    * Running for both segmented and non-segmented log.
@@ -280,6 +281,72 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests blob store use of {@link WriteStatusDelegate}
+   * @throws StoreException
+   */
+  @Test
+  public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
+    //Setup threshold test properties, replicaId, mock write status delegate
+    StoreConfig defaultConfig = changeThreshold(65, 5);
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    WriteStatusDelegate writeStatusDelegate = mock(WriteStatusDelegate.class);
+    when(writeStatusDelegate.unseal(anyObject())).thenReturn(true);
+    when(writeStatusDelegate.seal(anyObject())).thenReturn(true);
+
+    //Restart store
+    restartStore(defaultConfig, replicaId, writeStatusDelegate);
+
+    //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
+    verifyZeroInteractions(writeStatusDelegate);
+
+    //Verify that putting in data that doesn't go over the threshold doesn't trigger the delegate
+    put(1, 50, Utils.Infinite_Time);
+    verifyNoMoreInteractions(writeStatusDelegate);
+
+    //Verify that after putting in enough data, the store goes to read only
+    List<MockId> addedIds = put(4, 900, Utils.Infinite_Time);
+    verify(writeStatusDelegate, times(1)).seal(replicaId);
+
+    //Assumes ClusterParticipant sets replicaId status to true
+    replicaId.setSealedState(true);
+
+    //Change config threshold to higher, see that it gets changed to unsealed on reset
+    restartStore(changeThreshold(99, 1), replicaId, writeStatusDelegate);
+    verify(writeStatusDelegate, times(1)).unseal(replicaId);
+    replicaId.setSealedState(false);
+
+    //Reset thresholds, verify that it changed back
+    restartStore(defaultConfig, replicaId, writeStatusDelegate);
+    verify(writeStatusDelegate, times(2)).seal(replicaId);
+    replicaId.setSealedState(true);
+
+    //Remaining tests only relevant for segmented logs
+    if (isLogSegmented) {
+      //Delete added data
+      for (MockId addedId : addedIds) {
+        delete(addedId);
+      }
+
+      //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
+      //By restarting, only last segment will be in journal
+      restartStore(defaultConfig, replicaId, writeStatusDelegate);
+      verifyNoMoreInteractions(writeStatusDelegate);
+
+      //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
+      //that the store is now read-write
+      time.sleep(TimeUnit.DAYS.toMillis(8));
+      store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)));
+      verify(writeStatusDelegate, times(2)).unseal(replicaId);
+
+      //Test if replicaId is erroneously true that it updates the status upon startup
+      replicaId.setSealedState(true);
+      restartStore(defaultConfig, replicaId, writeStatusDelegate);
+      verify(writeStatusDelegate, times(3)).unseal(replicaId);
+    }
+    store.shutdown();
+  }
+
+  /**
    * Tests {@link BlobStore#start()} for corner cases and error cases.
    * Corner cases
    * 1. Creating a directory on first startup
@@ -294,7 +361,6 @@ public class BlobStoreTest {
    */
   @Test
   public void storeStartupTests() throws IOException, StoreException {
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
 
     // attempt to start when store is already started fails
     verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
@@ -303,33 +369,23 @@ public class BlobStoreTest {
 
     // fail if attempt to create directory fails
     String badPath = new File(nonExistentDir, UtilsTest.getRandomString(10)).getAbsolutePath();
-    MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
-    BlobStore blobStore =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, badPath,
-            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+
+    BlobStore blobStore = createBlobStore(getMockReplicaId(badPath));
+
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
 
+    ReplicaId replicaIdWithNonExistentDir = getMockReplicaId(nonExistentDir);
+
     // create directory if it does not exist
-    registry = new MetricRegistry();
-    metrics = new StoreMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-        nonExistentDir, LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
     verifyStartupSuccess(blobStore);
     File createdDir = new File(nonExistentDir);
     assertTrue("Directory should now exist", createdDir.exists() && createdDir.isDirectory());
 
     // should not be able to start two stores at the same path
-    registry = new MetricRegistry();
-    metrics = new StoreMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-        nonExistentDir, LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    blobStore = createBlobStore(replicaIdWithNonExistentDir);
     blobStore.start();
-    registry = new MetricRegistry();
-    metrics = new StoreMetrics(registry);
-    BlobStore secondStore =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-            nonExistentDir, LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    BlobStore secondStore = createBlobStore(replicaIdWithNonExistentDir);
     verifyStartupFailure(secondStore, StoreErrorCodes.Initialization_Error);
     blobStore.shutdown();
 
@@ -344,10 +400,7 @@ public class BlobStoreTest {
     File file = new File(tempDir, UtilsTest.getRandomString(10));
     assertTrue("Test file could not be created", file.createNewFile());
     file.deleteOnExit();
-    registry = new MetricRegistry();
-    metrics = new StoreMetrics(registry);
-    blobStore = new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-        file.getAbsolutePath(), LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    blobStore = createBlobStore(getMockReplicaId(file.getAbsolutePath()));
     verifyStartupFailure(blobStore, StoreErrorCodes.Initialization_Error);
   }
 
@@ -664,11 +717,7 @@ public class BlobStoreTest {
     store.shutdown();
     // no operations should be possible if store is not up or has been shutdown
     verifyOperationFailuresOnInactiveStore(store);
-    StoreMetrics metrics = new StoreMetrics(new MetricRegistry());
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, tempDirStr,
-            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    store = createBlobStore(getMockReplicaId(tempDirStr));
     verifyOperationFailuresOnInactiveStore(store);
   }
 
@@ -801,14 +850,9 @@ public class BlobStoreTest {
    */
   private void setupTestState() throws InterruptedException, StoreException {
     long segmentCapacity = isLogSegmented ? SEGMENT_CAPACITY : LOG_CAPACITY;
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(metricRegistry);
     properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, tempDirStr,
-            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    store = createBlobStore(getMockReplicaId(tempDirStr));
     store.start();
     // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
     // being picked for delete.
@@ -972,12 +1016,7 @@ public class BlobStoreTest {
       store.shutdown();
     }
     assertFalse("Store should be shutdown", store.isStarted());
-    metricRegistry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(metricRegistry);
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    store =
-        new BlobStore(storeId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics, tempDirStr,
-            LOG_CAPACITY, STORE_KEY_FACTORY, recovery, hardDelete, time);
+    store = createBlobStore(getMockReplicaId(tempDirStr));
     assertFalse("Store should not be started", store.isStarted());
     store.start();
     assertTrue("Store should be started", store.isStarted());
@@ -1190,5 +1229,43 @@ public class BlobStoreTest {
     MessageWriteSet writeSet = new MockMessageWriteSet(messageInfoList, bufferList);
     // Put the initial two messages.
     store.put(writeSet);
+  }
+
+  private BlobStore createBlobStore(ReplicaId replicaId) {
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    return createBlobStore(replicaId, config, null);
+  }
+
+  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
+      WriteStatusDelegate writeStatusDelegate) {
+    MetricRegistry registry = new MetricRegistry();
+    StoreMetrics metrics = new StoreMetrics(registry);
+    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
+        STORE_KEY_FACTORY, recovery, hardDelete, writeStatusDelegate, time);
+  }
+
+  private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
+    return StoreTestUtils.createMockReplicaId(storeId, LOG_CAPACITY, filePath);
+  }
+
+  /**
+   * Change threshold levels for dynamic replica sealing
+   * @param readOnlyThreshold new storeReadOnlyEnableSizeThresholdPercentageName value
+   * @param readWriteDeltaThreshold new storeReadWriteEnableSizeThresholdPercentageDeltaName value
+   * @return StoreConfig object with new threshold values
+   */
+  private StoreConfig changeThreshold(int readOnlyThreshold, int readWriteDeltaThreshold) {
+    properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName,
+        Integer.toString(readOnlyThreshold));
+    properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName,
+        Integer.toString(readWriteDeltaThreshold));
+    return new StoreConfig(new VerifiableProperties(properties));
+  }
+
+  private void restartStore(StoreConfig config, ReplicaId replicaId, WriteStatusDelegate delegate)
+      throws StoreException {
+    store.shutdown();
+    store = createBlobStore(replicaId, config, delegate);
+    store.start();
   }
 }

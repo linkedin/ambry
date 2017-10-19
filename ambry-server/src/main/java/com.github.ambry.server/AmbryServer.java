@@ -16,6 +16,7 @@ package com.github.ambry.server;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -134,7 +135,8 @@ public class AmbryServer {
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       storageManager =
           new StorageManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
-              new BlobStoreRecovery(), new BlobStoreHardDelete(), time);
+              new BlobStoreRecovery(), new BlobStoreHardDelete(),
+              new WriteStatusDelegate(clusterParticipant), time);
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

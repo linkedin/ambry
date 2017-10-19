@@ -42,6 +42,8 @@ public class StoreMetrics {
   public final Counter storeStartFailure;
   public final Counter overflowWriteError;
   public final Counter overflowReadError;
+  public final Counter sealSetError;
+  public final Counter unsealSetError;
   public final Timer recoveryTime;
   public final Timer findTime;
   public final Timer indexFlushTime;
@@ -104,6 +106,8 @@ public class StoreMetrics {
     storeStartFailure = registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreStartFailure"));
     overflowWriteError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowWriteError"));
     overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowReadError"));
+    sealSetError = registry.counter(MetricRegistry.name(BlobStore.class, name + "SealSetError"));
+    unsealSetError = registry.counter(MetricRegistry.name(BlobStore.class, name + "UnsealSetError"));
     recoveryTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexRecoveryTime"));
     findTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFindTime"));
     indexFlushTime = registry.timer(MetricRegistry.name(PersistentIndex.class, name + "IndexFlushTime"));

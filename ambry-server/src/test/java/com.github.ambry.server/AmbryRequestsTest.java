@@ -807,7 +807,7 @@ public class AmbryRequestsTest {
 
     MockStorageManager() throws StoreException {
       super(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, true),
-          new MetricRegistry(), Collections.EMPTY_LIST, null, null, null, new MockTime());
+          new MetricRegistry(), Collections.EMPTY_LIST, null, null, null, null, new MockTime());
     }
 
     @Override

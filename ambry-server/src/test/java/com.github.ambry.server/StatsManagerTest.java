@@ -265,7 +265,7 @@ public class StatsManagerTest {
 
     MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
       super(new StoreConfig(new VerifiableProperties(new Properties())), Utils.newScheduler(1, false),
-          new MetricRegistry(), new ArrayList<ReplicaId>(), null, null, null, SystemTime.getInstance());
+          new MetricRegistry(), new ArrayList<ReplicaId>(), null, null, null, null, SystemTime.getInstance());
       storeMap = map;
     }
 

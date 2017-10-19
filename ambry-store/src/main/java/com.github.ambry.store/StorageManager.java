@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -55,7 +56,8 @@ public class StorageManager {
    */
   public StorageManager(StoreConfig config, ScheduledExecutorService scheduler, MetricRegistry registry,
       List<? extends ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time) throws StoreException {
+      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate, Time time)
+      throws StoreException {
     verifyConfigs(config);
     metrics = new StorageManagerMetrics(registry);
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
@@ -75,7 +77,7 @@ public class StorageManager {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager = new DiskManager(disk, replicasForDisk, config, scheduler, metrics, storeMainMetrics,
-          storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, time);
+          storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate, time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);

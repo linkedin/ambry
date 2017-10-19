@@ -14,6 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.WriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
@@ -45,8 +47,7 @@ class BlobStore implements Store {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  /* A lock that prevents concurrent writes to the log */
-  private final Object lock = new Object();
+  private final Object storeWriteLock = new Object();
   private final StoreConfig config;
   private final long capacityInBytes;
   private final StoreKeyFactory factory;
@@ -56,6 +57,10 @@ class BlobStore implements Store {
   private final StoreMetrics storeUnderCompactionMetrics;
   private final Time time;
   private final UUID sessionId = UUID.randomUUID();
+  private final ReplicaId replicaId;
+  private final WriteStatusDelegate writeStatusDelegate;
+  private final long thresholdBytesHigh;
+  private final long thresholdBytesLow;
 
   private Log log;
   private BlobStoreCompactor compactor;
@@ -78,28 +83,84 @@ class BlobStore implements Store {
     SOME_NOT_ALL_DUPLICATE, // At least one of the message is a duplicate, but not all.
   }
 
+  /**
+   * Constructor for BlobStore, used in ambry-server
+   * @param replicaId replica associated with BlobStore.  BlobStore id, data directory, and capacity derived from this
+   * @param config the settings for store configuration.
+   * @param taskScheduler the {@link ScheduledExecutorService} for executing short period background tasks.
+   * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
+   * @param diskIOScheduler schedules disk IO operations
+   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
+   * @param factory the {@link StoreKeyFactory} for parsing store keys.
+   * @param recovery the {@link MessageStoreRecovery} instance to use.
+   * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
+   * @param writeStatusDelegate delegate used to communicate BlobStore write status (sealed or unsealed)
+   * @param time the {@link Time} instance to use.
+   */
+  BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
+      StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate,
+      Time time) {
+    this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
+        diskIOScheduler, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
+        replicaId.getCapacityInBytes(), factory, recovery, hardDelete, writeStatusDelegate, time);
+  }
+
+  /**
+   * Constructor for BlobStore, used in ambry-tools
+   * @param storeId id of the BlobStore
+   * @param config the settings for store configuration.
+   * @param taskScheduler the {@link ScheduledExecutorService} for executing background tasks.
+   * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
+   * @param diskIOScheduler schedules disk IO operations
+   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
+   * @param dataDir directory that will be used by the BlobStore for data
+   * @param capacityInBytes capacity of the BlobStore
+   * @param factory the {@link StoreKeyFactory} for parsing store keys.
+   * @param recovery the {@link MessageStoreRecovery} instance to use.
+   * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
+   * @param time the {@link Time} instance to use.
+   */
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
       StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
       MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this.metrics = metrics;
-    this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
+    this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
+        storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time);
+  }
+
+  private BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
+      StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
+      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      WriteStatusDelegate writeStatusDelegate, Time time) {
+    this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
+    this.metrics = metrics;
+    this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
     this.config = config;
     this.capacityInBytes = capacityInBytes;
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
+    this.writeStatusDelegate = writeStatusDelegate;
     this.time = time;
+    long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
+    long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
+    this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
+    this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
   }
 
   @Override
   public void start() throws StoreException {
-    synchronized (lock) {
+    synchronized (storeWriteLock) {
       if (started) {
         throw new StoreException("Store already started", StoreErrorCodes.Store_Already_Started);
       }
@@ -144,6 +205,7 @@ class BlobStore implements Store {
             new BlobStoreStats(storeId, index, config.storeStatsBucketCount, bucketSpanInMs, logSegmentForecastOffsetMs,
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
+        checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -216,6 +278,29 @@ class BlobStore implements Store {
     }
   }
 
+  /**
+   * Checks the used capacity of the store against the configured percentage thresholds to see if the store
+   * should be read-only or read-write
+   * @param totalCapacity total capacity of the store in bytes
+   * @param usedCapacity total used capacity of the store in bytes
+   */
+  private void checkCapacityAndUpdateWriteStatusDelegate(long totalCapacity, long usedCapacity) {
+    if (writeStatusDelegate != null) {
+      if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
+        if (!writeStatusDelegate.seal(replicaId)) {
+          metrics.sealSetError.inc();
+        }
+      } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
+        if (!writeStatusDelegate.unseal(replicaId)) {
+          metrics.unsealSetError.inc();
+        }
+      }
+      //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
+    } else {
+      logger.info("WriteStatusDelegate not set, dynamic write status turned off");
+    }
+  }
+
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();
@@ -227,7 +312,7 @@ class BlobStore implements Store {
       Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
       MessageWriteSetStateInStore state = checkWriteSetStateInStore(messageSetToWrite, null);
       if (state == MessageWriteSetStateInStore.ALL_ABSENT) {
-        synchronized (lock) {
+        synchronized (storeWriteLock) {
           // Validate that log end offset was not changed. If changed, check once again for existing
           // keys in store
           Offset currentIndexEndOffset = index.getCurrentEndOffset();
@@ -240,6 +325,7 @@ class BlobStore implements Store {
             Offset endOffsetOfLastMessage = log.getEndOffset();
             messageSetToWrite.writeTo(log);
             logger.trace("Store : {} message set written to log", dataDir);
+
             List<MessageInfo> messageInfo = messageSetToWrite.getMessageSetInfo();
             ArrayList<IndexEntry> indexEntries = new ArrayList<>(messageInfo.size());
             for (MessageInfo info : messageInfo) {
@@ -256,6 +342,7 @@ class BlobStore implements Store {
               blobStoreStats.handleNewPutEntry(newEntry.getValue());
             }
             logger.trace("Store : {} message set written to index ", dataDir);
+            checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
           }
         }
       }
@@ -307,7 +394,7 @@ class BlobStore implements Store {
         }
         indexValuesToDelete.add(value);
       }
-      synchronized (lock) {
+      synchronized (storeWriteLock) {
         Offset currentIndexEndOffset = index.getCurrentEndOffset();
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
@@ -409,7 +496,7 @@ class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     long startTimeInMs = time.milliseconds();
-    synchronized (lock) {
+    synchronized (storeWriteLock) {
       checkStarted();
       try {
         logger.info("Store : " + dataDir + " shutting down");
@@ -449,6 +536,7 @@ class BlobStore implements Store {
   void compact(CompactionDetails details) throws IOException, StoreException {
     checkStarted();
     compactor.compact(details);
+    checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
   /**
@@ -460,6 +548,7 @@ class BlobStore implements Store {
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
       compactor.resumeCompaction();
+      checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
     }
   }
 

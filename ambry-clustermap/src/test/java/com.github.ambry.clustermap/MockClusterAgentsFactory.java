@@ -57,8 +57,13 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public void setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
-
+        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+          if (!(replicaId instanceof MockReplicaId)) {
+            throw new IllegalArgumentException("Not MockReplicaId");
+          }
+          MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+          mockReplicaId.setSealedState(isSealed);
+          return true;
         }
       };
     }

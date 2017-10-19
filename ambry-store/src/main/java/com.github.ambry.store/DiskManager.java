@@ -14,6 +14,7 @@
 
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -65,7 +66,8 @@ class DiskManager {
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig config, ScheduledExecutorService scheduler,
       StorageManagerMetrics metrics, StoreMetrics storeMainMetrics, StoreMetrics storeUnderCompactionMetrics,
-      StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
+      StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      WriteStatusDelegate writeStatusDelegate, Time time) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
@@ -73,11 +75,9 @@ class DiskManager {
     longLivedTaskScheduler = Utils.newScheduler(1, true);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        String storeId = replica.getPartitionId().toString();
         BlobStore store =
-            new BlobStore(storeId, config, scheduler, longLivedTaskScheduler, diskIOScheduler, storeMainMetrics,
-                storeUnderCompactionMetrics, replica.getReplicaPath(), replica.getCapacityInBytes(), keyFactory,
-                recovery, hardDelete, time);
+            new BlobStore(replica, config, scheduler, longLivedTaskScheduler, diskIOScheduler, storeMainMetrics,
+                storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate, time);
         stores.put(replica.getPartitionId(), store);
       }
     }
