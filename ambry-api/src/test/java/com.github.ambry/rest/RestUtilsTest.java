@@ -730,15 +730,19 @@ public class RestUtilsTest {
     Map<String, Object> args = new HashMap<>();
     args.put("HeaderA", 1000L);
     args.put("HeaderB", "NotLong");
+    args.put("HeaderC", "10000");
     // getLongHeader() calls getHeader() and in the interest of keeping tests short, tests for that functionality
     // are not repeated here. If that changes, these tests need to change.
     assertEquals("Header value does not match", args.get("HeaderA"), RestUtils.getLongHeader(args, "HeaderA", true));
+    assertEquals("Header value does not match", Long.parseLong(args.get("HeaderC").toString()),
+        RestUtils.getLongHeader(args, "HeaderC", true).longValue());
     try {
       RestUtils.getLongHeader(args, "HeaderB", true);
       fail("Getting HeaderB as required should have failed");
     } catch (RestServiceException e) {
       assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
     }
+    assertNull("There should no value for HeaderD", RestUtils.getLongHeader(args, "HeaderD", false));
   }
 
   // helpers.

@@ -27,6 +27,7 @@ import java.util.Map;
  * parameters and does not actually reliably sign the URL.
  * <p/>
  * A real implementation needs to encode enough information for manipulations to be discovered.
+ * See https://github.com/linkedin/ambry/issues/788
  */
 public class AmbryUrlSigningService implements UrlSigningService {
   static final String AMBRY_PARAMETERS_PREFIX = "x-ambry-";
@@ -43,6 +44,17 @@ public class AmbryUrlSigningService implements UrlSigningService {
   private final long maxUrlTtlSecs;
   private final Time time;
 
+  /**
+   * Constructor
+   * @param uploadEndpoint the endpoint in all signed POST URLs.
+   * @param downloadEndpoint the endpoint in all signed GET URLs.
+   * @param defaultUrlTtlSecs the default ttl of signed URLs if the request does not customize it.
+   * @param defaultMaxUploadSize the default max size of upload from signed POST URLs if the request does not customize
+   *                             it.
+   * @param maxUrlTtlSecs the maximum ttl of signed URLs. If the request specifies a higher TTL, it will be lowered
+   *                      to this number.
+   * @param time the {@link Time} instance to use.
+   */
   AmbryUrlSigningService(String uploadEndpoint, String downloadEndpoint, long defaultUrlTtlSecs,
       long defaultMaxUploadSize, long maxUrlTtlSecs, Time time) {
     if (!uploadEndpoint.endsWith(ENDPOINT_SUFFIX)) {
@@ -87,7 +99,8 @@ public class AmbryUrlSigningService implements UrlSigningService {
     for (Map.Entry<String, Object> entry : args.entrySet()) {
       String name = entry.getKey();
       Object value = entry.getValue();
-      if (name.startsWith(AMBRY_PARAMETERS_PREFIX) && value instanceof String) {
+      if (name.regionMatches(true, 0, AMBRY_PARAMETERS_PREFIX, 0, AMBRY_PARAMETERS_PREFIX.length())
+          && value instanceof String) {
         switch (name) {
           case RestUtils.Headers.URL_TTL:
             urlTtlSecs = Math.min(maxUrlTtlSecs, RestUtils.getLongHeader(args, RestUtils.Headers.URL_TTL, true));

@@ -639,11 +639,15 @@ public class RestUtils {
       throws RestServiceException {
     // if getHeader() is no longer called, tests for this function have to be changed.
     String value = getHeader(args, header, required);
-    try {
-      return Long.parseLong(value);
-    } catch (NumberFormatException e) {
-      throw new RestServiceException("Invalid value for " + header + ": " + value, e, RestServiceErrorCode.InvalidArgs);
+    if (value != null) {
+      try {
+        return Long.parseLong(value);
+      } catch (NumberFormatException e) {
+        throw new RestServiceException("Invalid value for " + header + ": " + value, e,
+            RestServiceErrorCode.InvalidArgs);
+      }
     }
+    return null;
   }
 
   /**
