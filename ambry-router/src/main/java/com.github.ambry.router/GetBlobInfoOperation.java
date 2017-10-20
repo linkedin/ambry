@@ -309,9 +309,10 @@ class GetBlobInfoOperation extends GetOperation {
     ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
     // @todo use the encryption key for decryption.
     if (operationResult == null) {
-      operationResult = new GetBlobResultInternal(new GetBlobResult(
-          new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
-              MessageFormatRecord.deserializeUserMetadata(payload).array()), null), null);
+      BlobInfo blobInfo = new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
+          MessageFormatRecord.deserializeUserMetadata(payload).array());
+      getOptions().ageAtAccessTracker.trackAgeAtAccess(blobInfo.getBlobProperties().getCreationTimeInMs());
+      operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, null), null);
     } else {
       // If the successTarget is 1, this case will never get executed.
       // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that

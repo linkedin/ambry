@@ -894,6 +894,7 @@ class GetBlobOperation extends GetOperation {
         } else {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
           blobInfo = blobAll.getBlobInfo();
+          getOptions().ageAtAccessTracker.trackAgeAtAccess(blobInfo.getBlobProperties().getCreationTimeInMs());
           blobData = blobAll.getBlobData();
           encryptionKey = blobAll.getBlobEncryptionKey();
         }
