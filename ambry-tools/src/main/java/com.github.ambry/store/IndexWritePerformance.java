@@ -30,7 +30,6 @@ import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FileWriter;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.Random;

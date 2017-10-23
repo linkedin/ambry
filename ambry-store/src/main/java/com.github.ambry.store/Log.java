@@ -14,13 +14,11 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;

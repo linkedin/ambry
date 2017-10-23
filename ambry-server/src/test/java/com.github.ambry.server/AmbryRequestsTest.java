@@ -23,8 +23,8 @@ import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -809,8 +809,8 @@ public class AmbryRequestsTest {
     PartitionId compactionScheduledPartitionId = null;
 
     MockStorageManager() throws StoreException {
-      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true),
-          new MetricRegistry(), Collections.emptyList(), null, null, null, null, new MockTime());
+      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
+          Collections.emptyList(), null, null, null, null, new MockTime());
     }
 
     @Override

@@ -28,7 +28,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -294,9 +293,9 @@ public class DiskReformatter {
    */
   private void ensureNotInUse(File srcDir, long storeCapacity) throws StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    Store store =
-        new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler, diskSpaceAllocator,metrics,metrics, srcDir.getAbsolutePath(),
-            storeCapacity, storeKeyFactory, recovery, null, time);
+    Store store = new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler,
+        diskSpaceAllocator, metrics, metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null,
+        time);
     store.start();
     store.shutdown();
   }

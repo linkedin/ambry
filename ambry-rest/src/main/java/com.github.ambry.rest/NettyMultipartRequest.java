@@ -65,7 +65,7 @@ class NettyMultipartRequest extends NettyRequest {
    *                                {@link RestMethod}.
    */
   NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
-    Set<String> blacklistedQueryParams) throws RestServiceException {
+      Set<String> blacklistedQueryParams) throws RestServiceException {
     super(request, channel, nettyMetrics, blacklistedQueryParams);
     // reset auto read state.
     channel.config().setRecvByteBufAllocator(savedAllocator);

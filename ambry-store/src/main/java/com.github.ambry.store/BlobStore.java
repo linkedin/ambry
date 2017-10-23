@@ -14,8 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
-import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
@@ -102,10 +102,10 @@ class BlobStore implements Store {
    * @param time the {@link Time} instance to use.
    */
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics,
-      StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate,
-      Time time) {
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      WriteStatusDelegate writeStatusDelegate, Time time) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, writeStatusDelegate, time);
@@ -138,10 +138,10 @@ class BlobStore implements Store {
   }
 
   private BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics,
-      StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      WriteStatusDelegate writeStatusDelegate, Time time) {
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
+      String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate, Time time) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;

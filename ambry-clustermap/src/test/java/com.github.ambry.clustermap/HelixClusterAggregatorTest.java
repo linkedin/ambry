@@ -60,7 +60,7 @@ public class HelixClusterAggregatorTest {
     String nodeStatsJSON = mapper.writeValueAsString(nodeStats);
     Map<String, String> statsWrappersJSON = new HashMap<>();
     for (int i = 0; i < nodeCount; i++) {
-      statsWrappersJSON.put("Store_"+i,(nodeStatsJSON));
+      statsWrappersJSON.put("Store_" + i, (nodeStatsJSON));
     }
     for (int i = 1; i < storeSnapshots.size(); i++) {
       StatsSnapshot.aggregate(storeSnapshots.get(0), storeSnapshots.get(i));
@@ -108,7 +108,7 @@ public class HelixClusterAggregatorTest {
         generateNodeStats(upToDateStoreSnapshots, TimeUnit.MINUTES.toMillis(2 * RELEVANT_PERIOD_IN_MINUTES));
     StatsWrapper outdatedNodeStats = generateNodeStats(outdatedStoreSnapshots, 0);
     Map<String, String> statsWrappersJSON = new HashMap<>();
-    statsWrappersJSON.put("Store_0",mapper.writeValueAsString(outdatedNodeStats));
+    statsWrappersJSON.put("Store_0", mapper.writeValueAsString(outdatedNodeStats));
     statsWrappersJSON.put("Store_1", mapper.writeValueAsString(upToDateNodeStats));
     Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
     StatsSnapshot expectedSnapshot = upToDateStoreSnapshots.get(0);
@@ -135,7 +135,7 @@ public class HelixClusterAggregatorTest {
     StatsWrapper greaterNodeStats = generateNodeStats(greaterStoreSnapshots, DEFAULT_TIMESTAMP);
     StatsWrapper smallerNodeStats = generateNodeStats(smallerStoreSnapshots, DEFAULT_TIMESTAMP);
     Map<String, String> statsWrappersJSON = new HashMap<>();
-    statsWrappersJSON.put("Store_0",mapper.writeValueAsString(smallerNodeStats));
+    statsWrappersJSON.put("Store_0", mapper.writeValueAsString(smallerNodeStats));
     statsWrappersJSON.put("Store_1", mapper.writeValueAsString(greaterNodeStats));
     Pair<String, String> results = clusterAggregator.doWork(statsWrappersJSON);
     StatsSnapshot expectedSnapshot = greaterStoreSnapshots.get(0);

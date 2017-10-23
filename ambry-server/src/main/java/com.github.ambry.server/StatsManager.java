@@ -215,7 +215,7 @@ class StatsManager {
         Iterator<PartitionId> iterator = totalPartitionIds.iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
-          logger.info("Aggregating stats started for store {}", partitionId );
+          logger.info("Aggregating stats started for store {}", partitionId);
           collectAndAggregate(aggregatedSnapshot, partitionId, unreachableStores);
         }
         if (!cancelled) {
