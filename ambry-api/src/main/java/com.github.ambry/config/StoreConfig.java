@@ -202,11 +202,10 @@ public class StoreConfig {
       "store.read.write.enable.size.threshold.percentage.delta";
 
   /**
-   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
-   * converted from RO to RW
+   * Enables or disables dynamic sealing/unsealing of the BlobStore
    */
   @Config(storeWriteStatusDelegateEnableName)
-  @Default("5")
+  @Default("false")
   public final boolean storeWriteStatusDelegateEnable;
   public static final String storeWriteStatusDelegateEnableName =
       "store.write.status.delegate.enable";
