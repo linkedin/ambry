@@ -559,7 +559,7 @@ public class NonBlockingRouterMetrics {
     private final Counter betweenWeekAndMonthOld;
     private final Counter betweenMonthAndThreeMonthsOld;
     private final Counter betweenThreeMonthsAndSixMonthsOld;
-    private final Counter betweenSizeMonthsAndYearOld;
+    private final Counter betweenSixMonthsAndYearOld;
     private final Counter moreThanYearOld;
 
     /**
@@ -582,8 +582,8 @@ public class NonBlockingRouterMetrics {
           registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenMonthAndThreeMonthsOld"));
       betweenThreeMonthsAndSixMonthsOld = registry.counter(
           MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenThreeMonthsAndSixMonthsOld"));
-      betweenSizeMonthsAndYearOld =
-          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenSizeMonthsAndYearOld"));
+      betweenSixMonthsAndYearOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenSixMonthsAndYearOld"));
       moreThanYearOld = registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "MoreThanYearOld"));
     }
 
@@ -609,7 +609,7 @@ public class NonBlockingRouterMetrics {
       } else if (ageInMs < TimeUnit.DAYS.toMillis(30 * 6)) {
         betweenThreeMonthsAndSixMonthsOld.inc();
       } else if (ageInMs < TimeUnit.DAYS.toMillis(30 * 12)) {
-        betweenSizeMonthsAndYearOld.inc();
+        betweenSixMonthsAndYearOld.inc();
       } else {
         moreThanYearOld.inc();
       }
