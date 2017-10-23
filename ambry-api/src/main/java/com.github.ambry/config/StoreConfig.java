@@ -201,6 +201,16 @@ public class StoreConfig {
   public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
       "store.read.write.enable.size.threshold.percentage.delta";
 
+  /**
+   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
+   * converted from RO to RW
+   */
+  @Config(storeWriteStatusDelegateEnableName)
+  @Default("5")
+  public final boolean storeWriteStatusDelegateEnable;
+  public static final String storeWriteStatusDelegateEnableName =
+      "store.write.status.delegate.enable";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -243,6 +253,7 @@ public class StoreConfig {
     storeReadWriteEnableSizeThresholdPercentageDelta =
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
+    storeWriteStatusDelegateEnable = verifiableProperties.getBoolean(storeWriteStatusDelegateEnableName, false);
   }
 }
 

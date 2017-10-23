@@ -287,11 +287,11 @@ public class BlobStoreTest {
   @Test
   public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
     //Setup threshold test properties, replicaId, mock write status delegate
-    StoreConfig defaultConfig = changeThreshold(65, 5);
+    StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     WriteStatusDelegate writeStatusDelegate = mock(WriteStatusDelegate.class);
-    when(writeStatusDelegate.unseal(anyObject())).thenReturn(true);
-    when(writeStatusDelegate.seal(anyObject())).thenReturn(true);
+    when(writeStatusDelegate.unseal(any())).thenReturn(true);
+    when(writeStatusDelegate.seal(any())).thenReturn(true);
 
     //Restart store
     restartStore(defaultConfig, replicaId, writeStatusDelegate);
@@ -310,8 +310,12 @@ public class BlobStoreTest {
     //Assumes ClusterParticipant sets replicaId status to true
     replicaId.setSealedState(true);
 
+    //Change config threshold but with delegate disabled, verify that nothing happens
+    restartStore(changeThreshold(99, 1, false), replicaId, writeStatusDelegate);
+    verifyNoMoreInteractions(writeStatusDelegate);
+
     //Change config threshold to higher, see that it gets changed to unsealed on reset
-    restartStore(changeThreshold(99, 1), replicaId, writeStatusDelegate);
+    restartStore(changeThreshold(99, 1, true), replicaId, writeStatusDelegate);
     verify(writeStatusDelegate, times(1)).unseal(replicaId);
     replicaId.setSealedState(false);
 
@@ -1254,7 +1258,8 @@ public class BlobStoreTest {
    * @param readWriteDeltaThreshold new storeReadWriteEnableSizeThresholdPercentageDeltaName value
    * @return StoreConfig object with new threshold values
    */
-  private StoreConfig changeThreshold(int readOnlyThreshold, int readWriteDeltaThreshold) {
+  private StoreConfig changeThreshold(int readOnlyThreshold, int readWriteDeltaThreshold, boolean delegateEnabled) {
+    properties.setProperty(StoreConfig.storeWriteStatusDelegateEnableName, Boolean.toString(delegateEnabled));
     properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName,
         Integer.toString(readOnlyThreshold));
     properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName,
