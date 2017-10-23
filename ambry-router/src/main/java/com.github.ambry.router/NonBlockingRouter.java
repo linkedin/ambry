@@ -300,7 +300,7 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     currentBackgroundOperationsCount.incrementAndGet();
     GetBlobOptionsInternal options =
-        new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.Include_All, null),
+        new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.Include_All, null),
             true, routerMetrics.ageAtDelete);
     backgroundDeleter.getBlob(blobId, options, callback);
   }
