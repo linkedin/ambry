@@ -383,10 +383,8 @@ class DiskSpaceAllocator {
     File remove(long sizeInBytes) {
       File reserveFile = null;
       Queue<File> reserveFilesForSize = internalMap.get(sizeInBytes);
-      if (reserveFilesForSize != null) {
-        if (reserveFilesForSize.size() != 0) {
-          reserveFile = reserveFilesForSize.remove();
-        }
+      if (reserveFilesForSize != null && reserveFilesForSize.size() != 0) {
+        reserveFile = reserveFilesForSize.remove();
       }
       return reserveFile;
     }

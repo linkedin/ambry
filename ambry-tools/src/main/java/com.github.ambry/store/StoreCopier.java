@@ -181,8 +181,8 @@ public class StoreCopier implements Closeable {
       DiskSpaceAllocator diskSpaceAllocator =
           new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
       try (StoreCopier storeCopier = new StoreCopier("src", srcDir, tgtDir, config.storeCapacity,
-          config.fetchSizeInBytes, storeConfig, metrics, storeKeyFactory,
-          new DiskIOScheduler(null),diskSpaceAllocator, Collections.emptyList(), SystemTime.getInstance())) {
+          config.fetchSizeInBytes, storeConfig, metrics, storeKeyFactory, new DiskIOScheduler(null), diskSpaceAllocator,
+          Collections.emptyList(), SystemTime.getInstance())) {
         storeCopier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
       }
     }
@@ -204,16 +204,16 @@ public class StoreCopier implements Closeable {
    * @throws StoreException
    */
   public StoreCopier(String storeId, File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes,
-      StoreConfig storeConfig, StoreMetrics metrics, StoreKeyFactory storeKeyFactory,
-      DiskIOScheduler diskIOScheduler,DiskSpaceAllocator diskSpaceAllocator, List<Transformer> transformers, Time time) throws StoreException {
+      StoreConfig storeConfig, StoreMetrics metrics, StoreKeyFactory storeKeyFactory, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, List<Transformer> transformers, Time time) throws StoreException {
     this.storeId = storeId;
     this.fetchSizeInBytes = fetchSizeInBytes;
     this.transformers = transformers;
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, diskSpaceAllocator,metrics,metrics, srcDir.getAbsolutePath(),
-        storeCapacity, storeKeyFactory, recovery, null, time);
-    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, diskSpaceAllocator,metrics,metrics,
-        tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
+        srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, diskSpaceAllocator, metrics,
+        metrics, tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     src.start();
     tgt.start();
   }

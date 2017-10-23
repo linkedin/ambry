@@ -283,6 +283,27 @@ public class DiskSpaceAllocatorTest {
   }
 
   /**
+   * Test the allocator with pooling disabled. The reserve file pool should never be created
+   */
+  @Test
+  public void unpooledAllocatorTest() throws Exception {
+    alloc = constructUnpooledAllocator();
+    verifyPoolState(null);
+    File f1 = allocateAndVerify("file1", 20);
+    verifyPoolState(null);
+    freeAndVerify(f1, 20);
+    verifyPoolState(null);
+
+    // initializing should be a no-op
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(20, 1, 0)));
+    verifyPoolState(null);
+    File f2 = allocateAndVerify("file1", 20);
+    verifyPoolState(null);
+    freeAndVerify(f1, 20);
+    verifyPoolState(null);
+  }
+
+  /**
    * Allocate a file and check for existence and write permissions.
    * @param filename the name of the destination file. This file will be created in the allocated file directory.
    * @param size the size of the file to allocate.
@@ -373,7 +394,7 @@ public class DiskSpaceAllocatorTest {
   /**
    * Verify that the layout of the pool matches the expected state.
    * @param expectedState an {@link ExpectedState} object that describes the expected number of reserve files for each
-   *                      size.
+   *                      size, or {@code null} if the directory should not exist.
    */
   private void verifyPoolState(ExpectedState expectedState) {
     verifyPoolState(reserveFileDir, expectedState);
@@ -387,19 +408,31 @@ public class DiskSpaceAllocatorTest {
   }
 
   /**
+   * @return a new {@link DiskSpaceAllocator} with pooling disabled.
+   */
+  private DiskSpaceAllocator constructUnpooledAllocator() {
+    return new DiskSpaceAllocator(false, reserveFileDir, requiredSwapSegmentsPerSize, METRICS);
+  }
+
+  /**
    * Verify that the layout of the pool matches the expected state.
    * @param reserveFileDir the reserve file directory to inspect.
-   * @param expectedState a map from file size to the number of reserve files expected of that size.
+   * @param expectedState an {@link ExpectedState} object that describes the expected number of reserve files for each
+   *                      size, or {@code null} if the directory should not exist.
    */
   static void verifyPoolState(File reserveFileDir, ExpectedState expectedState) {
-    assertEquals("Wrong number of file size dirs", expectedState.map.size(), reserveFileDir.list().length);
-    for (Map.Entry<Long, Integer> entry : expectedState.map.entrySet()) {
-      long size = entry.getKey();
-      int count = entry.getValue();
-      File fileSizeDir = new File(reserveFileDir, DiskSpaceAllocator.generateFileSizeDirName(size));
-      String[] filenameList = fileSizeDir.list();
-      assertNotNull("Error while listing files for size " + size, filenameList);
-      assertEquals("Wrong number of files for size " + size, count, filenameList.length);
+    if (expectedState == null) {
+      assertFalse("Reserve directory should not exist", reserveFileDir.exists());
+    } else {
+      assertEquals("Wrong number of file size dirs", expectedState.map.size(), reserveFileDir.list().length);
+      for (Map.Entry<Long, Integer> entry : expectedState.map.entrySet()) {
+        long size = entry.getKey();
+        int count = entry.getValue();
+        File fileSizeDir = new File(reserveFileDir, DiskSpaceAllocator.generateFileSizeDirName(size));
+        String[] filenameList = fileSizeDir.list();
+        assertNotNull("Error while listing files for size " + size, filenameList);
+        assertEquals("Wrong number of files for size " + size, count, filenameList.length);
+      }
     }
   }
 
