@@ -94,14 +94,6 @@ public class FrontendConfig {
   public final String frontendUrlSignerDownloadEndpoint;
 
   /**
-   * The default time (in seconds) for which a signed URL is valid unless otherwise specified at the time of URL
-   * creation (depends on implementation).
-   */
-  @Config("frontend.url.signer.default.url.ttl.secs")
-  @Default("5 * 60")
-  public final long frontendUrlSignerDefaultUrlTtlSecs;
-
-  /**
    * The default maximum size (in bytes) that can be uploaded using a signed POST URL unless otherwise specified at
    * the time of URL creation (depends on implementation).
    */
@@ -115,6 +107,14 @@ public class FrontendConfig {
   @Config("frontend.url.signer.max.url.ttl.secs")
   @Default("60 * 60")
   public final long frontendUrlSignerMaxUrlTtlSecs;
+
+  /**
+   * The default time (in seconds) for which a signed URL is valid unless otherwise specified at the time of URL
+   * creation (depends on implementation).
+   */
+  @Config("frontend.url.signer.default.url.ttl.secs")
+  @Default("5 * 60")
+  public final long frontendUrlSignerDefaultUrlTtlSecs;
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
@@ -136,12 +136,13 @@ public class FrontendConfig {
         verifiableProperties.getString("frontend.url.signer.upload.endpoint", "http://localhost:1174");
     frontendUrlSignerDownloadEndpoint =
         verifiableProperties.getString("frontend.url.signer.download.endpoint", "http://localhost:1174");
-    frontendUrlSignerDefaultUrlTtlSecs =
-        verifiableProperties.getLongInRange("frontend.url.signer.default.url.ttl.secs", 5 * 60, 0, Long.MAX_VALUE);
     frontendUrlSignerDefaultMaxUploadSizeBytes =
         verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
             Long.MAX_VALUE);
     frontendUrlSignerMaxUrlTtlSecs =
         verifiableProperties.getLongInRange("frontend.url.signer.max.url.ttl.secs", 60 * 60, 0, Long.MAX_VALUE);
+    frontendUrlSignerDefaultUrlTtlSecs =
+        verifiableProperties.getLongInRange("frontend.url.signer.default.url.ttl.secs", 5 * 60, 0,
+            frontendUrlSignerMaxUrlTtlSecs);
   }
 }

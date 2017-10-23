@@ -23,8 +23,8 @@ import java.util.Map;
 
 
 /**
- * Default implementation of {@link UrlSigningService} that currently only converts all POST headers into query
- * parameters and does not actually reliably sign the URL.
+ * Default implementation of {@link UrlSigningService} that currently only converts all headers that start with
+ * "x-ambry-" into query parameters and does not actually sign the URL.
  * <p/>
  * A real implementation needs to encode enough information for manipulations to be discovered.
  * See https://github.com/linkedin/ambry/issues/788

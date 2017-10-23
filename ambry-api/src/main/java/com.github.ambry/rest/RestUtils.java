@@ -136,7 +136,7 @@ public class RestUtils {
      */
     public final static String CREATION_TIME = "x-ambry-creation-time";
     /**
-     * The type of signed URL requested.
+     * The type of signed URL requested (for e.g, POST or GET).
      */
     public static final String URL_TYPE = "x-ambry-url-type";
     /**
