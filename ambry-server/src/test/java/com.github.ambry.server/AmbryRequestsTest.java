@@ -264,39 +264,51 @@ public class AmbryRequestsTest {
     // cases with a given partition id
     // all replicas of given partition < acceptableLag
     generateLagOverrides(0, acceptableLagInBytes - 1);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    doCatchupStatusTest(id, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, true);
     // all replicas of given partition = acceptableLag
     generateLagOverrides(acceptableLagInBytes, acceptableLagInBytes);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    doCatchupStatusTest(id, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, true);
     // 1 replica of some other partition > acceptableLag
     String key = MockReplicationManager.getPartitionLagKey(otherPartRemoteRep.getPartitionId(),
         otherPartRemoteRep.getDataNodeId().getHostname(), otherPartRemoteRep.getReplicaPath());
     replicationManager.lagOverrides.put(key, acceptableLagInBytes + 1);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    doCatchupStatusTest(id, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, true);
     // 1 replica of this partition > acceptableLag
     key = MockReplicationManager.getPartitionLagKey(id, thisPartRemoteRep.getDataNodeId().getHostname(),
         thisPartRemoteRep.getReplicaPath());
     replicationManager.lagOverrides.put(key, acceptableLagInBytes + 1);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+    doCatchupStatusTest(id, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, false);
+    // same result if num expected replicas == total count -1.
+    doCatchupStatusTest(id, acceptableLagInBytes, (short) (replicaIds.size() - 1), ServerErrorCode.No_Error, false);
+    // caught up if num expected replicas == total count - 2
+    doCatchupStatusTest(id, acceptableLagInBytes, (short) (replicaIds.size() - 2), ServerErrorCode.No_Error, true);
+    // caught up if num expected replicas == total count - 3
+    doCatchupStatusTest(id, acceptableLagInBytes, (short) (replicaIds.size() - 3), ServerErrorCode.No_Error, true);
     // all replicas of this partition > acceptableLag
     generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+    doCatchupStatusTest(id, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, false);
 
     // cases with no partition id provided
     // all replicas of all partitions < acceptableLag
     generateLagOverrides(0, acceptableLagInBytes - 1);
-    doCatchupStatusTest(null, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    doCatchupStatusTest(null, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, true);
     // all replicas of all partitions = acceptableLag
     generateLagOverrides(acceptableLagInBytes, acceptableLagInBytes);
-    doCatchupStatusTest(null, acceptableLagInBytes, ServerErrorCode.No_Error, true);
+    doCatchupStatusTest(null, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, true);
     // 1 replica of one partition > acceptableLag
     key = MockReplicationManager.getPartitionLagKey(id, thisPartRemoteRep.getDataNodeId().getHostname(),
         thisPartRemoteRep.getReplicaPath());
     replicationManager.lagOverrides.put(key, acceptableLagInBytes + 1);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+    doCatchupStatusTest(null, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, false);
+    // same result if num expected replicas == total count -1.
+    doCatchupStatusTest(null, acceptableLagInBytes, (short) (replicaIds.size() - 1), ServerErrorCode.No_Error, false);
+    // caught up if num expected replicas == total count - 2
+    doCatchupStatusTest(null, acceptableLagInBytes, (short) (replicaIds.size() - 2), ServerErrorCode.No_Error, true);
+    // caught up if num expected replicas == total count - 3
+    doCatchupStatusTest(null, acceptableLagInBytes, (short) (replicaIds.size() - 3), ServerErrorCode.No_Error, true);
     // all replicas of all partitions > acceptableLag
     generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
-    doCatchupStatusTest(id, acceptableLagInBytes, ServerErrorCode.No_Error, false);
+    doCatchupStatusTest(null, acceptableLagInBytes, Short.MAX_VALUE, ServerErrorCode.No_Error, false);
   }
 
   /**
@@ -305,10 +317,16 @@ public class AmbryRequestsTest {
    */
   @Test
   public void catchupStatusFailureTest() throws InterruptedException, IOException {
+    // acceptableLagInBytes < 0
+    doCatchupStatusTest(null, -1, Short.MAX_VALUE, ServerErrorCode.Bad_Request, false);
+    // numReplicasCaughtUpPerPartition = 0
+    doCatchupStatusTest(null, 0, (short) 0, ServerErrorCode.Bad_Request, false);
+    // numReplicasCaughtUpPerPartition < 0
+    doCatchupStatusTest(null, 0, (short) -1, ServerErrorCode.Bad_Request, false);
     // replication manager error
     replicationManager.reset();
     replicationManager.exceptionToThrow = new IllegalStateException();
-    doCatchupStatusTest(null, 0, ServerErrorCode.Unknown_Error, false);
+    doCatchupStatusTest(null, 0, Short.MAX_VALUE, ServerErrorCode.Unknown_Error, false);
   }
 
   // helpers
@@ -594,17 +612,20 @@ public class AmbryRequestsTest {
    * deserialized in {@link AmbryRequests} and the necessary info obtained from {@link ReplicationManager}.
    * @param id the {@link PartitionId} to disable replication on. Can be {@code null}.
    * @param acceptableLagInBytes the value of acceptable lag to set in the {@link CatchupStatusAdminRequest}.
+   * @param numReplicasCaughtUpPerPartition the value of num replicas caught up per partition to set in the
+   *                          {@link CatchupStatusAdminRequest}.
    * @param expectedServerErrorCode the {@link ServerErrorCode} expected in the response.
    * @param expectedIsCaughtUp the expected return from {@link CatchupStatusAdminResponse#isCaughtUp()}.
    * @throws InterruptedException
    * @throws IOException
    */
-  private void doCatchupStatusTest(PartitionId id, long acceptableLagInBytes, ServerErrorCode expectedServerErrorCode,
-      boolean expectedIsCaughtUp) throws InterruptedException, IOException {
+  private void doCatchupStatusTest(PartitionId id, long acceptableLagInBytes, short numReplicasCaughtUpPerPartition,
+      ServerErrorCode expectedServerErrorCode, boolean expectedIsCaughtUp) throws InterruptedException, IOException {
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.CatchupStatus, id, correlationId, clientId);
-    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLagInBytes, adminRequest);
+    CatchupStatusAdminRequest catchupStatusRequest =
+        new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
     Response response = sendRequestGetResponse(catchupStatusRequest, expectedServerErrorCode);
     assertTrue("Response not of type CatchupStatusAdminResponse", response instanceof CatchupStatusAdminResponse);
     CatchupStatusAdminResponse adminResponse = (CatchupStatusAdminResponse) response;
@@ -788,8 +809,8 @@ public class AmbryRequestsTest {
     PartitionId compactionScheduledPartitionId = null;
 
     MockStorageManager() throws StoreException {
-      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), new MetricRegistry(), Collections.EMPTY_LIST, null,
-          null, null, new MockTime(), Utils.newScheduler(1, true));
+      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true),
+          new MetricRegistry(), Collections.emptyList(), null, null, null, null, new MockTime());
     }
 
     @Override

@@ -17,12 +17,15 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.healthcheck.HealthReportProvider;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.task.Task;
@@ -36,7 +39,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * An implementation of {@link ClusterParticipant} that registers registers as a participant to a Helix cluster.
+ * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
  */
 class HelixParticipant implements ClusterParticipant {
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -44,6 +47,7 @@ class HelixParticipant implements ClusterParticipant {
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
   private HelixManager manager;
+  private String instanceName;
 
   /**
    * Instantiate a HelixParticipant.
@@ -76,7 +80,7 @@ class HelixParticipant implements ClusterParticipant {
   @Override
   public void initialize(String hostName, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException {
     logger.info("Initializing participant");
-    String instanceName = ClusterMapUtils.getInstanceName(hostName, port);
+    instanceName = ClusterMapUtils.getInstanceName(hostName, port);
     manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
@@ -88,6 +92,39 @@ class HelixParticipant implements ClusterParticipant {
     }
     for (AmbryHealthReport ambryHealthReport : ambryHealthReports) {
       manager.getHealthReportCollector().addHealthReportProvider((HealthReportProvider) ambryHealthReport);
+    }
+  }
+
+  @Override
+  public synchronized boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+    if (!(replicaId instanceof AmbryReplica)) {
+      throw new IllegalArgumentException(
+          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+    }
+    List<String> sealedReplicas = getSealedReplicas();
+    if (sealedReplicas == null) {
+      sealedReplicas = new ArrayList<>();
+    }
+    String partitionId = replicaId.getPartitionId().toPathString();
+    boolean success = true;
+    if (!isSealed && sealedReplicas.contains(partitionId)) {
+      sealedReplicas.remove(partitionId);
+      success = setSealedReplicas(sealedReplicas);
+    } else if (isSealed && !sealedReplicas.contains(partitionId)) {
+      sealedReplicas.add(partitionId);
+      success = setSealedReplicas(sealedReplicas);
+    }
+    return success;
+  }
+
+  /**
+   * Disconnect from the {@link HelixManager}.
+   */
+  @Override
+  public void close() {
+    if (manager != null) {
+      manager.disconnect();
+      manager = null;
     }
   }
 
@@ -120,13 +157,28 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Disconnect from the {@link HelixManager}.
+   * Get the list of sealed replicas from the HelixAdmin
+   * @return list of sealed replicas from HelixAdmin
    */
-  @Override
-  public void close() {
-    if (manager != null) {
-      manager.disconnect();
-      manager = null;
+  private List<String> getSealedReplicas() {
+    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
+    return ClusterMapUtils.getSealedReplicas(instanceConfig);
+  }
+
+  /**
+   * Set the list of sealed replicas in the HelixAdmin
+   * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
+   * @return whether the operation succeeded or not
+   */
+  private boolean setSealedReplicas(List<String> sealedReplicas) {
+    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 }

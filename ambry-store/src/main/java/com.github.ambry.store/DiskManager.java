@@ -17,6 +17,7 @@ package com.github.ambry.store;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Throttler;
@@ -58,6 +59,7 @@ class DiskManager {
    * @param replicas all the replicas on this disk.
    * @param storeConfig the settings for store configuration.
    * @param diskManagerConfig the settings for disk manager configuration.
+   * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param metrics the {@link StorageManagerMetrics} instance to use.
    * @param storeMainMetrics the {@link StoreMetrics} object used for store-related metrics.
    * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
@@ -65,12 +67,11 @@ class DiskManager {
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
-   * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    */
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
-      StorageManagerMetrics metrics, StoreMetrics storeMainMetrics, StoreMetrics storeUnderCompactionMetrics,
-      StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time,
-      ScheduledExecutorService scheduler) {
+      ScheduledExecutorService scheduler, StorageManagerMetrics metrics, StoreMetrics storeMainMetrics,
+      StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
+      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate, Time time) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
@@ -81,11 +82,10 @@ class DiskManager {
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        String storeId = replica.getPartitionId().toString();
         BlobStore store =
-            new BlobStore(storeId, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, replica.getReplicaPath(), replica.getCapacityInBytes(),
-                keyFactory, recovery, hardDelete, time);
+            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate,
+                time);
         stores.put(replica.getPartitionId(), store);
       }
     }

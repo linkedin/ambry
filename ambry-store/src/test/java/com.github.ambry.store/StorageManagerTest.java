@@ -282,9 +282,9 @@ public class StorageManagerTest {
   private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
       throws StoreException, InterruptedException {
     StorageManager storageManager =
-        new StorageManager(storeConfig, diskManagerConfig, metricRegistry, replicas, new MockIdFactory(),
-            new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), SystemTime.getInstance(),
-            Utils.newScheduler(1, false));
+        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
+            new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), null,
+            SystemTime.getInstance());
     return storageManager;
   }
 

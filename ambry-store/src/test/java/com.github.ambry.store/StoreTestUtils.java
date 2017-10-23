@@ -14,9 +14,19 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.List;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -36,6 +46,86 @@ class StoreTestUtils {
     File tempDir = Files.createTempDirectory(prefix).toFile();
     tempDir.deleteOnExit();
     return tempDir;
+  }
+
+  /**
+   * Need mock ReplicaId to get and set isSealed state
+   */
+  public static class MockReplicaId implements ReplicaId {
+
+    private String storeId;
+    private long capacity;
+    private String filePath;
+    private PartitionId partitionId;
+    private boolean isSealed = false;
+
+    MockReplicaId(String storeId, long capacity, String filePath) {
+      this.storeId = storeId;
+      this.capacity = capacity;
+      this.filePath = filePath;
+      partitionId = mock(PartitionId.class);
+      when(partitionId.toString()).thenReturn(storeId);
+    }
+
+    @Override
+    public PartitionId getPartitionId() {
+      return partitionId;
+    }
+
+    @Override
+    public DataNodeId getDataNodeId() {
+      return null;
+    }
+
+    @Override
+    public String getMountPath() {
+      return null;
+    }
+
+    @Override
+    public String getReplicaPath() {
+      return filePath;
+    }
+
+    @Override
+    public List<? extends ReplicaId> getPeerReplicaIds() {
+      return null;
+    }
+
+    @Override
+    public long getCapacityInBytes() {
+      return capacity;
+    }
+
+    @Override
+    public DiskId getDiskId() {
+      return null;
+    }
+
+    @Override
+    public boolean isDown() {
+      return false;
+    }
+
+    @Override
+    public boolean isSealed() {
+      return isSealed;
+    }
+
+    public void setSealedState(boolean isSealed) {
+      this.isSealed = isSealed;
+    }
+  }
+
+  /**
+   * Creates a mock replicaId for blob store testing
+   * @param storeId partitionId from replicaId.getPartitionId() will toString() to this
+   * @param capacity replicaId.getCapacityInBytes() will output this
+   * @param filePath replicaId.getReplicaPath() will output this
+   * @return mock replicaId
+   */
+  static MockReplicaId createMockReplicaId(String storeId, long capacity, String filePath) {
+    return new MockReplicaId(storeId, capacity, filePath);
   }
 
   /**

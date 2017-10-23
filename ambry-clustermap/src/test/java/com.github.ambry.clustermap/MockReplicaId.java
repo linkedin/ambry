@@ -23,15 +23,16 @@ public class MockReplicaId implements ReplicaId {
   private String mountPath;
   private String replicaPath;
   private List<ReplicaId> peerReplicas;
-  private PartitionId partitionId;
+  private MockPartitionId partitionId;
   private MockDataNodeId dataNodeId;
   private MockDiskId diskId;
   private boolean isMarkedDown = false;
+  private volatile boolean isSealed;
 
   public MockReplicaId() {
   }
 
-  public MockReplicaId(int port, PartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
+  public MockReplicaId(int port, MockPartitionId partitionId, MockDataNodeId dataNodeId, int indexOfMountPathToUse) {
     this.partitionId = partitionId;
     this.dataNodeId = dataNodeId;
     mountPath = dataNodeId.getMountPaths().get(indexOfMountPathToUse);
@@ -41,6 +42,7 @@ public class MockReplicaId implements ReplicaId {
     replicaFile.deleteOnExit();
     replicaPath = replicaFile.getAbsolutePath();
     diskId = new MockDiskId(dataNodeId, mountPath);
+    isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
   }
 
   @Override
@@ -94,6 +96,16 @@ public class MockReplicaId implements ReplicaId {
   public boolean isDown() {
     return isMarkedDown || getDataNodeId().getState() == HardwareState.UNAVAILABLE
         || getDiskId().getState() == HardwareState.UNAVAILABLE;
+  }
+
+  @Override
+  public boolean isSealed() {
+    return isSealed;
+  }
+
+  public void setSealedState(boolean isSealed) {
+    this.isSealed = isSealed;
+    partitionId.resolvePartitionStatus();
   }
 
   @Override

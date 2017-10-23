@@ -157,7 +157,7 @@ class ReplicaThread implements Runnable {
             replicationDisabledPartitions.add(id);
             allDisabled = allReplicatedPartitions.size() == replicationDisabledPartitions.size();
           }
-          logger.info("Enable status of replication of {} from {} is {}. allDisabled for {} is {}", id, datacenterName,
+          logger.info("Disable status of replication of {} from {} is {}. allDisabled for {} is {}", id, datacenterName,
               replicationDisabledPartitions.contains(id), getName(), allDisabled);
         }
       }

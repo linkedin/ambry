@@ -81,6 +81,11 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         public void close() {
 
         }
+
+        @Override
+        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+          return false;
+        }
       };
     }
     return clusterParticipant;

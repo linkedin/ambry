@@ -182,6 +182,25 @@ public class StoreConfig {
   @Default("115")
   public final int storeIndexPersistedEntryMinBytes;
 
+  /**
+   * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW
+   */
+  @Config(storeReadOnlyEnableSizeThresholdPercentageName)
+  @Default("95")
+  public final int storeReadOnlyEnableSizeThresholdPercentage;
+  public static final String storeReadOnlyEnableSizeThresholdPercentageName =
+      "store.read.only.enable.size.threshold.percentage";
+
+  /**
+   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
+   * converted from RO to RW
+   */
+  @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
+  @Default("5")
+  public final int storeReadWriteEnableSizeThresholdPercentageDelta;
+  public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
+      "store.read.write.enable.size.threshold.percentage.delta";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -219,6 +238,11 @@ public class StoreConfig {
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
     storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
+    storeReadOnlyEnableSizeThresholdPercentage =
+        verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
+    storeReadWriteEnableSizeThresholdPercentageDelta =
+        verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
+            storeReadOnlyEnableSizeThresholdPercentage);
   }
 }
 

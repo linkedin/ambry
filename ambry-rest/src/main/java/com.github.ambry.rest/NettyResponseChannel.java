@@ -386,6 +386,10 @@ class NettyResponseChannel implements RestResponseChannel {
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);
       }
+    } else if (Utils.isPossibleClientTermination(cause)) {
+      nettyMetrics.clientEarlyTerminationCount.inc();
+      status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      errorResponseStatus = ResponseStatus.InternalServerError;
     } else {
       nettyMetrics.internalServerErrorCount.inc();
       status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -511,6 +515,9 @@ class NettyResponseChannel implements RestResponseChannel {
           ctx.fireExceptionCaught(cause);
           nettyMetrics.throwableCount.inc();
         }
+      } else if (cause instanceof ClosedChannelException) {
+        // wrap the exception in something we recognize as a client termination
+        exception = Utils.convertToClientTerminationException(cause);
       } else {
         exception = (Exception) cause;
       }
@@ -538,12 +545,15 @@ class NettyResponseChannel implements RestResponseChannel {
         RestServiceErrorCode errorCode = ((RestServiceException) exception).getErrorCode();
         ResponseStatus responseStatus = ResponseStatus.getResponseStatus(errorCode);
         if (responseStatus == ResponseStatus.InternalServerError) {
-          logger.error("Internal error handling request {} with method {}.", uri, restMethod, exception);
+          logger.error("Internal error handling request {} with method {}", uri, restMethod, exception);
         } else {
-          logger.trace("Error handling request {} with method {}.", uri, restMethod, exception);
+          logger.trace("Error handling request {} with method {}", uri, restMethod, exception);
         }
+      } else if (Utils.isPossibleClientTermination(exception)) {
+        logger.trace("Client likely terminated connection while handling request {} with method {}", uri, restMethod,
+            exception);
       } else {
-        logger.error("Unexpected error handling request {} with method {}.", uri, restMethod, exception);
+        logger.error("Unexpected error handling request {} with method {}", uri, restMethod, exception);
       }
     } else {
       logger.debug("Exception encountered after channel {} became inactive", ctx.channel(), exception);
@@ -608,7 +618,7 @@ class NettyResponseChannel implements RestResponseChannel {
      * @param buffer the {@link ByteBuffer} that forms the data of this chunk.
      * @param callback the {@link Callback} to invoke when {@link #writeCompleteThreshold} is reached.
      */
-    public Chunk(ByteBuffer buffer, Callback<Long> callback) {
+    Chunk(ByteBuffer buffer, Callback<Long> callback) {
       this.buffer = buffer;
       bytesToBeWritten = buffer.remaining();
       this.callback = callback;
@@ -623,7 +633,7 @@ class NettyResponseChannel implements RestResponseChannel {
     /**
      * Does tasks (like tracking) that need to be done when a chunk is dequeued for processing.
      */
-    public void onDequeue() {
+    void onDequeue() {
       chunksToWriteCount.decrementAndGet();
       chunkWriteStartTime = System.currentTimeMillis();
       long chunkQueueTime = chunkWriteStartTime - chunkQueueStartTime;
@@ -638,7 +648,7 @@ class NettyResponseChannel implements RestResponseChannel {
      * resolved, the data inside it is considered void.
      * @param exception the reason for chunk handling failure.
      */
-    public void resolveChunk(Exception exception) {
+    void resolveChunk(Exception exception) {
       long chunkWriteFinishTime = System.currentTimeMillis();
       long bytesWritten = 0;
       if (exception == null) {

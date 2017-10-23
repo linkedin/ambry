@@ -202,6 +202,15 @@ public class ServerAdminTool implements Closeable {
     final long acceptableLagInBytes;
 
     /**
+     * The number of replicas of each partition that have to be within "acceptable.lag.in.bytes" in case of catchup
+     * status requests. The min of this value or the total count of replicas -1 is considered.
+     * Applicable for: CatchupStatus
+     */
+    @Config("num.replicas.caught.up.per.partition")
+    @Default("Short.MAX_VALUE")
+    final short numReplicasCaughtUpPerPartition;
+
+    /**
      * Path of the file where the data from certain operations will output. For example, the blob from GetBlob and the
      * user metadata from GetUserMetadata will be written into this file.
      */
@@ -227,6 +236,9 @@ public class ServerAdminTool implements Closeable {
       enableState = verifiableProperties.getBoolean("enable.state", true);
       origins = verifiableProperties.getString("replication.origins", "").split(",");
       acceptableLagInBytes = verifiableProperties.getLongInRange("acceptable.lag.in.bytes", 0, 0, Long.MAX_VALUE);
+      numReplicasCaughtUpPerPartition =
+          verifiableProperties.getShortInRange("num.replicas.caught.up.per.partition", Short.MAX_VALUE, (short) 1,
+              Short.MAX_VALUE);
       dataOutputFilePath = verifiableProperties.getString("data.output.file.path", "/tmp/ambryResult.out");
     }
   }
@@ -296,8 +308,9 @@ public class ServerAdminTool implements Closeable {
         break;
       case TriggerCompaction:
         if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
-          for (String partitionId : config.partitionIds) {
-            ServerErrorCode errorCode = serverAdminTool.triggerCompaction(dataNodeId, partitionId, clusterMap);
+          for (String partitionIdStr : config.partitionIds) {
+            PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+            ServerErrorCode errorCode = serverAdminTool.triggerCompaction(dataNodeId, partitionId);
             if (errorCode == ServerErrorCode.No_Error) {
               LOGGER.info("Compaction has been triggered for {} on {}", partitionId, dataNodeId);
             } else {
@@ -311,35 +324,40 @@ public class ServerAdminTool implements Closeable {
         break;
       case RequestControl:
         if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
-          for (String partitionId : config.partitionIds) {
-            sendRequestControlRequest(serverAdminTool, clusterMap, dataNodeId, partitionId, config.requestTypeToControl,
+          for (String partitionIdStr : config.partitionIds) {
+            PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+            sendRequestControlRequest(serverAdminTool, dataNodeId, partitionId, config.requestTypeToControl,
                 config.enableState);
           }
         } else {
           LOGGER.info("No partition list provided. Requesting enable status of {} to be set to {} on all partitions",
               config.requestTypeToControl, config.enableState);
-          sendRequestControlRequest(serverAdminTool, clusterMap, dataNodeId, null, config.requestTypeToControl,
-              config.enableState);
+          sendRequestControlRequest(serverAdminTool, dataNodeId, null, config.requestTypeToControl, config.enableState);
         }
         break;
       case ReplicationControl:
-        List<String> origins = Arrays.asList(config.origins);
+        List<String> origins = Collections.EMPTY_LIST;
+        if (config.origins.length > 0 && !config.origins[0].isEmpty()) {
+          origins = Arrays.asList(config.origins);
+        }
         if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
-          for (String partitionId : config.partitionIds) {
-            sendReplicationControlRequest(serverAdminTool, clusterMap, dataNodeId, partitionId, origins,
-                config.enableState);
+          for (String partitionIdStr : config.partitionIds) {
+            PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+            sendReplicationControlRequest(serverAdminTool, dataNodeId, partitionId, origins, config.enableState);
           }
         } else {
           LOGGER.info("No partition list provided. Requesting enable status for replication from {} to be set to {} on "
-              + "all partitions", origins, config.enableState);
-          sendReplicationControlRequest(serverAdminTool, clusterMap, dataNodeId, null, origins, config.enableState);
+              + "all partitions", origins.isEmpty() ? "all DCs" : origins, config.enableState);
+          sendReplicationControlRequest(serverAdminTool, dataNodeId, null, origins, config.enableState);
         }
         break;
       case CatchupStatus:
         if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
-          for (String partitionId : config.partitionIds) {
+          for (String partitionIdStr : config.partitionIds) {
+            PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
             Pair<ServerErrorCode, Boolean> response =
-                serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes, clusterMap);
+                serverAdminTool.isCaughtUp(dataNodeId, partitionId, config.acceptableLagInBytes,
+                    config.numReplicasCaughtUpPerPartition);
             if (response.getFirst() == ServerErrorCode.No_Error) {
               LOGGER.info("Replicas are {} within {} bytes for {}", response.getSecond() ? "" : "NOT",
                   config.acceptableLagInBytes, partitionId);
@@ -350,7 +368,8 @@ public class ServerAdminTool implements Closeable {
           }
         } else {
           Pair<ServerErrorCode, Boolean> response =
-              serverAdminTool.isCaughtUp(dataNodeId, null, config.acceptableLagInBytes, clusterMap);
+              serverAdminTool.isCaughtUp(dataNodeId, null, config.acceptableLagInBytes,
+                  config.numReplicasCaughtUpPerPartition);
           if (response.getFirst() == ServerErrorCode.No_Error) {
             LOGGER.info("Replicas are {} within {} for all partitions", response.getSecond() ? "" : "NOT",
                 config.acceptableLagInBytes);
@@ -369,6 +388,33 @@ public class ServerAdminTool implements Closeable {
   }
 
   /**
+   * Gets the {@link PartitionId} in the {@code clusterMap} whose string representation matches {@code partitionIdStr}.
+   * @param partitionIdStr the string representation of the partition required.
+   * @param clusterMap the {@link ClusterMap} to use to list and process {@link PartitionId}s.
+   * @return the {@link PartitionId} in the {@code clusterMap} whose string repr matches {@code partitionIdStr}.
+   * {@code null} if {@code partitionIdStr} is {@code null}.
+   * @throws IllegalArgumentException if there is no @link PartitionId} in the {@code clusterMap} whose string repr
+   * matches {@code partitionIdStr}.
+   */
+  public static PartitionId getPartitionIdFromStr(String partitionIdStr, ClusterMap clusterMap) {
+    if (partitionIdStr == null) {
+      return null;
+    }
+    PartitionId targetPartitionId = null;
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    for (PartitionId partitionId : partitionIds) {
+      if (partitionId.isEqual(partitionIdStr)) {
+        targetPartitionId = partitionId;
+        break;
+      }
+    }
+    if (targetPartitionId == null) {
+      throw new IllegalArgumentException("Partition Id is not valid: [" + partitionIdStr + "]");
+    }
+    return targetPartitionId;
+  }
+
+  /**
    * Writes the content of {@code buffer} into {@link ServerAdminToolConfig#dataOutputFilePath}.
    * @param buffer the {@link ByteBuffer} whose content needs to be written.
    * @param outputFileStream the {@link FileOutputStream} to write to.
@@ -384,7 +430,6 @@ public class ServerAdminTool implements Closeable {
    * Sends a {@link RequestControlAdminRequest} to {@code dataNodeId} to set enable status of {@code toControl} to
    * {@code enable} for {@code partitionId}.
    * @param serverAdminTool the {@link ServerAdminTool} instance to use.
-   * @param clusterMap the {@link ClusterMap} to use.
    * @param dataNodeId the {@link DataNodeId} to send the request to.
    * @param partitionId the partition id (string) on which the operation will take place. Can be {@code null}.
    * @param toControl the {@link RequestOrResponseType} to control.
@@ -392,10 +437,9 @@ public class ServerAdminTool implements Closeable {
    * @throws IOException
    * @throws TimeoutException
    */
-  private static void sendRequestControlRequest(ServerAdminTool serverAdminTool, ClusterMap clusterMap,
-      DataNodeId dataNodeId, String partitionId, RequestOrResponseType toControl, boolean enable)
-      throws IOException, TimeoutException {
-    ServerErrorCode errorCode = serverAdminTool.controlRequest(dataNodeId, partitionId, toControl, enable, clusterMap);
+  private static void sendRequestControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
+      PartitionId partitionId, RequestOrResponseType toControl, boolean enable) throws IOException, TimeoutException {
+    ServerErrorCode errorCode = serverAdminTool.controlRequest(dataNodeId, partitionId, toControl, enable);
     if (errorCode == ServerErrorCode.No_Error) {
       LOGGER.info("{} enable state has been set to {} for {} on {}", toControl, enable, partitionId, dataNodeId);
     } else {
@@ -408,21 +452,19 @@ public class ServerAdminTool implements Closeable {
    * Sends a {@link ReplicationControlAdminRequest} to {@code dataNodeId} to set enable status of replication from
    * {@code origins} to {@code enable} for {@code partitionId}.
    * @param serverAdminTool the {@link ServerAdminTool} instance to use.
-   * @param clusterMap the {@link ClusterMap} to use.
    * @param dataNodeId the {@link DataNodeId} to send the request to.
-   * @param partitionId the partition id (string) on which the operation will take place. Can be {@code null}.
+   * @param partitionId the partition id  on which the operation will take place. Can be {@code null}.
    * @param origins the names of the datacenters from which replication should be controlled.
    * @param enable the enable (or disable) status required for {@code toControl}.
    * @throws IOException
    * @throws TimeoutException
    */
-  private static void sendReplicationControlRequest(ServerAdminTool serverAdminTool, ClusterMap clusterMap,
-      DataNodeId dataNodeId, String partitionId, List<String> origins, boolean enable)
-      throws IOException, TimeoutException {
-    ServerErrorCode errorCode =
-        serverAdminTool.controlReplication(dataNodeId, partitionId, origins, enable, clusterMap);
+  private static void sendReplicationControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
+      PartitionId partitionId, List<String> origins, boolean enable) throws IOException, TimeoutException {
+    ServerErrorCode errorCode = serverAdminTool.controlReplication(dataNodeId, partitionId, origins, enable);
     if (errorCode == ServerErrorCode.No_Error) {
-      LOGGER.info("Enable state of replication from {} has been set to {} for {} on {}", origins, enable, partitionId,
+      LOGGER.info("Enable state of replication from {} has been set to {} for {} on {}",
+          origins.isEmpty() ? "all DCs" : origins, enable, partitionId == null ? "all partitions" : partitionId,
           dataNodeId);
     } else {
       LOGGER.error(
@@ -532,17 +574,16 @@ public class ServerAdminTool implements Closeable {
   /**
    * Triggers compaction on {@code dataNodeId} for the partition defined in {@code partitionIdStr}.
    * @param dataNodeId the {@link DataNodeId} to contact.
-   * @param partitionIdStr the String representation of the {@link PartitionId} to compact.
-   * @param clusterMap the {@link ClusterMap} to use.
+   * @param partitionId the {@link PartitionId} to compact.
    * @return the {@link ServerErrorCode} that is returned.
    * @throws IOException
    * @throws TimeoutException
    */
-  public ServerErrorCode triggerCompaction(DataNodeId dataNodeId, String partitionIdStr, ClusterMap clusterMap)
+  public ServerErrorCode triggerCompaction(DataNodeId dataNodeId, PartitionId partitionId)
       throws IOException, TimeoutException {
-    PartitionId targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, targetPartitionId,
-        correlationId.incrementAndGet(), CLIENT_ID);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.TriggerCompaction, partitionId, correlationId.incrementAndGet(),
+            CLIENT_ID);
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, adminRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();
@@ -552,19 +593,17 @@ public class ServerAdminTool implements Closeable {
    * Sends a {@link RequestControlAdminRequest} to set the enable state of {@code toControl} on {@code partitionIdStr}
    * to {@code enable} in {@code dataNodeId}.
    * @param dataNodeId the {@link DataNodeId} to contact.
-   * @param partitionIdStr the String representation of the {@link PartitionId} to compact. Can be {@code null}.
+   * @param partitionId the {@link PartitionId} to control requests to. Can be {@code null}.
    * @param toControl the {@link RequestOrResponseType} to control.
    * @param enable the enable (or disable) status required for {@code toControl}.
-   * @param clusterMap the {@link ClusterMap} to use.
    * @return the {@link ServerErrorCode} that is returned.
    * @throws IOException
    * @throws TimeoutException
    */
-  public ServerErrorCode controlRequest(DataNodeId dataNodeId, String partitionIdStr, RequestOrResponseType toControl,
-      boolean enable, ClusterMap clusterMap) throws IOException, TimeoutException {
-    PartitionId targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+  public ServerErrorCode controlRequest(DataNodeId dataNodeId, PartitionId partitionId, RequestOrResponseType toControl,
+      boolean enable) throws IOException, TimeoutException {
     AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.RequestControl, targetPartitionId, correlationId.incrementAndGet(),
+        new AdminRequest(AdminRequestOrResponseType.RequestControl, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     RequestControlAdminRequest controlRequest = new RequestControlAdminRequest(toControl, enable, adminRequest);
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
@@ -573,22 +612,21 @@ public class ServerAdminTool implements Closeable {
   }
 
   /**
-   * Sends a {@link RequestControlAdminRequest} to enable/disable replication from {@code origins} for
+   * Sends a {@link ReplicationControlAdminRequest} to enable/disable replication from {@code origins} for
    * {@code partitionIdStr} in {@code dataNodeId}.
    * @param dataNodeId the {@link DataNodeId} to contact.
-   * @param partitionIdStr the String representation of the {@link PartitionId} to compact. Can be {@code null}.
+   * @param partitionId the {@link PartitionId} to control replication for. Can be {@code null}.
    * @param origins the names of the datacenters from which replication should be controlled.
    * @param enable the enable (or disable) status required for replication from {@code origins}.
-   * @param clusterMap the {@link ClusterMap} to use.
    * @return the {@link ServerErrorCode} that is returned.
    * @throws IOException
    * @throws TimeoutException
    */
-  public ServerErrorCode controlReplication(DataNodeId dataNodeId, String partitionIdStr, List<String> origins,
-      boolean enable, ClusterMap clusterMap) throws IOException, TimeoutException {
-    PartitionId targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.ReplicationControl, targetPartitionId,
-        correlationId.incrementAndGet(), CLIENT_ID);
+  public ServerErrorCode controlReplication(DataNodeId dataNodeId, PartitionId partitionId, List<String> origins,
+      boolean enable) throws IOException, TimeoutException {
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.ReplicationControl, partitionId, correlationId.incrementAndGet(),
+            CLIENT_ID);
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
@@ -598,52 +636,28 @@ public class ServerAdminTool implements Closeable {
   /**
    * Sends a {@link CatchupStatusAdminRequest} for {@code partitionIdStr} to {@code dataNodeId}.
    * @param dataNodeId the {@link DataNodeId} to contact.
-   * @param partitionIdStr the String representation of the {@link PartitionId} to compact. If {@code null}, status is
-   *                       for all partitions on {@code dataNodeId}
+   * @param partitionId the {@link PartitionId} to check catchup status for. If {@code null}, status is for all
+   *                    partitions on {@code dataNodeId}
    * @param acceptableLagInBytes that lag in bytes that is considered OK.
-   * @param clusterMap the {@link ClusterMap} to use.
-   * @return the {@link ServerErrorCode} and the catchup status that is returned.
+   * @param numReplicasCaughtUpPerPartition the number of replicas that have to be within {@code acceptableLagInBytes}
+   *                                        (per partition). The min of this value or the total count of replicas - 1 is
+   *                                        considered.
+   * @return the {@link ServerErrorCode} and the catchup status that is returned if the error code is
+   *          {@link ServerErrorCode#No_Error}, otherwise {@code false}.
    * @throws IOException
    * @throws TimeoutException
    */
-  public Pair<ServerErrorCode, Boolean> isCaughtUp(DataNodeId dataNodeId, String partitionIdStr,
-      long acceptableLagInBytes, ClusterMap clusterMap) throws IOException, TimeoutException {
-    PartitionId targetPartitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+  public Pair<ServerErrorCode, Boolean> isCaughtUp(DataNodeId dataNodeId, PartitionId partitionId,
+      long acceptableLagInBytes, short numReplicasCaughtUpPerPartition) throws IOException, TimeoutException {
     AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.CatchupStatus, targetPartitionId, correlationId.incrementAndGet(),
+        new AdminRequest(AdminRequestOrResponseType.CatchupStatus, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
-    CatchupStatusAdminRequest catchupStatusRequest = new CatchupStatusAdminRequest(acceptableLagInBytes, adminRequest);
+    CatchupStatusAdminRequest catchupStatusRequest =
+        new CatchupStatusAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, catchupStatusRequest);
     CatchupStatusAdminResponse response =
         CatchupStatusAdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
-    return new Pair<>(response.getError(), response.isCaughtUp());
-  }
-
-  /**
-   * Gets the {@link PartitionId} in the {@code clusterMap} whose string representation matches {@code partitionIdStr}.
-   * @param partitionIdStr the string representation of the partition required.
-   * @param clusterMap the {@link ClusterMap} to use to list and process {@link PartitionId}s.
-   * @return the {@link PartitionId} in the {@code clusterMap} whose string repr matches {@code partitionIdStr}.
-   * {@code null} if {@code partitionIdStr} is {@code null}.
-   * @throws IllegalArgumentException if there is no @link PartitionId} in the {@code clusterMap} whose string repr
-   * matches {@code partitionIdStr}.
-   */
-  private PartitionId getPartitionIdFromStr(String partitionIdStr, ClusterMap clusterMap) {
-    if (partitionIdStr == null) {
-      return null;
-    }
-    PartitionId targetPartitionId = null;
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
-    for (PartitionId partitionId : partitionIds) {
-      if (partitionId.isEqual(partitionIdStr)) {
-        targetPartitionId = partitionId;
-        break;
-      }
-    }
-    if (targetPartitionId == null) {
-      throw new IllegalArgumentException("Partition Id is not valid: [" + partitionIdStr + "]");
-    }
-    return targetPartitionId;
+    return new Pair<>(response.getError(), response.getError() == ServerErrorCode.No_Error && response.isCaughtUp());
   }
 
   /**

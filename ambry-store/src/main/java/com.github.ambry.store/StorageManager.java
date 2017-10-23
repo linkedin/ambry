@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
@@ -47,17 +48,18 @@ public class StorageManager {
    * Constructs a {@link StorageManager}
    * @param storeConfig the settings for store configuration.
    * @param diskManagerConfig the settings for disk manager configuration
+   * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param registry the {@link MetricRegistry} used for store-related metrics.
    * @param replicas all the replicas on this disk.
    * @param keyFactory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
    * @param time the {@link Time} instance to use.
-   * @param scheduler the {@link ScheduledExecutorService} for executing background tasks.
    */
-  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig, MetricRegistry registry,
-      List<? extends ReplicaId> replicas, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService scheduler) throws StoreException {
+  public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
+      ScheduledExecutorService scheduler, MetricRegistry registry, List<? extends ReplicaId> replicas,
+      StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      WriteStatusDelegate writeStatusDelegate, Time time) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
     metrics = new StorageManagerMetrics(registry);
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
@@ -71,9 +73,9 @@ public class StorageManager {
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
-      DiskManager diskManager = new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, metrics, storeMainMetrics,
-          storeUnderCompactionMetrics, keyFactory, recovery,
-              hardDelete, time, scheduler);
+      DiskManager diskManager =
+          new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
+              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate, time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);

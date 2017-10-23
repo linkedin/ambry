@@ -48,7 +48,6 @@ class Partition extends PartitionId {
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
-  // For constructing new Partition
   Partition(long id, PartitionState partitionState, long replicaCapacityInBytes) {
     logger.trace("Partition " + id + ", " + partitionState + ", " + replicaCapacityInBytes);
     this.id = id;
@@ -125,7 +124,8 @@ class Partition extends PartitionId {
    *
    * @return string representation of the Partition's ID for use as part of file system path.
    */
-  String toPathString() {
+  @Override
+  public String toPathString() {
     return Long.toString(id);
   }
 

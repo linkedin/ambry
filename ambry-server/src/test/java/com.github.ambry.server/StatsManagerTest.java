@@ -36,7 +36,6 @@ import com.github.ambry.store.TimeRange;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.File;
 import java.io.IOException;
@@ -265,8 +264,8 @@ public class StatsManagerTest {
     private final Map<PartitionId, Store> storeMap;
 
     MockStorageManager(Map<PartitionId, Store> map) throws StoreException {
-      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), new MetricRegistry(), new ArrayList<>(), null, null,
-          null, SystemTime.getInstance(), Utils.newScheduler(1, false));
+      super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), new ArrayList<>(), null,
+          null, null, null, SystemTime.getInstance());
       storeMap = map;
     }
 

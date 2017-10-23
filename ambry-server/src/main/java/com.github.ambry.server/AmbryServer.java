@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -134,8 +135,10 @@ public class AmbryServer {
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
-      storageManager = new StorageManager(storeConfig, diskManagerConfig, registry, clusterMap.getReplicaIds(nodeId),
-          storeKeyFactory, new BlobStoreRecovery(), new BlobStoreHardDelete(), time, scheduler);
+      storageManager =
+          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId),
+              storeKeyFactory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
+              new WriteStatusDelegate(clusterParticipant), time);
       storageManager.start();
 
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);

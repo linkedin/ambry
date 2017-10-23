@@ -44,6 +44,7 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.messaging.handling.MessageHandler;
 import org.apache.helix.model.HelixConfigScope;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.StateMachineEngine;
@@ -52,9 +53,11 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -63,6 +66,7 @@ import static org.junit.Assert.*;
 public class HelixParticipantTest {
   private final MockHelixManagerFactory helixManagerFactory;
   private final Properties props;
+  private final String clusterName = "HelixParticipantTestCluster";
 
   public HelixParticipantTest() throws Exception {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
@@ -70,10 +74,89 @@ public class HelixParticipantTest {
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
-    props.setProperty("clustermap.cluster.name", "HelixParticipantTestCluster");
+    props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     helixManagerFactory = new MockHelixManagerFactory();
+  }
+
+  /**
+   * Tests setReplicaSealedState method for {@link HelixParticipant}
+   * @throws IOException
+   */
+  @Test
+  public void testSetReplicaSealedState() throws IOException {
+    //setup HelixParticipant and dependencies
+    String partitionIdStr = "somePartitionId";
+    String partitionIdStr2 = "someOtherPartitionId";
+    ReplicaId replicaId = createMockAmbryReplica(partitionIdStr);
+    ReplicaId replicaId2 = createMockAmbryReplica(partitionIdStr2);
+    String hostname = "localhost";
+    int port = 2200;
+    String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
+    helixParticipant.initialize(hostname, port, Collections.EMPTY_LIST);
+    HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
+    HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
+    helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+
+    //Make sure the current sealedReplicas list is null
+    List<String> sealedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    assertNull("sealedReplicas is not null", sealedReplicas);
+
+    String listName = "sealedReplicas";
+
+    //Check that invoking setReplicaSealedState with a non-AmbryReplica ReplicaId throws an IllegalArgumentException
+    ReplicaId notAmbryReplica = createMockNotAmbryReplica(partitionIdStr);
+    try {
+      helixParticipant.setReplicaSealedState(notAmbryReplica, true);
+      fail("Expected an IllegalArgumentException here");
+    } catch (IllegalArgumentException e) {
+      //Expected exception
+    }
+
+    //Check that invoking setReplicaSealedState adds the partition to the list of sealed replicas
+    helixParticipant.setReplicaSealedState(replicaId, true);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 1, listName);
+    assertTrue(sealedReplicas.contains(partitionIdStr));
+
+    //Seal another replicaId
+    helixParticipant.setReplicaSealedState(replicaId2, true);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 2, listName);
+    assertTrue(sealedReplicas.contains(partitionIdStr2));
+    assertTrue(sealedReplicas.contains(partitionIdStr));
+
+    //Check that sealed replica list doesn't take duplicates (and that dups are detected by partitionId comparison, not
+    //replicaId object comparison
+    ReplicaId dup = createMockAmbryReplica(partitionIdStr);
+    helixParticipant.setReplicaSealedState(dup, true);
+    helixParticipant.setReplicaSealedState(replicaId2, true);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 2, listName);
+    assertTrue(sealedReplicas.contains(partitionIdStr2));
+    assertTrue(sealedReplicas.contains(partitionIdStr));
+
+    //Check that invoking setReplicaSealedState with isSealed == false removes partition from list of sealed replicas
+    helixParticipant.setReplicaSealedState(replicaId, false);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 1, listName);
+    assertTrue(sealedReplicas.contains(partitionIdStr2));
+    assertFalse(sealedReplicas.contains(partitionIdStr));
+
+    //Removing a replicaId that's already been removed doesn't hurt anything
+    helixParticipant.setReplicaSealedState(replicaId, false);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 1, listName);
+
+    //Removing all replicas yields expected behavior (and removal works by partitionId, not replicaId itself)
+    dup = createMockAmbryReplica(partitionIdStr2);
+    helixParticipant.setReplicaSealedState(dup, false);
+    sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(sealedReplicas, 0, listName);
   }
 
   /**
@@ -157,6 +240,28 @@ public class HelixParticipantTest {
     }
   }
 
+  private ReplicaId createMockAmbryReplica(String partitionIdString) {
+    return createMockReplicaId(partitionIdString, AmbryReplica.class, AmbryPartition.class);
+  }
+
+  private ReplicaId createMockNotAmbryReplica(String partitionIdString) {
+    return createMockReplicaId(partitionIdString, ReplicaId.class, PartitionId.class);
+  }
+
+  private ReplicaId createMockReplicaId(String partitionIdString, Class<? extends ReplicaId> replicaClass,
+      Class<? extends PartitionId> partitionClass) {
+    ReplicaId replicaId = Mockito.mock(replicaClass);
+    PartitionId partitionId = Mockito.mock(partitionClass);
+    when(partitionId.toPathString()).thenReturn(partitionIdString);
+    when(replicaId.getPartitionId()).thenReturn(partitionId);
+    return replicaId;
+  }
+
+  private void listIsExpectedSize(List list, int expectedSize, String listName) {
+    assertNotNull(listName + " is null", list);
+    assertEquals(listName + " is not size " + expectedSize, expectedSize, list.size());
+  }
+
   /**
    * A mock implementation of the {@link HelixManager} for exclusive use for testing the {@link HelixParticipant}
    */
@@ -165,6 +270,7 @@ public class HelixParticipantTest {
     private StateModelFactory stateModelFactory;
     private boolean isConnected;
     boolean beBad;
+    private final HelixAdmin helixAdmin = new MockHelixAdmin();
 
     @Override
     public StateMachineEngine getStateMachineEngine() {
@@ -195,6 +301,16 @@ public class HelixParticipantTest {
         }
 
         @Override
+        public StateModelFactory<? extends StateModel> getStateModelFactory(String stateModelName) {
+          return null;
+        }
+
+        @Override
+        public StateModelFactory<? extends StateModel> getStateModelFactory(String stateModelName, String factoryName) {
+          return null;
+        }
+
+        @Override
         public MessageHandler createHandler(Message message, NotificationContext context) {
           return null;
         }
@@ -205,10 +321,20 @@ public class HelixParticipantTest {
         }
 
         @Override
+        public List<String> getMessageTypes() {
+          return null;
+        }
+
+        @Override
         public void reset() {
 
         }
       };
+    }
+
+    @Override
+    public Long getSessionStartTime() {
+      throw new IllegalStateException("Not implemented");
     }
 
     @Override
@@ -323,7 +449,7 @@ public class HelixParticipantTest {
 
     @Override
     public HelixAdmin getClusterManagmentTool() {
-      throw new IllegalStateException("Not implemented");
+      return helixAdmin;
     }
 
     @Override

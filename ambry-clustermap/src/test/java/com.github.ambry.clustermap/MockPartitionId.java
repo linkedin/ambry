@@ -25,6 +25,7 @@ public class MockPartitionId extends PartitionId {
 
   Long partition;
   public List<ReplicaId> replicaIds;
+  private PartitionState partitionState = PartitionState.READ_WRITE;
 
   public MockPartitionId() {
     this(0L);
@@ -63,7 +64,7 @@ public class MockPartitionId extends PartitionId {
 
   @Override
   public PartitionState getPartitionState() {
-    return PartitionState.READ_WRITE;
+    return partitionState;
   }
 
   @Override
@@ -95,6 +96,20 @@ public class MockPartitionId extends PartitionId {
     return true;
   }
 
+  /**
+   * If all replicaIds == !isSealed, then partition status = Read-Write, else Read-Only
+   */
+  void resolvePartitionStatus() {
+    boolean isReadWrite = true;
+    for (ReplicaId replicaId : replicaIds) {
+      if (replicaId.isSealed()) {
+        isReadWrite = false;
+        break;
+      }
+    }
+    partitionState = isReadWrite ? PartitionState.READ_WRITE : PartitionState.READ_ONLY;
+  }
+
   @Override
   public int hashCode() {
     return (int) (partition ^ (partition >>> 32));
@@ -103,6 +118,11 @@ public class MockPartitionId extends PartitionId {
   @Override
   public String toString() {
     return partition.toString();
+  }
+
+  @Override
+  public String toPathString() {
+    return String.valueOf(partition);
   }
 
   public void cleanUp() {
