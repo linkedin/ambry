@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -39,7 +38,7 @@ import org.slf4j.LoggerFactory;
 class Log implements Write {
   private final String dataDir;
   private final long capacityInBytes;
-  private final boolean isLogSegmented;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final StoreMetrics metrics;
   private final Iterator<Pair<String, String>> segmentNameAndFileNameIterator;
   private final ConcurrentSkipListMap<String, LogSegment> segmentsByName =
@@ -47,6 +46,7 @@ class Log implements Write {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final AtomicLong remainingUnallocatedSegments = new AtomicLong(0);
 
+  private boolean isLogSegmented;
   private LogSegment activeSegment = null;
 
   /**
@@ -54,16 +54,19 @@ class Log implements Write {
    * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
    * @param segmentCapacityInBytes the capacity of a single segment in the log.
+   * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @throws IOException if there is any I/O error loading the segment files.
    * @throws IllegalArgumentException if {@code totalCapacityInBytes} or {@code segmentCapacityInBytes} <= 0 or if
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics) throws IOException {
+  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
+      StoreMetrics metrics) throws IOException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = totalCapacityInBytes > segmentCapacityInBytes;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.metrics = metrics;
     this.segmentNameAndFileNameIterator = Collections.EMPTY_LIST.iterator();
 
@@ -73,6 +76,7 @@ class Log implements Write {
       throw new IOException("Could not read from directory: " + dataDir);
     } else {
       initialize(getSegmentsToLoad(segmentFiles), segmentCapacityInBytes);
+      this.isLogSegmented = isExistingLogSegmented();
     }
   }
 
@@ -81,6 +85,7 @@ class Log implements Write {
    * @param dataDir the directory where the segments of the log need to be loaded from.
    * @param totalCapacityInBytes the total capacity of this log.
    * @param segmentCapacityInBytes the capacity of a single segment in the log.
+   * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use to allocate new log segments.
    * @param metrics the {@link StoreMetrics} instance to use.
    * @param isLogSegmented {@code true} if this log is segmented or needs to be segmented.
    * @param segmentsToLoad the list of pre-created {@link LogSegment} instances to load.
@@ -92,12 +97,13 @@ class Log implements Write {
    * {@code totalCapacityInBytes} > {@code segmentCapacityInBytes} and {@code totalCapacityInBytes} is not a perfect
    * multiple of {@code segmentCapacityInBytes}.
    */
-  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, StoreMetrics metrics,
-      boolean isLogSegmented, List<LogSegment> segmentsToLoad,
+  Log(String dataDir, long totalCapacityInBytes, long segmentCapacityInBytes, DiskSpaceAllocator diskSpaceAllocator,
+      StoreMetrics metrics, boolean isLogSegmented, List<LogSegment> segmentsToLoad,
       Iterator<Pair<String, String>> segmentNameAndFileNameIterator) throws IOException {
     this.dataDir = dataDir;
     this.capacityInBytes = totalCapacityInBytes;
     this.isLogSegmented = isLogSegmented;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.metrics = metrics;
     this.segmentNameAndFileNameIterator = segmentNameAndFileNameIterator;
 
@@ -170,6 +176,22 @@ class Log implements Write {
   long getSegmentCapacity() {
     // all segments same size
     return getFirstSegment().getCapacityInBytes();
+  }
+
+  /**
+   * This returns the number of unallocated segments for this log. However, this method can only be used when compaction
+   * is not running.
+   * @return the number of unallocated segments.
+   */
+  long getRemainingUnallocatedSegments() {
+    return remainingUnallocatedSegments.get();
+  }
+
+  /**
+   * @return {@code true} if the log is segmented.
+   */
+  boolean isLogSegmented() {
+    return isLogSegmented;
   }
 
   /**
@@ -308,6 +330,14 @@ class Log implements Write {
   }
 
   /**
+   * @return {@code true} if the data directory contains segments that aren't old-style single segment log files.
+   * This should be run after a log is initialized to get the actual log segmentation state.
+   */
+  private boolean isExistingLogSegmented() {
+    return !segmentsByName.firstKey().isEmpty();
+  }
+
+  /**
    * Initializes the log.
    * @param segmentsToLoad the {@link LogSegment} instances to include as a part of the log. These are not in any order
    * @param segmentCapacityInBytes the capacity of a single {@link LogSegment}.
@@ -337,10 +367,10 @@ class Log implements Write {
    * @throws IOException if the there is any I/O error in allocating the file.
    */
   private File allocate(String filename, long size) throws IOException {
-    // TODO (DiskManager changes): This is intended to "request" the segment file from the DiskManager which will have
-    // TODO (DiskManager changes): a pool of segments.
     File segmentFile = new File(dataDir, filename);
-    Utils.preAllocateFileIfNeeded(segmentFile, size);
+    if (!segmentFile.exists()) {
+      diskSpaceAllocator.allocate(segmentFile, size);
+    }
     return segmentFile;
   }
 
@@ -350,12 +380,9 @@ class Log implements Write {
    * @throws IOException if there is any I/O error freeing the log segment.
    */
   private void free(LogSegment logSegment) throws IOException {
-    // TODO (DiskManager changes): This will actually return the segment to the DiskManager pool.
     File segmentFile = logSegment.getView().getFirst();
     logSegment.close();
-    if (!segmentFile.delete()) {
-      throw new IllegalStateException("Could not delete segment file: " + segmentFile.getAbsolutePath());
-    }
+    diskSpaceAllocator.free(segmentFile, logSegment.getCapacityInBytes());
   }
 
   /**

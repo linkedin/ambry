@@ -14,8 +14,8 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -231,6 +231,7 @@ public class BlobStoreTest {
 
   private final String storeId = UtilsTest.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
+  private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR;
   private final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
   private final ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
   private final Properties properties = new Properties();
@@ -719,6 +720,35 @@ public class BlobStoreTest {
     verifyOperationFailuresOnInactiveStore(store);
     store = createBlobStore(getMockReplicaId(tempDirStr));
     verifyOperationFailuresOnInactiveStore(store);
+  }
+
+  /**
+   * Tests that {@link BlobStore#getDiskSpaceRequirements()} functions as expected.
+   * @throws StoreException
+   */
+  @Test
+  public void diskSpaceRequirementsTest() throws Exception {
+    // expect three log segments to be already allocated (from setup process)
+    int segmentsAllocated = 3;
+    doDiskSpaceRequirementsTest(segmentsAllocated, 0);
+
+    // try adding fake swap segment log segment.
+    File tempFile = File.createTempFile("sample-swap",
+        LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX, tempDir);
+    doDiskSpaceRequirementsTest(segmentsAllocated, 1);
+    assertTrue("Could not delete temp file", tempFile.delete());
+
+    addCuratedData(SEGMENT_CAPACITY);
+    segmentsAllocated += 1;
+    doDiskSpaceRequirementsTest(segmentsAllocated, 0);
+
+    File.createTempFile("sample-swap", LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+        tempDir).deleteOnExit();
+    File.createTempFile("sample-swap", LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
+        tempDir).deleteOnExit();
+    addCuratedData(SEGMENT_CAPACITY);
+    segmentsAllocated += 1;
+    doDiskSpaceRequirementsTest(segmentsAllocated, 2);
   }
 
   // helpers
@@ -1231,17 +1261,35 @@ public class BlobStoreTest {
     store.put(writeSet);
   }
 
+  // diskSpaceRequirementsTest() helpers
+
+  /**
+   * Run the {@link BlobStore#getDiskSpaceRequirements()} test.
+   * @param segmentsAllocated the number of segments currently used by the blob store.
+   * @param numSwapSegments the number of swap segments currently used by the blob store.
+   * @throws Exception
+   */
+  private void doDiskSpaceRequirementsTest(int segmentsAllocated, int numSwapSegments) throws Exception {
+    DiskSpaceRequirements requirements = store.getDiskSpaceRequirements();
+    if (!isLogSegmented) {
+      assertNull("Expected null DiskSpaceRequirements for non segmented log", requirements);
+    } else {
+      assertEquals(SEGMENT_CAPACITY, requirements.getSegmentSizeInBytes());
+      assertEquals((LOG_CAPACITY / SEGMENT_CAPACITY) - segmentsAllocated, requirements.getSegmentsNeeded());
+      assertEquals(numSwapSegments, requirements.getSwapSegmentsInUse());
+    }
+  }
+
   private BlobStore createBlobStore(ReplicaId replicaId) {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     return createBlobStore(replicaId, config, null);
   }
 
-  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
-      WriteStatusDelegate writeStatusDelegate) {
+  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config, WriteStatusDelegate writeStatusDelegate) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
-    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, metrics, metrics,
-        STORE_KEY_FACTORY, recovery, hardDelete, writeStatusDelegate, time);
+    return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator,
+        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, writeStatusDelegate, time);
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {

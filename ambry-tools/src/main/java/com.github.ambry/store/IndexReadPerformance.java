@@ -143,7 +143,9 @@ public class IndexReadPerformance {
       MetricRegistry metricRegistry = new MetricRegistry();
       StoreMetrics metrics = new StoreMetrics(metricRegistry);
       ScheduledExecutorService s = Utils.newScheduler(numberOfReaders, "index", true);
-      Log log = new Log(System.getProperty("user.dir"), 1000, 1000, metrics);
+      DiskSpaceAllocator diskSpaceAllocator =
+          new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
+      Log log = new Log(System.getProperty("user.dir"), 1000, 1000, diskSpaceAllocator, metrics);
 
       Properties props = new Properties();
       props.setProperty("store.index.memory.size.bytes", "1048576");

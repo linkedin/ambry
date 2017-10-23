@@ -29,6 +29,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
@@ -322,7 +327,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 1 && checkAssignable(ctor.getParameterTypes()[0], arg)) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == 1 && checkAssignable(paramTypes[0], arg)) {
         return (T) ctor.newInstance(arg);
       }
     }
@@ -346,8 +352,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 2 && checkAssignable(ctor.getParameterTypes()[0], arg1) && checkAssignable(
-          ctor.getParameterTypes()[1], arg2)) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == 2 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)) {
         return (T) ctor.newInstance(arg1, arg2);
       }
     }
@@ -372,8 +378,9 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 3 && checkAssignable(ctor.getParameterTypes()[0], arg1) && checkAssignable(
-          ctor.getParameterTypes()[1], arg2) && checkAssignable(ctor.getParameterTypes()[2], arg3)) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == 3 && checkAssignable(paramTypes[0], arg1) && checkAssignable(paramTypes[1], arg2)
+          && checkAssignable(paramTypes[2], arg3)) {
         return (T) ctor.newInstance(arg1, arg2, arg3);
       }
     }
@@ -396,10 +403,11 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == objects.length) {
+      Class<?>[] paramTypes = ctor.getParameterTypes();
+      if (paramTypes.length == objects.length) {
         int i = 0;
         for (; i < objects.length; i++) {
-          if (!checkAssignable(ctor.getParameterTypes()[i], objects[i])) {
+          if (!checkAssignable(paramTypes[i], objects[i])) {
             break;
           }
         }
@@ -835,6 +843,29 @@ public class Utils {
    */
   public static IOException convertToClientTerminationException(Throwable cause) {
     return new IOException(CLIENT_RESET_EXCEPTION_MSG, cause);
+  }
+
+  /**
+   * Delete a directory recursively or delete a single file.
+   * @param file the file or directory to delete.
+   * @throws IOException if all files could not be deleted.
+   */
+  public static void deleteFileOrDirectory(File file) throws IOException {
+    if (file.exists()) {
+      Files.walkFileTree(file.toPath(), new SimpleFileVisitor<Path>() {
+        @Override
+        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+          Files.delete(file);
+          return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+          Files.delete(dir);
+          return FileVisitResult.CONTINUE;
+        }
+      });
+    }
   }
 
   /**

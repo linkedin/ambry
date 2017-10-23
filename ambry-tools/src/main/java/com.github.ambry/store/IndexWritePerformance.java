@@ -124,7 +124,9 @@ public class IndexWritePerformance {
 
       MetricRegistry metricRegistry = new MetricRegistry();
       StoreMetrics metrics = new StoreMetrics(metricRegistry);
-      Log log = new Log(System.getProperty("user.dir"), 10, 10, metrics);
+      DiskSpaceAllocator diskSpaceAllocator =
+          new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(metricRegistry));
+      Log log = new Log(System.getProperty("user.dir"), 10, 10, diskSpaceAllocator, metrics);
 
       ScheduledExecutorService s = Utils.newScheduler(numberOfWriters, "index", false);
 

@@ -28,7 +28,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -77,6 +76,7 @@ public class DiskReformatter {
   private final Time time;
   private final ConsistencyCheckerTool consistencyChecker;
   private final StoreMetrics metrics;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
 
   /**
@@ -211,6 +211,8 @@ public class DiskReformatter {
     this.storeKeyFactory = storeKeyFactory;
     this.clusterMap = clusterMap;
     this.time = time;
+    diskSpaceAllocator =
+        new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
     consistencyChecker = new ConsistencyCheckerTool(clusterMap, storeKeyFactory, storeConfig, null, null,
         new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
     metrics = new StoreMetrics(clusterMap.getMetricRegistry());
@@ -266,7 +268,7 @@ public class DiskReformatter {
       logger.info("Copying {} to {}", src, tgt);
       copy(partIdString, src, tgt, replicaId.getCapacityInBytes());
       logger.info("Deleting {}", src);
-      delete(src);
+      Utils.deleteFileOrDirectory(src);
       logger.info("Renaming {} to {}", tgt, src);
       if (!tgt.renameTo(src)) {
         throw new IllegalStateException("Could not rename " + tgt + " to " + src);
@@ -278,7 +280,7 @@ public class DiskReformatter {
     logger.info("Copying {} to {}", scratchTgt, scratchSrc);
     copy(toMove.getPartitionId().toString(), scratchTgt, scratchSrc, toMove.getCapacityInBytes());
     logger.info("Deleting {}", scratchTgt);
-    delete(scratchTgt);
+    Utils.deleteFileOrDirectory(scratchTgt);
     logger.info("Done reformatting {}", toMove);
   }
 
@@ -291,9 +293,9 @@ public class DiskReformatter {
    */
   private void ensureNotInUse(File srcDir, long storeCapacity) throws StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    Store store =
-        new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler, metrics,
-            metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+    Store store = new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler,
+        diskSpaceAllocator, metrics, metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null,
+        time);
     store.start();
     store.shutdown();
   }
@@ -309,24 +311,13 @@ public class DiskReformatter {
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
     try (
         StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig, metrics,
-            storeKeyFactory, diskIOScheduler, transformers, time)) {
+            storeKeyFactory, diskIOScheduler, diskSpaceAllocator, transformers, time)) {
       copier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
     }
     // verify that the stores are equivalent
     File[] replicas = {src, tgt};
     if (!consistencyChecker.checkConsistency(replicas)) {
       throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
-    }
-  }
-
-  /**
-   * Deletes {@code location}
-   * @param location the location to delete
-   * @throws IOException if there are any problems deleting {@code location}.
-   */
-  private void delete(File location) throws IOException {
-    if (location.exists() && !FileUtils.deleteQuietly(location)) {
-      throw new IOException("Could not delete " + location);
     }
   }
 }

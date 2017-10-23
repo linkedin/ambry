@@ -204,6 +204,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
+    assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse());
     try {
       compactor.resumeCompaction();
       fail("Should have failed because there is no compaction in progress");
@@ -950,7 +951,8 @@ public class BlobStoreCompactorTest {
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
     return new BlobStoreCompactor(tempDirStr, STORE_ID, CuratedLogIndexState.STORE_KEY_FACTORY, config, metrics,
-        metrics, ioScheduler, log, state.time, state.sessionId, state.incarnationId);
+        metrics, ioScheduler, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, log, state.time, state.sessionId,
+        state.incarnationId);
   }
 
   /**
@@ -1090,6 +1092,7 @@ public class BlobStoreCompactorTest {
     }
 
     assertFalse("No compaction should be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
+    assertEquals("Swap segments should not be found", 0, compactor.getSwapSegmentsInUse());
     long logSegmentSizeAfterCompaction = getSumOfLogSegmentEndOffsets();
     long logSegmentCountAfterCompaction = state.index.getLogSegmentCount();
     long indexSegmentCountAfterCompaction = state.index.getIndexSegments().size();
@@ -1165,6 +1168,8 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     state.initIndex();
     compactor.initialize(state.index);
+    assertEquals("Wrong number of swap segments in use",
+        tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse());
     try {
       if (CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID)) {
         compactor.resumeCompaction();
@@ -1990,7 +1995,7 @@ public class BlobStoreCompactorTest {
     InterruptionInducingLog(int addSegmentCallCountToInterruptAt, int dropSegmentCallCountToInterruptAt)
         throws IOException {
       super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(),
-          new StoreMetrics(new MetricRegistry()));
+          StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, new StoreMetrics(new MetricRegistry()));
       if (addSegmentCallCountToInterruptAt <= 0 || dropSegmentCallCountToInterruptAt <= 0) {
         throw new IllegalArgumentException("Arguments cannot be <= 0");
       }

@@ -178,9 +178,11 @@ public class StoreCopier implements Closeable {
       File srcDir = new File(config.srcStoreDirPath);
       File tgtDir = new File(config.tgtStoreDirPath);
       StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
+      DiskSpaceAllocator diskSpaceAllocator =
+          new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
       try (StoreCopier storeCopier = new StoreCopier("src", srcDir, tgtDir, config.storeCapacity,
-          config.fetchSizeInBytes, storeConfig, metrics, storeKeyFactory, new DiskIOScheduler(null),
-          Collections.EMPTY_LIST, SystemTime.getInstance())) {
+          config.fetchSizeInBytes, storeConfig, metrics, storeKeyFactory, new DiskIOScheduler(null), diskSpaceAllocator,
+          Collections.emptyList(), SystemTime.getInstance())) {
         storeCopier.copy(new StoreFindTokenFactory(storeKeyFactory).getNewFindToken());
       }
     }
@@ -196,21 +198,22 @@ public class StoreCopier implements Closeable {
    * @param metrics {@link StoreMetrics} to use for metrics.
    * @param storeKeyFactory the {@link StoreKeyFactory} to use for {@link StoreKey}s in the {@link Store}.
    * @param diskIOScheduler the {@link DiskIOScheduler} to use.
+   * @param diskSpaceAllocator the {@link DiskSpaceAllocator} to use.
    * @param transformers the list of {@link Transformer} functions to execute. They will be executed in order.
    * @param time the {@link Time} instance to use.
    * @throws StoreException
    */
   public StoreCopier(String storeId, File srcDir, File tgtDir, long storeCapacity, long fetchSizeInBytes,
       StoreConfig storeConfig, StoreMetrics metrics, StoreKeyFactory storeKeyFactory, DiskIOScheduler diskIOScheduler,
-      List<Transformer> transformers, Time time) throws StoreException {
+      DiskSpaceAllocator diskSpaceAllocator, List<Transformer> transformers, Time time) throws StoreException {
     this.storeId = storeId;
     this.fetchSizeInBytes = fetchSizeInBytes;
     this.transformers = transformers;
     MessageStoreRecovery recovery = new BlobStoreRecovery();
-    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, metrics, metrics, srcDir.getAbsolutePath(),
-        storeCapacity, storeKeyFactory, recovery, null, time);
-    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, metrics, metrics,
-        tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+    src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
+        srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+    tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, diskSpaceAllocator, metrics,
+        metrics, tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
     src.start();
     tgt.start();
   }

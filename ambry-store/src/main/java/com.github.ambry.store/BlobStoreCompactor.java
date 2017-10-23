@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 class BlobStoreCompactor {
   static final String INDEX_SEGMENT_READ_JOB_NAME = "blob_store_compactor_index_segment_read";
   static final String TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME = "compactor_clean_shutdown";
+  static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
   static final FilenameFilter TEMP_LOG_SEGMENTS_FILTER = new FilenameFilter() {
     private final String SUFFIX = LogSegmentNameHelper.SUFFIX + TEMP_LOG_SEGMENT_NAME_SUFFIX;
 
@@ -60,7 +61,6 @@ class BlobStoreCompactor {
   };
 
   private static final long WAIT_TIME_FOR_CLEANUP_MS = 5 * Time.MsPerSec;
-  private static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
 
   private final File dataDir;
   private final String storeId;
@@ -70,6 +70,7 @@ class BlobStoreCompactor {
   private final StoreMetrics tgtMetrics;
   private final Log srcLog;
   private final DiskIOScheduler diskIOScheduler;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final Time time;
   private final UUID sessionId;
   private final UUID incarnationId;
@@ -103,8 +104,9 @@ class BlobStoreCompactor {
    * @throws StoreException if the commit failed during recovery.
    */
   BlobStoreCompactor(String dataDir, String storeId, StoreKeyFactory storeKeyFactory, StoreConfig config,
-      StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler, Log srcLog, Time time,
-      UUID sessionId, UUID incarnationId) throws IOException, StoreException {
+      StoreMetrics srcMetrics, StoreMetrics tgtMetrics, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, Log srcLog, Time time, UUID sessionId, UUID incarnationId)
+      throws IOException, StoreException {
     this.dataDir = new File(dataDir);
     this.storeId = storeId;
     this.storeKeyFactory = storeKeyFactory;
@@ -113,6 +115,7 @@ class BlobStoreCompactor {
     this.tgtMetrics = tgtMetrics;
     this.srcLog = srcLog;
     this.diskIOScheduler = diskIOScheduler;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.time = time;
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
@@ -235,6 +238,18 @@ class BlobStoreCompactor {
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
     }
+  }
+
+  /**
+   * @return the number of temporary log segment files this compactor is currently using.
+   */
+  int getSwapSegmentsInUse() throws StoreException {
+    String[] tempSegments = dataDir.list(TEMP_LOG_SEGMENTS_FILTER);
+    if (tempSegments == null) {
+      throw new StoreException("Error occured while listing files in data dir:" + dataDir.getAbsolutePath(),
+          StoreErrorCodes.IOError);
+    }
+    return tempSegments.length;
   }
 
   /**
@@ -443,8 +458,8 @@ class BlobStoreCompactor {
     long targetLogTotalCapacity = srcLog.getSegmentCapacity();
     logger.debug("Target log capacity is {} for {}. Existing log segments are {}. Future names and files are {}",
         targetLogTotalCapacity, storeId, existingTargetLogSegments, targetSegmentNamesAndFilenames);
-    tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), tgtMetrics, true,
-        existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
+    tgtLog = new Log(dataDir.getAbsolutePath(), targetLogTotalCapacity, srcLog.getSegmentCapacity(), diskSpaceAllocator,
+        tgtMetrics, true, existingTargetLogSegments, targetSegmentNamesAndFilenames.iterator());
     Journal journal = new Journal(dataDir.getAbsolutePath(), 2 * config.storeIndexMaxNumberOfInmemElements,
         config.storeMaxNumberOfEntriesToReturnFromJournal);
     tgtIndex =

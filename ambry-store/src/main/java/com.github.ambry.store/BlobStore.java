@@ -14,14 +14,15 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
-import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +47,7 @@ class BlobStore implements Store {
   private final ScheduledExecutorService taskScheduler;
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskIOScheduler diskIOScheduler;
+  private final DiskSpaceAllocator diskSpaceAllocator;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final Object storeWriteLock = new Object();
   private final StoreConfig config;
@@ -90,6 +92,7 @@ class BlobStore implements Store {
    * @param taskScheduler the {@link ScheduledExecutorService} for executing short period background tasks.
    * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
    * @param diskIOScheduler schedules disk IO operations
+   * @param diskSpaceAllocator allocates log segment files.
    * @param metrics the {@link StorageManagerMetrics} instance to use.
    * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
    * @param factory the {@link StoreKeyFactory} for parsing store keys.
@@ -99,12 +102,12 @@ class BlobStore implements Store {
    * @param time the {@link Time} instance to use.
    */
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
-      StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate,
-      Time time) {
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+      WriteStatusDelegate writeStatusDelegate, Time time) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
-        diskIOScheduler, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
+        diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, writeStatusDelegate, time);
   }
 
@@ -114,7 +117,8 @@ class BlobStore implements Store {
    * @param config the settings for store configuration.
    * @param taskScheduler the {@link ScheduledExecutorService} for executing background tasks.
    * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
-   * @param diskIOScheduler schedules disk IO operations
+   * @param diskIOScheduler schedules disk IO operations.
+   * @param diskSpaceAllocator allocates log segment files.
    * @param metrics the {@link StorageManagerMetrics} instance to use.
    * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
    * @param dataDir directory that will be used by the BlobStore for data
@@ -125,24 +129,26 @@ class BlobStore implements Store {
    * @param time the {@link Time} instance to use.
    */
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
-      StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, Time time) {
-    this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, metrics,
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
+      String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      MessageStoreHardDelete hardDelete, Time time) {
+    this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator, metrics,
         storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time);
   }
 
   private BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler, StoreMetrics metrics,
-      StoreMetrics storeUnderCompactionMetrics, String dataDir, long capacityInBytes, StoreKeyFactory factory,
-      MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      WriteStatusDelegate writeStatusDelegate, Time time) {
+      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
+      String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
+      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate, Time time) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
     this.diskIOScheduler = diskIOScheduler;
+    this.diskSpaceAllocator = diskSpaceAllocator;
     this.metrics = metrics;
     this.storeUnderCompactionMetrics = storeUnderCompactionMetrics;
     this.config = config;
@@ -190,9 +196,9 @@ class BlobStore implements Store {
         }
 
         StoreDescriptor storeDescriptor = new StoreDescriptor(dataDir);
-        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, metrics);
+        log = new Log(dataDir, capacityInBytes, config.storeSegmentSizeInBytes, diskSpaceAllocator, metrics);
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
-            diskIOScheduler, log, time, sessionId, storeDescriptor.getIncarnationId());
+            diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId());
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
@@ -516,6 +522,20 @@ class BlobStore implements Store {
         metrics.storeShutdownTimeInMs.update(time.milliseconds() - startTimeInMs);
       }
     }
+  }
+
+  /**
+   * @return the {@link DiskSpaceRequirements} for this store to provide to
+   * {@link DiskSpaceAllocator#initializePool(Collection)}. This will be {@code null} if this store uses a non-segmented
+   * log. This is because it does not require any additional/swap segments.
+   * @throws StoreException
+   */
+  DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
+    checkStarted();
+    DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(log.getSegmentCapacity(),
+        log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
+    logger.debug("Store {} has disk space requirements: {}", storeId, requirements);
+    return requirements;
   }
 
   /**

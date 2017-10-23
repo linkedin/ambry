@@ -32,6 +32,14 @@ public class StorageManagerMetrics {
   public final Counter totalStoreStartFailures;
   public final Counter totalStoreShutdownFailures;
   public final Counter diskMountPathFailures;
+  public final Counter diskDownCount;
+
+  // DiskSpaceAllocator related metrics
+  public final Histogram diskSpaceAllocatorStartTimeMs;
+  public final Counter diskSpaceAllocatorInitFailureCount;
+  public final Counter diskSpaceAllocatorSegmentNotFoundCount;
+  public final Counter diskSpaceAllocatorAllocBeforeInitCount;
+  public final Counter diskSpaceAllocatorFreeBeforeInitCount;
 
   // CompactionManager related metrics
   public final Counter compactionManagerTerminateErrorCount;
@@ -56,6 +64,17 @@ public class StorageManagerMetrics {
     totalStoreStartFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreStartFailures"));
     totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
     diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));
+    diskDownCount = registry.counter(MetricRegistry.name(DiskManager.class, "DiskDownCount"));
+    diskSpaceAllocatorStartTimeMs =
+        registry.histogram(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorStartTimeMs"));
+    diskSpaceAllocatorInitFailureCount =
+        registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorInitFailureCount"));
+    diskSpaceAllocatorSegmentNotFoundCount =
+        registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorSegmentNotFoundCount"));
+    diskSpaceAllocatorAllocBeforeInitCount =
+        registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorAllocBeforeInitCount"));
+    diskSpaceAllocatorFreeBeforeInitCount =
+        registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorFreeBeforeInitCount"));
     compactionCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionCount"));
     compactionManagerTerminateErrorCount =
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionManagerTerminateErrorCount"));

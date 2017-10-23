@@ -16,15 +16,16 @@ package com.github.ambry.server;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
-import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
@@ -114,6 +115,7 @@ public class AmbryServer {
       logger.info("creating configs");
       NetworkConfig networkConfig = new NetworkConfig(properties);
       StoreConfig storeConfig = new StoreConfig(properties);
+      DiskManagerConfig diskManagerConfig = new DiskManagerConfig(properties);
       ServerConfig serverConfig = new ServerConfig(properties);
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
@@ -134,8 +136,8 @@ public class AmbryServer {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       FindTokenFactory findTokenFactory = Utils.getObj(replicationConfig.replicationTokenFactory, storeKeyFactory);
       storageManager =
-          new StorageManager(storeConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId), storeKeyFactory,
-              new BlobStoreRecovery(), new BlobStoreHardDelete(),
+          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, clusterMap.getReplicaIds(nodeId),
+              storeKeyFactory, new BlobStoreRecovery(), new BlobStoreHardDelete(),
               new WriteStatusDelegate(clusterParticipant), time);
       storageManager.start();
 

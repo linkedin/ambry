@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
@@ -21,9 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
-import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import static org.mockito.Mockito.*;
 
@@ -32,6 +30,8 @@ import static org.mockito.Mockito.*;
  * Utility class for common functions used in tests of store classes.
  */
 class StoreTestUtils {
+  static final DiskSpaceAllocator DEFAULT_DISK_SPACE_ALLOCATOR =
+      new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(new MetricRegistry()));
 
   /**
    * Creates a temporary directory whose name starts with the given {@code prefix}.
