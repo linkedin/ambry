@@ -91,19 +91,20 @@ public class DatacenterTest {
 
   @Test
   public void basics() throws JSONException {
-    JSONObject jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
+    JSONObject jsonObject = TestUtils.getJsonDatacenter("XYZ1", (byte) 1, getDataNodes());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
 
     Datacenter datacenter = new TestDatacenter(jsonObject, clusterMapConfig);
 
     assertEquals(datacenter.getName(), "XYZ1");
+    assertEquals(datacenter.getId(), 1);
     assertEquals(datacenter.getDataNodes().size(), dataNodeCount);
     assertEquals(datacenter.getRawCapacityInBytes(), dataNodeCount * diskCount * diskCapacityInBytes);
     assertFalse(datacenter.isRackAware());
     assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
     assertEquals(datacenter, new TestDatacenter(datacenter.toJSONObject(), clusterMapConfig));
 
-    jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodesRackAware());
+    jsonObject = TestUtils.getJsonDatacenter("XYZ1", (byte) 1, getDataNodesRackAware());
     datacenter = new TestDatacenter(jsonObject, clusterMapConfig);
     assertTrue(datacenter.isRackAware());
     assertEquals(datacenter.toJSONObject().toString(), jsonObject.toString());
@@ -126,7 +127,7 @@ public class DatacenterTest {
 
     try {
       // Null HardwareLayout
-      jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodes());
+      jsonObject = TestUtils.getJsonDatacenter("XYZ1", (byte) 1, getDataNodes());
       new Datacenter(null, jsonObject, clusterMapConfig);
       fail("Should have failed validation.");
     } catch (IllegalStateException e) {
@@ -134,11 +135,11 @@ public class DatacenterTest {
     }
 
     // Bad datacenter name
-    jsonObject = TestUtils.getJsonDatacenter("", getDataNodes());
+    jsonObject = TestUtils.getJsonDatacenter("", (byte) 1, getDataNodes());
     failValidation(jsonObject, clusterMapConfig);
 
     // Missing rack IDs
-    jsonObject = TestUtils.getJsonDatacenter("XYZ1", getDataNodesPartiallyRackAware());
+    jsonObject = TestUtils.getJsonDatacenter("XYZ1", (byte) 1, getDataNodesPartiallyRackAware());
     failValidation(jsonObject, clusterMapConfig);
   }
 }

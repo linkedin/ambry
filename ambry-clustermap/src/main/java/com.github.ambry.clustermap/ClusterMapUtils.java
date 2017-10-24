@@ -44,6 +44,7 @@ public class ClusterMapUtils {
   static final String ZKCONNECTSTR_STR = "zkConnectStr";
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
+  static final String DATACENTER_ID_STR = "id";
   static final int UNKNOWN_RACK_ID = -1;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
@@ -51,6 +52,39 @@ public class ClusterMapUtils {
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
   static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
+
+  /**
+   * Stores all zk related info for a DC.
+   */
+  public static class DcZkInfo {
+    private final String dcName;
+    private final byte dcId;
+    private final String zkConnectStr;
+
+    /**
+     * Construct a DcInfo object with the given parameters.
+     * @param dcName the associated datacenter name.
+     * @param dcId the associated datacenter ID.
+     * @param zkConnectStr the associated ZK connect string for this datacenter.
+     */
+    DcZkInfo(String dcName, byte dcId, String zkConnectStr) {
+      this.dcName = dcName;
+      this.dcId = dcId;
+      this.zkConnectStr = zkConnectStr;
+    }
+
+    public String getDcName() {
+      return dcName;
+    }
+
+    public byte getDcId() {
+      return dcId;
+    }
+
+    public String getZkConnectStr() {
+      return zkConnectStr;
+    }
+  }
 
   /**
    * Construct and return the instance name given the host and port.
@@ -63,18 +97,20 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Parses zk layout JSON string and populates and returns a map of datacenter name to Zk connect strings.
-   * @param zkLayoutJsonString the string containing the Zookeeper layout.
-   * @return a map of dcName -> zkConnectStr.
+   * Parses DC information JSON string and returns a map of datacenter name to {@link DcZkInfo}.
+   * @param dcInfoJsonString the string containing the DC info.
+   * @return a map of dcName -> DcInfo.
    * @throws JSONException if there is an error parsing the JSON.
    */
-  public static Map<String, String> parseZkJsonAndPopulateZkInfo(String zkLayoutJsonString) throws JSONException {
-    Map<String, String> dataCenterToZkAddress = new HashMap<>();
-    JSONObject root = new JSONObject(zkLayoutJsonString);
+  public static Map<String, DcZkInfo> parseDcJsonAndPopulateDcInfo(String dcInfoJsonString) throws JSONException {
+    Map<String, DcZkInfo> dataCenterToZkAddress = new HashMap<>();
+    JSONObject root = new JSONObject(dcInfoJsonString);
     JSONArray all = root.getJSONArray(ZKINFO_STR);
     for (int i = 0; i < all.length(); i++) {
       JSONObject entry = all.getJSONObject(i);
-      dataCenterToZkAddress.put(entry.getString(DATACENTER_STR), entry.getString(ZKCONNECTSTR_STR));
+      byte id = Byte.parseByte(entry.getString(DATACENTER_ID_STR));
+      DcZkInfo dcZkInfo = new DcZkInfo(entry.getString(DATACENTER_STR), id, entry.getString(ZKCONNECTSTR_STR));
+      dataCenterToZkAddress.put(dcZkInfo.dcName, dcZkInfo);
     }
     return dataCenterToZkAddress;
   }

@@ -84,8 +84,9 @@ public class HelixClusterManagerTest {
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
     int port = 2200;
+    byte dcId = (byte) 0;
     for (String dcName : dcs) {
-      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, port++, false));
+      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, false));
     }
     String hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
@@ -115,7 +116,7 @@ public class HelixClusterManagerTest {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.datacenter.name", "DC0");
+    props.setProperty("clustermap.datacenter.name", dcs[0]);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
@@ -158,7 +159,7 @@ public class HelixClusterManagerTest {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.datacenter.name", "DC0");
+    props.setProperty("clustermap.datacenter.name", dcs[0]);
     props.setProperty("clustermap.dcs.zk.connect.strings", invalidZkJson.toString(2));
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
@@ -192,6 +193,7 @@ public class HelixClusterManagerTest {
     for (String metricName : clusterManager.getMetricRegistry().getNames()) {
       System.out.println(metricName);
     }
+    assertEquals("Incorrect local datacenter ID", 0, clusterManager.getLocalDatacenterId());
     testPartitionReplicaConsistency();
     testInvalidPartitionId();
     testDatacenterDatanodeReplicas();

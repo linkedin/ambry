@@ -62,8 +62,9 @@ class HelixParticipant implements ClusterParticipant {
       throw new IllegalStateException("Clustername is empty in clusterMapConfig");
     }
     try {
-      zkConnectStr = ClusterMapUtils.parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
-          .get(clusterMapConfig.clusterMapDatacenterName);
+      zkConnectStr = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
+          .get(clusterMapConfig.clusterMapDatacenterName)
+          .getZkConnectStr();
     } catch (JSONException e) {
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }

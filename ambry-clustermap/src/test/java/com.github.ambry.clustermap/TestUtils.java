@@ -245,9 +245,10 @@ public class TestUtils {
     return jsonArray;
   }
 
-  public static JSONObject getJsonDatacenter(String name, JSONArray dataNodes) throws JSONException {
+  public static JSONObject getJsonDatacenter(String name, byte id, JSONArray dataNodes) throws JSONException {
     JSONObject jsonObject = new JSONObject();
     jsonObject.put("name", name);
+    jsonObject.put("id", id);
     jsonObject.put("dataNodes", dataNodes);
     return jsonObject;
   }
@@ -259,7 +260,7 @@ public class TestUtils {
 
     JSONArray datacenterJSONArray = new JSONArray();
     for (int i = 0; i < names.size(); i++) {
-      datacenterJSONArray.put(getJsonDatacenter(names.get(i), dataNodes.get(i)));
+      datacenterJSONArray.put(getJsonDatacenter(names.get(i), (byte) i, dataNodes.get(i)));
     }
     return datacenterJSONArray;
   }
@@ -735,7 +736,7 @@ public class TestUtils {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
-    StaticClusterManager clusterMapManager = new StaticClusterManager(partitionLayout, new MetricRegistry());
+    StaticClusterManager clusterMapManager = new StaticClusterManager(partitionLayout, null, new MetricRegistry());
     List<PartitionId> allocatedPartitions;
 
     allocatedPartitions =
@@ -762,11 +763,12 @@ public class TestUtils {
     JSONArray zkInfosJson = new JSONArray();
     for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : zkInfos) {
       JSONObject zkInfoJson = new JSONObject();
-      zkInfoJson.put("datacenter", zkInfo.getDcName());
-      zkInfoJson.put("zkConnectStr", "localhost:" + zkInfo.getPort());
+      zkInfoJson.put(ClusterMapUtils.DATACENTER_STR, zkInfo.getDcName());
+      zkInfoJson.put(ClusterMapUtils.DATACENTER_ID_STR, zkInfo.getId());
+      zkInfoJson.put(ClusterMapUtils.ZKCONNECTSTR_STR, "localhost:" + zkInfo.getPort());
       zkInfosJson.put(zkInfoJson);
     }
-    return new JSONObject().put("zkInfo", zkInfosJson);
+    return new JSONObject().put(ClusterMapUtils.ZKINFO_STR, zkInfosJson);
   }
 
   /**
@@ -785,6 +787,18 @@ public class TestUtils {
       int partitionCount) throws JSONException {
     return new TestPartitionLayout(testHardwareLayout, partitionCount, PartitionState.READ_WRITE, 1024L * 1024 * 1024,
         3);
+  }
+
+  /**
+   * For use when the the actual values in {@link ClusterMapConfig} are unimportant.
+   * @return a {@link ClusterMapConfig} with some default values.
+   */
+  static ClusterMapConfig getDummyConfig() {
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.cluster.name", "cluster");
+    props.setProperty("clustermap.datacenter.name", "");
+    return new ClusterMapConfig(new VerifiableProperties(props));
   }
 }
 

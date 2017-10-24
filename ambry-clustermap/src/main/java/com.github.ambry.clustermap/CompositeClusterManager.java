@@ -23,8 +23,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
-
 
 /**
  * A cluster manager that is a wrapper over a {@link StaticClusterManager} instance and a {@link HelixClusterManager}
@@ -42,6 +40,11 @@ class CompositeClusterManager implements ClusterMap {
    * @param helixClusterManager the {@link HelixClusterManager} instance to use for comparison of views.
    */
   CompositeClusterManager(StaticClusterManager staticClusterManager, HelixClusterManager helixClusterManager) {
+    if (staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
+      throw new IllegalStateException(
+          "Datacenter ID in the static cluster map [" + staticClusterManager.getLocalDatacenterId()
+              + "] does not match the one in helix [" + helixClusterManager.getLocalDatacenterId() + "]");
+    }
     this.staticClusterManager = staticClusterManager;
     this.helixClusterManager = helixClusterManager;
     this.helixClusterManagerMetrics =
@@ -115,7 +118,7 @@ class CompositeClusterManager implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return UNKNOWN_DATACENTER_ID;
+    return staticClusterManager.getLocalDatacenterId();
   }
 
   /**
