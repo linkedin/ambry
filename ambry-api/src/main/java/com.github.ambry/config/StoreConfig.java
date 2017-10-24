@@ -183,6 +183,15 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   /**
+   * Enables or disables dynamic sealing/unsealing
+   */
+  @Config(storeWriteStatusDelegateEnableName)
+  @Default("false")
+  public final boolean storeWriteStatusDelegateEnable;
+  public static final String storeWriteStatusDelegateEnableName =
+      "store.write.status.delegate.enable";
+
+  /**
    * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW
    */
   @Config(storeReadOnlyEnableSizeThresholdPercentageName)
@@ -200,15 +209,6 @@ public class StoreConfig {
   public final int storeReadWriteEnableSizeThresholdPercentageDelta;
   public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
       "store.read.write.enable.size.threshold.percentage.delta";
-
-  /**
-   * Enables or disables dynamic sealing/unsealing of the BlobStore
-   */
-  @Config(storeWriteStatusDelegateEnableName)
-  @Default("false")
-  public final boolean storeWriteStatusDelegateEnable;
-  public static final String storeWriteStatusDelegateEnableName =
-      "store.write.status.delegate.enable";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -247,12 +247,12 @@ public class StoreConfig {
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
     storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
+    storeWriteStatusDelegateEnable = verifiableProperties.getBoolean(storeWriteStatusDelegateEnableName, false);
     storeReadOnlyEnableSizeThresholdPercentage =
         verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
     storeReadWriteEnableSizeThresholdPercentageDelta =
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
-    storeWriteStatusDelegateEnable = verifiableProperties.getBoolean(storeWriteStatusDelegateEnableName, false);
   }
 }
 
