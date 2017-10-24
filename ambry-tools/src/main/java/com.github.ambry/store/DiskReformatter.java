@@ -24,6 +24,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -32,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -318,8 +320,17 @@ public class DiskReformatter {
     if (!sourceHasProblems) {
       // verify that the stores are equivalent
       File[] replicas = {src, tgt};
-      if (!consistencyChecker.checkConsistency(replicas)) {
-        throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
+      Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> consistencyCheckResult =
+          consistencyChecker.checkConsistency(replicas);
+      if (!consistencyCheckResult.getFirst()) {
+        // there was a problem with the consistency check
+        if (consistencyCheckResult.getSecond().get(src).isIndexSane()) {
+          // the src index was sane which means either the tgt was not or that they are not consistent. Problem !
+          throw new IllegalStateException("Data in " + src + " and " + tgt + " is not equivalent");
+        } else {
+          // the src itself was bad - nothing we can do. move on.
+          logger.warn("{} was not sane. Consistency check was skipped", src);
+        }
       }
     } else {
       logger.warn("{} had problems so did not run consistency checker", src);

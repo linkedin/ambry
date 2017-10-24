@@ -23,6 +23,7 @@ import com.github.ambry.config.Default;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
@@ -152,7 +153,8 @@ public class ConsistencyCheckerTool {
       Throttler throttler = new Throttler(config.indexEntriesToProcessPerSec, 1000, true, time);
       ConsistencyCheckerTool consistencyCheckerTool =
           new ConsistencyCheckerTool(clusterMap, blobIdFactory, storeConfig, filterKeySet, throttler, metrics, time);
-      boolean success = consistencyCheckerTool.checkConsistency(config.pathOfInput.listFiles(File::isDirectory));
+      boolean success =
+          consistencyCheckerTool.checkConsistency(config.pathOfInput.listFiles(File::isDirectory)).getFirst();
       System.exit(success ? 0 : 1);
     }
   }
@@ -172,31 +174,54 @@ public class ConsistencyCheckerTool {
    * @return {@code true} if no real inconsistent blobs. {@code false}
    * @throws Exception
    */
-  public boolean checkConsistency(File[] replicas) throws Exception {
-    Map<StoreKey, ReplicationStatus> blobIdToStatusMap = getBlobStatusByReplica(replicas);
-    return checkConsistency(blobIdToStatusMap, replicas.length).size() == 0;
+  public Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> checkConsistency(File[] replicas)
+      throws Exception {
+    Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
+        getIndexProcessingResults(replicas);
+    boolean success = resultsByReplica.getFirst();
+    if (success) {
+      Map<StoreKey, ReplicationStatus> blobIdToStatusMap =
+          getBlobStatusByReplica(replicas, resultsByReplica.getSecond());
+      success = checkConsistency(blobIdToStatusMap, replicas.length).size() == 0;
+    }
+    return new Pair<>(success, resultsByReplica.getSecond());
+  }
+
+  /**
+   * Processes the indexes of each of the replicas and returns the results.
+   * @param replicas the replicas to process indexes for.
+   * @return a {@link Pair} whose first indicates whether all results were sane and whose second contains the map of
+   * individual results by replica.
+   * @throws Exception if there is any error in processing the indexes.
+   */
+  private Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> getIndexProcessingResults(File[] replicas)
+      throws Exception {
+    long currentTimeMs = time.milliseconds();
+    Map<File, DumpIndexTool.IndexProcessingResults> results = new HashMap<>();
+    boolean sane = true;
+    for (File replica : replicas) {
+      logger.info("Processing segment files for replica {} ", replica);
+      DumpIndexTool.IndexProcessingResults result =
+          dumpIndexTool.processIndex(replica, filterSet, currentTimeMs, throttler);
+      sane = sane && result.isIndexSane();
+      results.put(replica, result);
+    }
+    return new Pair<>(sane, results);
   }
 
   /**
    * Walks through all replicas and collects blob status in each of them.
    * @param replicas An Array of replica directories from which blob status' need to be collected
+   * @param results the results of processing the indexes of the given {@code replicas}.
    * @return a {@link Map} of BlobId to {@link ReplicationStatus}.
    * @throws Exception
    */
-  private Map<StoreKey, ReplicationStatus> getBlobStatusByReplica(File[] replicas) throws Exception {
-    long currentTimeMs = time.milliseconds();
+  private Map<StoreKey, ReplicationStatus> getBlobStatusByReplica(File[] replicas,
+      Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
     Map<StoreKey, ReplicationStatus> keyReplicationStatusMap = new HashMap<>();
     for (File replica : replicas) {
-      logger.info("Processing segment files for replica {} ", replica);
-      DumpIndexTool.IndexProcessingResults results =
-          dumpIndexTool.processIndex(replica, filterSet, currentTimeMs, throttler);
-      if (results.isIndexSane()) {
-        logger.info("Index of {} is well formed and without errors", replica);
-      } else {
-        logger.error("Index of {} has errors. Processing results: {}", replica, results);
-        throw new IllegalStateException("Index of " + replica + " has errors");
-      }
-      for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : results.getKeyToState().entrySet()) {
+      DumpIndexTool.IndexProcessingResults result = results.get(replica);
+      for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
         StoreKey key = entry.getKey();
         if (!keyReplicationStatusMap.containsKey(key)) {
           keyReplicationStatusMap.put(key, new ReplicationStatus(replicas));
