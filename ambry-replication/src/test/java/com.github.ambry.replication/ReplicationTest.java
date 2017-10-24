@@ -615,14 +615,14 @@ public class ReplicationTest {
     int encryptionKeySize = TestUtils.RANDOM.nextInt(blobSize / 4);
     byte[] blob = new byte[blobSize];
     byte[] usermetadata = new byte[userMetadataSize];
-    byte[] encryptionKey = new byte[encryptionKeySize];
+    byte[] encryptionKey = TestUtils.RANDOM.nextBoolean() ? new byte[encryptionKeySize] : null;
     TestUtils.RANDOM.nextBytes(blob);
     TestUtils.RANDOM.nextBytes(usermetadata);
     BlobProperties blobProperties = new BlobProperties(blobSize, "test", accountId, containerId);
 
     MessageFormatInputStream stream =
-        new PutMessageFormatInputStream(id, ByteBuffer.wrap(encryptionKey), blobProperties,
-            ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
+        new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
+            blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
     return new Pair<>(ByteBuffer.wrap(message),
         new MessageInfo(id, message.length, Utils.Infinite_Time, accountId, containerId,

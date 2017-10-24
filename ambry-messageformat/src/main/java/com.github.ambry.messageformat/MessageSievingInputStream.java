@@ -30,6 +30,8 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.messageformat.MessageFormatRecord.*;
+
 
 /**
  * InputStream that skips invalid blobs based on some validation criteria.
@@ -173,106 +175,53 @@ public class MessageSievingInputStream extends InputStream {
     long startTime = SystemTime.getInstance().milliseconds();
     try {
       int availableBeforeParsing = byteArrayInputStream.available();
-      byte[] headerVersionInBytes = new byte[MessageFormatRecord.Version_Field_Size_In_Bytes];
-      byteArrayInputStream.read(headerVersionInBytes, 0, MessageFormatRecord.Version_Field_Size_In_Bytes);
+      byte[] headerVersionInBytes = new byte[Version_Field_Size_In_Bytes];
+      byteArrayInputStream.read(headerVersionInBytes, 0, Version_Field_Size_In_Bytes);
       ByteBuffer headerVersion = ByteBuffer.wrap(headerVersionInBytes);
       short version = headerVersion.getShort();
-      switch (version) {
-        case MessageFormatRecord.Message_Header_Version_V1: {
-          encryptionKey = null;
-          ByteBuffer headerBuffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-          headerBuffer.putShort(version);
-          byteArrayInputStream.read(headerBuffer.array(), 2, headerBuffer.capacity() - 2);
-          headerBuffer.position(headerBuffer.capacity());
-          headerBuffer.flip();
-          MessageFormatRecord.MessageHeader_Format_V1 header =
-              new MessageFormatRecord.MessageHeader_Format_V1(headerBuffer);
-          StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(byteArrayInputStream));
-
-          if (header.getBlobPropertiesRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
-            metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
-            blobData = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
-          } else {
-            throw new IllegalStateException("Message cannot be a deleted record ");
-          }
-          if (byteArrayInputStream.available() != 0) {
-            logger.error("Parsed message size " + (availableBeforeParsing + byteArrayInputStream.available())
-                + " is not equivalent to the size in message info " + availableBeforeParsing);
-          } else {
-            if (logger.isTraceEnabled()) {
-              logger.trace("Message Successfully read");
-              logger.trace(
-                  "Header - version {} Message Size {} Starting offset of the blob {} BlobPropertiesRelativeOffset {}"
-                      + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
-                  header.getVersion(), header.getMessageSize(), currentOffset,
-                  header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
-                  header.getBlobRecordRelativeOffset(), header.getDeleteRecordRelativeOffset(), header.getCrc());
-              logger.trace("Id {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ", storeKey.getID(),
-                  props.getBlobSize(), metadata.capacity(), blobData.getSize());
-            }
-            if (msgInfo.getStoreKey().equals(storeKey)) {
-              isValid = true;
-            } else {
-              logger.error(
-                  "StoreKey in log " + storeKey + " failed to match store key from Index " + msgInfo.getStoreKey());
-            }
-          }
+      if (version != Message_Header_Version_V1 && version != MessageFormatRecord.Message_Header_Version_V2) {
+        throw new MessageFormatException("Header version not supported " + version,
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+      ByteBuffer headerBuffer = ByteBuffer.allocate(
+          version == Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
+              : MessageHeader_Format_V2.getHeaderSize());
+      headerBuffer.putShort(version);
+      byteArrayInputStream.read(headerBuffer.array(), 2, headerBuffer.capacity() - 2);
+      headerBuffer.position(headerBuffer.capacity());
+      headerBuffer.flip();
+      MessageHeader_Format header = version == Message_Header_Version_V1 ? new MessageHeader_Format_V1(headerBuffer)
+          : new MessageHeader_Format_V2(headerBuffer);
+      StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(byteArrayInputStream));
+      if (header.isPutRecord()) {
+        encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(byteArrayInputStream) : null;
+        props = deserializeBlobProperties(byteArrayInputStream);
+        metadata = deserializeUserMetadata(byteArrayInputStream);
+        blobData = deserializeBlob(byteArrayInputStream);
+      } else {
+        throw new IllegalStateException("Message cannot be a deleted record ");
+      }
+      if (byteArrayInputStream.available() != 0) {
+        logger.error("Parsed message size {} is not equivalent to the size in message info {}",
+            (availableBeforeParsing + byteArrayInputStream.available()), availableBeforeParsing);
+      } else {
+        logger.trace("Message Successfully read");
+        logger.trace(
+            "Header - version {} Message Size {} Starting offset of the blob {} BlobEncryptionKeyRecord {} BlobPropertiesRelativeOffset {}"
+                + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
+            header.getVersion(), header.getMessageSize(), currentOffset,
+            header.getBlobEncryptionKeyRecordRelativeOffset(), header.getBlobPropertiesRecordRelativeOffset(),
+            header.getUserMetadataRecordRelativeOffset(), header.getBlobRecordRelativeOffset(),
+            header.getDeleteRecordRelativeOffset(), header.getCrc());
+        logger.trace("Id {} Encryption Key -size {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ",
+            storeKey.getID(), encryptionKey == null ? 0 : encryptionKey.capacity(), props.getBlobSize(),
+            metadata.capacity(), blobData.getSize());
+        if (msgInfo.getStoreKey().equals(storeKey)) {
+          isValid = true;
+        } else {
+          logger.error(
+              "StoreKey in log " + storeKey + " failed to match store key from Index " + msgInfo.getStoreKey());
         }
-        break;
-        case MessageFormatRecord.Message_Header_Version_V2: {
-          ByteBuffer headerBuffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize());
-          headerBuffer.putShort(version);
-          byteArrayInputStream.read(headerBuffer.array(), 2, headerBuffer.capacity() - 2);
-          headerBuffer.position(headerBuffer.capacity());
-          headerBuffer.flip();
-          MessageFormatRecord.MessageHeader_Format_V2 header =
-              new MessageFormatRecord.MessageHeader_Format_V2(headerBuffer);
-          StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(byteArrayInputStream));
-          boolean hasEncryptionKey = header.getBlobEncryptionKeyRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
-
-          if (header.getBlobPropertiesRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            encryptionKey =
-                hasEncryptionKey ? MessageFormatRecord.deserializeBlobEncryptionKey(byteArrayInputStream) : null;
-            props = MessageFormatRecord.deserializeBlobProperties(byteArrayInputStream);
-            metadata = MessageFormatRecord.deserializeUserMetadata(byteArrayInputStream);
-            blobData = MessageFormatRecord.deserializeBlob(byteArrayInputStream);
-          } else {
-            throw new IllegalStateException("Message cannot be a deleted record ");
-          }
-          if (byteArrayInputStream.available() != 0) {
-            logger.error("Parsed message size " + (availableBeforeParsing + byteArrayInputStream.available())
-                + " is not equivalent to the size in message info " + availableBeforeParsing);
-          } else {
-            if (logger.isTraceEnabled()) {
-              logger.trace("Message Successfully read");
-              logger.trace(
-                  "Header - version {} Message Size {} Starting offset of the blob {} BlobEncryptionKeyRecord {} BlobPropertiesRelativeOffset {}"
-                      + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
-                  header.getVersion(), header.getMessageSize(), currentOffset,
-                  header.getBlobEncryptionKeyRecordRelativeOffset(), header.getBlobPropertiesRecordRelativeOffset(),
-                  header.getUserMetadataRecordRelativeOffset(), header.getBlobRecordRelativeOffset(),
-                  header.getDeleteRecordRelativeOffset(), header.getCrc());
-              logger.trace(
-                  "Id {} Encryption Key -size {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ",
-                  storeKey.getID(), encryptionKey.capacity(), props.getBlobSize(), metadata.capacity(),
-                  blobData.getSize());
-            }
-            if (msgInfo.getStoreKey().equals(storeKey)) {
-              isValid = true;
-            } else {
-              logger.error(
-                  "StoreKey in log " + storeKey + " failed to match store key from Index " + msgInfo.getStoreKey());
-            }
-          }
-        }
-        break;
-        default:
-          throw new MessageFormatException("Header version not supported " + version,
-              MessageFormatErrorCodes.Data_Corrupt);
       }
     } catch (MessageFormatException e) {
       logger.error(

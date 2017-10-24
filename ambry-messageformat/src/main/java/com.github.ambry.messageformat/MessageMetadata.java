@@ -41,6 +41,10 @@ public class MessageMetadata {
     return encryptionKey;
   }
 
+  public short getVersion() {
+    return version;
+  }
+
   /**
    * @return The number of bytes in the serialized form of this instance of MessageMetadata.
    */

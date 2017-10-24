@@ -790,12 +790,11 @@ class PutOperation {
         chunkBlobId =
             new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
                 passedInBlobProperties.getContainerId(), partitionId);
-        // @todo: set encrypted flag as appropriate.
         chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), false);
+            passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted());
         operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
             routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();

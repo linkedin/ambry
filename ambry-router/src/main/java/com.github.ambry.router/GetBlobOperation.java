@@ -722,15 +722,15 @@ class GetBlobOperation extends GetOperation {
               chunkException = new RouterException(
                   "Unexpected number of messages in a partition response, expected: 1, " + "received: "
                       + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError);
-            }
-
-            MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
-            handleBody(getResponse.getInputStream(), messageMetadata);
-            chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
-            if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
-              logger.trace("Cross colo request successful for remote replica in {} ",
-                  getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
-              routerMetrics.crossColoSuccessCount.inc();
+            } else {
+              MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
+              handleBody(getResponse.getInputStream(), messageMetadata);
+              chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
+              if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
+                logger.trace("Cross colo request successful for remote replica in {} ",
+                    getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+                routerMetrics.crossColoSuccessCount.inc();
+              }
             }
           } else {
             // process and set the most relevant exception.

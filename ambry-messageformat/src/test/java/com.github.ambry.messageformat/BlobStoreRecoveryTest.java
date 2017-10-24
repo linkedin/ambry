@@ -120,7 +120,7 @@ public class BlobStoreRecoveryTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V1}});
+        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
   }
 
   public BlobStoreRecoveryTest(short headerVersionToUse) {
@@ -141,6 +141,7 @@ public class BlobStoreRecoveryTest {
       byte[] blob = new byte[4000];
       TestUtils.RANDOM.nextBytes(usermetadata);
       TestUtils.RANDOM.nextBytes(blob);
+      TestUtils.RANDOM.nextBytes(encryptionKey);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
@@ -159,10 +160,10 @@ public class BlobStoreRecoveryTest {
           new BlobProperties(4000, "test", accountId, containerId), ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
-      // 3rd message
-      PutMessageFormatInputStream msg3 = new PutMessageFormatInputStream(keys[2], ByteBuffer.wrap(encryptionKey),
-          new BlobProperties(4000, "test", accountId, containerId), ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      // 3rd message (null encryption key)
+      PutMessageFormatInputStream msg3 =
+          new PutMessageFormatInputStream(keys[2], null, new BlobProperties(4000, "test", accountId, containerId),
+              ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
       DeleteMessageFormatInputStream msg4 =

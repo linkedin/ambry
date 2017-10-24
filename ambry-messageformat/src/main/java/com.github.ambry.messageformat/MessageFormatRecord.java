@@ -191,10 +191,10 @@ public class MessageFormatRecord {
    */
   public static BlobAll deserializeBlobAll(InputStream stream, StoreKeyFactory storeKeyFactory)
       throws IOException, MessageFormatException {
-    boolean hasEncryptionKeyRecord = false;
     DataInputStream inputStream = new DataInputStream(stream);
     short headerVersion = inputStream.readShort();
     ByteBuffer headerBuf;
+    MessageHeader_Format header;
     switch (headerVersion) {
       case Message_Header_Version_V1:
         headerBuf = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
@@ -202,7 +202,7 @@ public class MessageFormatRecord {
         inputStream.read(headerBuf.array(), Version_Field_Size_In_Bytes,
             MessageHeader_Format_V1.getHeaderSize() - Version_Field_Size_In_Bytes);
         headerBuf.rewind();
-        new MessageHeader_Format_V1(headerBuf).verifyHeader();
+        header = new MessageHeader_Format_V1(headerBuf);
         break;
       case Message_Header_Version_V2:
         headerBuf = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize());
@@ -210,24 +210,111 @@ public class MessageFormatRecord {
         inputStream.read(headerBuf.array(), Version_Field_Size_In_Bytes,
             MessageHeader_Format_V2.getHeaderSize() - Version_Field_Size_In_Bytes);
         headerBuf.rewind();
-        MessageHeader_Format_V2 header = new MessageHeader_Format_V2(headerBuf);
-        header.verifyHeader();
-        hasEncryptionKeyRecord =
-            header.getBlobEncryptionKeyRecordRelativeOffset() != Message_Header_Invalid_Relative_Offset;
+        header = new MessageHeader_Format_V2(headerBuf);
         break;
       default:
         throw new MessageFormatException("Message header version not supported",
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
+    header.verifyHeader();
     StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(stream));
     ByteBuffer blobEncryptionKey = null;
-    if (hasEncryptionKeyRecord) {
+    if (header.hasEncryptionKeyRecord()) {
       blobEncryptionKey = deserializeBlobEncryptionKey(stream);
     }
     BlobProperties blobProperties = deserializeBlobProperties(stream);
     byte[] userMetadata = deserializeUserMetadata(stream).array();
     BlobData blobData = deserializeBlob(stream);
     return new BlobAll(storeKey, blobEncryptionKey, new BlobInfo(blobProperties, userMetadata), blobData);
+  }
+
+  /**
+   * An interface that has to be implemented by all versions of the Message Header Format.
+   */
+  public interface MessageHeader_Format {
+    /**
+     * @return the version of this Message Header Format
+     */
+    short getVersion();
+
+    /**
+     * @return the offset of the message payload (the part after the blob id) relative to the end of the header.
+     */
+    int getPayloadRelativeOffset();
+
+    /**
+     * @return the message payload size.
+     */
+    long getMessageSize();
+
+    /**
+     * @return if this is a put record, the relative offset of the Blob Properties Record from the end of the header. If
+     * this is a delete record, returns {@link #Message_Header_Invalid_Relative_Offset}
+     */
+    int getBlobPropertiesRecordRelativeOffset();
+
+    /**
+     * @return the length of the BlobProperties record.
+     */
+    int getBlobPropertiesRecordSize();
+
+    /**
+     * @return if this is a delete record, the relative offset of the Delete Sub Record from the end of the header. If
+     * this is a put record, returns {@link #Message_Header_Invalid_Relative_Offset}
+     */
+    int getDeleteRecordRelativeOffset();
+
+    /**
+     * @return if this is a put record with an encryption key sub record, the offset of the encryption key sub record
+     * relative to the end of the header; else returns {@link #Message_Header_Invalid_Relative_Offset}
+     */
+    int getBlobEncryptionKeyRecordRelativeOffset();
+
+    /**
+     * @return the length of the Blob Encryption Key record.
+     */
+    int getBlobEncryptionKeyRecordSize();
+
+    /**
+     * @return the offset of the user metadata sub record relative to the end of the header.
+     */
+    int getUserMetadataRecordRelativeOffset();
+
+    /**
+     * @return the length of the User Metadata record.
+     */
+    int getUserMetadataRecordSize();
+
+    /**
+     * @return the offset of the blob sub record relative to the end of the header.
+     */
+    int getBlobRecordRelativeOffset();
+
+    /**
+     * @return the length of the Blob sub record.
+     */
+    long getBlobRecordSize();
+
+    /**
+     * @return the crc of the header.
+     */
+    long getCrc();
+
+    /**
+     * Verify that the header is proper.
+     * @throws MessageFormatException
+     */
+    void verifyHeader() throws MessageFormatException;
+
+    /**
+     * @return true if this record has an encryption key sub record; false otherwise.
+     */
+    boolean hasEncryptionKeyRecord();
+
+    /**
+     * @return true if this is a put record; false if this is a delete record.
+     */
+    boolean isPutRecord();
   }
 
   /**
@@ -261,7 +348,7 @@ public class MessageFormatRecord {
    *  crc             - The crc of the message header
    *
    */
-  public static class MessageHeader_Format_V1 {
+  public static class MessageHeader_Format_V1 implements MessageHeader_Format {
     private ByteBuffer buffer;
 
     // total size field start offset and size
@@ -352,37 +439,86 @@ public class MessageFormatRecord {
     }
 
     public MessageHeader_Format_V1(ByteBuffer input) {
-      this.buffer = input;
+      buffer = input;
     }
 
+    @Override
     public short getVersion() {
       return buffer.getShort(0);
     }
 
+    @Override
+    public boolean isPutRecord() {
+      return getBlobPropertiesRecordRelativeOffset() != Message_Header_Invalid_Relative_Offset;
+    }
+
+    @Override
+    public int getPayloadRelativeOffset() {
+      return isPutRecord() ? getBlobPropertiesRecordRelativeOffset() : getDeleteRecordRelativeOffset();
+    }
+
+    @Override
     public long getMessageSize() {
       return buffer.getLong(Total_Size_Field_Offset_In_Bytes);
     }
 
+    @Override
     public int getBlobPropertiesRecordRelativeOffset() {
       return buffer.getInt(BlobProperties_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public int getBlobPropertiesRecordSize() {
+      return getUserMetadataRecordRelativeOffset() - getBlobPropertiesRecordRelativeOffset();
+    }
+
+    @Override
     public int getDeleteRecordRelativeOffset() {
       return buffer.getInt(Delete_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public int getBlobEncryptionKeyRecordRelativeOffset() {
+      return Message_Header_Invalid_Relative_Offset;
+    }
+
+    @Override
+    public int getBlobEncryptionKeyRecordSize() {
+      return 0;
+    }
+
+    @Override
+    public boolean hasEncryptionKeyRecord() {
+      return false;
+    }
+
+    @Override
     public int getUserMetadataRecordRelativeOffset() {
       return buffer.getInt(UserMetadata_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public int getUserMetadataRecordSize() {
+      return getBlobRecordRelativeOffset() - getUserMetadataRecordRelativeOffset();
+    }
+
+    @Override
     public int getBlobRecordRelativeOffset() {
       return buffer.getInt(Blob_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public long getBlobRecordSize() {
+      int messageSizeExcludingBlobRecord = getBlobRecordRelativeOffset() - getPayloadRelativeOffset();
+      return getMessageSize() - messageSizeExcludingBlobRecord;
+    }
+
+    @Override
     public long getCrc() {
       return buffer.getLong(Crc_Field_Offset_In_Bytes);
     }
 
+    @Override
     public void verifyHeader() throws MessageFormatException {
       verifyCrc();
       checkHeaderConstraints(getMessageSize(), getBlobPropertiesRecordRelativeOffset(), getDeleteRecordRelativeOffset(),
@@ -434,7 +570,7 @@ public class MessageFormatRecord {
    *  crc             - The crc of the message header
    *
    */
-  public static class MessageHeader_Format_V2 {
+  public static class MessageHeader_Format_V2 implements MessageHeader_Format {
     private ByteBuffer buffer;
 
     // total size field start offset and size
@@ -533,41 +669,95 @@ public class MessageFormatRecord {
     }
 
     public MessageHeader_Format_V2(ByteBuffer input) {
-      this.buffer = input;
+      buffer = input;
     }
 
+    @Override
     public short getVersion() {
       return buffer.getShort(0);
     }
 
+    @Override
     public long getMessageSize() {
       return buffer.getLong(Total_Size_Field_Offset_In_Bytes);
     }
 
+    @Override
     public int getBlobPropertiesRecordRelativeOffset() {
       return buffer.getInt(BlobProperties_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public int getBlobPropertiesRecordSize() {
+      return getUserMetadataRecordRelativeOffset() - getBlobPropertiesRecordRelativeOffset();
+    }
+
+    @Override
+    public boolean isPutRecord() {
+      return getBlobPropertiesRecordRelativeOffset() != Message_Header_Invalid_Relative_Offset;
+    }
+
+    @Override
     public int getDeleteRecordRelativeOffset() {
       return buffer.getInt(Delete_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
     public int getBlobEncryptionKeyRecordRelativeOffset() {
       return buffer.getInt(Blob_Encryption_Key_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public int getBlobEncryptionKeyRecordSize() {
+      if (hasEncryptionKeyRecord()) {
+        return getBlobPropertiesRecordRelativeOffset() - getBlobEncryptionKeyRecordRelativeOffset();
+      } else {
+        return 0;
+      }
+    }
+
+    @Override
+    public boolean hasEncryptionKeyRecord() {
+      return getBlobEncryptionKeyRecordRelativeOffset() != Message_Header_Invalid_Relative_Offset;
+    }
+
+    @Override
     public int getUserMetadataRecordRelativeOffset() {
       return buffer.getInt(UserMetadata_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public int getUserMetadataRecordSize() {
+      return getBlobRecordRelativeOffset() - getUserMetadataRecordRelativeOffset();
+    }
+
+    @Override
     public int getBlobRecordRelativeOffset() {
       return buffer.getInt(Blob_Relative_Offset_Field_Offset_In_Bytes);
     }
 
+    @Override
+    public long getBlobRecordSize() {
+      int messageSizeExcludingBlobRecord = getBlobRecordRelativeOffset() - getPayloadRelativeOffset();
+      return getMessageSize() - messageSizeExcludingBlobRecord;
+    }
+
+    @Override
+    public int getPayloadRelativeOffset() {
+      if (isPutRecord()) {
+        return hasEncryptionKeyRecord() ? getBlobEncryptionKeyRecordRelativeOffset()
+            : getBlobPropertiesRecordRelativeOffset();
+      } else {
+        return getDeleteRecordRelativeOffset();
+      }
+    }
+
+    @Override
     public long getCrc() {
       return buffer.getLong(Crc_Field_Offset_In_Bytes);
     }
 
+    @Override
     public void verifyHeader() throws MessageFormatException {
       verifyCrc();
       checkHeaderConstraints(getMessageSize(), getBlobEncryptionKeyRecordRelativeOffset(),

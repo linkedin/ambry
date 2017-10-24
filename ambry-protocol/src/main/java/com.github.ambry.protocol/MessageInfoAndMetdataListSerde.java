@@ -64,6 +64,9 @@ class MessageInfoAndMetadataListSerde {
         messageInfoList == null ? null : new ArrayList<>(Collections.nCopies(messageInfoList.size(), null)), version);
   }
 
+  /**
+   * @return the size in bytes that serialization of this MessageInfoAndMetadataList will result in.
+   */
   int getMessageInfoAndMetadataListSize() {
     if (messageInfoList == null) {
       return Integer.BYTES;
@@ -81,58 +84,40 @@ class MessageInfoAndMetadataListSerde {
       size += Long.BYTES;
       // whether deleted
       size += 1;
-      switch (version) {
-        case VERSION_1:
-          break;
-        case VERSION_2:
-          // whether crc is present
-          size += 1;
-          if (messageInfo.getCrc() != null) {
-            // crc
-            size += Long.BYTES;
-          }
-          break;
-        case VERSION_3:
-          // whether crc is present
-          size += 1;
-          if (messageInfo.getCrc() != null) {
-            // crc
-            size += Long.BYTES;
-          }
-          // accountId
-          size += Short.BYTES;
-          // containerId
-          size += Short.BYTES;
-          // operationTime
+      if (version < VERSION_1 || version > VERSION_4) {
+        throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
+      }
+      if (version > VERSION_1) {
+        // whether crc is present
+        size += 1;
+        if (messageInfo.getCrc() != null) {
+          // crc
           size += Long.BYTES;
-          break;
-        case VERSION_4:
-          // whether crc is present
-          size += 1;
-          if (messageInfo.getCrc() != null) {
-            // crc
-            size += Long.BYTES;
-          }
-          // accountId
-          size += Short.BYTES;
-          // containerId
-          size += Short.BYTES;
-          // operationTime
-          size += Long.BYTES;
-          // whether message metadata is present.
-          size += Byte.BYTES;
-          if (messageMetadata != null) {
-            size += messageMetadata.sizeInBytes();
-          }
-          break;
-
-        default:
-          throw new IllegalArgumentException("Unknown version in MessageInfoList " + version);
+        }
+      }
+      if (version > VERSION_2) {
+        // accountId
+        size += Short.BYTES;
+        // containerId
+        size += Short.BYTES;
+        // operationTime
+        size += Long.BYTES;
+      }
+      if (version > VERSION_3) {
+        // whether message metadata is present.
+        size += Byte.BYTES;
+        if (messageMetadata != null) {
+          size += messageMetadata.sizeInBytes();
+        }
       }
     }
     return size;
   }
 
+  /**
+   * Serialize this object into the given buffer.
+   * @param outputBuffer the ByteBuffer to serialize into.
+   */
   void serializeMessageInfoAndMetadataList(ByteBuffer outputBuffer) {
     outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
     if (messageInfoList != null) {
@@ -174,6 +159,14 @@ class MessageInfoAndMetadataListSerde {
     }
   }
 
+  /**
+   * Deserialize the given stream and return the MessageInfo and Metadata lists.
+   * @param stream the stream to deserialize from.
+   * @param map the clustermap to use.
+   * @param versionToDeserializeIn the SerDe version to use to deserialize.
+   * @return a pair of {@link MessageInfo} list and {@link MessageMetadata} list.
+   * @throws IOException if an I/O error occurs while reading from the stream.
+   */
   static Pair<List<MessageInfo>, List<MessageMetadata>> deserializeMessageInfoAndMetadataList(DataInputStream stream,
       ClusterMap map, short versionToDeserializeIn) throws IOException {
     int messageCount = stream.readInt();

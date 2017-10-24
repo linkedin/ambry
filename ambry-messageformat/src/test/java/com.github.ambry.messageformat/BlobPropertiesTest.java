@@ -65,7 +65,7 @@ public class BlobPropertiesTest {
     int timeToLiveInSeconds = 144;
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    boolean isEncrypted = true;
+    boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
 
     BlobPropertiesSerDe.CURRENT_VERSION = version;
 

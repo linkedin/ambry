@@ -31,6 +31,9 @@ import org.junit.Test;
 
 public class MessageFormatInputStreamTest {
 
+  /**
+   * Tests for {@link PutMessageFormatInputStream} in different versions.
+   */
   @Test
   public void messageFormatRecordsTest() throws IOException, MessageFormatException {
     messageFormatRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob, false);
@@ -59,7 +62,6 @@ public class MessageFormatInputStreamTest {
         useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
       blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
-      useV2Header = false;
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.DataBlob) {
       blobSize = (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobContentSize);
     } else if (blobVersion == MessageFormatRecord.Blob_Version_V2 && blobType == BlobType.MetadataBlob) {
@@ -216,6 +218,9 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals(ByteBuffer.wrap(data), blobAll.getBlobData().getStream().getByteBuffer());
   }
 
+  /**
+   * Tests for {@link DeleteMessageFormatInputStream} in different versions.
+   */
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
     short[] versions = {MessageFormatRecord.Delete_Version_V1, MessageFormatRecord.Delete_Version_V2};

@@ -47,7 +47,9 @@ public class BlobPropertiesSerDe {
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
     short version = stream.readShort();
-    BlobProperties toReturn;
+    if (version < VERSION_1 || version > VERSION_3) {
+      throw new IllegalArgumentException("stream has unknown blob property version " + version);
+    }
     long ttl = stream.readLong();
     boolean isPrivate = stream.readByte() == 1;
     long creationTime = stream.readLong();
@@ -55,32 +57,11 @@ public class BlobPropertiesSerDe {
     String contentType = Utils.readIntString(stream);
     String ownerId = Utils.readIntString(stream);
     String serviceId = Utils.readIntString(stream);
-    switch (version) {
-      case VERSION_1:
-        toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime,
-            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
-        break;
-      case VERSION_2: {
-        short accountId = stream.readShort();
-        short containerId = stream.readShort();
-        toReturn =
-            new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-                containerId, false);
-      }
-      break;
-      case VERSION_3: {
-        short accountId = stream.readShort();
-        short containerId = stream.readShort();
-        boolean isEncrypted = stream.readByte() == (byte) 1;
-        toReturn =
-            new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-                containerId, isEncrypted);
-      }
-      break;
-      default:
-        throw new IllegalArgumentException("stream has unknown blob property version " + version);
-    }
-    return toReturn;
+    short accountId = version > VERSION_1 ? stream.readShort() : Account.UNKNOWN_ACCOUNT_ID;
+    short containerId = version > VERSION_1 ? stream.readShort() : Container.UNKNOWN_CONTAINER_ID;
+    boolean isEncrypted = version > VERSION_2 && stream.readByte() == (byte) 1;
+    return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
+        containerId, isEncrypted);
   }
 
   /**

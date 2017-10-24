@@ -43,7 +43,7 @@ public class BlobStoreHardDeleteTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V1}});
+        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
   }
 
   public BlobStoreHardDeleteTest(short headerVersionToUse) {
@@ -70,6 +70,7 @@ public class BlobStoreHardDeleteTest {
       byte[] blob = new byte[BLOB_SIZE];
       TestUtils.RANDOM.nextBytes(usermetadata);
       TestUtils.RANDOM.nextBytes(blob);
+      TestUtils.RANDOM.nextBytes(encryptionKey);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
@@ -84,8 +85,7 @@ public class BlobStoreHardDeleteTest {
               blobVersions[0], blobTypes[0]);
 
       MessageFormatInputStream msg1 =
-          getPutMessage(keys[1], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
-              blobVersions[1], blobTypes[1]);
+          getPutMessage(keys[1], null, blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[1], blobTypes[1]);
 
       MessageFormatInputStream msg2 =
           getPutMessage(keys[2], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,

@@ -85,8 +85,11 @@ public class MessageFormatSendTest {
     }
   }
 
+  /**
+   * Tests cases involving single messages across different header versions and with and without encryption keys
+   */
   @Test
-  public void sendWriteSingleMessageTest() throws MessageFormatException, IOException {
+  public void sendWriteSingleMessageTest() throws Exception {
     if (putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
       ByteBuffer encryptionKey = ByteBuffer.wrap(TestUtils.getRandomBytes(256));
       MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
@@ -102,8 +105,13 @@ public class MessageFormatSendTest {
     }
   }
 
+  /**
+   * Helper method for testing single message sends.
+   * @param encryptionKey the encryption key to include in the message while writing it.
+   * @param expectedEncryptionKey the key expected when reading the sent message.
+   */
   private void doSendWriteSingleMessageTest(ByteBuffer encryptionKey, ByteBuffer expectedEncryptionKey)
-      throws MessageFormatException, IOException {
+      throws Exception {
     String serviceId = "serviceId";
     String ownerId = "owner";
     String contentType = "bin";
@@ -245,8 +253,12 @@ public class MessageFormatSendTest {
     }
   }
 
+  /**
+   * Tests involving multiple messages in a single Send involving different combinations of header format versions, put
+   * formats and encryption keys.
+   */
   @Test
-  public void sendWriteCompositeMessagesTest() throws MessageFormatException, IOException {
+  public void sendWriteCompositeMessagesTest() throws Exception {
     if (!putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
       return;
     }
@@ -290,6 +302,16 @@ public class MessageFormatSendTest {
     MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
   }
 
+  /**
+   * Helper method to test multiple messages in a single Send involving different combinations of header format
+   * versions, put formats and encryption keys.
+   * @param blob the array of blob records for the messages.
+   * @param userMetadata the array of userMetadata for the messages.
+   * @param storeKeys the array of store keys for the messages.
+   * @param encryptionKeys the array of encryption keys for the messages.
+   * @param putFormats the array of Put Format class names to use to create the message streams.
+   * @param headerVersions the array of Message Header versions to use for the messages.
+   */
   private void doSendWriteCompositeMessagesTest(byte[][] blob, byte[][] userMetadata, StoreKey[] storeKeys,
       ByteBuffer[] encryptionKeys, String[] putFormats, short[] headerVersions)
       throws MessageFormatException, IOException {

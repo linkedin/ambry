@@ -225,10 +225,14 @@ public class ServerHardDeleteTest {
     data = new ArrayList<>(9);
     Random random = new Random();
     for (int i = 0; i < 9; i++) {
-      encryptionKey.add(new byte[100 + i]);
+      if (i % 2 == 0) {
+        encryptionKey.add(new byte[100 + i]);
+        random.nextBytes(encryptionKey.get(i));
+      } else {
+        encryptionKey.add(null);
+      }
       usermetadata.add(new byte[1000 + i]);
       data.add(new byte[31870 + i]);
-      random.nextBytes(encryptionKey.get(i));
       random.nextBytes(usermetadata.get(i));
       random.nextBytes(data.get(i));
     }
@@ -337,7 +341,7 @@ public class ServerHardDeleteTest {
       BlockingChannel channel) throws IOException {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobId, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-            properties.getBlobSize(), BlobType.DataBlob, ByteBuffer.wrap(encryptionKey));
+            properties.getBlobSize(), BlobType.DataBlob, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey));
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
     PutResponse response0 = PutResponse.readFrom(new DataInputStream(putResponseStream));

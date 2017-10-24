@@ -43,11 +43,11 @@ public class GetResponse extends Response {
   static final short GET_RESPONSE_VERSION_V_4 = 4;
 
   // @todo change this to V4 once V4 is understood by all.
-  static short getResponseVersionToUse = GET_RESPONSE_VERSION_V_3;
+  static short CURRENT_VERSION = GET_RESPONSE_VERSION_V_3;
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       Send send, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, getResponseVersionToUse, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -58,7 +58,7 @@ public class GetResponse extends Response {
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       InputStream stream, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, getResponseVersionToUse, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.partitionResponseInfoList = partitionResponseInfoList;
     this.partitionResponseInfoSize = 0;
     for (PartitionResponseInfo partitionResponseInfo : partitionResponseInfoList) {
@@ -68,7 +68,7 @@ public class GetResponse extends Response {
   }
 
   public GetResponse(int correlationId, String clientId, ServerErrorCode error) {
-    super(RequestOrResponseType.GetResponse, getResponseVersionToUse, correlationId, clientId, error);
+    super(RequestOrResponseType.GetResponse, CURRENT_VERSION, correlationId, clientId, error);
     this.partitionResponseInfoList = null;
     this.partitionResponseInfoSize = 0;
   }
@@ -161,6 +161,6 @@ public class GetResponse extends Response {
    * @return the current version in which new GetResponse objects are created.
    */
   static short getCurrentVersion() {
-    return getResponseVersionToUse;
+    return CURRENT_VERSION;
   }
 }

@@ -240,7 +240,8 @@ public class RequestResponseTest {
 
     BlobProperties blobProperties =
         new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+            TestUtils.RANDOM.nextBoolean());
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
     doTest(InvalidVersionPutRequest.Put_Request_Invalid_version, clusterMap, correlationId, clientId, blobId,
@@ -249,21 +250,23 @@ public class RequestResponseTest {
     // Put Request with size in blob properties different from the data size and blob type: Data blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+            TestUtils.RANDOM.nextBoolean());
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.DataBlob, blob,
         blobSize, blobKey);
 
     // Put Request with size in blob properties different from the data size and blob type: Metadata blob.
     blobProperties =
         new BlobProperties(blobSize * 10, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
+            TestUtils.RANDOM.nextBoolean());
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, BlobType.MetadataBlob,
         blob, blobSize, blobKey);
 
     // Put Request with empty user metadata.
     byte[] emptyUserMetadata = new byte[0];
     blobProperties = new BlobProperties(blobSize, "serviceID", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), true);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), TestUtils.RANDOM.nextBoolean());
     testPutRequest(clusterMap, correlationId, clientId, blobId, blobProperties, emptyUserMetadata, BlobType.DataBlob,
         blob, blobSize, blobKey);
 
@@ -282,7 +285,7 @@ public class RequestResponseTest {
   }
 
   private void testGetRequestResponse(short getVersionToUse) throws IOException {
-    GetResponse.getResponseVersionToUse = getVersionToUse;
+    GetResponse.CURRENT_VERSION = getVersionToUse;
     MockClusterMap clusterMap = new MockClusterMap();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -337,8 +340,7 @@ public class RequestResponseTest {
     } else {
       Assert.assertNull(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0));
     }
-    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_3
-        || GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_4) {
+    if (GetResponse.getCurrentVersion() >= GetResponse.GET_RESPONSE_VERSION_V_3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ConatinerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());
@@ -445,7 +447,7 @@ public class RequestResponseTest {
     Assert.assertEquals("MsgInfo size mismatch ", 1000, msgInfo.getSize());
     Assert.assertEquals("MsgInfo key mismatch ", id1, msgInfo.getStoreKey());
     Assert.assertEquals("MsgInfo expiration value mismatch ", Utils.Infinite_Time, msgInfo.getExpirationTimeInMs());
-    if (ReplicaMetadataResponse.getCurrentVersion() == ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
+    if (ReplicaMetadataResponse.getCurrentVersion() >= ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_3) {
       Assert.assertEquals("AccountId mismatch ", accountId, msgInfo.getAccountId());
       Assert.assertEquals("ContainerId mismatch ", containerId, msgInfo.getContainerId());
       Assert.assertEquals("OperationTime mismatch ", operationTimeMs, msgInfo.getOperationTimeMs());

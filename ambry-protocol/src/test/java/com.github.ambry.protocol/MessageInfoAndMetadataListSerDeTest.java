@@ -40,16 +40,16 @@ import static com.github.ambry.utils.TestUtils.*;
  */
 @RunWith(Parameterized.class)
 public class MessageInfoAndMetadataListSerDeTest {
-  private final short getResponseVersion;
+  private final short serDeVersion;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{GetResponse.GET_RESPONSE_VERSION_V_4}, {GetResponse.GET_RESPONSE_VERSION_V_3}});
+        new Object[][]{{MessageInfoAndMetadataListSerde.VERSION_1}, {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3}, {MessageInfoAndMetadataListSerde.VERSION_4}});
   }
 
-  public MessageInfoAndMetadataListSerDeTest(short getResponseVersion) {
-    this.getResponseVersion = getResponseVersion;
+  public MessageInfoAndMetadataListSerDeTest(short serDeVersion) {
+    this.serDeVersion = serDeVersion;
   }
 
   @Test
@@ -81,18 +81,54 @@ public class MessageInfoAndMetadataListSerDeTest {
 
     // Serialize and then deserialize
     MessageInfoAndMetadataListSerde messageInfoAndMetadataListSerde =
-        new MessageInfoAndMetadataListSerde(messageInfoList, messageMetadataList, getResponseVersion);
+        new MessageInfoAndMetadataListSerde(messageInfoList, messageMetadataList, serDeVersion);
     ByteBuffer buffer = ByteBuffer.allocate(messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize());
     messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(buffer);
     buffer.flip();
     Pair<List<MessageInfo>, List<MessageMetadata>> messageInfoAndMetadataList =
         MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(
-            new DataInputStream(new ByteBufferInputStream(buffer)), mockMap, getResponseVersion);
+            new DataInputStream(new ByteBufferInputStream(buffer)), mockMap, serDeVersion);
 
     // Verify
     List<MessageInfo> responseMessageInfoList = messageInfoAndMetadataList.getFirst();
     List<MessageMetadata> responseMessageMetadataList = messageInfoAndMetadataList.getSecond();
     Assert.assertEquals(4, responseMessageInfoList.size());
     Assert.assertEquals(4, responseMessageMetadataList.size());
+    for (int i = 0; i < 4; i++) {
+      assertMessageInfoEquality(messageInfoList.get(i), responseMessageInfoList.get(i));
+      assertMessageMetadataEquality(messageMetadataList.get(i), responseMessageMetadataList.get(i));
+    }
+  }
+
+  private void assertMessageInfoEquality(MessageInfo a, MessageInfo b) {
+    Assert.assertEquals(a.getExpirationTimeInMs(), b.getExpirationTimeInMs());
+    Assert.assertEquals(a.getSize(), b.getSize());
+    Assert.assertEquals(a.getStoreKey(), b.getStoreKey());
+    Assert.assertEquals(a.isDeleted(), b.isDeleted());
+    Assert.assertEquals(a.isExpired(), b.isExpired());
+    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_2) {
+      Assert.assertEquals(a.getCrc(), b.getCrc());
+    }
+    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_3) {
+      Assert.assertEquals(a.getAccountId(), b.getAccountId());
+      Assert.assertEquals(a.getContainerId(), b.getContainerId());
+      Assert.assertEquals(a.getOperationTimeMs(), b.getOperationTimeMs());
+    }
+  }
+
+  private void assertMessageMetadataEquality(MessageMetadata a, MessageMetadata b) {
+    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_4) {
+      if (a == null) {
+        Assert.assertNull(b);
+      } else {
+        if (a.getEncryptionKey() == null) {
+          // null encryption keys come in as empty.
+          Assert.assertEquals(0, b.getEncryptionKey().remaining());
+        } else {
+          Assert.assertEquals(a.getEncryptionKey().rewind(), b.getEncryptionKey());
+        }
+        Assert.assertEquals(a.getVersion(), b.getVersion());
+      }
+    }
   }
 }
