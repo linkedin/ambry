@@ -156,7 +156,7 @@ class BlobStore implements Store {
     this.factory = factory;
     this.recovery = recovery;
     this.hardDelete = hardDelete;
-    this.writeStatusDelegate = writeStatusDelegate;
+    this.writeStatusDelegate = config.storeWriteStatusDelegateEnable ? writeStatusDelegate : null;
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
@@ -302,8 +302,6 @@ class BlobStore implements Store {
         }
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
-    } else {
-      logger.info("WriteStatusDelegate not set, dynamic write status turned off");
     }
   }
 
