@@ -157,34 +157,42 @@ class DiskSpaceAllocator {
    * @throws IOException if the file could not be moved to the destination.
    */
   void allocate(File destinationFile, long sizeInBytes) throws IOException {
-    if (enablePooling && poolState != PoolState.INITIALIZED) {
-      logger.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
-          destinationFile.getAbsolutePath());
-      metrics.diskSpaceAllocatorAllocBeforeInitCount.inc();
-    } else {
-      logger.debug("Allocating segment of size {} to {}", sizeInBytes, destinationFile.getAbsolutePath());
-    }
-    if (destinationFile.exists()) {
-      throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
-    }
-    File reserveFile = null;
-    if (poolState != PoolState.NOT_INVENTORIED) {
-      reserveFile = reserveFiles.remove(sizeInBytes);
-    }
-    if (reserveFile == null) {
-      if (enablePooling) {
-        logger.info("Segment of size {} not found in pool; attempting to create a new preallocated file; poolState: {}",
-            sizeInBytes, poolState);
-        metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
+    long startTime = System.currentTimeMillis();
+    try {
+      if (enablePooling && poolState != PoolState.INITIALIZED) {
+        logger.info("Allocating segment of size {} to {} before pool is fully initialized", sizeInBytes,
+            destinationFile.getAbsolutePath());
+        metrics.diskSpaceAllocatorAllocBeforeInitCount.inc();
+      } else {
+        logger.debug("Allocating segment of size {} to {}", sizeInBytes, destinationFile.getAbsolutePath());
       }
-      Utils.preAllocateFileIfNeeded(destinationFile, sizeInBytes);
-    } else {
-      try {
-        Files.move(reserveFile.toPath(), destinationFile.toPath());
-      } catch (Exception e) {
-        reserveFiles.add(sizeInBytes, reserveFile);
-        throw e;
+      if (destinationFile.exists()) {
+        throw new IOException("Destination file already exists: " + destinationFile.getAbsolutePath());
       }
+      File reserveFile = null;
+      if (poolState != PoolState.NOT_INVENTORIED) {
+        reserveFile = reserveFiles.remove(sizeInBytes);
+      }
+      if (reserveFile == null) {
+        if (enablePooling) {
+          logger.info(
+              "Segment of size {} not found in pool; attempting to create a new preallocated file; poolState: {}",
+              sizeInBytes, poolState);
+          metrics.diskSpaceAllocatorSegmentNotFoundCount.inc();
+        }
+        Utils.preAllocateFileIfNeeded(destinationFile, sizeInBytes);
+      } else {
+        try {
+          Files.move(reserveFile.toPath(), destinationFile.toPath());
+        } catch (Exception e) {
+          reserveFiles.add(sizeInBytes, reserveFile);
+          throw e;
+        }
+      }
+    } finally {
+      long elapsedTime = System.currentTimeMillis() - startTime;
+      logger.debug("allocate took {} ms", elapsedTime);
+      metrics.diskSpaceAllocatorAllocTimeMs.update(elapsedTime - startTime);
     }
   }
 
@@ -195,19 +203,26 @@ class DiskSpaceAllocator {
    * @throws IOException if the file to return does not exist or cannot be cleaned or recreated correctly.
    */
   void free(File fileToReturn, long sizeInBytes) throws IOException {
-    if (enablePooling && poolState != PoolState.INITIALIZED) {
-      logger.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
-          fileToReturn.getAbsolutePath());
-      metrics.diskSpaceAllocatorFreeBeforeInitCount.inc();
-    } else {
-      logger.debug("Freeing segment of size {} from {}", sizeInBytes, fileToReturn.getAbsolutePath());
-    }
-    // For now, we delete the file and create a new one. Newer linux kernel versions support
-    // additional fallocate flags, which will be useful for cleaning up returned files.
-    Files.delete(fileToReturn.toPath());
-    if (poolState == PoolState.INITIALIZED) {
-      fileToReturn = createReserveFile(sizeInBytes);
-      reserveFiles.add(sizeInBytes, fileToReturn);
+    long startTime = System.currentTimeMillis();
+    try {
+      if (enablePooling && poolState != PoolState.INITIALIZED) {
+        logger.info("Freeing segment of size {} from {} before pool is fully initialized", sizeInBytes,
+            fileToReturn.getAbsolutePath());
+        metrics.diskSpaceAllocatorFreeBeforeInitCount.inc();
+      } else {
+        logger.debug("Freeing segment of size {} from {}", sizeInBytes, fileToReturn.getAbsolutePath());
+      }
+      // For now, we delete the file and create a new one. Newer linux kernel versions support
+      // additional fallocate flags, which will be useful for cleaning up returned files.
+      Files.delete(fileToReturn.toPath());
+      if (poolState == PoolState.INITIALIZED) {
+        fileToReturn = createReserveFile(sizeInBytes);
+        reserveFiles.add(sizeInBytes, fileToReturn);
+      }
+    } finally {
+      long elapsedTime = System.currentTimeMillis() - startTime;
+      logger.debug("free took {} ms", elapsedTime);
+      metrics.diskSpaceAllocatorFreeTimeMs.update(elapsedTime - startTime);
     }
   }
 
