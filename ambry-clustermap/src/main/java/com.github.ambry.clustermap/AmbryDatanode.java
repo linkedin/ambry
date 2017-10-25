@@ -37,6 +37,7 @@ class AmbryDataNode extends DataNodeId implements Resource {
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
+  private final ClusterMapConfig clusterMapConfig;
 
   /**
    * Instantiate an AmbryDataNode object.
@@ -54,6 +55,7 @@ class AmbryDataNode extends DataNodeId implements Resource {
     this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
     this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
     this.dataCenterName = dataCenterName;
+    this.clusterMapConfig = clusterMapConfig;
     this.rackId = rackId != null ? rackId : UNKNOWN_RACK_ID;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     ResourceStatePolicyFactory resourceStatePolicyFactory =
@@ -68,10 +70,12 @@ class AmbryDataNode extends DataNodeId implements Resource {
    */
   private void validate() {
     // validate hostname
-    String fqdn = getFullyQualifiedDomainName(hostName);
-    if (!fqdn.equals(hostName)) {
-      throw new IllegalStateException(
-          "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
+    if (clusterMapConfig.clusterMapResolveHostnames) {
+      String fqdn = getFullyQualifiedDomainName(hostName);
+      if (!fqdn.equals(hostName)) {
+        throw new IllegalStateException(
+                "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
+      }
     }
 
     // validate ports

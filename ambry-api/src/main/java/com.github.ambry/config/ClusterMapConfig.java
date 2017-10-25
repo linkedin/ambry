@@ -114,6 +114,19 @@ public class ClusterMapConfig {
   @Default("null")
   public final Integer clusterMapPort;
 
+  /**
+   * Indicates if a reverse DNS lookup should be used to try and obtain the fully qualified domain names of cluster map
+   * host entries. By default this is enabled and disabling should only be needed when a node's name cannot be 
+   * looked-up via a reverse lookup. For example when the node is known to Ambry by a CNAME record.
+   * 
+   * Beware that disabling this option also prevents Ambry from checking if a nodes naming configuration is 
+   * correct. For example there is no way for Ambry to check if the node config for 'host1.example.com' is actually 
+   * deployed on a host called 'host1.example.com'.
+   */
+  @Config("clustermap.resolve.hostnames")
+  @Default("true")
+  public final boolean clusterMapResolveHostnames;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -135,5 +148,6 @@ public class ClusterMapConfig {
     clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");
     clusterMapHostName = verifiableProperties.getString("clustermap.host.name");
     clusterMapPort = verifiableProperties.getInteger("clustermap.port", null);
+    clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
   }
 }

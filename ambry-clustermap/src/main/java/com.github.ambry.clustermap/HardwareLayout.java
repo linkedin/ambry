@@ -38,6 +38,7 @@ class HardwareLayout {
   private final long diskCount;
   private final Map<HardwareState, Long> dataNodeInHardStateCount;
   private final Map<HardwareState, Long> diskInHardStateCount;
+  private final ClusterMapConfig clusterMapConfig;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -47,6 +48,7 @@ class HardwareLayout {
     }
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");
+    this.clusterMapConfig = clusterMapConfig;
 
     this.datacenters = new ArrayList<Datacenter>(jsonObject.getJSONArray("datacenters").length());
     for (int i = 0; i < jsonObject.getJSONArray("datacenters").length(); ++i) {
@@ -202,7 +204,8 @@ class HardwareLayout {
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
-    String canonicalHostname = ClusterMapUtils.getFullyQualifiedDomainName(hostname);
+    String canonicalHostname = clusterMapConfig.clusterMapResolveHostnames ? 
+            ClusterMapUtils.getFullyQualifiedDomainName(hostname) : hostname;
     logger.trace("host to find host {} port {}", canonicalHostname, port);
     for (Datacenter datacenter : datacenters) {
       logger.trace("datacenter {}", datacenter.getName());
