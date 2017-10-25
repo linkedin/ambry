@@ -192,7 +192,7 @@ class DiskSpaceAllocator {
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
       logger.debug("allocate took {} ms", elapsedTime);
-      metrics.diskSpaceAllocatorAllocTimeMs.update(elapsedTime - startTime);
+      metrics.diskSpaceAllocatorAllocTimeMs.update(elapsedTime);
     }
   }
 
@@ -222,7 +222,7 @@ class DiskSpaceAllocator {
     } finally {
       long elapsedTime = System.currentTimeMillis() - startTime;
       logger.debug("free took {} ms", elapsedTime);
-      metrics.diskSpaceAllocatorFreeTimeMs.update(elapsedTime - startTime);
+      metrics.diskSpaceAllocatorFreeTimeMs.update(elapsedTime);
     }
   }
 
