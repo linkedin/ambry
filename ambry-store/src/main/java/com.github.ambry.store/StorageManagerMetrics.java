@@ -36,6 +36,8 @@ public class StorageManagerMetrics {
 
   // DiskSpaceAllocator related metrics
   public final Histogram diskSpaceAllocatorStartTimeMs;
+  public final Histogram diskSpaceAllocatorAllocTimeMs;
+  public final Histogram diskSpaceAllocatorFreeTimeMs;
   public final Counter diskSpaceAllocatorInitFailureCount;
   public final Counter diskSpaceAllocatorSegmentNotFoundCount;
   public final Counter diskSpaceAllocatorAllocBeforeInitCount;
@@ -67,6 +69,10 @@ public class StorageManagerMetrics {
     diskDownCount = registry.counter(MetricRegistry.name(DiskManager.class, "DiskDownCount"));
     diskSpaceAllocatorStartTimeMs =
         registry.histogram(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorStartTimeMs"));
+    diskSpaceAllocatorAllocTimeMs =
+        registry.histogram(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorAllocTimeMs"));
+    diskSpaceAllocatorFreeTimeMs =
+        registry.histogram(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorFreeTimeMs"));
     diskSpaceAllocatorInitFailureCount =
         registry.counter(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorInitFailureCount"));
     diskSpaceAllocatorSegmentNotFoundCount =
