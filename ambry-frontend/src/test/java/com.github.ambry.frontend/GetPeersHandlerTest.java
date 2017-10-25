@@ -33,7 +33,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.io.IOException;
@@ -51,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -83,6 +83,7 @@ public class GetPeersHandlerTest {
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = sendRequestGetResponse(restRequest, restResponseChannel);
       assertNotNull("There should be a response", channel);
+      Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
       assertEquals("Content-type is not as expected", "application/json",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
       assertEquals("Content-length is not as expected", channel.getSize(),
@@ -107,6 +108,8 @@ public class GetPeersHandlerTest {
     verifyFailureWithMsg(msg);
     securityServiceFactory.exceptionToThrow = new IllegalStateException(msg);
     securityServiceFactory.exceptionToReturn = null;
+    verifyFailureWithMsg(msg);
+    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
     verifyFailureWithMsg(msg);
   }
 

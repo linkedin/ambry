@@ -30,6 +30,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
@@ -63,6 +64,7 @@ import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import io.netty.util.ReferenceCountUtil;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
@@ -273,6 +275,72 @@ public class FrontendIntegrationTest {
     }
   }
 
+  /**
+   * Tests the handling of {@link Operations#GET_SIGNED_URL} requests.
+   * @throws Exception
+   */
+  @Test
+  public void getAndUseSignedUrlTest() throws Exception {
+    Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container container = account.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
+    // setup
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    long blobTtl = 7200;
+    String serviceId = "getAndUseSignedUrlTest";
+    String contentType = "application/octet-stream";
+    String ownerId = "getAndUseSignedUrlTest";
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
+    setAmbryHeadersForPut(headers, blobTtl, container.isPrivate(), serviceId, contentType, ownerId, account.getName(),
+        container.getName());
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+
+    // POST
+    // Get signed URL
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertNotNull("There should be a response from the server", response);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
+    assertNotNull("Did not get a signed POST URL", signedPostUrl);
+    discardContent(responseParts, 1);
+
+    // Use signed URL to POST
+    URI uri = new URI(signedPostUrl);
+    httpRequest = buildRequest(HttpMethod.POST, uri.getPath() + "?" + uri.getQuery(), null, content);
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    String blobId = verifyPostAndReturnBlobId(responseParts);
+
+    // verify POST
+    headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
+    getBlobAndVerify(blobId, null, GetOption.None, headers, container.isPrivate(), content);
+    getBlobInfoAndVerify(blobId, GetOption.None, headers, container.isPrivate(), account.getName(), container.getName(),
+        null);
+
+    // GET
+    // Get signed URL
+    HttpHeaders getHeaders = new DefaultHttpHeaders();
+    getHeaders.add(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
+    blobId = blobId.startsWith("/") ? blobId.substring(1) : blobId;
+    getHeaders.add(RestUtils.Headers.BLOB_ID, blobId);
+    httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    response = (HttpResponse) responseParts.poll();
+    assertNotNull("There should be a response from the server", response);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
+    assertNotNull("Did not get a signed GET URL", signedGetUrl);
+    discardContent(responseParts, 1);
+
+    // Use URL to GET blob
+    uri = new URI(signedGetUrl);
+    httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    verifyGetBlobResponse(responseParts, null, headers, container.isPrivate(), content);
+  }
+
   // helpers
   // general
 
@@ -294,6 +362,8 @@ public class FrontendIntegrationTest {
     FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, contentBuf);
     if (headers != null) {
       httpRequest.headers().set(headers);
+    }
+    if (HttpMethod.POST.equals(httpMethod) && !HttpUtil.isContentLengthSet(httpRequest)) {
       HttpUtil.setTransferEncodingChunked(httpRequest, true);
     }
     return httpRequest;
@@ -491,6 +561,15 @@ public class FrontendIntegrationTest {
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    return verifyPostAndReturnBlobId(responseParts);
+  }
+
+  /**
+   * Verifies a POST and returns the blob ID.
+   * @param responseParts the response received from the server.
+   * @returnn the blob ID of the blob.
+   */
+  private String verifyPostAndReturnBlobId(Queue<HttpObject> responseParts) {
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
@@ -498,10 +577,7 @@ public class FrontendIntegrationTest {
         response.headers().get(RestUtils.Headers.CREATION_TIME, null) != null);
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
-
-    if (blobId == null) {
-      fail("postBlobAndVerify did not return a blob ID");
-    }
+    assertNotNull("Blob ID from POST should not be null", blobId);
     discardContent(responseParts, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     return blobId;
@@ -530,6 +606,20 @@ public class FrontendIntegrationTest {
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    verifyGetBlobResponse(responseParts, range, expectedHeaders, isPrivate, expectedContent);
+  }
+
+  /**
+   * Verifies the GET blob response.
+   * @param responseParts the response received from the server.
+   * @param range the {@link ByteRange} for the request.
+   * @param expectedHeaders the expected headers in the response.
+   * @param isPrivate {@code true} if the blob is private, {@code false} if not.
+   * @param expectedContent the expected content of the blob.
+   * @throws RestServiceException
+   */
+  private void verifyGetBlobResponse(Queue<HttpObject> responseParts, ByteRange range, HttpHeaders expectedHeaders,
+      boolean isPrivate, ByteBuffer expectedContent) throws RestServiceException {
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status",
         range == null ? HttpResponseStatus.OK : HttpResponseStatus.PARTIAL_CONTENT, response.status());
@@ -882,20 +972,7 @@ public class FrontendIntegrationTest {
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, usermetadata);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
-    assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
-    assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
-    assertTrue("No " + RestUtils.Headers.CREATION_TIME,
-        response.headers().get(RestUtils.Headers.CREATION_TIME, null) != null);
-    assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
-    String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
-
-    if (blobId == null) {
-      fail("postBlobAndVerify did not return a blob ID");
-    }
-    discardContent(responseParts, 1);
-    assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
-    return blobId;
+    return verifyPostAndReturnBlobId(responseParts);
   }
 
   /**

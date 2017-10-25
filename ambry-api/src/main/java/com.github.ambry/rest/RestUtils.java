@@ -136,6 +136,26 @@ public class RestUtils {
      */
     public final static String CREATION_TIME = "x-ambry-creation-time";
     /**
+     * The type of signed URL requested (for e.g, POST or GET).
+     */
+    public static final String URL_TYPE = "x-ambry-url-type";
+    /**
+     * The TTL (in secs) of the signed URL.
+     */
+    public static final String URL_TTL = "x-ambry-url-ttl-secs";
+    /**
+     * The maximum size of the blob that can be uploaded using the URL.
+     */
+    public static final String MAX_UPLOAD_SIZE = "x-ambry-max-upload-size";
+    /**
+     * The blob ID requested by the URL.
+     */
+    public static final String BLOB_ID = "x-ambry-blob-id";
+    /**
+     * The signed URL header name in the response for signed url requests.
+     */
+    public static final String SIGNED_URL = "x-ambry-signed-url";
+    /**
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
@@ -456,7 +476,12 @@ public class RestUtils {
       // "- 1" removes the "slash" that precedes the sub-resource.
       endIndex = endIndex - subResource.name().length() - 1;
     }
-    return path.substring(startIndex, endIndex);
+    String operationOrBlobId = path.substring(startIndex, endIndex);
+    if ((operationOrBlobId.isEmpty() || operationOrBlobId.equals("/")) && restRequest.getArgs()
+        .containsKey(Headers.BLOB_ID)) {
+      operationOrBlobId = restRequest.getArgs().get(Headers.BLOB_ID).toString();
+    }
+    return operationOrBlobId;
   }
 
   /**
@@ -597,6 +622,32 @@ public class RestUtils {
           RestServiceErrorCode.MissingArgs);
     }
     return value;
+  }
+
+  /**
+   * Gets the value of a header as a {@link Long}
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param required if {@code true}, {@link IllegalArgumentException} will be thrown if {@code header} is not present
+   *                 in {@code args}.
+   * @return the value of {@code header} in {@code args} if it exists. If it does not exist and {@code required} is
+   *          {@code false}, then returns null.
+   * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
+   *                              converted to a {@link Long}.
+   */
+  public static Long getLongHeader(Map<String, Object> args, String header, boolean required)
+      throws RestServiceException {
+    // if getHeader() is no longer called, tests for this function have to be changed.
+    String value = getHeader(args, header, required);
+    if (value != null) {
+      try {
+        return Long.parseLong(value);
+      } catch (NumberFormatException e) {
+        throw new RestServiceException("Invalid value for " + header + ": " + value, e,
+            RestServiceErrorCode.InvalidArgs);
+      }
+    }
+    return null;
   }
 
   /**

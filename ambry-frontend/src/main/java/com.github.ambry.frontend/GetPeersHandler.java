@@ -23,11 +23,11 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.SystemTime;
 import java.nio.ByteBuffer;
+import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -218,6 +218,7 @@ class GetPeersHandler {
             }
           }
           channel = getResponseBody(peerDataNodeIds);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
         }

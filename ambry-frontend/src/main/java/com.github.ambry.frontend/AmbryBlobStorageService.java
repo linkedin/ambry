@@ -16,17 +16,13 @@ package com.github.ambry.frontend;
 import com.codahale.metrics.Histogram;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.BlobStorageService;
-import com.github.ambry.rest.IdConverter;
-import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -36,8 +32,6 @@ import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.rest.SecurityService;
-import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
@@ -51,7 +45,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -70,6 +63,8 @@ import static com.github.ambry.rest.RestUtils.*;
  */
 class AmbryBlobStorageService implements BlobStorageService {
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+  private static final Set<String> REQUIRED_POST_HEADERS =
+      Collections.unmodifiableSet(new HashSet<>(Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID)));
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
   private static final String OPERATION_TYPE_OUTBOUND_ID_CONVERSION = "Outbound Id Conversion";
@@ -80,11 +75,6 @@ class AmbryBlobStorageService implements BlobStorageService {
   private static final String OPERATION_TYPE_HEAD = "HEAD";
   private static final String OPERATION_TYPE_DELETE = "DELETE";
   private static final String OPERATION_TYPE_POST = "POST";
-  private static final Set<String> requiredAmbryHeadersForPutWithServiceId =
-      Collections.unmodifiableSet(new HashSet<>(Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.SERVICE_ID)));
-  private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
-      new HashSet<>(
-          Arrays.asList(Headers.AMBRY_CONTENT_TYPE, Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
   private final RestResponseHandler responseHandler;
   private final Router router;
   private final IdConverterFactory idConverterFactory;
@@ -93,11 +83,14 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
+  private final UrlSigningService urlSigningService;
+  private final AccountAndContainerInjector accountAndContainerInjector;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
   private final AccountService accountService;
   private GetPeersHandler getPeersHandler;
+  private GetSignedUrlHandler getSignedUrlHandler;
   private boolean isUp = false;
 
   /**
@@ -111,10 +104,12 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param idConverterFactory the {@link IdConverterFactory} to use to get an {@link IdConverter} instance.
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService} instance.
    * @param accountService the {@link AccountService} to use to query for target {@link Account} of a {@link RestRequest}.
+   * @param urlSigningService the {@link UrlSigningService} used to sign URLs.
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, AccountService accountService) {
+      SecurityServiceFactory securityServiceFactory, AccountService accountService,
+      UrlSigningService urlSigningService) {
     this.accountService = Objects.requireNonNull(accountService, "accountService cannot be null.");
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
@@ -123,7 +118,10 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.clusterMap = clusterMap;
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
+    this.urlSigningService = urlSigningService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
+    accountAndContainerInjector =
+        new AccountAndContainerInjector(accountService, clusterMap, frontendMetrics, frontendConfig);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
 
@@ -133,6 +131,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
+    getSignedUrlHandler =
+        new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
+            frontendMetrics);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -176,6 +177,9 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       if (operationOrBlobId.equalsIgnoreCase(Operations.GET_PEERS)) {
         getPeersHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (operationOrBlobId.endsWith(Operations.GET_SIGNED_URL)) {
+        getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         GetBlobOptions options =
@@ -227,7 +231,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
       long propsBuildStartTime = System.currentTimeMillis();
-      injectAccountAndContainerForPostRequest(restRequest);
+      accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
@@ -396,10 +400,6 @@ class AmbryBlobStorageService implements BlobStorageService {
     private final DeleteCallback deleteCallback;
     private final CallbackTracker callbackTracker;
 
-    InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-      this(restRequest, restResponseChannel, null, null, null);
-    }
-
     InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, GetCallback callback) {
       this(restRequest, restResponseChannel, callback, null, null);
     }
@@ -445,7 +445,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
-          injectTargetAccountAndContainerFromBlobId(result, restRequest);
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(result, restRequest);
           // TODO use callback when AmbryBlobStorageService gets refactored into handlers.
           securityService.postProcessRequest(restRequest).get();
           switch (restMethod) {
@@ -1024,174 +1024,6 @@ class AmbryBlobStorageService implements BlobStorageService {
      */
     void markStartTime() {
       callbackTracker.markOperationStart();
-    }
-  }
-
-  /**
-   * Injects target {@link Account} and {@link Container} for PUT requests. This method also ensures required headers
-   * are present for the PUT requests that use serviceId as the account name, and the PUT requests that carry both the
-   * {@code x-ambry-target-account} and {@code x-ambry-target-container} headers.
-   * @param restRequest The Put {@link RestRequest}.
-   * @throws RestServiceException
-   */
-  private void injectAccountAndContainerForPostRequest(RestRequest restRequest) throws RestServiceException {
-    accountAndContainerSanityCheck(restRequest);
-    if (getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false) != null
-        || getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false) != null) {
-      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithAccountAndContainerName);
-      frontendMetrics.putWithAccountAndContainerHeaderRate.mark();
-      injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest);
-    } else if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
-      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
-      frontendMetrics.putWithServiceIdForAccountNameRate.mark();
-      injectAccountAndContainerUsingServiceId(restRequest);
-    } else {
-      throw new RestServiceException(
-          "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
-          RestServiceErrorCode.BadRequest);
-    }
-  }
-
-  /**
-   * Injects {@link Account} and {@link Container} for the put request that does not carry the target account or
-   * target container header but a serviceId. The serviceId will be used as account name to query for the target
-   * {@link Account}.
-   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
-   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
-   */
-  private void injectAccountAndContainerUsingServiceId(RestRequest restRequest) throws RestServiceException {
-    String accountName = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
-    Account targetAccount = accountService.getAccountByName(accountName);
-    if (targetAccount == null) {
-      frontendMetrics.unrecognizedServiceIdCount.inc();
-      logger.debug(
-          "Account cannot be found for accountName={} in put request with serviceId. Setting targetAccount to UNKNOWN_ACCOUNT",
-          accountName);
-      targetAccount = Account.UNKNOWN_ACCOUNT;
-    }
-    boolean isBlobPrivate = isPrivate(restRequest.getArgs());
-    Container targetContainer = targetAccount.getContainerById(
-        isBlobPrivate ? Container.DEFAULT_PRIVATE_CONTAINER_ID : Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
-  }
-
-  /**
-   * Injects {@link Account} and {@link Container} for the PUT requests that carry the target account and container headers.
-   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
-   * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
-   */
-  private void injectAccountAndContainerUsingAccountAndContainerHeaders(RestRequest restRequest)
-      throws RestServiceException {
-    String accountName = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
-    Account targetAccount = accountService.getAccountByName(accountName);
-    if (targetAccount == null) {
-      frontendMetrics.unrecognizedAccountNameCount.inc();
-      throw new RestServiceException("Account cannot be found for accountName=" + accountName
-          + " in put request with account and container headers.", RestServiceErrorCode.InvalidAccount);
-    }
-    ensureAccountNameMatch(targetAccount, restRequest);
-    String containerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    Container targetContainer = targetAccount.getContainerByName(containerName);
-    if (targetContainer == null) {
-      frontendMetrics.unrecognizedContainerNameCount.inc();
-      throw new RestServiceException(
-          "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
-              + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
-    }
-    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
-  }
-
-  /**
-   * Obtains the target {@link Account} and {@link Container} id from the blobId string, queries the {@link AccountService}
-   * to get the corresponding {@link Account} and {@link Container}, and injects the target {@link Account} and
-   * {@link Container} into the {@link RestRequest}.
-   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id。
-   * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
-   * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be found; or 2)
-   *                              either {@link Account} or {@link Container} were explicitly specified as
-   *                              {@link Account#UNKNOWN_ACCOUNT} or {@link Container#UNKNOWN_CONTAINER}.
-   */
-  private void injectTargetAccountAndContainerFromBlobId(String blobIdStr, RestRequest restRequest)
-      throws RestServiceException {
-    BlobId blobId;
-    try {
-      blobId = new BlobId(blobIdStr, clusterMap);
-    } catch (Exception e) {
-      throw new RestServiceException("Invalid blob id=" + blobIdStr, RestServiceErrorCode.BadRequest);
-    }
-    Account targetAccount = accountService.getAccountById(blobId.getAccountId());
-    if (targetAccount == null) {
-      frontendMetrics.getHeadDeleteUnrecognizedAccountCount.inc();
-      // @todo The check can be removed once HelixAccountService is running with UNKNOWN_ACCOUNT created.
-      if (blobId.getAccountId() != Account.UNKNOWN_ACCOUNT_ID) {
-        throw new RestServiceException(
-            "Account from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " cannot be recognized",
-            RestServiceErrorCode.InvalidAccount);
-      } else {
-        logger.debug(
-            "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
-            blobIdStr, blobId.getAccountId());
-        targetAccount = Account.UNKNOWN_ACCOUNT;
-      }
-    }
-    Container targetContainer = targetAccount.getContainerById(blobId.getContainerId());
-    if (targetContainer == null) {
-      frontendMetrics.getHeadDeleteUnrecognizedContainerCount.inc();
-      throw new RestServiceException(
-          "Container from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " containerId="
-              + blobId.getContainerId() + " cannot be recognized", RestServiceErrorCode.InvalidContainer);
-    }
-    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
-  }
-
-  /**
-   * Sanity check for {@link RestRequest}. This check ensures that the specified service id, account and container name,
-   * if they exist, should not be the same as the not-allowed values. It also makes sure certain headers must not be present.
-   * @param restRequest The {@link RestRequest} to check.
-   * @throws RestServiceException if the specified service id, account or container name is set as system reserved value.
-   */
-  private void accountAndContainerSanityCheck(RestRequest restRequest) throws RestServiceException {
-    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
-        || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false))) {
-      throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
-    }
-    String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName)) {
-      throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
-    }
-    List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);
-    for (String prohibitedHeader : prohibitedHeaders) {
-      if (restRequest.getArgs().get(prohibitedHeader) != null) {
-        throw new RestServiceException("Unexpected header " + prohibitedHeader + " in request",
-            RestServiceErrorCode.BadRequest);
-      }
-    }
-  }
-
-  /**
-   * Sets target {@link Account} and {@link Container} objects in the {@link RestRequest}.
-   * @param restRequest The {@link RestRequest} to set.
-   * @param targetAccount The target {@link Account} to set.
-   * @param targetContainer The target {@link Container} to set.
-   */
-  private void setTargetAccountAndContainerInRestRequest(RestRequest restRequest, Account targetAccount,
-      Container targetContainer) throws RestServiceException {
-    restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, targetAccount);
-    restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, targetContainer);
-    logger.trace("Sets targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
-        restRequest);
-  }
-
-  /**
-   * Ensures the {@link Account} matches the account name specified in the {@link RestRequest}, if it is specified.
-   * @param account The {@link Account} to ensure.
-   * @param restRequest The {@link RestRequest} to ensure.
-   * @throws RestServiceException if the {@link Account}'s name does not match the name specified in the {@link RestRequest}.
-   */
-  private void ensureAccountNameMatch(Account account, RestRequest restRequest) throws RestServiceException {
-    String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
-    if (accountNameFromHeader != null && !accountNameFromHeader.equals(account.getName())) {
-      throw new RestServiceException("Error occurs when locating account", RestServiceErrorCode.InternalServerError);
     }
   }
 }

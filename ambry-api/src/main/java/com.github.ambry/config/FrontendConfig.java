@@ -51,6 +51,13 @@ public class FrontendConfig {
   public final String frontendAccountServiceFactory;
 
   /**
+   * The UrlSigningServiceFactory that needs to be used by AmbryBlobStorageService to sign and verify URLs.
+   */
+  @Config("frontend.url.signing.service.factory")
+  @Default("com.github.ambry.frontend.AmbryUrlSigningServiceFactory")
+  public final String frontendUrlSigningServiceFactory;
+
+  /**
    * The comma separated list of prefixes to remove from paths.
    */
   @Config("frontend.path.prefixes.to.remove")
@@ -72,6 +79,43 @@ public class FrontendConfig {
   @Default("true")
   public final boolean frontendAllowServiceIdBasedPostRequest;
 
+  /**
+   * The endpoint that signed POST URLs will point to.
+   */
+  @Config("frontend.url.signer.upload.endpoint")
+  @Default("http://localhost:1174")
+  public final String frontendUrlSignerUploadEndpoint;
+
+  /**
+   * The endpoint that signed GET URLs will point to.
+   */
+  @Config("frontend.url.signer.download.endpoint")
+  @Default("http://localhost:1174")
+  public final String frontendUrlSignerDownloadEndpoint;
+
+  /**
+   * The default maximum size (in bytes) that can be uploaded using a signed POST URL unless otherwise specified at
+   * the time of URL creation (depends on implementation).
+   */
+  @Config("frontend.url.signer.default.max.upload.size.bytes")
+  @Default("100 * 1024 * 1024")
+  public final long frontendUrlSignerDefaultMaxUploadSizeBytes;
+
+  /**
+   * The maximum amount of time a signed URL is valid i.e. the highest TTL that requests for signed URLs can set.
+   */
+  @Config("frontend.url.signer.max.url.ttl.secs")
+  @Default("60 * 60")
+  public final long frontendUrlSignerMaxUrlTtlSecs;
+
+  /**
+   * The default time (in seconds) for which a signed URL is valid unless otherwise specified at the time of URL
+   * creation (depends on implementation).
+   */
+  @Config("frontend.url.signer.default.url.ttl.secs")
+  @Default("5 * 60")
+  public final long frontendUrlSignerDefaultUrlTtlSecs;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendIdConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
@@ -80,11 +124,25 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbrySecurityServiceFactory");
     frontendAccountServiceFactory = verifiableProperties.getString("frontend.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
+    frontendUrlSigningServiceFactory = verifiableProperties.getString("frontend.url.signing.service.factory",
+        "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =
         verifiableProperties.getInt("frontend.chunked.get.response.threshold.in.bytes", 8192);
     frontendAllowServiceIdBasedPostRequest =
         verifiableProperties.getBoolean("frontend.allow.service.id.based.post.request", true);
+    frontendUrlSignerUploadEndpoint =
+        verifiableProperties.getString("frontend.url.signer.upload.endpoint", "http://localhost:1174");
+    frontendUrlSignerDownloadEndpoint =
+        verifiableProperties.getString("frontend.url.signer.download.endpoint", "http://localhost:1174");
+    frontendUrlSignerDefaultMaxUploadSizeBytes =
+        verifiableProperties.getLongInRange("frontend.url.signer.default.max.upload.size.bytes", 100 * 1024 * 1024, 0,
+            Long.MAX_VALUE);
+    frontendUrlSignerMaxUrlTtlSecs =
+        verifiableProperties.getLongInRange("frontend.url.signer.max.url.ttl.secs", 60 * 60, 0, Long.MAX_VALUE);
+    frontendUrlSignerDefaultUrlTtlSecs =
+        verifiableProperties.getLongInRange("frontend.url.signer.default.url.ttl.secs", 5 * 60, 0,
+            frontendUrlSignerMaxUrlTtlSecs);
   }
 }

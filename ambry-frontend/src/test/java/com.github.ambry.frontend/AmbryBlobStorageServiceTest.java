@@ -32,8 +32,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.rest.IdConverter;
-import com.github.ambry.rest.IdConverterFactory;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.ResponseStatus;
@@ -47,8 +45,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.rest.RestUtilsTest;
-import com.github.ambry.rest.SecurityService;
-import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
@@ -61,6 +57,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
@@ -100,7 +97,7 @@ import static org.junit.Assert.*;
 
 
 /**
- * Unit tests for {@link AmbryBlobStorageService}.
+ * Unit tests for {@link AmbryBlobStorageService}. Also tests {@link AccountAndContainerInjector}.
  */
 public class AmbryBlobStorageServiceTest {
   private final Account refAccount;
@@ -123,6 +120,7 @@ public class AmbryBlobStorageServiceTest {
   private Container refDefaultPrivateContainer;
   private InMemAccountServiceFactory.InMemAccountService accountService =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private final UrlSigningService urlSigningService;
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -136,8 +134,13 @@ public class AmbryBlobStorageServiceTest {
         String.valueOf(shouldAllowServiceIdBasedPut));
     verifiableProperties = new VerifiableProperties(configProps);
     frontendConfig = new FrontendConfig(verifiableProperties);
+    urlSigningService = new AmbryUrlSigningService(frontendConfig.frontendUrlSignerUploadEndpoint,
+        frontendConfig.frontendUrlSignerDownloadEndpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
+        frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
+        SystemTime.getInstance());
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
-    securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null);
+    securityServiceFactory =
+        new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null, urlSigningService);
     refAccount = accountService.createAndAddRandomAccount();
     for (Container container : refAccount.getAllContainers()) {
       if (container.getId() == Container.DEFAULT_PUBLIC_CONTAINER_ID) {
@@ -696,7 +699,7 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, accountService);
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -717,7 +720,7 @@ public class AmbryBlobStorageServiceTest {
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, accountService);
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -799,6 +802,88 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Tests the handling of {@link Operations#GET_SIGNED_URL} requests.
+   * @throws Exception
+   */
+  @Test
+  public void getAndUseSignedUrlTest() throws Exception {
+    // setup
+    int contentLength = 10;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
+    long blobTtl = 7200;
+    String serviceId = "getAndUseSignedUrlTest";
+    String contentType = "application/octet-stream";
+    String ownerId = "getAndUseSignedUrlTest";
+    JSONObject headers = new JSONObject();
+    headers.put(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
+    setAmbryHeadersForPut(headers, blobTtl, refContainer.isPrivate(), serviceId, contentType, ownerId,
+        refAccount.getName(), refContainer.getName());
+    Map<String, String> userMetadata = new HashMap<>();
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
+
+    // POST
+    // Get signed URL
+    RestRequest getSignedUrlRequest = createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, headers, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(getSignedUrlRequest, restResponseChannel);
+    assertEquals("Account not as expected", refAccount,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
+    assertEquals("Container not as expected", refContainer,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    String signedPostUrl = restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL);
+    assertNotNull("Did not get a signed POST URL", signedPostUrl);
+
+    // Use signed URL to POST
+    List<ByteBuffer> contents = new LinkedList<>();
+    contents.add(content);
+    contents.add(null);
+    RestRequest postSignedRequest = createRestRequest(RestMethod.POST, signedPostUrl, null, contents);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(postSignedRequest, restResponseChannel);
+    String blobId = verifyPostAndReturnBlobId(postSignedRequest, restResponseChannel, refAccount, refContainer);
+
+    // verify POST
+    headers.put(RestUtils.Headers.BLOB_SIZE, contentLength);
+    getBlobAndVerify(blobId, null, null, headers, content, refAccount, refContainer);
+    getBlobInfoAndVerify(blobId, null, headers, refAccount, refContainer);
+
+    // GET
+    // Get signed URL
+    JSONObject getHeaders = new JSONObject();
+    getHeaders.put(RestUtils.Headers.URL_TYPE, RestMethod.GET.name());
+    blobId = blobId.startsWith("/") ? blobId.substring(1) : blobId;
+    getHeaders.put(RestUtils.Headers.BLOB_ID, blobId);
+    getSignedUrlRequest = createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(getSignedUrlRequest, restResponseChannel);
+    assertEquals("Account not as expected", refAccount,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
+    assertEquals("Container not as expected", refContainer,
+        getSignedUrlRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    String signedGetUrl = restResponseChannel.getHeader(RestUtils.Headers.SIGNED_URL);
+    assertNotNull("Did not get a signed GET URL", signedGetUrl);
+
+    // Use URL to GET blob
+    RestRequest getSignedRequest = createRestRequest(RestMethod.GET, signedGetUrl, null, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(getSignedRequest, restResponseChannel);
+    verifyGetBlobResponse(getSignedRequest, restResponseChannel, null, headers, content, refAccount, refContainer);
+
+    // one error scenario to exercise exception path
+    try {
+      doOperation(createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, null, null),
+          new MockRestResponseChannel());
+      fail("Operation should have failed because some necessary parameters are missing");
+    } catch (RestServiceException e) {
+      assertEquals("RestServiceErrorCode not as expected", RestServiceErrorCode.MissingArgs, e.getErrorCode());
+    }
+  }
+
   // helpers
   // general
 
@@ -845,7 +930,7 @@ public class AmbryBlobStorageServiceTest {
       String contentType, String ownerId, String targetAccountName, String targetContainerName) throws JSONException {
     if (headers != null && serviceId != null && contentType != null) {
       if (ttlInSecs > -1) {
-        headers.put(RestUtils.Headers.TTL, ttlInSecs);
+        headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
       }
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
       headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
@@ -855,7 +940,7 @@ public class AmbryBlobStorageServiceTest {
       if (targetContainerName != null) {
         headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
       } else {
-        headers.put(RestUtils.Headers.PRIVATE, isPrivate);
+        headers.put(RestUtils.Headers.PRIVATE, Boolean.toString(isPrivate));
       }
       if (ownerId != null) {
         headers.put(RestUtils.Headers.OWNER_ID, ownerId);
@@ -910,7 +995,7 @@ public class AmbryBlobStorageServiceTest {
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() throws Exception {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-        idConverterFactory, securityServiceFactory, accountService);
+        idConverterFactory, securityServiceFactory, accountService, urlSigningService);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1053,6 +1138,19 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
+    return verifyPostAndReturnBlobId(restRequest, restResponseChannel, expectedAccount, expectedContainer);
+  }
+
+  /**
+   * Verifies POST response on {@code restResponseChannel} in response to {@code restRequest}.
+   * @param restRequest the {@link RestRequest} that was sent.
+   * @param restResponseChannel the {@link MockRestResponseChannel} over which response was received.
+   * @param expectedAccount the expected {@link Account} instance injected into the {@link RestRequest}.
+   * @param expectedContainer the expected {@link Container} instance injected into the {@link RestRequest}.
+   * @return the blob ID of the blob.
+   */
+  private String verifyPostAndReturnBlobId(RestRequest restRequest, MockRestResponseChannel restResponseChannel,
+      Account expectedAccount, Container expectedContainer) {
     assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getStatus());
     assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
@@ -1065,9 +1163,7 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Wrong container object in RestRequest's args", expectedContainer,
         restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
     String blobId = restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
-    if (blobId == null) {
-      fail("postBlobAndVerify did not return a blob ID");
-    }
+    assertNotNull("Did not get a blobId", blobId);
     return blobId;
   }
 
@@ -1087,6 +1183,25 @@ public class AmbryBlobStorageServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, createRequestHeaders(range, getOption), null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
+    verifyGetBlobResponse(restRequest, restResponseChannel, range, expectedHeaders, expectedContent, expectedAccount,
+        expectedContainer);
+  }
+
+  /**
+   * Verifies the GET response received for {@code restRequest} on {@code restResponseChannel}.
+   * @param restRequest the {@link RestRequest} that was sent.
+   * @param restResponseChannel the {@link MockRestResponseChannel} over which response was received.
+   * @param range the optional {@link ByteRange} for the request.
+   * @param expectedHeaders the expected headers in the response.
+   * @param expectedContent the expected content of the blob.
+   * @param expectedAccount the expected account in the rest request.
+   * @param expectedContainer the expected container in the rest request.
+   * @throws JSONException
+   * @throws RestServiceException
+   */
+  private void verifyGetBlobResponse(RestRequest restRequest, MockRestResponseChannel restResponseChannel,
+      ByteRange range, JSONObject expectedHeaders, ByteBuffer expectedContent, Account expectedAccount,
+      Container expectedContainer) throws JSONException, RestServiceException {
     assertEquals("Unexpected response status", range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent,
         restResponseChannel.getStatus());
     checkCommonGetHeadHeaders(restResponseChannel);
@@ -1402,7 +1517,7 @@ public class AmbryBlobStorageServiceTest {
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, accountService);
+            converterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
     doExternalServicesBadInputTest(RestMethod.values(), expectedExceptionMsg);
   }
@@ -1426,7 +1541,7 @@ public class AmbryBlobStorageServiceTest {
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              clusterMap, idConverterFactory, securityFactory, accountService);
+              clusterMap, idConverterFactory, securityFactory, accountService, urlSigningService);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg);
     }
@@ -1475,7 +1590,7 @@ public class AmbryBlobStorageServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, accountService);
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
@@ -1978,6 +2093,7 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
 class FrontendTestIdConverterFactory implements IdConverterFactory {
   public Exception exceptionToReturn = null;
   public RuntimeException exceptionToThrow = null;
+  public String translation = null;
 
   @Override
   public IdConverter getIdConverter() {
@@ -2010,9 +2126,10 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
         throw exceptionToThrow;
       }
       FutureResult<String> futureResult = new FutureResult<String>();
-      futureResult.done(null, exceptionToReturn);
+      String toReturn = exceptionToReturn == null ? translation : null;
+      futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
-        callback.onCompletion(null, exceptionToReturn);
+        callback.onCompletion(toReturn, exceptionToReturn);
       }
       return futureResult;
     }
@@ -2199,6 +2316,41 @@ class FrontendTestRouter implements Router {
       callback.onCompletion(result, exception);
     }
     return futureResult;
+  }
+}
+
+/**
+ * Implementation of {@link UrlSigningService} for tests in frontend.
+ */
+class FrontendTestUrlSigningServiceFactory implements UrlSigningServiceFactory {
+  String signedUrlToReturn = "";
+  boolean isRequestSigned = false;
+  RestServiceException getSignedUrlException = null;
+  RestServiceException verifySignedRequestException = null;
+
+  @Override
+  public UrlSigningService getUrlSigningService() {
+    return new UrlSigningService() {
+      @Override
+      public String getSignedUrl(RestRequest restRequest) throws RestServiceException {
+        if (getSignedUrlException != null) {
+          throw getSignedUrlException;
+        }
+        return signedUrlToReturn;
+      }
+
+      @Override
+      public boolean isRequestSigned(RestRequest restRequest) {
+        return isRequestSigned;
+      }
+
+      @Override
+      public void verifySignedRequest(RestRequest restRequest) throws RestServiceException {
+        if (verifySignedRequestException != null) {
+          throw verifySignedRequestException;
+        }
+      }
+    };
   }
 }
 

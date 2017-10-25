@@ -46,6 +46,8 @@ class FrontendMetrics {
   public final RestRequestMetrics getPeersSSLMetrics;
   public final RestRequestMetrics getReplicasMetrics;
   public final RestRequestMetrics getReplicasSSLMetrics;
+  public final RestRequestMetrics getSignedUrlMetrics;
+  public final RestRequestMetrics getSignedUrlSSLMetrics;
   // POST
   public final RestRequestMetrics postBlobMetrics;
   public final RestRequestMetrics postBlobSSLMetrics;
@@ -96,6 +98,7 @@ class FrontendMetrics {
   public final Histogram deleteSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram getSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram getPeersSecurityRequestCallbackProcessingTimeInMs;
+  public final Histogram getSignedUrlSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram headSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram postSecurityRequestCallbackProcessingTimeInMs;
   public final Histogram deleteSecurityRequestTimeInMs;
@@ -103,8 +106,10 @@ class FrontendMetrics {
   public final Histogram headSecurityRequestTimeInMs;
   public final Histogram postSecurityRequestTimeInMs;
   public final Histogram getPeersSecurityRequestTimeInMs;
+  public final Histogram getSignedUrlSecurityRequestTimeInMs;
   // SecurityPostProcessRequestCallback
   public final Histogram getPeersSecurityPostProcessRequestTimeInMs;
+  public final Histogram getSignedUrlSecurityPostProcessRequestTimeInMs;
   // AmbrySecurityService
   public final Histogram securityServiceProcessRequestTimeInMs;
   public final Histogram securityServicePostProcessRequestTimeInMs;
@@ -115,6 +120,8 @@ class FrontendMetrics {
   public final Histogram getPeersProcessingTimeInMs;
   // GetReplicasHandler
   public final Histogram getReplicasProcessingTimeInMs;
+  // GetSignedUrlHandler
+  public final Histogram getSignedUrlProcessingTimeInMs;
 
   // Errors
   // AmbryBlobStorageService
@@ -178,6 +185,9 @@ class FrontendMetrics {
     getReplicasMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "GetReplicas", metricRegistry);
     getReplicasSSLMetrics =
         new RestRequestMetrics(AmbryBlobStorageService.class, "GetReplicas" + SSL_SUFFIX, metricRegistry);
+    getSignedUrlMetrics = new RestRequestMetrics(GetSignedUrlHandler.class, "GetSignedUrl", metricRegistry);
+    getSignedUrlSSLMetrics =
+        new RestRequestMetrics(GetSignedUrlHandler.class, "GetSignedUrl" + SSL_SUFFIX, metricRegistry);
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
     postBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
@@ -262,7 +272,9 @@ class FrontendMetrics {
     getSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityRequestCallbackProcessingTimeInMs"));
     getPeersSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(AmbryBlobStorageService.class, "GetPeersSecurityRequestCallbackProcessingTimeInMs"));
+        MetricRegistry.name(GetPeersHandler.class, "SecurityRequestCallbackProcessingTimeInMs"));
+    getSignedUrlSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(GetSignedUrlHandler.class, "SecurityRequestCallbackProcessingTimeInMs"));
     getSecurityRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "GetSecurityRequestTimeInMs"));
     postSecurityRequestCallbackProcessingTimeInMs = metricRegistry.histogram(
@@ -271,9 +283,13 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostSecurityRequestTimeInMs"));
     getPeersSecurityRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityRequestTimeInMs"));
+    getSignedUrlSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "SecurityRequestTimeInMs"));
     // SecurityPostProcessRequestCallback
     getPeersSecurityPostProcessRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityPostProcessRequestTimeInMs"));
+    getSignedUrlSecurityPostProcessRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "SecurityPostProcessRequestTimeInMs"));
     // AmbrySecurityService
     securityServiceProcessRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestProcessingTimeInMs"));
@@ -290,6 +306,9 @@ class FrontendMetrics {
     // GetReplicasHandler
     getReplicasProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetReplicasHandler.class, "ProcessingTimeInMs"));
+    // GetSignedUrlHandler
+    getSignedUrlProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "ProcessingTimeInMs"));
 
     // Errors
     // AmbryBlobStorageService
