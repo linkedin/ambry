@@ -114,6 +114,14 @@ public class ClusterMapConfig {
   @Default("null")
   public final Integer clusterMapPort;
 
+  /**
+   * Indicates if a reverse DNS lookup should be used to try and obtain the fully qualified domain names of cluster map
+   * host entries.
+   */
+  @Config("clustermap.resolve.hostnames")
+  @Default("true")
+  public final boolean clusterMapResolveHostnames;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -135,5 +143,6 @@ public class ClusterMapConfig {
     clusterMapDatacenterName = verifiableProperties.getString("clustermap.datacenter.name");
     clusterMapHostName = verifiableProperties.getString("clustermap.host.name");
     clusterMapPort = verifiableProperties.getInteger("clustermap.port", null);
+    clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
   }
 }
