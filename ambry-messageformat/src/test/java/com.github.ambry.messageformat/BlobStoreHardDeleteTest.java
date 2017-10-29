@@ -31,7 +31,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -39,6 +41,17 @@ import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
 public class BlobStoreHardDeleteTest {
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @AfterClass
+  public static void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {

@@ -67,10 +67,10 @@ public class MessageInfoAndMetadataListSerDeTest {
         SystemTime.getInstance().milliseconds() + 10,
         SystemTime.getInstance().milliseconds() + 20, SystemTime.getInstance().milliseconds() + 30};
     MessageMetadata[] messageMetadata = new MessageMetadata[4];
-    messageMetadata[0] = new MessageMetadata(ByteBuffer.wrap(randomArray(100)));
+    messageMetadata[0] = new MessageMetadata(ByteBuffer.wrap(getRandomBytes(100)));
     messageMetadata[1] = new MessageMetadata(null);
     messageMetadata[2] = null;
-    messageMetadata[3] = new MessageMetadata(ByteBuffer.wrap(randomArray(200)));
+    messageMetadata[3] = new MessageMetadata(ByteBuffer.wrap(getRandomBytes(200)));
 
     List<MessageInfo> messageInfoList = new ArrayList<>(4);
     List<MessageMetadata> messageMetadataList = new ArrayList<>(4);

@@ -28,13 +28,26 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
 
 public class MessageSievingInputStreamTest {
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @AfterClass
+  public static void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
 
   @Test
   public void testValidBlobsAgainstCorruption() throws IOException, MessageFormatException {

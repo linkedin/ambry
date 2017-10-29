@@ -62,19 +62,16 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
       MessageHeader_Format headerFormat;
       ReadInputStream stream;
       long endOffset;
-      if (version != Message_Header_Version_V1 && version != Message_Header_Version_V2) {
+      if (!isValidHeaderVersion(version)) {
         throw new MessageFormatException("Version not known while reading message - " + version,
             MessageFormatErrorCodes.Unknown_Format_Version);
       }
-      ByteBuffer header = ByteBuffer.allocate(
-          version == Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-              : MessageHeader_Format_V2.getHeaderSize());
+      ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
       header.putShort(version);
       read.readInto(header, offset);
       offset += header.capacity() - headerVersion.capacity();
       header.flip();
-      headerFormat = version == Message_Header_Version_V1 ? new MessageHeader_Format_V1(header)
-          : new MessageHeader_Format_V2(header);
+      headerFormat = getMessageHeader(version, header);
       headerFormat.verifyHeader();
       endOffset = offset + headerFormat.getPayloadRelativeOffset() + headerFormat.getMessageSize();
 
@@ -161,22 +158,18 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
           Version_Field_Size_In_Bytes);
       headerVersionBuf.flip();
       short headerVersion = headerVersionBuf.getShort();
-      if (headerVersion != Message_Header_Version_V1 && headerVersion != Message_Header_Version_V2) {
+      if (!isValidHeaderVersion(headerVersion)) {
         throw new MessageFormatException(
             "Unknown header version during hard delete " + headerVersion + " storeKey " + readSet.getKeyAt(
                 readSetIndex), MessageFormatErrorCodes.Unknown_Format_Version);
       }
-      ByteBuffer header = ByteBuffer.allocate(
-          headerVersion == Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-              : MessageHeader_Format_V2.getHeaderSize());
+      ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(headerVersion));
       /* Read the rest of the header */
       header.putShort(headerVersion);
       readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(header)),
           Version_Field_Size_In_Bytes, header.capacity() - Version_Field_Size_In_Bytes);
       header.flip();
-      MessageHeader_Format headerFormat =
-          headerVersion == Message_Header_Version_V1 ? new MessageHeader_Format_V1(header)
-              : new MessageHeader_Format_V2(header);
+      MessageHeader_Format headerFormat = getMessageHeader(headerVersion, header);
       headerFormat.verifyHeader();
       StoreKey storeKey = storeKeyFactory.getStoreKey(
           new DataInputStream(new MessageReadSetIndexInputStream(readSet, readSetIndex, header.capacity())));

@@ -30,7 +30,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -39,6 +41,17 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class MessageFormatSendTest {
   private final String putFormat;
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @AfterClass
+  public static void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -259,6 +272,7 @@ public class MessageFormatSendTest {
    */
   @Test
   public void sendWriteCompositeMessagesTest() throws Exception {
+    short savedVersion = MessageFormatRecord.HEADER_VERSION_TO_USE;
     if (!putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
       return;
     }
@@ -299,7 +313,7 @@ public class MessageFormatSendTest {
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormatComposite2,
         headerFormatComposite2);
 
-    MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
+    MessageFormatRecord.HEADER_VERSION_TO_USE = savedVersion;
   }
 
   /**

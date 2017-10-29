@@ -27,7 +27,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -117,6 +119,18 @@ class MockIdFactory implements StoreKeyFactory {
 
 @RunWith(Parameterized.class)
 public class BlobStoreRecoveryTest {
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @AfterClass
+  public static void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
+
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(

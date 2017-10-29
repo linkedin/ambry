@@ -25,11 +25,24 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 
 public class MessageFormatInputStreamTest {
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @AfterClass
+  public static void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
 
   /**
    * Tests for {@link PutMessageFormatInputStream} in different versions.
@@ -79,8 +92,9 @@ public class MessageFormatInputStreamTest {
             : new PutMessageFormatBlobV1InputStream(key, prop, ByteBuffer.wrap(usermetadata), stream, blobContentSize,
                 blobType);
 
-    int headerSize = useV2Header ? MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize()
-        : MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
+        useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
+
     int blobEncryptionKeySize =
         useV2Header ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(
             ByteBuffer.wrap(encryptionKey)) : 0;
@@ -238,8 +252,8 @@ public class MessageFormatInputStreamTest {
         messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
         useV2Header = MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2;
       }
-      int headerSize = useV2Header ? MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize()
-          : MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+      int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
+          useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
       int deleteRecordSize =
           version == MessageFormatRecord.Delete_Version_V1 ? MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize()
               : MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();

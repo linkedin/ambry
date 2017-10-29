@@ -33,17 +33,6 @@ public class TestUtils {
   public static final Random RANDOM = new Random();
 
   /**
-   * Create an array of the given size and fill it with random bytes.
-   * @param size the size of the array to create.
-   * @return the created array.
-   */
-  public static byte[] randomArray(int size) {
-    byte[] arr = new byte[size];
-    RANDOM.nextBytes(arr);
-    return arr;
-  }
-
-  /**
    * Return the number of threads currently running with a name containing the given pattern.
    * @param pattern the pattern to compare
    * @return the number of threads currently running with a name containing the given pattern.

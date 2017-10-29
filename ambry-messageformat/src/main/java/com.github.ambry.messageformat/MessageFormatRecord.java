@@ -68,6 +68,30 @@ public class MessageFormatRecord {
     }
   }
 
+  static int getHeaderSizeForVersion(short headerVersion) throws MessageFormatException {
+    switch (headerVersion) {
+      case Message_Header_Version_V1:
+        return MessageHeader_Format_V1.getHeaderSize();
+      case Message_Header_Version_V2:
+        return MessageHeader_Format_V2.getHeaderSize();
+      default:
+        throw new MessageFormatException("Unknown header version: " + headerVersion,
+            MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+  }
+
+  static MessageHeader_Format getMessageHeader(short headerVersion, ByteBuffer input) throws MessageFormatException {
+    switch (headerVersion) {
+      case Message_Header_Version_V1:
+        return new MessageHeader_Format_V1(input);
+      case Message_Header_Version_V2:
+        return new MessageHeader_Format_V2(input);
+      default:
+        throw new MessageFormatException("Unknown header version: " + headerVersion,
+            MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+  }
+
   // Deserialization methods for individual records
   public static BlobProperties deserializeBlobProperties(InputStream stream)
       throws IOException, MessageFormatException {
@@ -351,6 +375,8 @@ public class MessageFormatRecord {
   public static class MessageHeader_Format_V1 implements MessageHeader_Format {
     private ByteBuffer buffer;
 
+    private static final Logger logger = LoggerFactory.getLogger(MessageHeader_Format_V1.class);
+
     // total size field start offset and size
     public static final int Total_Size_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
     public static final int Total_Size_Field_Size_In_Bytes = 8;
@@ -391,7 +417,6 @@ public class MessageFormatRecord {
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
-      Logger logger = LoggerFactory.getLogger(MessageHeader_Format_V1.class);
       logger.trace("serializing header : version {} size {} blobpropertiesrecordrelativeoffset {} "
               + "deleterecordrelativeoffset {} usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
           Message_Header_Version_V1, totalSize, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
@@ -573,6 +598,7 @@ public class MessageFormatRecord {
   public static class MessageHeader_Format_V2 implements MessageHeader_Format {
     private ByteBuffer buffer;
 
+    private static final Logger logger = LoggerFactory.getLogger(MessageHeader_Format_V2.class);
     // total size field start offset and size
     public static final int Total_Size_Field_Offset_In_Bytes = Version_Field_Size_In_Bytes;
     public static final int Total_Size_Field_Size_In_Bytes = 8;
@@ -617,7 +643,6 @@ public class MessageFormatRecord {
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
-      Logger logger = LoggerFactory.getLogger(MessageHeader_Format_V2.class);
       logger.trace(
           "serializing header : version {} size {} blobencryptionkeyrecordrelativeoffset {} blobpropertiesrecordrelativeoffset {} "
               + "deleterecordrelativeoffset {} usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",

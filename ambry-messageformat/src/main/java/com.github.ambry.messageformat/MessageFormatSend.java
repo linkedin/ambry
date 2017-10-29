@@ -116,14 +116,12 @@ public class MessageFormatSend implements Send {
 
           headerVersion.flip();
           short version = headerVersion.getShort();
-          if (version != Message_Header_Version_V1 && version != Message_Header_Version_V2) {
+          if (!isValidHeaderVersion(version)) {
             throw new MessageFormatException(
                 "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(i),
                 MessageFormatErrorCodes.Unknown_Format_Version);
           }
-          ByteBuffer header = ByteBuffer.allocate(
-              version == Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-                  : MessageHeader_Format_V2.getHeaderSize());
+          ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
           // read the header
           startTime = SystemTime.getInstance().milliseconds();
           headerVersion.clear();
@@ -134,8 +132,7 @@ public class MessageFormatSend implements Send {
 
           startTime = SystemTime.getInstance().milliseconds();
           header.flip();
-          MessageHeader_Format headerFormat = version == Message_Header_Version_V1 ? new MessageHeader_Format_V1(header)
-              : new MessageHeader_Format_V2(header);
+          MessageHeader_Format headerFormat = getMessageHeader(version, header);
           headerFormat.verifyHeader();
           int storeKeyRelativeOffset = header.capacity();
 

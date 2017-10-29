@@ -25,6 +25,8 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -41,6 +43,17 @@ import static org.junit.Assert.*;
 public class BlobPropertiesTest {
 
   private final short version;
+  private static short serDeVersionSaved;
+
+  @BeforeClass
+  public static void saveVersionToUse() {
+    serDeVersionSaved = BlobPropertiesSerDe.CURRENT_VERSION;
+  }
+
+  @AfterClass
+  public static void resetVersionToUse() {
+    BlobPropertiesSerDe.CURRENT_VERSION = serDeVersionSaved;
+  }
 
   /**
    * Running for {@link BlobPropertiesSerDe#VERSION_1} and {@link BlobPropertiesSerDe#VERSION_2}

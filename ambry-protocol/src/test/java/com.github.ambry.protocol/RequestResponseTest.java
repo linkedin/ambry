@@ -40,7 +40,9 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
@@ -117,6 +119,17 @@ class InvalidVersionPutRequest extends PutRequest {
  * Tests for different requests and responses in the protocol.
  */
 public class RequestResponseTest {
+  private static short versionSaved;
+
+  @BeforeClass
+  public static void saveVersionToUse() {
+    versionSaved = GetResponse.CURRENT_VERSION;
+  }
+
+  @AfterClass
+  public static void resetVersionToUse() {
+    GetResponse.CURRENT_VERSION = versionSaved;
+  }
   /**
    * Tests serialization and deserialization of Put requests in different versions.
    * @param clusterMap the cluster map to use.

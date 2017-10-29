@@ -179,19 +179,16 @@ public class MessageSievingInputStream extends InputStream {
       byteArrayInputStream.read(headerVersionInBytes, 0, Version_Field_Size_In_Bytes);
       ByteBuffer headerVersion = ByteBuffer.wrap(headerVersionInBytes);
       short version = headerVersion.getShort();
-      if (version != Message_Header_Version_V1 && version != MessageFormatRecord.Message_Header_Version_V2) {
+      if (!isValidHeaderVersion(version)) {
         throw new MessageFormatException("Header version not supported " + version,
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      ByteBuffer headerBuffer = ByteBuffer.allocate(
-          version == Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-              : MessageHeader_Format_V2.getHeaderSize());
+      ByteBuffer headerBuffer = ByteBuffer.allocate(getHeaderSizeForVersion(version));
       headerBuffer.putShort(version);
       byteArrayInputStream.read(headerBuffer.array(), 2, headerBuffer.capacity() - 2);
       headerBuffer.position(headerBuffer.capacity());
       headerBuffer.flip();
-      MessageHeader_Format header = version == Message_Header_Version_V1 ? new MessageHeader_Format_V1(headerBuffer)
-          : new MessageHeader_Format_V2(headerBuffer);
+      MessageHeader_Format header = getMessageHeader(version, headerBuffer);
       StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(byteArrayInputStream));
       if (header.isPutRecord()) {
         encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(byteArrayInputStream) : null;

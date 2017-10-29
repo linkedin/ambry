@@ -53,13 +53,11 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         startOffset += headerVersion.capacity();
         headerVersion.flip();
         short version = headerVersion.getShort();
-        if (version != Message_Header_Version_V1 && version != Message_Header_Version_V2) {
+        if (!isValidHeaderVersion(version)) {
           throw new MessageFormatException("Version not known while reading message - " + version,
               MessageFormatErrorCodes.Unknown_Format_Version);
         }
-        ByteBuffer header = ByteBuffer.allocate(
-            version == Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
-                : MessageHeader_Format_V2.getHeaderSize());
+        ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
         header.putShort(version);
         if (startOffset + (header.capacity() - headerVersion.capacity()) > endOffset) {
           throw new IndexOutOfBoundsException("Unable to read version. Reached end of stream");
@@ -67,8 +65,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
         read.readInto(header, startOffset);
         startOffset += header.capacity() - headerVersion.capacity();
         header.flip();
-        MessageHeader_Format headerFormat = version == Message_Header_Version_V1 ? new MessageHeader_Format_V1(header)
-            : new MessageHeader_Format_V2(header);
+        MessageHeader_Format headerFormat = getMessageHeader(version, header);
         headerFormat.verifyHeader();
         ReadInputStream stream = new ReadInputStream(read, startOffset, endOffset);
         StoreKey key = factory.getStoreKey(new DataInputStream(stream));
