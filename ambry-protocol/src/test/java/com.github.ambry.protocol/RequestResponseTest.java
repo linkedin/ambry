@@ -40,7 +40,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -126,10 +126,11 @@ public class RequestResponseTest {
     versionSaved = GetResponse.CURRENT_VERSION;
   }
 
-  @AfterClass
-  public static void resetVersionToUse() {
+  @After
+  public void resetVersionToUse() {
     GetResponse.CURRENT_VERSION = versionSaved;
   }
+
   /**
    * Tests serialization and deserialization of Put requests in different versions.
    * @param clusterMap the cluster map to use.

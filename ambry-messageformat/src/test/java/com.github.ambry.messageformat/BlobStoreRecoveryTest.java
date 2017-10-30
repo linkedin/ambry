@@ -27,7 +27,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -126,8 +126,8 @@ public class BlobStoreRecoveryTest {
     messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
   }
 
-  @AfterClass
-  public static void resetMessageFormatHeaderVersionToUse() {
+  @After
+  public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
   }
 

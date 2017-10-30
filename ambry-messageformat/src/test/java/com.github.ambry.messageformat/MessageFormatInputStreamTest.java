@@ -25,7 +25,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Random;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -39,8 +39,8 @@ public class MessageFormatInputStreamTest {
     messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
   }
 
-  @AfterClass
-  public static void resetMessageFormatHeaderVersionToUse() {
+  @After
+  public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
   }
 

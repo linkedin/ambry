@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -51,8 +51,8 @@ public class MessageFormatRecordTest {
     serDeVersionSaved = BlobPropertiesSerDe.CURRENT_VERSION;
   }
 
-  @AfterClass
-  public static void resetVersionToUse() {
+  @After
+  public void resetVersionToUse() {
     BlobPropertiesSerDe.CURRENT_VERSION = serDeVersionSaved;
   }
 
@@ -185,7 +185,6 @@ public class MessageFormatRecordTest {
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
     // Test Blob property Format V1 for all versions of BlobPropertiesSerDe
-    short savedVersion = BlobPropertiesSerDe.CURRENT_VERSION;
     short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3};
     for (short version : versions) {
       BlobPropertiesSerDe.CURRENT_VERSION = version;
@@ -234,7 +233,6 @@ public class MessageFormatRecordTest {
       }
     }
 
-    BlobPropertiesSerDe.CURRENT_VERSION = savedVersion;
     // failure case
     BlobProperties properties =
         new BlobProperties(1000, "id", "member", "test", true, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,

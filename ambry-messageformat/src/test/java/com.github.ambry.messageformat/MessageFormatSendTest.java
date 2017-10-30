@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -48,8 +48,8 @@ public class MessageFormatSendTest {
     messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
   }
 
-  @AfterClass
-  public static void resetMessageFormatHeaderVersionToUse() {
+  @After
+  public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
   }
 
@@ -112,7 +112,6 @@ public class MessageFormatSendTest {
       doSendWriteSingleMessageTest(null, null);
       doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0));
       doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate());
-      MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
     } else {
       doSendWriteSingleMessageTest(null, null);
     }
