@@ -68,6 +68,12 @@ public class MessageFormatRecord {
     }
   }
 
+  /**
+   * Get the size of the header for the given header version.
+   * @param headerVersion the version of the header for which the size is to be determined.
+   * @return the size of the header for the given header version.
+   * @throws MessageFormatException if the given header version is invalid.
+   */
   static int getHeaderSizeForVersion(short headerVersion) throws MessageFormatException {
     switch (headerVersion) {
       case Message_Header_Version_V1:
@@ -80,6 +86,13 @@ public class MessageFormatRecord {
     }
   }
 
+  /**
+   * Format a header for the given version using the given content.
+   * @param headerVersion the version of the header.
+   * @param input the input content that is to be formatted in the appropriate header version.
+   * @return a formatted header for the given version.
+   * @throws MessageFormatException if the given header version is invalid.
+   */
   static MessageHeader_Format getMessageHeader(short headerVersion, ByteBuffer input) throws MessageFormatException {
     switch (headerVersion) {
       case Message_Header_Version_V1:
