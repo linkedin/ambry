@@ -183,9 +183,9 @@ public class AmbryRequests implements RequestAPI {
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream =
-            new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobProperties(),
-                receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(), receivedRequest.getBlobSize(),
-                receivedRequest.getBlobType());
+            new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
+                receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
+                receivedRequest.getBlobSize(), receivedRequest.getBlobType());
         MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), false,
             Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
                 receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc(),
@@ -304,7 +304,8 @@ public class AmbryRequests implements RequestAPI {
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory);
             PartitionResponseInfo partitionResponseInfo =
-                new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo());
+                new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
+                    blobsToSend.getMessageMetadataList());
             messagesToSendList.add(blobsToSend);
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (StoreException e) {

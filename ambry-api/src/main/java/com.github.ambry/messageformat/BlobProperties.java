@@ -31,6 +31,7 @@ public class BlobProperties {
   private final long creationTimeInMs;
   private final short accountId;
   private final short containerId;
+  private final boolean isEncrypted;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -40,7 +41,7 @@ public class BlobProperties {
    */
   public BlobProperties(long blobSize, String serviceId, short accountId, short containerId) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId);
+        accountId, containerId, false);
   }
 
   /**
@@ -52,11 +53,12 @@ public class BlobProperties {
    * @param timeToLiveInSeconds The time to live, in seconds, relative to blob creation time.
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
+   * @param isEncrypted whether this blob is encrypted.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, short accountId, short containerId) {
+      long timeToLiveInSeconds, short accountId, short containerId, boolean isEncrypted) {
     this(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds,
-        SystemTime.getInstance().milliseconds(), accountId, containerId);
+        SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
   }
 
   /**
@@ -69,9 +71,10 @@ public class BlobProperties {
    * @param creationTimeInMs The time at which the blob is created.
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
+   * @param isEncrypted whether this blob is encrypted.
    */
   public BlobProperties(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId) {
+      long timeToLiveInSeconds, long creationTimeInMs, short accountId, short containerId, boolean isEncrypted) {
     this.blobSize = blobSize;
     this.serviceId = serviceId;
     this.ownerId = ownerId;
@@ -81,6 +84,7 @@ public class BlobProperties {
     this.timeToLiveInSeconds = timeToLiveInSeconds;
     this.accountId = accountId;
     this.containerId = containerId;
+    this.isEncrypted = isEncrypted;
   }
 
   public long getTimeToLiveInSeconds() {
@@ -123,6 +127,10 @@ public class BlobProperties {
     return containerId;
   }
 
+  public boolean isEncrypted() {
+    return isEncrypted;
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
@@ -152,6 +160,7 @@ public class BlobProperties {
     }
     sb.append(", ").append("AccountId=").append(getAccountId());
     sb.append(", ").append("ContainerId=").append(getContainerId());
+    sb.append(", ").append("IsEncrypted=").append(isEncrypted());
     sb.append("]");
     return sb.toString();
   }

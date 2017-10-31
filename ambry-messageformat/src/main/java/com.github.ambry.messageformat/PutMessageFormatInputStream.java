@@ -38,7 +38,75 @@ import java.nio.ByteBuffer;
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
-  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
+  public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
+      throws MessageFormatException {
+    if (MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2) {
+      createStreamWithMessageHeaderV2(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
+          blobType);
+    } else {
+      createStreamWithMessageHeaderV1(key, blobProperties, userMetadata, blobStream, streamSize, blobType);
+    }
+  }
+
+  public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream, long streamSize) throws MessageFormatException {
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob);
+  }
+
+  /**
+   * Helper method to create a stream with encryption key record. This will be the standard once all nodes in a cluster
+   * understand reading messages with encryption key record.
+   */
+  private void createStreamWithMessageHeaderV2(StoreKey key, ByteBuffer blobEncryptionKey,
+      BlobProperties blobProperties, ByteBuffer userMetadata, InputStream blobStream, long streamSize,
+      BlobType blobType) throws MessageFormatException {
+    int headerSize = MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize();
+    int blobEncryptionKeySize = blobEncryptionKey == null ? 0
+        : MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey);
+    int blobPropertiesRecordSize =
+        MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
+    int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
+    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
+
+    buffer = ByteBuffer.allocate(
+        headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + (int) (
+            blobSize - streamSize - MessageFormatRecord.Crc_Size));
+
+    long totalSize = blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + blobSize;
+    int blobEncryptionKeyRecordRelativeOffset =
+        blobEncryptionKey == null ? MessageFormatRecord.Message_Header_Invalid_Relative_Offset
+            : headerSize + key.sizeInBytes();
+    int blobPropertiesRecordRelativeOffset = blobEncryptionKey == null ? headerSize + key.sizeInBytes()
+        : blobEncryptionKeyRecordRelativeOffset + blobEncryptionKeySize;
+    int deleteRecordRelativeOffset = MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
+    int userMetadataRecordRelativeOffset = blobPropertiesRecordRelativeOffset + blobPropertiesRecordSize;
+    int blobRecordRelativeOffset = userMetadataRecordRelativeOffset + userMetadataSize;
+    MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, totalSize,
+        blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
+        userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
+    buffer.put(key.toBytes());
+    if (blobEncryptionKey != null) {
+      MessageFormatRecord.BlobEncryptionKey_Format_V1.serializeBlobEncryptionKeyRecord(buffer, blobEncryptionKey);
+    }
+    MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(buffer, blobProperties);
+    MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
+    int bufferBlobStart = buffer.position();
+    MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
+    Crc32 crc = new Crc32();
+    crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
+    stream = new CrcInputStream(crc, blobStream);
+    streamLength = streamSize;
+    messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
+    buffer.flip();
+  }
+
+  /**
+   * Helper method to create a stream without encryption key record. This is the default currently, but once all nodes
+   * once all nodes in a cluster understand reading messages with encryption key record, and writing in the new format
+   * is enabled, this method can be removed.
+   */
+  private void createStreamWithMessageHeaderV1(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
       InputStream blobStream, long streamSize, BlobType blobType) throws MessageFormatException {
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize =
@@ -66,10 +134,5 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     streamLength = streamSize;
     messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
     buffer.flip();
-  }
-
-  public PutMessageFormatInputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
-      InputStream blobStream, long streamSize) throws MessageFormatException {
-    this(key, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob);
   }
 }

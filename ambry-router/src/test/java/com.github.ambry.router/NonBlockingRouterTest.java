@@ -149,7 +149,7 @@ public class NonBlockingRouterTest {
 
   private void setOperationParams() {
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[PUT_CONTENT_SIZE];
@@ -470,7 +470,7 @@ public class NonBlockingRouterTest {
         // Create a clean cluster and put another blob that immediate expires.
         setOperationParams();
         putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
         blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
         Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
         allBlobsInServer.removeAll(blobsToBeDeleted);

@@ -36,6 +36,8 @@ import java.util.NoSuchElementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.messageformat.MessageFormatRecord.*;
+
 
 /**
  * This class takes a read set for blobs that are to be hard deleted and provides corresponding
@@ -52,44 +54,42 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
   public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory storeKeyFactory) throws IOException {
     try {
       // read message header
-      ByteBuffer headerVersion = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
+      ByteBuffer headerVersion = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
       read.readInto(headerVersion, offset);
       offset += headerVersion.capacity();
       headerVersion.flip();
       short version = headerVersion.getShort();
-      switch (version) {
-        case MessageFormatRecord.Message_Header_Version_V1:
-          ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-          header.putShort(version);
-          read.readInto(header, offset);
-          offset += header.capacity() - headerVersion.capacity();
-          header.flip();
-          MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
-              new MessageFormatRecord.MessageHeader_Format_V1(header);
-          headerFormat.verifyHeader();
-          long endOffset = headerFormat.getBlobPropertiesRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset ? offset
-              + headerFormat.getBlobPropertiesRecordRelativeOffset() + headerFormat.getMessageSize()
-              : offset + headerFormat.getDeleteRecordRelativeOffset() + headerFormat.getMessageSize();
+      MessageHeader_Format headerFormat;
+      ReadInputStream stream;
+      long endOffset;
+      if (!isValidHeaderVersion(version)) {
+        throw new MessageFormatException("Version not known while reading message - " + version,
+            MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+      ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
+      header.putShort(version);
+      read.readInto(header, offset);
+      offset += header.capacity() - headerVersion.capacity();
+      header.flip();
+      headerFormat = getMessageHeader(version, header);
+      headerFormat.verifyHeader();
+      endOffset = offset + headerFormat.getPayloadRelativeOffset() + headerFormat.getMessageSize();
 
-          ReadInputStream stream = new ReadInputStream(read, offset, endOffset);
-          StoreKey key = storeKeyFactory.getStoreKey(new DataInputStream(stream));
-
-          // read the appropriate type of message based on the relative offset that is set
-          if (headerFormat.getBlobPropertiesRecordRelativeOffset()
-              != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(stream);
-            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
-                Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
-                properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
-          } else {
-            DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(stream);
-            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
-                deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
-          }
-        default:
-          throw new MessageFormatException("Version not known while reading message - " + version,
-              MessageFormatErrorCodes.Unknown_Format_Version);
+      stream = new ReadInputStream(read, offset, endOffset);
+      StoreKey key = storeKeyFactory.getStoreKey(new DataInputStream(stream));
+      if (headerFormat.hasEncryptionKeyRecord()) {
+        deserializeBlobEncryptionKey(stream);
+      }
+      // read the appropriate type of message based on the relative offset that is set
+      if (headerFormat.isPutRecord()) {
+        BlobProperties properties = deserializeBlobProperties(stream);
+        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(),
+            Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
+            properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
+      } else {
+        DeleteRecord deleteRecord = deserializeDeleteRecord(stream);
+        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+            deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
       }
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message.
@@ -153,103 +153,113 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
 
     try {
       /* Read the version field in the header */
-      ByteBuffer headerVersionBuf = ByteBuffer.allocate(MessageFormatRecord.Version_Field_Size_In_Bytes);
+      ByteBuffer headerVersionBuf = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
       readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(headerVersionBuf)), 0,
-          MessageFormatRecord.Version_Field_Size_In_Bytes);
+          Version_Field_Size_In_Bytes);
       headerVersionBuf.flip();
       short headerVersion = headerVersionBuf.getShort();
-      switch (headerVersion) {
-        case MessageFormatRecord.Message_Header_Version_V1:
-          /* Read the rest of the header */
-          ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-          header.putShort(headerVersion);
-          readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(header)),
-              MessageFormatRecord.Version_Field_Size_In_Bytes,
-              MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize()
-                  - MessageFormatRecord.Version_Field_Size_In_Bytes);
-          header.flip();
-          MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
-              new MessageFormatRecord.MessageHeader_Format_V1(header);
-          headerFormat.verifyHeader();
-          StoreKey storeKey = storeKeyFactory.getStoreKey(
-              new DataInputStream(new MessageReadSetIndexInputStream(readSet, readSetIndex, header.capacity())));
-          if (storeKey.compareTo(readSet.getKeyAt(readSetIndex)) != 0) {
-            throw new MessageFormatException(
-                "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(readSetIndex) + " storeId "
-                    + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
-          }
+      if (!isValidHeaderVersion(headerVersion)) {
+        throw new MessageFormatException(
+            "Unknown header version during hard delete " + headerVersion + " storeKey " + readSet.getKeyAt(
+                readSetIndex), MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+      ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(headerVersion));
+      /* Read the rest of the header */
+      header.putShort(headerVersion);
+      readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(header)),
+          Version_Field_Size_In_Bytes, header.capacity() - Version_Field_Size_In_Bytes);
+      header.flip();
+      MessageHeader_Format headerFormat = getMessageHeader(headerVersion, header);
+      headerFormat.verifyHeader();
+      StoreKey storeKey = storeKeyFactory.getStoreKey(
+          new DataInputStream(new MessageReadSetIndexInputStream(readSet, readSetIndex, header.capacity())));
+      if (storeKey.compareTo(readSet.getKeyAt(readSetIndex)) != 0) {
+        throw new MessageFormatException(
+            "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(readSetIndex) + " storeId "
+                + storeKey, MessageFormatErrorCodes.Store_Key_Id_MisMatch);
+      }
 
-          if (headerFormat.getBlobPropertiesRecordRelativeOffset()
-              == MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-            throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
-                MessageFormatErrorCodes.IO_Error);
-          } else {
-            BlobProperties blobProperties =
-                getBlobPropertiesRecord(readSet, readSetIndex, headerFormat.getBlobPropertiesRecordRelativeOffset(),
-                    headerFormat.getUserMetadataRecordRelativeOffset()
-                        - headerFormat.getBlobPropertiesRecordRelativeOffset());
+      if (!headerFormat.isPutRecord()) {
+        throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
+            MessageFormatErrorCodes.IO_Error);
+      } else {
+        if (headerFormat.hasEncryptionKeyRecord()) {
+          ByteBuffer blobEncryptionKey =
+              getBlobEncryptionKeyRecord(readSet, readSetIndex, headerFormat.getBlobEncryptionKeyRecordRelativeOffset(),
+                  headerFormat.getBlobEncryptionKeyRecordSize());
+        }
+        BlobProperties blobProperties =
+            getBlobPropertiesRecord(readSet, readSetIndex, headerFormat.getBlobPropertiesRecordRelativeOffset(),
+                headerFormat.getBlobPropertiesRecordSize());
 
-            HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = recoveryInfoMap.get(storeKey);
+        HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata = recoveryInfoMap.get(storeKey);
 
-            int userMetadataRelativeOffset = headerFormat.getUserMetadataRecordRelativeOffset();
-            short userMetadataVersion;
-            int userMetadataSize;
-            short blobRecordVersion;
-            BlobType blobType;
-            long blobStreamSize;
-            DeserializedUserMetadata userMetadataInfo;
-            DeserializedBlob blobRecordInfo;
+        int userMetadataRelativeOffset = headerFormat.getUserMetadataRecordRelativeOffset();
+        short userMetadataVersion;
+        int userMetadataSize;
+        short blobRecordVersion;
+        BlobType blobType;
+        long blobStreamSize;
+        DeserializedUserMetadata userMetadataInfo;
+        DeserializedBlob blobRecordInfo;
 
-            if (hardDeleteRecoveryMetadata == null) {
-              userMetadataInfo =
-                  getUserMetadataInfo(readSet, readSetIndex, headerFormat.getUserMetadataRecordRelativeOffset(),
-                      headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset());
-              userMetadataSize = userMetadataInfo.getUserMetadata().capacity();
-              userMetadataVersion = userMetadataInfo.getVersion();
+        if (hardDeleteRecoveryMetadata == null) {
+          userMetadataInfo =
+              getUserMetadataInfo(readSet, readSetIndex, headerFormat.getUserMetadataRecordRelativeOffset(),
+                  headerFormat.getUserMetadataRecordSize());
+          userMetadataSize = userMetadataInfo.getUserMetadata().capacity();
+          userMetadataVersion = userMetadataInfo.getVersion();
 
-              blobRecordInfo = getBlobRecordInfo(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
-                  headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset()
-                      - headerFormat.getBlobPropertiesRecordRelativeOffset()));
-              blobStreamSize = blobRecordInfo.getBlobData().getSize();
-              blobRecordVersion = blobRecordInfo.getVersion();
-              if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
-                blobType = blobRecordInfo.getBlobData().getBlobType();
-              } else {
-                blobType = BlobType.DataBlob;
-              }
-              hardDeleteRecoveryMetadata =
-                  new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize,
-                      blobRecordVersion, blobType, blobStreamSize, storeKey);
-            } else {
-              logger.trace("Skipping crc check for user metadata and blob stream fields for key {}", storeKey);
-              userMetadataVersion = hardDeleteRecoveryMetadata.getUserMetadataVersion();
-              blobRecordVersion = hardDeleteRecoveryMetadata.getBlobRecordVersion();
-              if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
-                blobType = hardDeleteRecoveryMetadata.getBlobType();
-              } else {
-                blobType = BlobType.DataBlob;
-              }
-              userMetadataSize = hardDeleteRecoveryMetadata.getUserMetadataSize();
-              blobStreamSize = hardDeleteRecoveryMetadata.getBlobStreamSize();
-            }
+          blobRecordInfo = getBlobRecordInfo(readSet, readSetIndex, headerFormat.getBlobRecordRelativeOffset(),
+              headerFormat.getBlobRecordSize());
+          blobStreamSize = blobRecordInfo.getBlobData().getSize();
+          blobRecordVersion = blobRecordInfo.getVersion();
+          blobType = blobRecordInfo.getBlobData().getBlobType();
+          hardDeleteRecoveryMetadata =
+              new HardDeleteRecoveryMetadata(headerVersion, userMetadataVersion, userMetadataSize, blobRecordVersion,
+                  blobType, blobStreamSize, storeKey);
+        } else {
+          logger.trace("Skipping crc check for user metadata and blob stream fields for key {}", storeKey);
+          userMetadataVersion = hardDeleteRecoveryMetadata.getUserMetadataVersion();
+          blobRecordVersion = hardDeleteRecoveryMetadata.getBlobRecordVersion();
+          blobType = hardDeleteRecoveryMetadata.getBlobType();
+          userMetadataSize = hardDeleteRecoveryMetadata.getUserMetadataSize();
+          blobStreamSize = hardDeleteRecoveryMetadata.getBlobStreamSize();
+        }
 
-            HardDeleteMessageFormatInputStream hardDeleteStream =
-                new HardDeleteMessageFormatInputStream(userMetadataRelativeOffset, userMetadataVersion,
-                    userMetadataSize, blobRecordVersion, blobType, blobStreamSize);
+        HardDeleteMessageFormatInputStream hardDeleteStream =
+            new HardDeleteMessageFormatInputStream(userMetadataRelativeOffset, userMetadataVersion, userMetadataSize,
+                blobRecordVersion, blobType, blobStreamSize);
 
-            hardDeleteInfo = new HardDeleteInfo(Channels.newChannel(hardDeleteStream), hardDeleteStream.getSize(),
-                hardDeleteStream.getHardDeleteStreamRelativeOffset(), hardDeleteRecoveryMetadata.toBytes());
-          }
-          break;
-        default:
-          throw new MessageFormatException(
-              "Unknown header version during hard delete " + headerVersion + " storeKey " + readSet.getKeyAt(
-                  readSetIndex), MessageFormatErrorCodes.Unknown_Format_Version);
+        hardDeleteInfo = new HardDeleteInfo(Channels.newChannel(hardDeleteStream), hardDeleteStream.getSize(),
+            hardDeleteStream.getHardDeleteStreamRelativeOffset(), hardDeleteRecoveryMetadata.toBytes());
       }
     } catch (Exception e) {
       logger.error("Exception when reading blob: ", e);
     }
     return hardDeleteInfo;
+  }
+
+  /**
+   * Get the Blob Encryption Key Record from the given readSet
+   * @param readSet the {@link MessageReadSet} from which to read.
+   * @param readSetIndex the index of the message in the readSet.
+   * @param relativeOffset the relative offset in the message from which to read.
+   * @param blobEncryptionKeySize the size of the record to read (in this case the encryption key record).
+   * @return returns the read encryption key.
+   * @throws MessageFormatException
+   * @throws IOException
+   */
+  private ByteBuffer getBlobEncryptionKeyRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
+      long blobEncryptionKeySize) throws MessageFormatException, IOException {
+
+    /* Read the field from the channel */
+    ByteBuffer blobEncryptionKey = ByteBuffer.allocate((int) blobEncryptionKeySize);
+    readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobEncryptionKey)), relativeOffset,
+        blobEncryptionKeySize);
+    blobEncryptionKey.flip();
+
+    return deserializeBlobEncryptionKey(new ByteBufferInputStream(blobEncryptionKey));
   }
 
   private BlobProperties getBlobPropertiesRecord(MessageReadSet readSet, int readSetIndex, long relativeOffset,
@@ -261,7 +271,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
         blobPropertiesSize);
     blobProperties.flip();
 
-    return MessageFormatRecord.deserializeBlobProperties(new ByteBufferInputStream(blobProperties));
+    return deserializeBlobProperties(new ByteBufferInputStream(blobProperties));
   }
 
   private DeserializedUserMetadata getUserMetadataInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
@@ -272,7 +282,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(userMetaData)), relativeOffset,
         userMetadataSize);
     userMetaData.flip();
-    return MessageFormatRecord.deserializeAndGetUserMetadataWithVersion(new ByteBufferInputStream(userMetaData));
+    return deserializeAndGetUserMetadataWithVersion(new ByteBufferInputStream(userMetaData));
   }
 
   private DeserializedBlob getBlobRecordInfo(MessageReadSet readSet, int readSetIndex, int relativeOffset,
@@ -283,7 +293,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
     readSet.writeTo(readSetIndex, Channels.newChannel(new ByteBufferOutputStream(blobRecord)), relativeOffset,
         blobRecordSize);
     blobRecord.flip();
-    return MessageFormatRecord.deserializeAndGetBlobWithVersion(new ByteBufferInputStream(blobRecord));
+    return deserializeAndGetBlobWithVersion(new ByteBufferInputStream(blobRecord));
   }
 }
 
@@ -298,8 +308,8 @@ class HardDeleteRecoveryMetadata {
 
   HardDeleteRecoveryMetadata(short headerVersion, short userMetadataVersion, int userMetadataSize,
       short blobRecordVersion, BlobType blobType, long blobStreamSize, StoreKey storeKey) throws IOException {
-    if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) || !MessageFormatRecord.isValidUserMetadataVersion(
-        userMetadataVersion) || !MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
+    if (!isValidHeaderVersion(headerVersion) || !isValidUserMetadataVersion(userMetadataVersion)
+        || !isValidBlobRecordVersion(blobRecordVersion)) {
       throw new IOException(
           "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
               + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion);
@@ -319,14 +329,14 @@ class HardDeleteRecoveryMetadata {
     userMetadataVersion = stream.readShort();
     userMetadataSize = stream.readInt();
     blobRecordVersion = stream.readShort();
-    if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+    if (blobRecordVersion == Blob_Version_V2) {
       blobType = BlobType.values()[stream.readShort()];
     } else {
       blobType = BlobType.DataBlob;
     }
     blobStreamSize = stream.readLong();
-    if (!MessageFormatRecord.isValidHeaderVersion(headerVersion) || !MessageFormatRecord.isValidUserMetadataVersion(
-        userMetadataVersion) || !MessageFormatRecord.isValidBlobRecordVersion(blobRecordVersion)) {
+    if (!isValidHeaderVersion(headerVersion) || !isValidUserMetadataVersion(userMetadataVersion)
+        || !isValidBlobRecordVersion(blobRecordVersion)) {
       throw new IOException(
           "Unknown version during hard delete, headerVersion: " + headerVersion + " userMetadataVersion: "
               + userMetadataVersion + " blobRecordVersion: " + blobRecordVersion + " blobType " + blobType);
@@ -365,18 +375,16 @@ class HardDeleteRecoveryMetadata {
   byte[] toBytes() {
     // create a byte array to hold the headerVersion + userMetadataVersion + userMetadataSize + blobRecordVersion +
     // blobType + blobRecordSize + storeKey.
-    byte[] bytes =
-        new byte[MessageFormatRecord.Version_Field_Size_In_Bytes + MessageFormatRecord.Version_Field_Size_In_Bytes
-            + Integer.SIZE / 8 + MessageFormatRecord.Version_Field_Size_In_Bytes + (
-            blobRecordVersion == MessageFormatRecord.Blob_Version_V2 ? (Short.SIZE / 8) : 0) + Long.SIZE / 8
-            + storeKey.sizeInBytes()];
+    byte[] bytes = new byte[Version_Field_Size_In_Bytes + Version_Field_Size_In_Bytes + Integer.SIZE / 8
+        + Version_Field_Size_In_Bytes + (blobRecordVersion == Blob_Version_V2 ? (Short.SIZE / 8) : 0) + Long.SIZE / 8
+        + storeKey.sizeInBytes()];
 
     ByteBuffer bufWrap = ByteBuffer.wrap(bytes);
     bufWrap.putShort(headerVersion);
     bufWrap.putShort(userMetadataVersion);
     bufWrap.putInt(userMetadataSize);
     bufWrap.putShort(blobRecordVersion);
-    if (blobRecordVersion == MessageFormatRecord.Blob_Version_V2) {
+    if (blobRecordVersion == Blob_Version_V2) {
       bufWrap.putShort((short) blobType.ordinal());
     }
     bufWrap.putLong(blobStreamSize);

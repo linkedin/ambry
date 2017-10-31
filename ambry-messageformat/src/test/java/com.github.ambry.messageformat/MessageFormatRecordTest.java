@@ -30,7 +30,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
@@ -42,26 +44,83 @@ import static org.junit.Assert.*;
 
 
 public class MessageFormatRecordTest {
+  private static short serDeVersionSaved;
+
+  @BeforeClass
+  public static void saveVersionToUse() {
+    serDeVersionSaved = BlobPropertiesSerDe.CURRENT_VERSION;
+  }
+
+  @After
+  public void resetVersionToUse() {
+    BlobPropertiesSerDe.CURRENT_VERSION = serDeVersionSaved;
+  }
 
   @Test
   public void deserializeTest() {
     try {
-      // Test message header V1
-      ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
-      MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(header, 1000, 10, -1, 20, 30);
-      header.flip();
-      MessageFormatRecord.MessageHeader_Format_V1 format = new MessageFormatRecord.MessageHeader_Format_V1(header);
-      Assert.assertEquals(format.getMessageSize(), 1000);
-      Assert.assertEquals(format.getBlobPropertiesRecordRelativeOffset(), 10);
-      Assert.assertEquals(format.getUserMetadataRecordRelativeOffset(), 20);
-      Assert.assertEquals(format.getBlobRecordRelativeOffset(), 30);
+      {
+        // Test message header V1
+        ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
+        MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(header, 1000, 10, -1, 20, 30);
+        header.flip();
+        MessageFormatRecord.MessageHeader_Format_V1 format = new MessageFormatRecord.MessageHeader_Format_V1(header);
+        Assert.assertEquals(format.getMessageSize(), 1000);
+        Assert.assertEquals(format.getBlobPropertiesRecordRelativeOffset(), 10);
+        Assert.assertEquals(format.getUserMetadataRecordRelativeOffset(), 20);
+        Assert.assertEquals(format.getBlobRecordRelativeOffset(), 30);
 
-      // corrupt message header V1
-      header.put(10, (byte) 1);
-      format = new MessageFormatRecord.MessageHeader_Format_V1(header);
+        // corrupt message header V1
+        header.put(10, (byte) 1);
+        format = new MessageFormatRecord.MessageHeader_Format_V1(header);
+        try {
+          format.verifyHeader();
+          Assert.assertEquals(true, false);
+        } catch (MessageFormatException e) {
+          Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        }
+      }
+
+      {
+        // Test message header V2
+        ByteBuffer header = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize());
+        MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(header, 1000, 5, 10, -1, 20, 30);
+        header.flip();
+        MessageFormatRecord.MessageHeader_Format_V2 format = new MessageFormatRecord.MessageHeader_Format_V2(header);
+        Assert.assertEquals(format.getMessageSize(), 1000);
+        Assert.assertEquals(format.getBlobEncryptionKeyRecordRelativeOffset(), 5);
+        Assert.assertEquals(format.getBlobPropertiesRecordRelativeOffset(), 10);
+        Assert.assertEquals(format.getUserMetadataRecordRelativeOffset(), 20);
+        Assert.assertEquals(format.getBlobRecordRelativeOffset(), 30);
+
+        // corrupt message header V2
+        header.put(10, (byte) 1);
+        format = new MessageFormatRecord.MessageHeader_Format_V2(header);
+        try {
+          format.verifyHeader();
+          fail("Corrupt header verification should have failed");
+        } catch (MessageFormatException e) {
+          Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+        }
+      }
+
+      // Test blob encryption key record
+      ByteBuffer blobEncryptionKey = ByteBuffer.allocate(1000);
+      new Random().nextBytes(blobEncryptionKey.array());
+      ByteBuffer output = ByteBuffer.allocate(
+          MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey));
+      MessageFormatRecord.BlobEncryptionKey_Format_V1.serializeBlobEncryptionKeyRecord(output, blobEncryptionKey);
+      output.flip();
+      ByteBuffer bufOutput = MessageFormatRecord.deserializeBlobEncryptionKey(new ByteBufferInputStream(output));
+      Assert.assertArrayEquals(blobEncryptionKey.array(), bufOutput.array());
+
+      // Corrupt encryption key record
+      output.flip();
+      Byte currentRandomByte = output.get(10);
+      output.put(10, (byte) (currentRandomByte + 1));
       try {
-        format.verifyHeader();
-        Assert.assertEquals(true, false);
+        MessageFormatRecord.deserializeBlobEncryptionKey(new ByteBufferInputStream(output));
+        fail("Encryption key record deserialization should have failed for corrupt data");
       } catch (MessageFormatException e) {
         Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
       }
@@ -69,16 +128,15 @@ public class MessageFormatRecordTest {
       // Test usermetadata V1 record
       ByteBuffer usermetadata = ByteBuffer.allocate(1000);
       new Random().nextBytes(usermetadata.array());
-      ByteBuffer output =
-          ByteBuffer.allocate(MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata));
+      output = ByteBuffer.allocate(MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata));
       MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(output, usermetadata);
       output.flip();
-      ByteBuffer bufOutput = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
+      bufOutput = MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
       Assert.assertArrayEquals(usermetadata.array(), bufOutput.array());
 
       // corrupt usermetadata record V1
       output.flip();
-      Byte currentRandomByte = output.get(10);
+      currentRandomByte = output.get(10);
       output.put(10, (byte) (currentRandomByte + 1));
       try {
         MessageFormatRecord.deserializeUserMetadata(new ByteBufferInputStream(output));
@@ -126,19 +184,22 @@ public class MessageFormatRecordTest {
    */
   @Test
   public void testBlobPropertyV1() throws IOException, MessageFormatException {
-    // Test Blob property Format V1 for both versions of BlobPropertiesSerDe
-    short[] versions = new short[]{VERSION_1, VERSION_2};
+    // Test Blob property Format V1 for all versions of BlobPropertiesSerDe
+    short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3};
     for (short version : versions) {
+      BlobPropertiesSerDe.CURRENT_VERSION = version;
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
       long ttl = TestUtils.RANDOM.nextInt();
+      boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
       if (version == VERSION_1) {
         properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID);
+            Container.UNKNOWN_CONTAINER_ID, isEncrypted);
       } else {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-        properties = new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId);
+        properties =
+            new BlobProperties(blobSize, "id", "member", "test", true, ttl, accountId, containerId, isEncrypted);
       }
       ByteBuffer stream;
       if (version == VERSION_1) {
@@ -157,6 +218,9 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(properties.getServiceId(), result.getServiceId());
       Assert.assertEquals(properties.getAccountId(), result.getAccountId());
       Assert.assertEquals(properties.getContainerId(), result.getContainerId());
+      if (version > VERSION_2) {
+        Assert.assertEquals(properties.isEncrypted(), result.isEncrypted());
+      }
 
       // corrupt blob property V1 record
       stream.flip();
@@ -172,7 +236,7 @@ public class MessageFormatRecordTest {
     // failure case
     BlobProperties properties =
         new BlobProperties(1000, "id", "member", "test", true, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID);
+            Container.UNKNOWN_CONTAINER_ID, false);
     ByteBuffer stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties) - 10);
     try {
       MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);

@@ -39,7 +39,9 @@ public class ReplicaMetadataResponse extends Response {
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_1 = 1;
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_2 = 2;
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_3 = 3;
+  static final short REPLICA_METADATA_RESPONSE_VERSION_V_4 = 4;
 
+  // @todo change this to V4 once all servers understand V4.
   private static final short CURRENT_VERSION = REPLICA_METADATA_RESPONSE_VERSION_V_3;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
@@ -135,7 +137,7 @@ public class ReplicaMetadataResponse extends Response {
   /**
    * @return the current version in which new ReplicaMetadataResponse objects are created.
    */
-  public static short getCurrentVersion() {
+  static short getCurrentVersion() {
     return CURRENT_VERSION;
   }
 }

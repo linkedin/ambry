@@ -28,23 +28,28 @@ public class BlobPropertiesSerDe {
 
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
-  private static final short CURRENT_VERSION = VERSION_2;
+  static final short VERSION_3 = 3;
+  static short CURRENT_VERSION = VERSION_2;
   private static final int VERSION_FIELD_SIZE_IN_BYTES = Short.BYTES;
   private static final int TTL_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int PRIVATE_FIELD_SIZE_IN_BYTES = Byte.BYTES;
   private static final int CREATION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int BLOB_SIZE_FIELD_SIZE_IN_BYTES = Long.BYTES;
+  private static final int ENCRYPTED_FIELD_SIZE_IN_BYTES = Byte.BYTES;
 
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     return VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
         + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + Utils.getIntStringLength(
         properties.getContentType()) + Utils.getIntStringLength(properties.getOwnerId()) + Utils.getIntStringLength(
-        properties.getServiceId()) + Short.BYTES + Short.BYTES;
+        properties.getServiceId()) + Short.BYTES + Short.BYTES + (CURRENT_VERSION == VERSION_3
+        ? ENCRYPTED_FIELD_SIZE_IN_BYTES : 0);
   }
 
   public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
     short version = stream.readShort();
-    BlobProperties toReturn;
+    if (version < VERSION_1 || version > VERSION_3) {
+      throw new IllegalArgumentException("stream has unknown blob property version " + version);
+    }
     long ttl = stream.readLong();
     boolean isPrivate = stream.readByte() == 1;
     long creationTime = stream.readLong();
@@ -52,22 +57,11 @@ public class BlobPropertiesSerDe {
     String contentType = Utils.readIntString(stream);
     String ownerId = Utils.readIntString(stream);
     String serviceId = Utils.readIntString(stream);
-    switch (version) {
-      case VERSION_1:
-        toReturn = new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime,
-            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
-        break;
-      case VERSION_2:
-        short accountId = stream.readShort();
-        short containerId = stream.readShort();
-        toReturn =
-            new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-                containerId);
-        break;
-      default:
-        throw new IllegalArgumentException("stream has unknown blob property version " + version);
-    }
-    return toReturn;
+    short accountId = version > VERSION_1 ? stream.readShort() : Account.UNKNOWN_ACCOUNT_ID;
+    short containerId = version > VERSION_1 ? stream.readShort() : Container.UNKNOWN_CONTAINER_ID;
+    boolean isEncrypted = version > VERSION_2 && stream.readByte() == (byte) 1;
+    return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
+        containerId, isEncrypted);
   }
 
   /**
@@ -89,5 +83,8 @@ public class BlobPropertiesSerDe {
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
     outputBuffer.putShort(properties.getAccountId());
     outputBuffer.putShort(properties.getContainerId());
+    if (CURRENT_VERSION == VERSION_3) {
+      outputBuffer.put(properties.isEncrypted() ? (byte) 1 : (byte) 0);
+    }
   }
 }

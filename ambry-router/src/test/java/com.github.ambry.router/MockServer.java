@@ -21,6 +21,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.BoundedByteBufferReceive;
 import com.github.ambry.network.ByteBufferSend;
 import com.github.ambry.network.Send;
@@ -306,12 +307,15 @@ class MockServer {
 
       byteBuffer.flip();
       ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
-      List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(1);
+      List<MessageInfo> messageInfoList = new ArrayList<>(1);
+      List<MessageMetadata> messageMetadataList = new ArrayList<>(1);
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
       messageInfoList.add(new MessageInfo(key, byteBufferSize, accountId, containerId, operationTimeMs));
+      // @todo: once support is added in the router for encryption, changes need to go in here.
+      messageMetadataList.add(null);
       PartitionResponseInfo partitionResponseInfo =
           partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
-              getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList)
+              getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList, messageMetadataList)
               : new PartitionResponseInfo(getRequest.getPartitionInfoList().get(0).getPartition(), partitionError);
       partitionResponseInfoList.add(partitionResponseInfo);
       getResponse = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), partitionResponseInfoList,

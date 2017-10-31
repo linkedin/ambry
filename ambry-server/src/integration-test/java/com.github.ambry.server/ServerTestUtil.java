@@ -146,7 +146,7 @@ public final class ServerTestUtil {
 
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
-          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId);
+          new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, accountId, containerId, false);
       PutRequest putRequest4 =
           new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob, null);
@@ -815,7 +815,7 @@ public final class ServerTestUtil {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
           new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, Utils.Infinite_Time, accountId,
-              containerId);
+              containerId, false);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       new Random().nextBytes(metadata);
@@ -1357,7 +1357,8 @@ public final class ServerTestUtil {
               long parsedToken = endTokenOffset == null ? -1 : endTokenOffset.getOffset();
               System.out.println("The parsed token is " + parsedToken);
               if (partitionId.isEqual(targetPartition)) {
-                Assert.assertFalse("Parsed offset must not be larger than target value: " + targetOffset,
+                Assert.assertFalse(
+                    "Parsed offset: " + parsedToken + " must not be larger than target value: " + targetOffset,
                     parsedToken > targetOffset);
                 if (parsedToken == targetOffset) {
                   numFound++;

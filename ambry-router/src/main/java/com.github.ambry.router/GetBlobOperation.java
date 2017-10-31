@@ -28,6 +28,7 @@ import com.github.ambry.messageformat.CompositeBlobInfo;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
@@ -35,6 +36,7 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
@@ -608,12 +610,15 @@ class GetBlobOperation extends GetOperation {
     /**
      * Handle the body of the response: Deserialize and add to the list of chunk buffers.
      * @param payload the body of the response.
+     * @param messageMetadata the {@link MessageMetadata} associated with the message.
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(InputStream payload) throws IOException, MessageFormatException {
+    void handleBody(InputStream payload, MessageMetadata messageMetadata) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
+        ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
+        // @todo Use the above encryption key for decryption of blobData.
         chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(blobData));
         numChunksRetrieved++;
         successfullyDeserialized = true;
@@ -711,12 +716,21 @@ class GetBlobOperation extends GetOperation {
         } else {
           getError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
           if (getError == ServerErrorCode.No_Error) {
-            handleBody(getResponse.getInputStream());
-            chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
-            if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
-              logger.trace("Cross colo request successful for remote replica in {} ",
-                  getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
-              routerMetrics.crossColoSuccessCount.inc();
+            PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
+            int objectsInPartitionResponse = partitionResponseInfo.getMessageInfoList().size();
+            if (objectsInPartitionResponse != 1) {
+              chunkException = new RouterException(
+                  "Unexpected number of messages in a partition response, expected: 1, " + "received: "
+                      + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError);
+            } else {
+              MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
+              handleBody(getResponse.getInputStream(), messageMetadata);
+              chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
+              if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
+                logger.trace("Cross colo request successful for remote replica in {} ",
+                    getRequestInfo.replicaId.getDataNodeId().getDatacenterName());
+                routerMetrics.crossColoSuccessCount.inc();
+              }
             }
           } else {
             // process and set the most relevant exception.
@@ -870,16 +884,20 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(InputStream payload) throws IOException, MessageFormatException {
+    void handleBody(InputStream payload, MessageMetadata messageMetadata) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
+        ByteBuffer encryptionKey;
         if (getOperationFlag() == MessageFormatFlags.Blob) {
           blobData = MessageFormatRecord.deserializeBlob(payload);
+          encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         } else {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
           blobInfo = blobAll.getBlobInfo();
           blobData = blobAll.getBlobData();
+          encryptionKey = blobAll.getBlobEncryptionKey();
         }
+        // @todo use the encryption key for decryption of blobData and userMetadata within blobInfo.
         BlobType blobType = blobData.getBlobType();
         chunkIndexToBuffer = new TreeMap<>();
         if (blobType == BlobType.MetadataBlob) {

@@ -30,6 +30,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
@@ -611,16 +612,19 @@ public class ReplicationTest {
       throws MessageFormatException, IOException {
     int blobSize = TestUtils.RANDOM.nextInt(500) + 501;
     int userMetadataSize = TestUtils.RANDOM.nextInt(blobSize / 2);
+    int encryptionKeySize = TestUtils.RANDOM.nextInt(blobSize / 4);
     byte[] blob = new byte[blobSize];
     byte[] usermetadata = new byte[userMetadataSize];
+    byte[] encryptionKey = TestUtils.RANDOM.nextBoolean() ? new byte[encryptionKeySize] : null;
     TestUtils.RANDOM.nextBytes(blob);
     TestUtils.RANDOM.nextBytes(usermetadata);
     BlobProperties blobProperties = new BlobProperties(blobSize, "test", accountId, containerId);
 
-    MessageFormatInputStream stream = new PutMessageFormatInputStream(id, blobProperties, ByteBuffer.wrap(usermetadata),
-        new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
+    MessageFormatInputStream stream =
+        new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
+            blobProperties, ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize);
     byte[] message = Utils.readBytesFromStream(stream, (int) stream.getSize());
-    return new Pair(ByteBuffer.wrap(message),
+    return new Pair<>(ByteBuffer.wrap(message),
         new MessageInfo(id, message.length, Utils.Infinite_Time, accountId, containerId,
             blobProperties.getCreationTimeInMs()));
   }
@@ -1080,6 +1084,7 @@ public class ReplicationTest {
 
     private List<ByteBuffer> buffersToReturn;
     private Map<PartitionId, List<MessageInfo>> infosToReturn;
+    private Map<PartitionId, List<MessageMetadata>> messageMetadatasToReturn;
     private ReplicaMetadataRequest metadataRequest;
     private GetRequest getRequest;
 
@@ -1096,18 +1101,21 @@ public class ReplicationTest {
         getRequest = (GetRequest) request;
         buffersToReturn = new ArrayList<>();
         infosToReturn = new HashMap<>();
+        messageMetadatasToReturn = new HashMap<>();
         boolean requestIsEmpty = true;
         for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
           PartitionId partitionId = partitionRequestInfo.getPartition();
           List<ByteBuffer> bufferList = host.buffersByPartition.get(partitionId);
           List<MessageInfo> messageInfoList = host.infosByPartition.get(partitionId);
           infosToReturn.put(partitionId, new ArrayList<>());
+          messageMetadatasToReturn.put(partitionId, new ArrayList<>());
           for (StoreKey key : partitionRequestInfo.getBlobIds()) {
             requestIsEmpty = false;
             int index = 0;
             for (MessageInfo info : messageInfoList) {
               if (key.equals(info.getStoreKey())) {
                 infosToReturn.get(partitionId).add(info);
+                messageMetadatasToReturn.get(partitionId).add(null);
                 buffersToReturn.add(bufferList.get(index));
               }
               index++;
@@ -1147,7 +1155,8 @@ public class ReplicationTest {
         List<PartitionResponseInfo> responseInfoList = new ArrayList<>();
         for (PartitionRequestInfo requestInfo : getRequest.getPartitionInfoList()) {
           PartitionResponseInfo partitionResponseInfo =
-              new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()));
+              new PartitionResponseInfo(requestInfo.getPartition(), infosToReturn.get(requestInfo.getPartition()),
+                  messageMetadatasToReturn.get(requestInfo.getPartition()));
           responseInfoList.add(partitionResponseInfo);
         }
         response = new GetResponse(1, "replication", responseInfoList, new MockSend(buffersToReturn),

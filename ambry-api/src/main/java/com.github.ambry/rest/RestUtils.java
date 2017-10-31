@@ -259,8 +259,9 @@ public class RestUtils {
       }
     }
 
+    // @todo: Need to pass in isEncrypted here when that support is added.
     return new BlobProperties(-1, serviceId, ownerId, contentType, container.isPrivate(), ttl, account.getId(),
-        container.getId());
+        container.getId(), false);
   }
 
   /**

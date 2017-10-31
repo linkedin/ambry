@@ -25,9 +25,14 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.List;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 class MockId extends StoreKey {
@@ -112,7 +117,29 @@ class MockIdFactory implements StoreKeyFactory {
   }
 }
 
+@RunWith(Parameterized.class)
 public class BlobStoreRecoveryTest {
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @After
+  public void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(
+        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
+  }
+
+  public BlobStoreRecoveryTest(short headerVersionToUse) {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = headerVersionToUse;
+  }
 
   public class ReadImp implements Read {
 
@@ -123,31 +150,33 @@ public class BlobStoreRecoveryTest {
     public void initialize() throws MessageFormatException, IOException {
       // write 3 new blob messages, and delete update messages. write the last
       // message that is partial
+      byte[] encryptionKey = new byte[256];
       byte[] usermetadata = new byte[2000];
       byte[] blob = new byte[4000];
       TestUtils.RANDOM.nextBytes(usermetadata);
       TestUtils.RANDOM.nextBytes(blob);
+      TestUtils.RANDOM.nextBytes(encryptionKey);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       // 1st message
       BlobProperties blobProperties =
-          new BlobProperties(4000, "test", "mem1", "img", false, 9999, accountId, containerId);
+          new BlobProperties(4000, "test", "mem1", "img", false, 9999, accountId, containerId, true);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 =
-          new PutMessageFormatInputStream(keys[0], blobProperties, ByteBuffer.wrap(usermetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
-
-      // 2nd message
-      PutMessageFormatInputStream msg2 =
-          new PutMessageFormatInputStream(keys[1], new BlobProperties(4000, "test", accountId, containerId),
+          new PutMessageFormatInputStream(keys[0], ByteBuffer.wrap(encryptionKey), blobProperties,
               ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
-      // 3rd message
+      // 2nd message
+      PutMessageFormatInputStream msg2 = new PutMessageFormatInputStream(keys[1], ByteBuffer.wrap(encryptionKey),
+          new BlobProperties(4000, "test", accountId, containerId), ByteBuffer.wrap(usermetadata),
+          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+
+      // 3rd message (null encryption key)
       PutMessageFormatInputStream msg3 =
-          new PutMessageFormatInputStream(keys[2], new BlobProperties(4000, "test", accountId, containerId),
+          new PutMessageFormatInputStream(keys[2], null, new BlobProperties(4000, "test", accountId, containerId),
               ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
@@ -155,9 +184,9 @@ public class BlobStoreRecoveryTest {
           new DeleteMessageFormatInputStream(keys[1], accountId, containerId, deletionTimeMs);
 
       // 5th message
-      PutMessageFormatInputStream msg5 =
-          new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test", accountId, containerId),
-              ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      PutMessageFormatInputStream msg5 = new PutMessageFormatInputStream(keys[3], ByteBuffer.wrap(encryptionKey),
+          new BlobProperties(4000, "test", accountId, containerId), ByteBuffer.wrap(usermetadata),
+          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       buffer = ByteBuffer.allocate(
           (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() / 2));

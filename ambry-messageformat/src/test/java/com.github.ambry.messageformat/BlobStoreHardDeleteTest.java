@@ -28,13 +28,40 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
+@RunWith(Parameterized.class)
 public class BlobStoreHardDeleteTest {
+  private static short messageFormatHeaderVersionSaved;
+
+  @BeforeClass
+  public static void saveMessageFormatHeaderVersionToUse() {
+    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+  }
+
+  @After
+  public void resetMessageFormatHeaderVersionToUse() {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(
+        new Object[][]{{MessageFormatRecord.Message_Header_Version_V1}, {MessageFormatRecord.Message_Header_Version_V2}});
+  }
+
+  public BlobStoreHardDeleteTest(short headerVersionToUse) {
+    MessageFormatRecord.HEADER_VERSION_TO_USE = headerVersionToUse;
+  }
 
   public class ReadImp implements Read {
     MockReadSet readSet = new MockReadSet();
@@ -48,38 +75,45 @@ public class BlobStoreHardDeleteTest {
         throws MessageFormatException, IOException {
       // write 3 new blob messages, and delete update messages. write the last
       // message that is partial
+      final int ENCRYPTION_KEY_SIZE = 256;
       final int USERMETADATA_SIZE = 2000;
       final int BLOB_SIZE = 4000;
+      byte[] encryptionKey = new byte[ENCRYPTION_KEY_SIZE];
       byte[] usermetadata = new byte[USERMETADATA_SIZE];
       byte[] blob = new byte[BLOB_SIZE];
       TestUtils.RANDOM.nextBytes(usermetadata);
       TestUtils.RANDOM.nextBytes(blob);
+      TestUtils.RANDOM.nextBytes(encryptionKey);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       BlobProperties blobProperties =
-          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId);
+          new BlobProperties(BLOB_SIZE, "test", "mem1", "img", false, 9999, accountId, containerId, true);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
 
       MessageFormatInputStream msg0 =
-          getPutMessage(keys[0], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[0], blobTypes[0]);
+          getPutMessage(keys[0], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
+              blobVersions[0], blobTypes[0]);
 
       MessageFormatInputStream msg1 =
-          getPutMessage(keys[1], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[1], blobTypes[1]);
+          getPutMessage(keys[1], null, blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[1], blobTypes[1]);
 
       MessageFormatInputStream msg2 =
-          getPutMessage(keys[2], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[2], blobTypes[2]);
+          getPutMessage(keys[2], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
+              blobVersions[2], blobTypes[2]);
 
       DeleteMessageFormatInputStream msg3d =
           new DeleteMessageFormatInputStream(keys[1], accountId, containerId, deletionTimeMs);
 
       MessageFormatInputStream msg4 =
-          getPutMessage(keys[3], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[3], blobTypes[3]);
+          getPutMessage(keys[3], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
+              blobVersions[3], blobTypes[3]);
 
       MessageFormatInputStream msg5 =
-          getPutMessage(keys[4], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[4], blobTypes[4]);
+          getPutMessage(keys[4], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
+              blobVersions[4], blobTypes[4]);
 
       buffer = ByteBuffer.allocate(
           (int) (msg0.getSize() + msg1.getSize() + msg2.getSize() + msg3d.getSize() + msg4.getSize() + msg5.getSize()));
@@ -111,7 +145,7 @@ public class BlobStoreHardDeleteTest {
       readSet.addMessage(buffer.position(), keys[2], (int) msg2.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
       HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
-          new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
+          new HardDeleteRecoveryMetadata(MessageFormatRecord.HEADER_VERSION_TO_USE,
               MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[2], blobTypes[2], BLOB_SIZE,
               keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
@@ -123,7 +157,7 @@ public class BlobStoreHardDeleteTest {
       // This should succeed.
       readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
-      hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.Message_Header_Version_V1,
+      hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.HEADER_VERSION_TO_USE,
           MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[3], blobTypes[3], BLOB_SIZE,
           keys[3]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
@@ -136,10 +170,11 @@ public class BlobStoreHardDeleteTest {
       return msgOffsets;
     }
 
-    private MessageFormatInputStream getPutMessage(StoreKey key, BlobProperties blobProperties, byte[] usermetadata,
-        byte[] blob, int blobSize, short blobVersion, BlobType blobType) throws MessageFormatException {
+    private MessageFormatInputStream getPutMessage(StoreKey key, ByteBuffer encryptionKey,
+        BlobProperties blobProperties, byte[] usermetadata, byte[] blob, int blobSize, short blobVersion,
+        BlobType blobType) throws MessageFormatException {
       if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
-        return new PutMessageFormatInputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
+        return new PutMessageFormatInputStream(key, encryptionKey, blobProperties, ByteBuffer.wrap(usermetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
       } else {
         return new PutMessageFormatBlobV1InputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
