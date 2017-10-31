@@ -60,8 +60,7 @@ public class PutRequest extends RequestOrResponse {
   private static final short PUT_REQUEST_VERSION_V3 = 3;
   static final short PUT_REQUEST_VERSION_V4 = 4;
 
-  // @todo change this to V4 once V4 becomes standard.
-  private static final short currentVersion = PUT_REQUEST_VERSION_V3;
+  private static final short currentVersion = PUT_REQUEST_VERSION_V4;
 
   /**
    * Construct a PutRequest
@@ -76,7 +75,8 @@ public class PutRequest extends RequestOrResponse {
    * @param blobEncryptionKey the encryption key for the blob.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey) {
+      ByteBuffer usermetadata, ByteBuffer materializedBlob, long blobSize, BlobType blobType,
+      ByteBuffer blobEncryptionKey) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
@@ -112,12 +112,9 @@ public class PutRequest extends RequestOrResponse {
       sizeExcludingBlobAndCrc =
           (int) super.sizeInBytes() + blobId.sizeInBytes() + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties)
               + USERMETADATA_SIZE_IN_BYTES + usermetadata.capacity() + BLOB_SIZE_IN_BYTES + BLOBTYPE_SIZE_IN_BYTES;
-      // @todo: remove this check once V4 becomes standard.
-      if (getVersionId() == PUT_REQUEST_VERSION_V4) {
-        sizeExcludingBlobAndCrc += BLOBKEYLENGTH_SIZE_IN_BYTES;
-        if (blobEncryptionKey != null) {
-          sizeExcludingBlobAndCrc += blobEncryptionKey.remaining();
-        }
+      sizeExcludingBlobAndCrc += BLOBKEYLENGTH_SIZE_IN_BYTES;
+      if (blobEncryptionKey != null) {
+        sizeExcludingBlobAndCrc += blobEncryptionKey.remaining();
       }
     }
     return sizeExcludingBlobAndCrc;
@@ -138,13 +135,10 @@ public class PutRequest extends RequestOrResponse {
         bufferToSend.putInt(usermetadata.capacity());
         bufferToSend.put(usermetadata);
         bufferToSend.putShort((short) blobType.ordinal());
-        // @todo remove this check once V4 is everywhere.
-        if (getVersionId() == PUT_REQUEST_VERSION_V4) {
-          short keyLength = blobEncryptionKey == null ? 0 : (short) blobEncryptionKey.remaining();
-          bufferToSend.putShort(keyLength);
-          if (keyLength > 0) {
-            bufferToSend.put(blobEncryptionKey);
-          }
+        short keyLength = blobEncryptionKey == null ? 0 : (short) blobEncryptionKey.remaining();
+        bufferToSend.putShort(keyLength);
+        if (keyLength > 0) {
+          bufferToSend.put(blobEncryptionKey);
         }
         bufferToSend.putLong(blobSize);
         crc.update(bufferToSend.array(), bufferToSend.arrayOffset() + crcStart, bufferToSend.position() - crcStart);
@@ -283,8 +277,8 @@ public class PutRequest extends RequestOrResponse {
      * @param crc the crc associated with this request.
      */
     ReceivedPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
-        ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream, Long crc)
-        throws IOException {
+        ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream,
+        Long crc) throws IOException {
       this.correlationId = correlationId;
       this.clientId = clientId;
       this.blobId = blobId;
@@ -388,6 +382,7 @@ public class PutRequest extends RequestOrResponse {
       sb.append(", ").append("blobType=").append(blobType);
       sb.append(", ").append("blobSize=").append(blobSize);
       sb.append(", ").append("crc=").append(receivedCrc);
+      sb.append(", ").append("BlobKeyAvailable=").append(blobEncryptionKey != null);
       sb.append("]");
       return sb.toString();
     }
