@@ -21,6 +21,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.CryptoServiceConfig;
+import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
@@ -60,6 +62,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.CryptoTestUtils.*;
+import static com.github.ambry.router.PutManagerTest.*;
 import static com.github.ambry.router.RouterTestHelpers.*;
 
 
@@ -94,6 +98,10 @@ public class GetBlobOperationTest {
   private final MockNetworkClient mockNetworkClient;
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
+  private final boolean toEncrypt;
+  private CryptoJobExecutorServiceTest.MockKeyManagementService kms = null;
+  private CryptoJobExecutorServiceTest.MockCryptoService cryptoService = null;
+  private CryptoJobExecutorService exec = null;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -140,16 +148,20 @@ public class GetBlobOperationTest {
   public void after() {
     router.close();
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    if (exec != null) {
+      exec.close();
+    }
   }
 
   /**
-   * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
-   * @return an array with both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
+   * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker} with and without encryption
+   * @return an array of Pairs of {{@link SimpleOperationTracker}, Non-Encrypted}, {{@link SimpleOperationTracker}, Encrypted}
+   * and {{@link AdaptiveOperationTracker}, Non-Encrypted}
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getSimpleName()}, {AdaptiveOperationTracker.class.getSimpleName()}});
+        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {SimpleOperationTracker.class.getSimpleName(), true}, {AdaptiveOperationTracker.class.getSimpleName(), false}});
   }
 
   /**
@@ -157,8 +169,9 @@ public class GetBlobOperationTest {
    * and can be queried by the getBlob operations in the test.
    * @param operationTrackerType the type of {@link OperationTracker} to use.
    */
-  public GetBlobOperationTest(String operationTrackerType) throws Exception {
+  public GetBlobOperationTest(String operationTrackerType, boolean toEncrypt) throws Exception {
     this.operationTrackerType = operationTrackerType;
+    this.toEncrypt = toEncrypt;
     // Defaults. Tests may override these and do new puts as appropriate.
     maxChunkSize = random.nextInt(1024 * 1024) + 1;
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
@@ -176,8 +189,14 @@ public class GetBlobOperationTest {
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
+    if (toEncrypt) {
+      kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vprops),
+          getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+      cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vprops));
+      exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
+    }
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
-        new LoggingNotificationSystem(), mockClusterMap, time);
+        new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, exec, time);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
     routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>());
   }
@@ -190,7 +209,7 @@ public class GetBlobOperationTest {
    */
   private void doPut() throws Exception {
     blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random), false);
+        Utils.getRandomShort(random), Utils.getRandomShort(random), toEncrypt);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     putContent = new byte[blobSize];
@@ -215,7 +234,7 @@ public class GetBlobOperationTest {
     // test a bad case
     try {
       new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", null,
-          getRouterCallback, routerCallback, blobIdFactory, time);
+          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, exec, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
@@ -229,8 +248,7 @@ public class GetBlobOperationTest {
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
-        getRouterCallback, routerCallback, blobIdFactory, time);
-
+        getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, exec, time);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
@@ -241,7 +259,7 @@ public class GetBlobOperationTest {
     try {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
-          getRouterCallback, routerCallback, blobIdFactory, time);
+          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, exec, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -435,6 +453,68 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test failure with KMS
+   * @throws Exception
+   */
+  @Test
+  public void testKMSFailureFailure() throws Exception {
+    if (toEncrypt) {
+      // simple Blob
+      doPut();
+      kms.exceptionToThrow.set(GSE);
+      GetBlobOperation op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
+
+      // composite blob : multiple of chunk size
+      kms.exceptionToThrow.set(null);
+      blobSize = maxChunkSize * random.nextInt(10);
+      doPut();
+      kms.exceptionToThrow.set(GSE);
+      op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
+
+      // composite blob : not a multiple of chunk size
+      kms.exceptionToThrow.set(null);
+      blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
+      doPut();
+      kms.exceptionToThrow.set(GSE);
+      op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
+    }
+  }
+
+  /**
+   * Test failure with CryptoService
+   * @throws Exception
+   */
+  @Test
+  public void testCryptoServiceFailureFailure() throws Exception {
+    if (toEncrypt) {
+      // simple Blob
+      doPut();
+      cryptoService.exceptionOnDecryption.set(GSE);
+      GetBlobOperation op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
+
+      // composite blob : multiple of chunk size
+      cryptoService.exceptionOnDecryption.set(null);
+      blobSize = maxChunkSize * random.nextInt(10);
+      doPut();
+      cryptoService.exceptionOnDecryption.set(GSE);
+      op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
+
+      // composite blob : not a multiple of chunk size
+      cryptoService.exceptionOnDecryption.set(null);
+      blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
+      doPut();
+      cryptoService.exceptionOnDecryption.set(GSE);
+      op = createOperationAndComplete(null);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
+    }
+  }
+
+  /**
    * Helper method to simulate errors from the servers. Only one node in the datacenter where the put happened will
    * return success. No matter what order the servers are contacted, as long as one of them returns success, the whole
    * operation should succeed.
@@ -525,7 +605,6 @@ public class GetBlobOperationTest {
       int randomTwo = random.nextInt(blobSize);
       testRangeRequestOffsetRange(Math.min(randomOne, randomTwo), Math.max(randomOne, randomTwo), true);
     }
-
     blobSize = random.nextInt(maxChunkSize) + 1;
     // Entire blob
     testRangeRequestOffsetRange(0, blobSize - 1, true);
@@ -823,7 +902,12 @@ public class GetBlobOperationTest {
                     RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
                 Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
                     blobSize, blobInfo.getBlobProperties().getBlobSize());
-                Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
+                if (!blobProperties.isEncrypted()) {
+                  Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
+                } else {
+                  // encrypt and verify userMetadata
+
+                }
                 break;
               case Data:
                 Assert.assertNull("Unexpected blob info in operation result", result.getBlobResult.getBlobInfo());
@@ -910,7 +994,7 @@ public class GetBlobOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, callback,
-            routerCallback, blobIdFactory, time);
+            routerCallback, blobIdFactory, kms, cryptoService, exec, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     return op;
   }

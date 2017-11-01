@@ -57,6 +57,9 @@ class NonBlockingRouter implements Router {
   private final ClusterMap clusterMap;
   private final NonBlockingRouterMetrics routerMetrics;
   private final ResponseHandler responseHandler;
+  private final KeyManagementService kms;
+  private final CryptoService cryptoService;
+  private final CryptoJobExecutorService exec;
   private final Time time;
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -74,18 +77,28 @@ class NonBlockingRouter implements Router {
    *                             instances of {@link NetworkClient}.
    * @param notificationSystem the notification system to use to notify about blob creations and deletions.
    * @param clusterMap the cluster map for the cluster.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param exec {@link CryptoJobExecutorService} to assist in the execution of crypto jobs
    * @param time the time instance.
    * @throws IOException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-      Time time) throws IOException {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobExecutorService exec, Time time)
+      throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
     this.notificationSystem = notificationSystem;
     this.clusterMap = clusterMap;
     responseHandler = new ResponseHandler(clusterMap);
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.exec = exec;
+    if (exec != null) {
+      exec.start();
+    }
     this.time = time;
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
@@ -318,6 +331,10 @@ class NonBlockingRouter implements Router {
     shutDownOperationControllers();
     // wait for all the threads to actually exit
     waitForResponseHandlerThreadExit();
+    // close the crypto job executor service
+    if (exec != null) {
+      exec.close();
+    }
   }
 
   /**
@@ -424,8 +441,10 @@ class NonBlockingRouter implements Router {
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
-              suffix, time);
-      getManager = new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, time);
+              suffix, kms, cryptoService, exec, time);
+      getManager =
+          new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
+              exec, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
           routerCallback, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);

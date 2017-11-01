@@ -23,7 +23,8 @@ import java.security.GeneralSecurityException;
  */
 class DecryptJob implements CryptoJob {
   private final BlobId blobId;
-  private final ByteBuffer enryptedContent;
+  private final ByteBuffer encryptedBlobContent;
+  private final ByteBuffer encryptedUserMetadata;
   private final ByteBuffer encryptedKey;
   private final Callback<DecryptJobResult> callback;
   private final CryptoService cryptoService;
@@ -34,13 +35,17 @@ class DecryptJob implements CryptoJob {
    * {@link Callback}
    * @param blobId the {@link BlobId} for which decryption is requested
    * @param encryptedKey encrypted per blob key
-   * @param encryptedContent encrypted blob content
+   * @param encryptedBlobContent encrypted blob content. Could be {@null}
+   * @param encryptedUserMetadata encrypted user metadata. Could be {@null}
+   * @param cryptoService the {@link CryptoService} instance to use
+   * @param kms the {@link KeyManagementService} instance to use
    * @param callback {@link Callback} to be invoked on completion
    */
-  DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent, CryptoService cryptoService,
-      KeyManagementService kms, Callback<DecryptJobResult> callback) {
+  DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedBlobContent, ByteBuffer encryptedUserMetadata,
+      CryptoService cryptoService, KeyManagementService kms, Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
-    this.enryptedContent = encryptedContent;
+    this.encryptedBlobContent = encryptedBlobContent;
+    this.encryptedUserMetadata = encryptedUserMetadata;
     this.encryptedKey = encryptedKey;
     this.callback = callback;
     this.cryptoService = cryptoService;
@@ -51,17 +56,25 @@ class DecryptJob implements CryptoJob {
    * Steps to be performed on decryption
    * 1. Fetch ContainerKey from kms for the given blob
    * 2. Decrypt encryptedKey using containerKey to obtain perBlobKey
-   * 3. Decrypt encryptedContent using perBlobKey
-   * 4. Invoke callback with the decryptedContent
+   * 3. Decrypt encryptedContent using perBlobKey if not null
+   * 4. Decrypt encryptedUserMeta using perBlobKey if not null
+   * 5. Invoke callback with the decryptedBlobContent
    */
   public void run() {
     try {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
       Object perBlobKey = cryptoService.decryptKey(encryptedKey, containerKey);
-      ByteBuffer decryptedContent = cryptoService.decrypt(enryptedContent, perBlobKey);
-      callback.onCompletion(new DecryptJobResult(blobId, decryptedContent), null);
+      ByteBuffer decryptedBlobContent = null;
+      if (encryptedBlobContent != null) {
+        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
+      }
+      ByteBuffer decryptedUserMetadata = null;
+      if (encryptedUserMetadata != null) {
+        decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
+      }
+      callback.onCompletion(new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata), null);
     } catch (Exception e) {
-      callback.onCompletion(new DecryptJobResult(blobId, null), e);
+      callback.onCompletion(new DecryptJobResult(blobId, null, null), e);
     }
   }
 
@@ -70,7 +83,7 @@ class DecryptJob implements CryptoJob {
    * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callback for the job
    */
   public void closeJob(GeneralSecurityException gse) {
-    callback.onCompletion(new DecryptJobResult(blobId, null), gse);
+    callback.onCompletion(new DecryptJobResult(blobId, null, null), gse);
   }
 
   /**
@@ -78,19 +91,25 @@ class DecryptJob implements CryptoJob {
    */
   class DecryptJobResult {
     private final BlobId blobId;
-    private final ByteBuffer decryptedContent;
+    private final ByteBuffer decryptedBlobContent;
+    private final ByteBuffer decryptedUserMetadata;
 
-    DecryptJobResult(BlobId blobId, ByteBuffer decryptedContent) {
+    DecryptJobResult(BlobId blobId, ByteBuffer decryptedBlobContent, ByteBuffer decryptedUserMetadata) {
       this.blobId = blobId;
-      this.decryptedContent = decryptedContent;
+      this.decryptedBlobContent = decryptedBlobContent;
+      this.decryptedUserMetadata = decryptedUserMetadata;
     }
 
     BlobId getBlobId() {
       return blobId;
     }
 
-    ByteBuffer getDecryptedContent() {
-      return decryptedContent;
+    ByteBuffer getDecryptedBlobContent() {
+      return decryptedBlobContent;
+    }
+
+    ByteBuffer getDecryptedUserMetadata() {
+      return decryptedUserMetadata;
     }
   }
 }

@@ -54,6 +54,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
+import static com.github.ambry.messageformat.MessageFormatRecord.*;
+
 
 /**
  * A class that mocks the server (data node) and provides methods for sending requests and setting error states.
@@ -180,6 +182,7 @@ class MockServer {
       long operationTimeMs = Utils.Infinite_Time;
       StoredBlob blob = blobs.get(key.getID());
       ServerErrorCode processedError = errorForGet(blob, getRequest);
+      MessageMetadata msgMetadata = null;
       if (processedError == ServerErrorCode.No_Error) {
         ByteBuffer buf = blobs.get(key.getID()).serializedSentPutRequest.duplicate();
         // read off the size
@@ -198,12 +201,18 @@ class MockServer {
             byteBufferSize = MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties)
                 + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
             byteBuffer = ByteBuffer.allocate(byteBufferSize);
+            if (originalBlobPutReq.getBlobEncryptionKey() != null) {
+              msgMetadata = new MessageMetadata(originalBlobPutReq.getBlobEncryptionKey().duplicate());
+            }
             MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(byteBuffer, blobProperties);
             MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             break;
           case Blob:
             switch (blobFormatVersion) {
               case MessageFormatRecord.Blob_Version_V2:
+                if (originalBlobPutReq.getBlobEncryptionKey() != null) {
+                  msgMetadata = new MessageMetadata(originalBlobPutReq.getBlobEncryptionKey().duplicate());
+                }
                 byteBufferSize =
                     (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize((int) originalBlobPutReq.getBlobSize());
                 byteBuffer = ByteBuffer.allocate(byteBufferSize);
@@ -232,7 +241,10 @@ class MockServer {
             containerId = blobProperties.getContainerId();
             userMetadata = originalBlobPutReq.getUsermetadata();
             operationTimeMs = originalBlobPutReq.getBlobProperties().getCreationTimeInMs();
-            int blobHeaderSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
+            int blobHeaderSize = MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize();
+            int blobEncryptionRecordSize = originalBlobPutReq.getBlobEncryptionKey() != null
+                ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(
+                originalBlobPutReq.getBlobEncryptionKey().duplicate()) : 0;
             int blobPropertiesSize =
                 MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
             int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
@@ -250,17 +262,26 @@ class MockServer {
               default:
                 throw new IllegalStateException("Blob format version " + blobFormatVersion + " not supported.");
             }
-            byteBufferSize = blobHeaderSize + key.sizeInBytes() + blobInfoSize + blobRecordSize;
+            byteBufferSize =
+                blobHeaderSize + key.sizeInBytes() + blobEncryptionRecordSize + blobInfoSize + blobRecordSize;
             byteBuffer = ByteBuffer.allocate(byteBufferSize);
             try {
-              MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(byteBuffer, blobInfoSize + blobRecordSize,
-                  blobHeaderSize + key.sizeInBytes(), MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-                  blobHeaderSize + key.sizeInBytes() + blobPropertiesSize,
-                  blobHeaderSize + key.sizeInBytes() + blobInfoSize);
+              MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(byteBuffer,
+                  blobEncryptionRecordSize + blobInfoSize + blobRecordSize,
+                  originalBlobPutReq.getBlobEncryptionKey() == null ? Message_Header_Invalid_Relative_Offset
+                      : blobHeaderSize + key.sizeInBytes(),
+                  blobHeaderSize + key.sizeInBytes() + blobEncryptionRecordSize, Message_Header_Invalid_Relative_Offset,
+                  blobHeaderSize + key.sizeInBytes() + blobEncryptionRecordSize + blobPropertiesSize,
+                  blobHeaderSize + key.sizeInBytes() + blobEncryptionRecordSize + blobInfoSize);
             } catch (MessageFormatException e) {
               e.printStackTrace();
             }
             byteBuffer.put(key.toBytes());
+            if (originalBlobPutReq.getBlobEncryptionKey() != null) {
+              MessageFormatRecord.BlobEncryptionKey_Format_V1.serializeBlobEncryptionKeyRecord(byteBuffer,
+                  originalBlobPutReq.getBlobEncryptionKey().duplicate());
+              msgMetadata = new MessageMetadata(originalBlobPutReq.getBlobEncryptionKey().duplicate());
+            }
             MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(byteBuffer, blobProperties);
             MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(byteBuffer, userMetadata);
             int blobRecordStart = byteBuffer.position();
@@ -311,8 +332,7 @@ class MockServer {
       List<MessageMetadata> messageMetadataList = new ArrayList<>(1);
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
       messageInfoList.add(new MessageInfo(key, byteBufferSize, accountId, containerId, operationTimeMs));
-      // @todo: once support is added in the router for encryption, changes need to go in here.
-      messageMetadataList.add(null);
+      messageMetadataList.add(msgMetadata);
       PartitionResponseInfo partitionResponseInfo =
           partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
               getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList, messageMetadataList)
@@ -462,6 +482,7 @@ class StoredBlob {
   final BlobType type;
   final BlobProperties properties;
   final ByteBuffer userMetadata;
+  final ByteBuffer blobEncryptionKey;
   final ByteBuffer serializedSentPutRequest;
   final PutRequest.ReceivedPutRequest receivedPutRequest;
   private final long expiresAt;
@@ -483,6 +504,7 @@ class StoredBlob {
     type = receivedPutRequest.getBlobType();
     properties = receivedPutRequest.getBlobProperties();
     userMetadata = receivedPutRequest.getUsermetadata();
+    blobEncryptionKey = receivedPutRequest.getBlobEncryptionKey();
     expiresAt = properties.getTimeToLiveInSeconds() == Utils.Infinite_Time ? Utils.Infinite_Time
         : SystemTime.getInstance().milliseconds() + properties.getTimeToLiveInSeconds();
   }

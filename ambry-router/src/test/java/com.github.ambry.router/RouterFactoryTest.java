@@ -51,6 +51,7 @@ public class RouterFactoryTest {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("kms.default.container.key", CryptoTestUtils.getRandomKey(128));
     return new VerifiableProperties(properties);
   }
 

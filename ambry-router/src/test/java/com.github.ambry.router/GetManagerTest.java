@@ -17,6 +17,8 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
+import com.github.ambry.config.CryptoServiceConfig;
+import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
@@ -27,6 +29,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
@@ -38,8 +41,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import static com.github.ambry.router.CryptoTestUtils.*;
 
 
+@RunWith(Parameterized.class)
 public class GetManagerTest {
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
@@ -48,6 +56,10 @@ public class GetManagerTest {
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private NonBlockingRouter router;
+  private final boolean toEncrypt;
+  private KeyManagementService kms = null;
+  private CryptoService cryptoService = null;
+  private CryptoJobExecutorService exec = null;
   private RouterConfig routerConfig;
   private int chunkSize;
   private int requestParallelism;
@@ -64,9 +76,20 @@ public class GetManagerTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
 
   /**
-   * Pre-initialization common to all tests.
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
    */
-  public GetManagerTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
+   * Pre-initialization common to all tests.
+   * @param toEncrypt {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   */
+  public GetManagerTest(boolean toEncrypt) throws Exception {
+    this.toEncrypt = toEncrypt;
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -74,6 +97,14 @@ public class GetManagerTest {
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
+    if (toEncrypt) {
+      VerifiableProperties vProps = new VerifiableProperties(new Properties());
+      kms = new SingleKeyManagementService(new KMSConfig(vProps),
+          getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+      cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
+      exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
+      exec.start();
+    }
   }
 
   /**
@@ -85,6 +116,9 @@ public class GetManagerTest {
   public void postCheck() {
     Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     Assert.assertEquals("Router operations count must be zero", 0, router.getOperationsCount());
+    if (exec != null) {
+      exec.close();
+    }
   }
 
   /**
@@ -362,8 +396,8 @@ public class GetManagerTest {
     routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
+        cryptoService, exec, mockTime);
     return router;
   }
 
@@ -375,7 +409,7 @@ public class GetManagerTest {
   private void setOperationParams(int blobSize, GetBlobOptions options) {
     this.blobSize = blobSize;
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), toEncrypt);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[blobSize];

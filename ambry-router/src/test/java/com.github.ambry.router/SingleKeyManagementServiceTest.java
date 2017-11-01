@@ -36,7 +36,7 @@ import static com.github.ambry.router.CryptoTestUtils.*;
  */
 public class SingleKeyManagementServiceTest {
 
-  private static final int DEFAULT_KEY_SIZE_CHARS = 64;
+  static final int DEFAULT_KEY_SIZE_CHARS = 64;
   private static final int DEFAULT_RANDOM_KEY_SIZE_BITS = 256;
   private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
   private static final MetricRegistry REGISTRY = new MetricRegistry();

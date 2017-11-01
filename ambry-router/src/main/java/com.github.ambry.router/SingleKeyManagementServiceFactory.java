@@ -38,7 +38,7 @@ public class SingleKeyManagementServiceFactory implements KeyManagementServiceFa
    * @param clusterName Cluster name for which {@link KeyManagementService} is requested for
    * @param registry {@link MetricRegistry} to use
    */
-  SingleKeyManagementServiceFactory(VerifiableProperties verifiableProperties, String clusterName,
+  public SingleKeyManagementServiceFactory(VerifiableProperties verifiableProperties, String clusterName,
       MetricRegistry registry) {
     kmsConfig = new KMSConfig(verifiableProperties);
     kmsDefaultContainerKey = verifiableProperties.getString("kms.default.container.key");
