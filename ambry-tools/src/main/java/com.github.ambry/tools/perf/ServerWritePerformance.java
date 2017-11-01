@@ -337,7 +337,7 @@ public class ServerWritePerformance {
           byte[] blob = new byte[randomNum];
           byte[] usermetadata = new byte[new Random().nextInt(1024)];
           BlobProperties props =
-              new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+              new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
           ConnectedChannel channel = null;
           try {
             List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();

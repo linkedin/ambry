@@ -62,7 +62,7 @@ public class MessageFormatInputStreamTest {
     StoreKeyFactory keyFactory = new MockIdFactory();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId);
+    BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId, false);
     byte[] encryptionKey = new byte[100];
     new Random().nextBytes(encryptionKey);
     byte[] usermetadata = new byte[1000];

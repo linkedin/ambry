@@ -68,7 +68,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key1 = new MockId("id1");
     short accountId1 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId1 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1);
+    BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1, false);
     byte[] usermetadata1 = new byte[1000];
     TestUtils.RANDOM.nextBytes(usermetadata1);
     int blobContentSize = 2000;
@@ -101,7 +101,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key2 = new MockId("id2");
     short accountId2 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId2 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop2 = new BlobProperties(10, "servid2", accountId2, containerId2);
+    BlobProperties prop2 = new BlobProperties(10, "servid2", accountId2, containerId2, false);
     byte[] usermetadata2 = new byte[1000];
     TestUtils.RANDOM.nextBytes(usermetadata2);
     blobContentSize = 2000;
@@ -127,7 +127,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key3 = new MockId("id3");
     short accountId3 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId3 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3);
+    BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3, false);
     byte[] usermetadata3 = new byte[1000];
     TestUtils.RANDOM.nextBytes(usermetadata3);
     blobContentSize = 2000;
@@ -157,7 +157,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key4 = new MockId("id4");
     short accountId4 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId4 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop4 = new BlobProperties(10, "servid4", accountId4, containerId4);
+    BlobProperties prop4 = new BlobProperties(10, "servid4", accountId4, containerId4, false);
     byte[] usermetadata4 = new byte[1000];
     TestUtils.RANDOM.nextBytes(usermetadata4);
     blobContentSize = 2000;
@@ -184,7 +184,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key5 = new MockId("id5");
     short accountId5 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId5 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop5 = new BlobProperties(10, "servid5", accountId5, containerId5);
+    BlobProperties prop5 = new BlobProperties(10, "servid5", accountId5, containerId5, false);
     byte[] usermetadata5 = new byte[1000];
     TestUtils.RANDOM.nextBytes(usermetadata5);
     blobContentSize = 2000;
@@ -313,7 +313,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key1 = new MockId("id1");
     short accountId1 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId1 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1);
+    BlobProperties prop1 = new BlobProperties(10, "servid1", accountId1, containerId1, false);
     byte[] encryptionKey1 = new byte[100];
     TestUtils.RANDOM.nextBytes(encryptionKey1);
     byte[] usermetadata1 = new byte[1000];
@@ -349,7 +349,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key2 = new MockId("id2");
     short accountId2 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId2 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop2 = new BlobProperties(10, "servid2", accountId2, containerId2);
+    BlobProperties prop2 = new BlobProperties(10, "servid2", accountId2, containerId2, false);
     byte[] encryptionKey2 = new byte[100];
     TestUtils.RANDOM.nextBytes(encryptionKey2);
     byte[] usermetadata2 = new byte[1000];
@@ -383,7 +383,7 @@ public class MessageSievingInputStreamTest {
     StoreKey key3 = new MockId("id3");
     short accountId3 = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId3 = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3);
+    BlobProperties prop3 = new BlobProperties(10, "servid3", accountId3, containerId3, false);
     byte[] encryptionKey3 = new byte[100];
     TestUtils.RANDOM.nextBytes(encryptionKey3);
     byte[] usermetadata3 = new byte[1000];
@@ -478,7 +478,7 @@ public class MessageSievingInputStreamTest {
         StoreKey key1 = new MockId("id1");
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-        BlobProperties prop1 = new BlobProperties(10, "servid1", accountId, containerId);
+        BlobProperties prop1 = new BlobProperties(10, "servid1", accountId, containerId, false);
         byte[] encryptionKey1 = new byte[100];
         TestUtils.RANDOM.nextBytes(encryptionKey1);
         byte[] usermetadata1 = new byte[1000];
@@ -516,7 +516,7 @@ public class MessageSievingInputStreamTest {
         StoreKey key3 = new MockId("id3");
         accountId = Utils.getRandomShort(TestUtils.RANDOM);
         containerId = Utils.getRandomShort(TestUtils.RANDOM);
-        BlobProperties prop3 = new BlobProperties(10, "servid3", accountId, containerId);
+        BlobProperties prop3 = new BlobProperties(10, "servid3", accountId, containerId, false);
         byte[] encryptionKey3 = new byte[100];
         TestUtils.RANDOM.nextBytes(encryptionKey3);
         byte[] usermetadata3 = new byte[1000];

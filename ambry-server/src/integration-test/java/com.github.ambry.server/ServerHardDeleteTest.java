@@ -239,25 +239,25 @@ public class ServerHardDeleteTest {
 
     properties = new ArrayList<>(9);
     properties.add(new BlobProperties(31870, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), true));
     properties.add(new BlobProperties(31871, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), false));
     properties.add(new BlobProperties(31872, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), true));
     properties.add(
         new BlobProperties(31873, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
             Utils.getRandomShort(TestUtils.RANDOM), false));
     properties.add(new BlobProperties(31874, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), true));
     properties.add(
         new BlobProperties(31875, "serviceid1", "ownerid", "jpeg", false, 0, Utils.getRandomShort(TestUtils.RANDOM),
             Utils.getRandomShort(TestUtils.RANDOM), false));
     properties.add(new BlobProperties(31876, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), true));
     properties.add(new BlobProperties(31877, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), false));
     properties.add(new BlobProperties(31878, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM)));
+        Utils.getRandomShort(TestUtils.RANDOM), true));
 
     List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds();
     PartitionId chosenPartition = partitionIds.get(0);
@@ -285,6 +285,7 @@ public class ServerHardDeleteTest {
     // delete blob 1
     deleteBlob(blobIdList.get(1), channel);
     zeroOutBlobContent(1);
+
     // delete blob 4
     deleteBlob(blobIdList.get(4), channel);
     zeroOutBlobContent(4);
@@ -293,7 +294,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198520);
+    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198902);
 
     getAndVerify(channel, 6);
 
@@ -312,9 +313,11 @@ public class ServerHardDeleteTest {
     // delete blob 3 that is expired.
     deleteBlob(blobIdList.get(3), channel);
     zeroOutBlobContent(3);
+
     // delete blob 0
     deleteBlob(blobIdList.get(0), channel);
     zeroOutBlobContent(0);
+
     // delete blob 6.
     deleteBlob(blobIdList.get(6), channel);
     zeroOutBlobContent(6);
@@ -323,7 +326,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 298081);
+    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 298732);
 
     getAndVerify(channel, 9);
   }

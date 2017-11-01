@@ -150,7 +150,7 @@ class RouterServerTestFramework {
     TestUtils.RANDOM.nextBytes(data);
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId);
+    BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId, false);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
     return opChain;

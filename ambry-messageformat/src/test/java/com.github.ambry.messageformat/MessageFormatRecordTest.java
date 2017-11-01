@@ -187,6 +187,7 @@ public class MessageFormatRecordTest {
     // Test Blob property Format V1 for all versions of BlobPropertiesSerDe
     short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3};
     for (short version : versions) {
+      System.out.println("Version " + version);
       BlobPropertiesSerDe.CURRENT_VERSION = version;
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
@@ -205,6 +206,9 @@ public class MessageFormatRecordTest {
       if (version == VERSION_1) {
         stream = ByteBuffer.allocate(getBlobPropertiesV1RecordSize(properties));
         serializeBlobPropertiesV1Record(stream, properties);
+      } else if (version == VERSION_2) {
+        stream = ByteBuffer.allocate(getBlobPropertiesV2RecordSize(properties));
+        serializeBlobPropertiesV2Record(stream, properties);
       } else {
         stream = ByteBuffer.allocate(getBlobPropertiesRecordSize(properties));
         MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(stream, properties);
@@ -260,7 +264,7 @@ public class MessageFormatRecordTest {
   }
 
   /**
-   * Returns {@link BlobProperties} record size in version1
+   * Returns {@link BlobProperties} record size in version {@link BlobPropertiesSerDe#VERSION_1}
    * @param properties {@link BlobProperties} for which size is requested
    * @return the size of the {@link BlobPropertiesSerDe} in version {@link BlobPropertiesSerDe#VERSION_1}
    */
@@ -285,6 +289,51 @@ public class MessageFormatRecordTest {
     Utils.serializeNullableString(outputBuffer, properties.getContentType());
     Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
     Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+  }
+
+  /**
+   * Serialize {@link BlobProperties} in version {@link BlobPropertiesSerDe#VERSION_2}
+   * @param outputBuffer {@link ByteBuffer} to serialize the {@link BlobProperties}
+   * @param properties {@link BlobProperties} to be serialized
+   */
+  private void serializeBlobPropertiesV2Record(ByteBuffer outputBuffer, BlobProperties properties) {
+    int startOffset = outputBuffer.position();
+    outputBuffer.putShort(BlobProperties_Version_V1);
+    putBlobPropertiesToBufferV2(outputBuffer, properties);
+    Crc32 crc = new Crc32();
+    crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV2RecordSize(properties) - Crc_Size);
+    outputBuffer.putLong(crc.getValue());
+  }
+
+  /**
+   * Returns {@link BlobProperties} record size in version {@link BlobPropertiesSerDe#VERSION_2}
+   * @param properties {@link BlobProperties} for which size is requested
+   * @return the size of the {@link BlobPropertiesSerDe} in version {@link BlobPropertiesSerDe#VERSION_2}
+   */
+  private int getBlobPropertiesV2RecordSize(BlobProperties properties) {
+    int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
+        + Utils.getNullableStringLength(properties.getContentType()) + Integer.BYTES + Utils.getNullableStringLength(
+        properties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(properties.getServiceId())
+        + Short.BYTES + Short.BYTES;
+    return Version_Field_Size_In_Bytes + size + Crc_Size;
+  }
+
+  /**
+   * Serialize {@link BlobProperties} to buffer in the {@link BlobPropertiesSerDe#VERSION_2}
+   * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
+   * @param properties the {@link BlobProperties} that needs to be serialized
+   */
+  private static void putBlobPropertiesToBufferV2(ByteBuffer outputBuffer, BlobProperties properties) {
+    outputBuffer.putShort(VERSION_2);
+    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
+    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(properties.getCreationTimeInMs());
+    outputBuffer.putLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
   }
 
   /**

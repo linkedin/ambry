@@ -102,7 +102,7 @@ public final class ServerTestUtil {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
 
-      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId);
+      BlobProperties properties = new BlobProperties(31870, "serviceid1", accountId, containerId, false);
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
@@ -356,7 +356,7 @@ public final class ServerTestUtil {
       byte[] data = new byte[100];
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      BlobProperties properties = new BlobProperties(100, "serviceid1", accountId, containerId);
+      BlobProperties properties = new BlobProperties(100, "serviceid1", accountId, containerId, false);
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
 
@@ -407,7 +407,7 @@ public final class ServerTestUtil {
           ServerErrorCode.No_Error);
       // Test the case where a put arrives with the same id as one in the server, but the blob is not identical.
       BlobProperties differentProperties =
-          new BlobProperties(properties.getBlobSize(), properties.getServiceId(), accountId, containerId);
+          new BlobProperties(properties.getBlobSize(), properties.getServiceId(), accountId, containerId, false);
       testLatePutRequest(blobIds.get(0), differentProperties, usermetadata, data, channel1, channel2, channel3,
           ServerErrorCode.Blob_Already_Exists);
       byte[] differentUsermetadata = Arrays.copyOf(usermetadata, usermetadata.length);
@@ -879,41 +879,37 @@ public final class ServerTestUtil {
     try {
       int expectedTokenSize = 0;
       MockClusterMap clusterMap = cluster.getClusterMap();
+      ArrayList<BlobProperties> propertyList = new ArrayList<>();
+      ArrayList<BlobId> blobIdList = new ArrayList<>();
+      ArrayList<byte[]> dataList = new ArrayList<>();
+      ArrayList<byte[]> encryptionKeyList = new ArrayList<>();
       byte[] usermetadata = new byte[1000];
-      byte[] data = new byte[1000];
-      short accontId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      BlobProperties properties = new BlobProperties(1000, "serviceid1", accontId, containerId);
-      new Random().nextBytes(usermetadata);
-      new Random().nextBytes(data);
+      TestUtils.RANDOM.nextBytes(usermetadata);
       PartitionId partition = clusterMap.getWritablePartitionIds().get(0);
-      BlobId blobId1 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId2 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId3 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId4 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId5 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId6 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId7 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId8 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId9 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId10 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
-      BlobId blobId11 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition);
+
+      for (int i = 0; i < 11; i++) {
+        short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+        short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+        propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, true));
+        blobIdList.add(
+            new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), accountId, containerId, partition));
+        dataList.add(TestUtils.getRandomBytes(1000));
+        boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
+        if (isEncrypted) {
+          encryptionKeyList.add(TestUtils.getRandomBytes(128));
+        } else {
+          encryptionKeyList.add(null);
+        }
+      }
+
       // put blob 1
       PutRequest putRequest =
-          new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId1, ByteBuffer.wrap(usermetadata), data);
+          new PutRequest(1, "client1", blobIdList.get(0), propertyList.get(0), ByteBuffer.wrap(usermetadata),
+              ByteBuffer.wrap(dataList.get(0)), propertyList.get(0).getBlobSize(), BlobType.DataBlob,
+              encryptionKeyList.get(0) != null ? ByteBuffer.wrap(encryptionKeyList.get(0)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(0), blobIdList.get(0),
+          encryptionKeyList.get(0) != null ? ByteBuffer.wrap(encryptionKeyList.get(0)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(0));
 
       BlockingChannel channel1 =
           getBlockingChannelBasedOnPortType(dataNode1Port, "localhost", clientSSLSocketFactory1, clientSSLConfig1);
@@ -931,9 +927,12 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, response.getError());
       // put blob 2
       PutRequest putRequest2 =
-          new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
+          new PutRequest(1, "client1", blobIdList.get(1), propertyList.get(1), ByteBuffer.wrap(usermetadata),
+              ByteBuffer.wrap(dataList.get(1)), propertyList.get(1).getBlobSize(), BlobType.DataBlob,
+              encryptionKeyList.get(1) != null ? ByteBuffer.wrap(encryptionKeyList.get(1)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(1), blobIdList.get(1),
+          encryptionKeyList.get(1) != null ? ByteBuffer.wrap(encryptionKeyList.get(1)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(1));
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
@@ -941,9 +940,12 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, response2.getError());
       // put blob 3
       PutRequest putRequest3 =
-          new PutRequest(1, "client1", blobId3, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId3, ByteBuffer.wrap(usermetadata), data);
+          new PutRequest(1, "client1", blobIdList.get(2), propertyList.get(2), ByteBuffer.wrap(usermetadata),
+              ByteBuffer.wrap(dataList.get(2)), propertyList.get(2).getBlobSize(), BlobType.DataBlob,
+              encryptionKeyList.get(2) != null ? ByteBuffer.wrap(encryptionKeyList.get(2)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(2), blobIdList.get(2),
+          encryptionKeyList.get(2) != null ? ByteBuffer.wrap(encryptionKeyList.get(2)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(2));
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
@@ -951,10 +953,12 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 4
-      putRequest =
-          new PutRequest(1, "client1", blobId4, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId4, ByteBuffer.wrap(usermetadata), data);
+      putRequest = new PutRequest(1, "client1", blobIdList.get(3), propertyList.get(3), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(3)), propertyList.get(3).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(3) != null ? ByteBuffer.wrap(encryptionKeyList.get(3)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(3), blobIdList.get(3),
+          encryptionKeyList.get(3) != null ? ByteBuffer.wrap(encryptionKeyList.get(3)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(3));
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel1.send(putRequest);
       putResponseStream = channel1.receive().getInputStream();
@@ -962,10 +966,12 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, response.getError());
 
       // put blob 5
-      putRequest2 =
-          new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId5, ByteBuffer.wrap(usermetadata), data);
+      putRequest2 = new PutRequest(1, "client1", blobIdList.get(4), propertyList.get(4), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(4)), propertyList.get(4).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(4) != null ? ByteBuffer.wrap(encryptionKeyList.get(4)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(4), blobIdList.get(4),
+          encryptionKeyList.get(4) != null ? ByteBuffer.wrap(encryptionKeyList.get(4)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(4));
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
@@ -973,27 +979,29 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 6
-      putRequest3 =
-          new PutRequest(1, "client1", blobId6, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId6, ByteBuffer.wrap(usermetadata), data);
+      putRequest3 = new PutRequest(1, "client1", blobIdList.get(5), propertyList.get(5), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(5)), propertyList.get(5).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(5) != null ? ByteBuffer.wrap(encryptionKeyList.get(5)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(5), blobIdList.get(5),
+          encryptionKeyList.get(5) != null ? ByteBuffer.wrap(encryptionKeyList.get(5)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(5));
       System.out.println("Expected size after first put " + expectedTokenSize);
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response3.getError());
       // wait till replication can complete
-      notificationSystem.awaitBlobCreations(blobId1.getID());
-      notificationSystem.awaitBlobCreations(blobId2.getID());
-      notificationSystem.awaitBlobCreations(blobId3.getID());
-      notificationSystem.awaitBlobCreations(blobId4.getID());
-      notificationSystem.awaitBlobCreations(blobId5.getID());
-      notificationSystem.awaitBlobCreations(blobId6.getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(0).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(1).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(2).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(3).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(4).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(5).getID());
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       MockPartitionId mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(blobId3);
+      ids.add(blobIdList.get(2));
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -1008,14 +1016,15 @@ public final class ServerTestUtil {
         BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
         assertEquals(1000, propertyOutput.getBlobSize());
         assertEquals("serviceid1", propertyOutput.getServiceId());
-        assertEquals("AccountId mismatch", accontId, propertyOutput.getAccountId());
-        assertEquals("ContainerId mismatch", containerId, propertyOutput.getContainerId());
+        assertEquals("AccountId mismatch", propertyList.get(2).getAccountId(), propertyOutput.getAccountId());
+        assertEquals("ContainerId mismatch", propertyList.get(2).getContainerId(), propertyOutput.getContainerId());
+        assertEquals("IsEncrypted mismatch", propertyList.get(2).isEncrypted(), propertyOutput.isEncrypted());
       } catch (MessageFormatException e) {
         Assert.fail();
       }
       // get user metadata
       ids.clear();
-      ids.add(blobId2);
+      ids.add(blobIdList.get(1));
       GetRequest getRequest2 =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       channel1.send(getRequest2);
@@ -1032,7 +1041,7 @@ public final class ServerTestUtil {
 
       // get blob
       ids.clear();
-      ids.add(blobId1);
+      ids.add(blobIdList.get(0));
       GetRequest getRequest3 =
           new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       channel3.send(getRequest3);
@@ -1040,13 +1049,14 @@ public final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
+        // todo: fix once router support encryption. Might have to decrypt to compare data
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
         byte[] blobout = new byte[(int) blobData.getSize()];
         int readsize = 0;
         while (readsize < blobData.getSize()) {
           readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
         }
-        Assert.assertArrayEquals(data, blobout);
+        Assert.assertArrayEquals(dataList.get(0), blobout);
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -1058,12 +1068,12 @@ public final class ServerTestUtil {
       VerifiableProperties routerVerifiableProperties = new VerifiableProperties(routerProperties);
       Router router = new NonBlockingRouterFactory(routerVerifiableProperties, clusterMap, notificationSystem,
           getSSLFactoryIfRequired(routerVerifiableProperties)).getRouter();
-      checkBlobId(router, blobId1, data);
-      checkBlobId(router, blobId2, data);
-      checkBlobId(router, blobId3, data);
-      checkBlobId(router, blobId4, data);
-      checkBlobId(router, blobId5, data);
-      checkBlobId(router, blobId6, data);
+      checkBlobId(router, blobIdList.get(0), dataList.get(0));
+      checkBlobId(router, blobIdList.get(1), dataList.get(1));
+      checkBlobId(router, blobIdList.get(2), dataList.get(2));
+      checkBlobId(router, blobIdList.get(3), dataList.get(3));
+      checkBlobId(router, blobIdList.get(4), dataList.get(4));
+      checkBlobId(router, blobIdList.get(5), dataList.get(5));
 
       router.close();
 
@@ -1071,8 +1081,8 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), mockPartitionId));
+      ids.add(new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), propertyList.get(0).getAccountId(),
+          propertyList.get(0).getContainerId(), mockPartitionId));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -1085,17 +1095,17 @@ public final class ServerTestUtil {
       assertEquals(ServerErrorCode.Blob_Not_Found, resp4.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // delete a blob and ensure it is propagated
-      DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobId1, System.currentTimeMillis());
-      expectedTokenSize += getDeleteRecordSize(blobId1);
+      DeleteRequest deleteRequest = new DeleteRequest(1, "reptest", blobIdList.get(0), System.currentTimeMillis());
+      expectedTokenSize += getDeleteRecordSize(blobIdList.get(0));
       System.out.println("Expected size after first delete " + expectedTokenSize);
       channel1.send(deleteRequest);
       InputStream deleteResponseStream = channel1.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(deleteResponseStream));
       assertEquals(ServerErrorCode.No_Error, deleteResponse.getError());
 
-      notificationSystem.awaitBlobDeletions(blobId1.getID());
+      notificationSystem.awaitBlobDeletions(blobIdList.get(0).getID());
       ids = new ArrayList<BlobId>();
-      ids.add(blobId1);
+      ids.add(blobIdList.get(0));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -1118,47 +1128,55 @@ public final class ServerTestUtil {
       // - The offset stored in the token will be the position of the last entry in the log (the delete, in this case)
       // - Thus, it will be at the end of the 6 puts: 6 * 2183 = 13098
 
-      checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobId1), "0");
+      checkReplicaTokens(clusterMap, dataNodeId, expectedTokenSize - getDeleteRecordSize(blobIdList.get(0)), "0");
 
       // Shut down server 1
       cluster.getServers().get(0).shutdown();
       cluster.getServers().get(0).awaitShutdown();
       // Add more data to server 2 and server 3. Recover server 1 and ensure it is completely replicated
       // put blob 7
-      putRequest2 =
-          new PutRequest(1, "client1", blobId7, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId7, ByteBuffer.wrap(usermetadata), data);
+      putRequest2 = new PutRequest(1, "client1", blobIdList.get(6), propertyList.get(6), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(6)), propertyList.get(6).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(6) != null ? ByteBuffer.wrap(encryptionKeyList.get(6)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(6), blobIdList.get(6),
+          encryptionKeyList.get(6) != null ? ByteBuffer.wrap(encryptionKeyList.get(6)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(6));
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 8
-      putRequest3 =
-          new PutRequest(1, "client1", blobId8, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId8, ByteBuffer.wrap(usermetadata), data);
+      putRequest3 = new PutRequest(1, "client1", blobIdList.get(7), propertyList.get(7), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(7)), propertyList.get(7).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(7) != null ? ByteBuffer.wrap(encryptionKeyList.get(7)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(7), blobIdList.get(7),
+          encryptionKeyList.get(7) != null ? ByteBuffer.wrap(encryptionKeyList.get(7)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(7));
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response3.getError());
 
       // put blob 9
-      putRequest2 =
-          new PutRequest(1, "client1", blobId9, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId9, ByteBuffer.wrap(usermetadata), data);
+      putRequest2 = new PutRequest(1, "client1", blobIdList.get(8), propertyList.get(8), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(8)), propertyList.get(8).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(8) != null ? ByteBuffer.wrap(encryptionKeyList.get(8)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(8), blobIdList.get(8),
+          encryptionKeyList.get(8) != null ? ByteBuffer.wrap(encryptionKeyList.get(8)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(8));
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response2.getError());
 
       // put blob 10
-      putRequest3 =
-          new PutRequest(1, "client1", blobId10, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId10, ByteBuffer.wrap(usermetadata), data);
+      putRequest3 = new PutRequest(1, "client1", blobIdList.get(9), propertyList.get(9), ByteBuffer.wrap(usermetadata),
+          ByteBuffer.wrap(dataList.get(9)), propertyList.get(9).getBlobSize(), BlobType.DataBlob,
+          encryptionKeyList.get(9) != null ? ByteBuffer.wrap(encryptionKeyList.get(9)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(9), blobIdList.get(9),
+          encryptionKeyList.get(9) != null ? ByteBuffer.wrap(encryptionKeyList.get(9)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(9));
       channel3.send(putRequest3);
       putResponseStream = channel3.receive().getInputStream();
       response3 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1166,9 +1184,12 @@ public final class ServerTestUtil {
 
       // put blob 11
       putRequest2 =
-          new PutRequest(1, "client1", blobId11, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
-              properties.getBlobSize(), BlobType.DataBlob, null);
-      expectedTokenSize += getPutRecordSize(properties, blobId11, ByteBuffer.wrap(usermetadata), data);
+          new PutRequest(1, "client1", blobIdList.get(10), propertyList.get(10), ByteBuffer.wrap(usermetadata),
+              ByteBuffer.wrap(dataList.get(10)), propertyList.get(10).getBlobSize(), BlobType.DataBlob,
+              encryptionKeyList.get(10) != null ? ByteBuffer.wrap(encryptionKeyList.get(10)) : null);
+      expectedTokenSize += getPutRecordSize(propertyList.get(10), blobIdList.get(10),
+          encryptionKeyList.get(10) != null ? ByteBuffer.wrap(encryptionKeyList.get(10)) : null,
+          ByteBuffer.wrap(usermetadata), dataList.get(10));
       channel2.send(putRequest2);
       putResponseStream = channel2.receive().getInputStream();
       response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
@@ -1176,27 +1197,27 @@ public final class ServerTestUtil {
 
       cluster.getServers().get(0).startup();
       // wait for server to recover
-      notificationSystem.awaitBlobCreations(blobId7.getID());
-      notificationSystem.awaitBlobCreations(blobId8.getID());
-      notificationSystem.awaitBlobCreations(blobId9.getID());
-      notificationSystem.awaitBlobCreations(blobId10.getID());
-      notificationSystem.awaitBlobCreations(blobId11.getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(7).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(8).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(9).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(10).getID());
       channel1.disconnect();
       channel1.connect();
 
       // check all ids exist on server 1
       // get blob
       try {
-        checkBlobContent(clusterMap, blobId2, channel1, data);
-        checkBlobContent(clusterMap, blobId3, channel1, data);
-        checkBlobContent(clusterMap, blobId4, channel1, data);
-        checkBlobContent(clusterMap, blobId5, channel1, data);
-        checkBlobContent(clusterMap, blobId6, channel1, data);
-        checkBlobContent(clusterMap, blobId7, channel1, data);
-        checkBlobContent(clusterMap, blobId8, channel1, data);
-        checkBlobContent(clusterMap, blobId9, channel1, data);
-        checkBlobContent(clusterMap, blobId10, channel1, data);
-        checkBlobContent(clusterMap, blobId11, channel1, data);
+        checkBlobContent(clusterMap, blobIdList.get(1), channel1, dataList.get(1));
+        checkBlobContent(clusterMap, blobIdList.get(2), channel1, dataList.get(2));
+        checkBlobContent(clusterMap, blobIdList.get(3), channel1, dataList.get(3));
+        checkBlobContent(clusterMap, blobIdList.get(4), channel1, dataList.get(4));
+        checkBlobContent(clusterMap, blobIdList.get(5), channel1, dataList.get(5));
+        checkBlobContent(clusterMap, blobIdList.get(6), channel1, dataList.get(6));
+        checkBlobContent(clusterMap, blobIdList.get(7), channel1, dataList.get(7));
+        checkBlobContent(clusterMap, blobIdList.get(8), channel1, dataList.get(8));
+        checkBlobContent(clusterMap, blobIdList.get(9), channel1, dataList.get(9));
+        checkBlobContent(clusterMap, blobIdList.get(10), channel1, dataList.get(10));
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -1209,28 +1230,38 @@ public final class ServerTestUtil {
       for (File toDelete : mountFile.listFiles()) {
         deleteFolderContent(toDelete, true);
       }
-      notificationSystem.decrementCreatedReplica(blobId2.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId3.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId4.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId5.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId6.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId7.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId8.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId9.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId10.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
-      notificationSystem.decrementCreatedReplica(blobId11.getID(), dataNodeId.getHostname(), dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(1).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(2).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(3).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(4).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(5).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(6).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(7).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(8).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(9).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
+      notificationSystem.decrementCreatedReplica(blobIdList.get(10).getID(), dataNodeId.getHostname(),
+          dataNodeId.getPort());
 
       cluster.getServers().get(0).startup();
-      notificationSystem.awaitBlobCreations(blobId2.getID());
-      notificationSystem.awaitBlobCreations(blobId3.getID());
-      notificationSystem.awaitBlobCreations(blobId4.getID());
-      notificationSystem.awaitBlobCreations(blobId5.getID());
-      notificationSystem.awaitBlobCreations(blobId6.getID());
-      notificationSystem.awaitBlobCreations(blobId7.getID());
-      notificationSystem.awaitBlobCreations(blobId8.getID());
-      notificationSystem.awaitBlobCreations(blobId9.getID());
-      notificationSystem.awaitBlobCreations(blobId10.getID());
-      notificationSystem.awaitBlobCreations(blobId11.getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(1).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(2).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(3).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(4).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(5).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(6).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(7).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(8).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(9).getID());
+      notificationSystem.awaitBlobCreations(blobIdList.get(10).getID());
 
       channel1.disconnect();
       channel1.connect();
@@ -1238,16 +1269,16 @@ public final class ServerTestUtil {
       // check all ids exist on server 1
       // get blob
       try {
-        checkBlobContent(clusterMap, blobId2, channel1, data);
-        checkBlobContent(clusterMap, blobId3, channel1, data);
-        checkBlobContent(clusterMap, blobId4, channel1, data);
-        checkBlobContent(clusterMap, blobId5, channel1, data);
-        checkBlobContent(clusterMap, blobId6, channel1, data);
-        checkBlobContent(clusterMap, blobId7, channel1, data);
-        checkBlobContent(clusterMap, blobId8, channel1, data);
-        checkBlobContent(clusterMap, blobId9, channel1, data);
-        checkBlobContent(clusterMap, blobId10, channel1, data);
-        checkBlobContent(clusterMap, blobId11, channel1, data);
+        checkBlobContent(clusterMap, blobIdList.get(1), channel1, dataList.get(1));
+        checkBlobContent(clusterMap, blobIdList.get(2), channel1, dataList.get(2));
+        checkBlobContent(clusterMap, blobIdList.get(3), channel1, dataList.get(3));
+        checkBlobContent(clusterMap, blobIdList.get(4), channel1, dataList.get(4));
+        checkBlobContent(clusterMap, blobIdList.get(5), channel1, dataList.get(5));
+        checkBlobContent(clusterMap, blobIdList.get(6), channel1, dataList.get(6));
+        checkBlobContent(clusterMap, blobIdList.get(7), channel1, dataList.get(7));
+        checkBlobContent(clusterMap, blobIdList.get(8), channel1, dataList.get(8));
+        checkBlobContent(clusterMap, blobIdList.get(9), channel1, dataList.get(9));
+        checkBlobContent(clusterMap, blobIdList.get(10), channel1, dataList.get(10));
       } catch (MessageFormatException e) {
         Assert.fail();
       }
@@ -1269,10 +1300,12 @@ public final class ServerTestUtil {
    * @param data actual data associated with the put
    * @return the size of the put record in the log
    */
-  private static long getPutRecordSize(BlobProperties properties, BlobId blobId, ByteBuffer usermetadata, byte[] data) {
-    return MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() + blobId.sizeInBytes()
-        + MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties)
-        + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
+  private static long getPutRecordSize(BlobProperties properties, BlobId blobId, ByteBuffer blobEncryptionKey,
+      ByteBuffer usermetadata, byte[] data) {
+    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes() + (
+        blobEncryptionKey != null ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(
+            blobEncryptionKey) : 0) + +MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(
+        properties) + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
         + MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length);
   }
 
@@ -1282,7 +1315,7 @@ public final class ServerTestUtil {
    * @return the size of the put record in the log
    */
   private static long getDeleteRecordSize(BlobId blobId) {
-    return MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize() + blobId.sizeInBytes()
+    return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
         + MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
   }
 
@@ -1397,6 +1430,7 @@ public final class ServerTestUtil {
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, BlockingChannel channel,
       byte[] dataToCheck) throws IOException, MessageFormatException {
+    // todo: fix once router support encryption. Might have to decryt to compare data
     ArrayList<BlobId> listIds = new ArrayList<BlobId>();
     listIds.add(blobId);
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();

@@ -226,9 +226,9 @@ public class BlobPropertiesTest {
   private BlobProperties getBlobProperties(long blobSize, boolean isEncrypted, String serviceId, short accountId,
       short containerId, short version) {
     if (version == BlobPropertiesSerDe.VERSION_1) {
-      return new BlobProperties(blobSize, serviceId, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+      return new BlobProperties(blobSize, serviceId, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
     } else if (version == BlobPropertiesSerDe.VERSION_2) {
-      return new BlobProperties(blobSize, serviceId, accountId, containerId);
+      return new BlobProperties(blobSize, serviceId, accountId, containerId, false);
     } else {
       return new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
           SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);

@@ -149,7 +149,8 @@ public class DirectoryUploader {
               + " cannot be put using this tool.");
         }
         BlobProperties props =
-            new BlobProperties(f.length(), "migration", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+            new BlobProperties(f.length(), "migration", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                false);
         byte[] usermetadata = new byte[1];
         FileInputStream stream = null;
         try {

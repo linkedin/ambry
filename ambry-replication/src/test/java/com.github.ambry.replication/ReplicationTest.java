@@ -618,7 +618,7 @@ public class ReplicationTest {
     byte[] encryptionKey = TestUtils.RANDOM.nextBoolean() ? new byte[encryptionKeySize] : null;
     TestUtils.RANDOM.nextBytes(blob);
     TestUtils.RANDOM.nextBytes(usermetadata);
-    BlobProperties blobProperties = new BlobProperties(blobSize, "test", accountId, containerId);
+    BlobProperties blobProperties = new BlobProperties(blobSize, "test", accountId, containerId, encryptionKey != null);
 
     MessageFormatInputStream stream =
         new PutMessageFormatInputStream(id, encryptionKey == null ? null : ByteBuffer.wrap(encryptionKey),
