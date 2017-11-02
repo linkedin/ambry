@@ -85,8 +85,7 @@ public class GetBlobInfoOperationTest {
   private final String operationTrackerType;
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
-  private final GetBlobOptionsInternal options = new GetBlobOptionsInternal(
-      new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false);
+  private final GetBlobOptionsInternal options;
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -118,6 +117,9 @@ public class GetBlobInfoOperationTest {
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    options = new GetBlobOptionsInternal(
+        new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
+        routerMetrics.ageAtGet);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);

@@ -144,7 +144,7 @@ class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false);
+    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     if (isOpen.get()) {
       getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
         @Override
@@ -300,8 +300,8 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     currentBackgroundOperationsCount.incrementAndGet();
     GetBlobOptionsInternal options =
-        new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.Data, GetOption.Include_All, null),
-            true);
+        new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.Include_All, null),
+            true, routerMetrics.ageAtDelete);
     backgroundDeleter.getBlob(blobId, options, callback);
   }
 

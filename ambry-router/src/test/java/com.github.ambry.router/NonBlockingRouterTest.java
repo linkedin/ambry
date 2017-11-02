@@ -74,6 +74,7 @@ public class NonBlockingRouterTest {
   private int maxPutChunkSize = PUT_CONTENT_SIZE;
   private final Random random = new Random();
   private NonBlockingRouter router;
+  private NonBlockingRouterMetrics routerMetrics;
   private PutManager putManager;
   private GetManager getManager;
   private DeleteManager deleteManager;
@@ -141,7 +142,8 @@ public class NonBlockingRouterTest {
    */
   private void setRouter(Properties props, MockServerLayout mockServerLayout) throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
-    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
         mockTime);
@@ -904,13 +906,13 @@ public class NonBlockingRouterTest {
         case GET:
           final FutureResult getFutureResult = new FutureResult<GetBlobResultInternal>();
           getManager.submitGetBlobOperation(blobId, new GetBlobOptionsInternal(
-                  new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false),
-              new Callback<GetBlobResultInternal>() {
-                @Override
-                public void onCompletion(GetBlobResultInternal result, Exception exception) {
-                  getFutureResult.done(result, exception);
-                }
-              });
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
+              routerMetrics.ageAtGet), new Callback<GetBlobResultInternal>() {
+            @Override
+            public void onCompletion(GetBlobResultInternal result, Exception exception) {
+              getFutureResult.done(result, exception);
+            }
+          });
           futureResult = getFutureResult;
           break;
         case DELETE:

@@ -253,15 +253,19 @@ class GetManager {
 class GetBlobOptionsInternal {
   final GetBlobOptions getBlobOptions;
   final boolean getChunkIdsOnly;
+  final NonBlockingRouterMetrics.AgeAtAccessMetrics ageAtAccessTracker;
 
   /**
    * Construct an GetBlobOptionsInternal instance
    * @param getBlobOptions the {@link GetBlobOptions} associated with this instance.
    * @param getChunkIdsOnly {@code true} if this operation is to fetch just the chunk ids of a composite blob.
+   * @param ageAtAccessTracker the {@link NonBlockingRouterMetrics.AgeAtAccessMetrics} tracker to use.
    */
-  GetBlobOptionsInternal(GetBlobOptions getBlobOptions, boolean getChunkIdsOnly) {
+  GetBlobOptionsInternal(GetBlobOptions getBlobOptions, boolean getChunkIdsOnly,
+      NonBlockingRouterMetrics.AgeAtAccessMetrics ageAtAccessTracker) {
     this.getBlobOptions = getBlobOptions;
     this.getChunkIdsOnly = getChunkIdsOnly;
+    this.ageAtAccessTracker = ageAtAccessTracker;
   }
 }
 

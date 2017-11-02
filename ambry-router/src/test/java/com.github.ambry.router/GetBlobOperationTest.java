@@ -106,7 +106,7 @@ public class GetBlobOperationTest {
   private byte[] putContent;
 
   // Options which are passed into GetBlobOperations
-  private GetBlobOptionsInternal options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false);
+  private GetBlobOptionsInternal options;
 
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
@@ -169,6 +169,7 @@ public class GetBlobOperationTest {
     mockClusterMap = new MockClusterMap();
     blobIdFactory = new BlobIdFactory(mockClusterMap);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     replicasCount = mockClusterMap.getWritablePartitionIds().get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
@@ -227,8 +228,8 @@ public class GetBlobOperationTest {
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), getRouterCallback, routerCallback,
-        blobIdFactory, time);
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
+        getRouterCallback, routerCallback, blobIdFactory, time);
 
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
@@ -239,8 +240,8 @@ public class GetBlobOperationTest {
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
-          new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false), getRouterCallback, routerCallback,
-          blobIdFactory, time);
+          new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
+          getRouterCallback, routerCallback, blobIdFactory, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -259,11 +260,13 @@ public class GetBlobOperationTest {
       switch (i % 2) {
         case 0:
           options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false);
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false,
+              routerMetrics.ageAtGet);
           break;
         case 1:
           options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false);
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false,
+              routerMetrics.ageAtGet);
           break;
       }
       getAndAssertSuccess();
@@ -304,11 +307,13 @@ public class GetBlobOperationTest {
       switch (i % 2) {
         case 0:
           options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false);
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false,
+              routerMetrics.ageAtGet);
           break;
         case 1:
           options = new GetBlobOptionsInternal(
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false);
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(), false,
+              routerMetrics.ageAtGet);
           break;
       }
       getAndAssertSuccess();
@@ -686,7 +691,7 @@ public class GetBlobOperationTest {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .range(ByteRange.fromOffsetRange(startOffset, endOffset))
-        .build(), false);
+        .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -701,7 +706,7 @@ public class GetBlobOperationTest {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .range(ByteRange.fromStartOffset(startOffset))
-        .build(), false);
+        .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 
@@ -716,7 +721,7 @@ public class GetBlobOperationTest {
     doPut();
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All)
         .range(ByteRange.fromLastNBytes(lastNBytes))
-        .build(), false);
+        .build(), false, routerMetrics.ageAtGet);
     getErrorCodeChecker.testAndAssert(rangeSatisfiable ? null : RouterErrorCode.RangeNotSatisfiable);
   }
 

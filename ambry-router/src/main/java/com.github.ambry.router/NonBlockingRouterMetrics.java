@@ -20,8 +20,10 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.utils.SystemTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
@@ -128,6 +130,10 @@ public class NonBlockingRouterMetrics {
   public final Histogram getBlobInfoLocalColoLatencyMs;
   public final Histogram getBlobInfoCrossColoLatencyMs;
   public final Counter getBlobInfoPastDueCount;
+
+  // Workload characteristics
+  public final AgeAtAccessMetrics ageAtGet;
+  public final AgeAtAccessMetrics ageAtDelete;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -283,6 +289,10 @@ public class NonBlockingRouterMetrics {
     getBlobInfoCrossColoLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobInfoOperation.class, "CrossColoLatencyMs"));
     getBlobInfoPastDueCount = metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "PastDueCount"));
+
+    // Workload
+    ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
+    ageAtDelete = new AgeAtAccessMetrics(metricRegistry, "OnDelete");
   }
 
   /**
@@ -534,6 +544,75 @@ public class NonBlockingRouterMetrics {
           registry.counter(MetricRegistry.name(GetBlobOperation.class, dataNodeName, "GetRequestErrorCount"));
       deleteRequestErrorCount =
           registry.counter(MetricRegistry.name(DeleteOperation.class, dataNodeName, "DeleteRequestErrorCount"));
+    }
+  }
+
+  /**
+   * Tracks the age of a blob at the time of access.
+   */
+  public static class AgeAtAccessMetrics {
+    private final Histogram ageInMs;
+    private final Counter lessThanMinuteOld;
+    private final Counter betweenMinuteAndHourOld;
+    private final Counter betweenHourAndDayOld;
+    private final Counter betweenDayAndWeekOld;
+    private final Counter betweenWeekAndMonthOld;
+    private final Counter betweenMonthAndThreeMonthsOld;
+    private final Counter betweenThreeMonthsAndSixMonthsOld;
+    private final Counter betweenSixMonthsAndYearOld;
+    private final Counter moreThanYearOld;
+
+    /**
+     * @param registry the {@link MetricRegistry} to use.
+     * @param accessType the type of access (get, delete).
+     */
+    private AgeAtAccessMetrics(MetricRegistry registry, String accessType) {
+      ageInMs = registry.histogram(MetricRegistry.name(NonBlockingRouter.class, accessType, "AgeInMs"));
+      lessThanMinuteOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "LessThanMinuteOld"));
+      betweenMinuteAndHourOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenMinuteAndHourOld"));
+      betweenHourAndDayOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenHourAndDayOld"));
+      betweenDayAndWeekOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenDayAndWeekOld"));
+      betweenWeekAndMonthOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenWeekAndMonthOld"));
+      betweenMonthAndThreeMonthsOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenMonthAndThreeMonthsOld"));
+      betweenThreeMonthsAndSixMonthsOld = registry.counter(
+          MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenThreeMonthsAndSixMonthsOld"));
+      betweenSixMonthsAndYearOld =
+          registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "BetweenSixMonthsAndYearOld"));
+      moreThanYearOld = registry.counter(MetricRegistry.name(NonBlockingRouter.class, accessType, "MoreThanYearOld"));
+    }
+
+    /**
+     * Tracks the age of the time of access.
+     * @param creationTimeMs the time of creation of the blob.
+     */
+    void trackAgeAtAccess(long creationTimeMs) {
+      long ageInMs = SystemTime.getInstance().milliseconds() - creationTimeMs;
+      this.ageInMs.update(ageInMs);
+      if (ageInMs < TimeUnit.MINUTES.toMillis(1)) {
+        lessThanMinuteOld.inc();
+      } else if (ageInMs < TimeUnit.HOURS.toMillis(1)) {
+        betweenMinuteAndHourOld.inc();
+      } else if (ageInMs < TimeUnit.DAYS.toMillis(1)) {
+        betweenHourAndDayOld.inc();
+      } else if (ageInMs < TimeUnit.DAYS.toMillis(7)) {
+        betweenDayAndWeekOld.inc();
+      } else if (ageInMs < TimeUnit.DAYS.toMillis(30)) {
+        betweenWeekAndMonthOld.inc();
+      } else if (ageInMs < TimeUnit.DAYS.toMillis(30 * 3)) {
+        betweenMonthAndThreeMonthsOld.inc();
+      } else if (ageInMs < TimeUnit.DAYS.toMillis(30 * 6)) {
+        betweenThreeMonthsAndSixMonthsOld.inc();
+      } else if (ageInMs < TimeUnit.DAYS.toMillis(30 * 12)) {
+        betweenSixMonthsAndYearOld.inc();
+      } else {
+        moreThanYearOld.inc();
+      }
     }
   }
 }
