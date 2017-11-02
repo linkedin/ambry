@@ -73,7 +73,8 @@
           "rackId": 1611
         },
       ],
-      "name": "dc1"
+      "name": "dc1",
+      "id" : "1"
     },
     {
       "dataNodes": [
@@ -147,7 +148,8 @@
           "rackId": 316
         },
       ],
-      "name": "dc2"
+      "name": "dc2",
+      "id" : "2"
     }
   ],
   "version": 4

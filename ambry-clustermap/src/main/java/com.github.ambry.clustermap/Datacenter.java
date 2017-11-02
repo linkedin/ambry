@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 class Datacenter {
   private final HardwareLayout hardwareLayout;
   private final String name;
+  private final byte id;
   private final ArrayList<DataNode> dataNodes;
   private final long rawCapacityInBytes;
   private boolean rackAware = false;
@@ -47,6 +48,7 @@ class Datacenter {
     }
     this.hardwareLayout = hardwareLayout;
     this.name = jsonObject.getString("name");
+    id = Byte.parseByte(jsonObject.getString("id"));
 
     this.dataNodes = new ArrayList<DataNode>(jsonObject.getJSONArray("dataNodes").length());
     for (int i = 0; i < jsonObject.getJSONArray("dataNodes").length(); ++i) {
@@ -62,6 +64,10 @@ class Datacenter {
 
   String getName() {
     return name;
+  }
+
+  byte getId() {
+    return id;
   }
 
   long getRawCapacityInBytes() {
@@ -132,7 +138,7 @@ class Datacenter {
   }
 
   JSONObject toJSONObject() throws JSONException {
-    JSONObject jsonObject = new JSONObject().put("name", name).put("dataNodes", new JSONArray());
+    JSONObject jsonObject = new JSONObject().put("name", name).put("id", id).put("dataNodes", new JSONArray());
     for (DataNode dataNode : dataNodes) {
       jsonObject.accumulate("dataNodes", dataNode.toJSONObject());
     }

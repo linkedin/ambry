@@ -55,7 +55,7 @@ class HelixClusterManager implements ClusterMap {
   private final String clusterName;
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
-  private final ConcurrentHashMap<String, DcZkInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, DcInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas =
@@ -68,6 +68,7 @@ class HelixClusterManager implements ClusterMap {
   private long clusterWideAllocatedRawCapacityBytes;
   private long clusterWideAllocatedUsableCapacityBytes;
   private final HelixClusterManagerCallback helixClusterManagerCallback;
+  private final byte localDatacenterId;
   private final AtomicReference<Exception> initializationException = new AtomicReference<>();
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
@@ -87,12 +88,12 @@ class HelixClusterManager implements ClusterMap {
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
-      final Map<String, String> dataCenterToZkAddress =
-          parseZkJsonAndPopulateZkInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
+      final Map<String, DcZkInfo> dataCenterToZkAddress =
+          parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
       final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
-      for (Map.Entry<String, String> entry : dataCenterToZkAddress.entrySet()) {
+      for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
         String dcName = entry.getKey();
-        String zkConnectStr = entry.getValue();
+        String zkConnectStr = entry.getValue().getZkConnectStr();
         ClusterChangeHandler clusterChangeHandler = new ClusterChangeHandler(dcName);
         // Initialize from every datacenter in a separate thread to speed things up.
         Utils.newThread(new Runnable() {
@@ -104,8 +105,8 @@ class HelixClusterManager implements ClusterMap {
               logger.info("Connecting to Helix manager at {}", zkConnectStr);
               manager.connect();
               logger.info("Established connection to Helix manager at {}", zkConnectStr);
-              DcZkInfo dcZkInfo = new DcZkInfo(dcName, zkConnectStr, manager, clusterChangeHandler);
-              dcToDcZkInfo.put(dcName, dcZkInfo);
+              DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
+              dcToDcZkInfo.put(dcName, dcInfo);
 
               // The initial instance config change notification is required to populate the static cluster
               // information, and only after that is complete do we want the live instance change notification to
@@ -144,6 +145,7 @@ class HelixClusterManager implements ClusterMap {
       throw new IOException("Encountered exception while parsing json, connecting to Helix or initializing",
           initializationException.get());
     }
+    localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
   }
 
   /**
@@ -169,7 +171,7 @@ class HelixClusterManager implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return UNKNOWN_DATACENTER_ID;
+    return localDatacenterId;
   }
 
   @Override
@@ -259,8 +261,8 @@ class HelixClusterManager implements ClusterMap {
    */
   @Override
   public void close() {
-    for (DcZkInfo dcZkInfo : dcToDcZkInfo.values()) {
-      dcZkInfo.helixManager.disconnect();
+    for (DcInfo dcInfo : dcToDcZkInfo.values()) {
+      dcInfo.helixManager.disconnect();
     }
     dcToDcZkInfo.clear();
   }
@@ -484,24 +486,24 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Class that stores all ZK related information associated with a datacenter.
+   * Class that stores all the information associated with a datacenter.
    */
-  private static class DcZkInfo {
+  private static class DcInfo {
     final String dcName;
-    final String zkConnectStr;
+    final DcZkInfo dcZkInfo;
     final HelixManager helixManager;
     final ClusterChangeHandler clusterChangeHandler;
 
     /**
-     * Construct a DcZkInfo object with the given parameters.
+     * Construct a DcInfo object with the given parameters.
      * @param dcName the associated datacenter name.
-     * @param zkConnectStr the associated ZK connect string for this datacenter.
+     * @param dcZkInfo the {@link DcZkInfo} associated with the DC.
      * @param helixManager the associated {@link HelixManager} for this datacenter.
      * @param clusterChangeHandler the associated {@link ClusterChangeHandler} for this datacenter.
      */
-    DcZkInfo(String dcName, String zkConnectStr, HelixManager helixManager, ClusterChangeHandler clusterChangeHandler) {
+    DcInfo(String dcName, DcZkInfo dcZkInfo, HelixManager helixManager, ClusterChangeHandler clusterChangeHandler) {
       this.dcName = dcName;
-      this.zkConnectStr = zkConnectStr;
+      this.dcZkInfo = dcZkInfo;
       this.helixManager = helixManager;
       this.clusterChangeHandler = clusterChangeHandler;
     }

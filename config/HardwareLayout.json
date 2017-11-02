@@ -17,7 +17,8 @@
                     "port": 6667
                 }
             ],
-            "name": "Datacenter"
+            "name": "Datacenter",
+            "id" : "1"
         }
     ]
 }

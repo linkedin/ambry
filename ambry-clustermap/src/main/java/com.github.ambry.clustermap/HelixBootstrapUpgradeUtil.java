@@ -85,7 +85,7 @@ class HelixBootstrapUpgradeUtil {
   private final String localDc;
   private final String clusterName;
   private final int maxPartitionsInOneResource;
-  private Map<String, String> dataCenterToZkAddress;
+  private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
 
   /**
    * Takes in the path to the files that make up the static cluster map and adds or updates the cluster map information
@@ -126,13 +126,13 @@ class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String localDc, int maxPartitionsInOneResource) throws Exception {
     this.localDc = localDc;
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
-    this.dataCenterToZkAddress = ClusterMapUtils.parseZkJsonAndPopulateZkInfo(Utils.readStringFromFile(zkLayoutPath));
+    this.dataCenterToZkAddress = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
 
     Properties props = new Properties();
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("clustermap.cluster.name", "");
-    props.setProperty("clustermap.datacenter.name", localDc == null ? "none" : localDc);
+    props.setProperty("clustermap.datacenter.name", localDc == null ? "" : localDc);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     if (new File(partitionLayoutPath).exists()) {
       staticClusterMap =
@@ -195,8 +195,8 @@ class HelixBootstrapUpgradeUtil {
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    */
   private void initializeAdminsAndAddCluster(HelixAdminFactory helixAdminFactory) {
-    for (Map.Entry<String, String> entry : dataCenterToZkAddress.entrySet()) {
-      HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue());
+    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
       adminForDc.put(entry.getKey(), admin);
       // Add a cluster entry in every DC
       if (!admin.getClusters().contains(clusterName)) {
@@ -520,7 +520,14 @@ class HelixBootstrapUpgradeUtil {
    */
   private void verifyDataNodeAndDiskEquivalencyInDc(Datacenter dc, String clusterName, PartitionLayout partitionLayout)
       throws Exception {
-    StaticClusterManager staticClusterMap = (new StaticClusterAgentsFactory(null, partitionLayout)).getClusterMap();
+    // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.cluster.name", clusterName);
+    props.setProperty("clustermap.datacenter.name", dc.getName());
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    StaticClusterManager staticClusterMap =
+        (new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout)).getClusterMap();
     HelixAdmin admin = adminForDc.get(dc.getName());
     List<String> allInstancesInHelix = admin.getInstancesInCluster(clusterName);
     for (DataNodeId dataNodeId : dc.getDataNodes()) {

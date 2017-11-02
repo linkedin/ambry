@@ -18,6 +18,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -55,15 +56,16 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
    * @param partitionLayout the {@link PartitionLayout} to use.
    */
   StaticClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout) {
-    this.clusterMapConfig = clusterMapConfig;
-    this.partitionLayout = partitionLayout;
+    this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig, "ClusterMapConfig cannot be null");
+    this.partitionLayout = Objects.requireNonNull(partitionLayout, "PartitionLayout cannot be null");
     this.metricRegistry = new MetricRegistry();
   }
 
   @Override
   public StaticClusterManager getClusterMap() {
     if (staticClusterManager == null) {
-      staticClusterManager = new StaticClusterManager(partitionLayout, metricRegistry);
+      staticClusterManager =
+          new StaticClusterManager(partitionLayout, clusterMapConfig.clusterMapDatacenterName, metricRegistry);
     }
     return staticClusterManager;
   }

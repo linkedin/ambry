@@ -28,7 +28,6 @@ import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -41,6 +40,7 @@ class StaticClusterManager implements ClusterMap {
   protected final PartitionLayout partitionLayout;
   private final MetricRegistry metricRegistry;
   private final ClusterMapMetrics clusterMapMetrics;
+  private final byte localDatacenterId;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -51,7 +51,7 @@ class StaticClusterManager implements ClusterMap {
    */
   private static final int NUM_CHOICES = 2;
 
-  StaticClusterManager(PartitionLayout partitionLayout, MetricRegistry metricRegistry) {
+  StaticClusterManager(PartitionLayout partitionLayout, String localDatacenterName, MetricRegistry metricRegistry) {
     if (logger.isTraceEnabled()) {
       logger.trace("StaticClusterManager " + partitionLayout);
     }
@@ -59,6 +59,8 @@ class StaticClusterManager implements ClusterMap {
     this.partitionLayout = partitionLayout;
     this.metricRegistry = metricRegistry;
     this.clusterMapMetrics = new ClusterMapMetrics(this.hardwareLayout, this.partitionLayout, this.metricRegistry);
+    localDatacenterId = localDatacenterName != null && !localDatacenterName.isEmpty() ? hardwareLayout.findDatacenter(
+        localDatacenterName).getId() : ClusterMapUtils.UNKNOWN_DATACENTER_ID;
   }
 
   void persist(String hardwareLayoutPath, String partitionLayoutPath) throws IOException, JSONException {
@@ -96,7 +98,7 @@ class StaticClusterManager implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return UNKNOWN_DATACENTER_ID;
+    return localDatacenterId;
   }
 
   @Override

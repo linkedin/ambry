@@ -47,6 +47,7 @@ public class AccountUpdateToolTest {
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
   private static final int ZK_SERVER_PORT = 2200;
   private static final String DC_NAME = "testDc";
+  private static final byte DC_ID = (byte) 1;
   private static final String ZK_SERVER_ADDRESS = "localhost:" + ZK_SERVER_PORT;
   private static final String HELIX_STORE_ROOT_PATH = "/ambry/defaultCluster/helixPropertyStore";
   private static final Properties helixConfigProps = new Properties();
@@ -71,7 +72,7 @@ public class AccountUpdateToolTest {
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     try {
-      zkInfo = new ZkInfo(tempDirPath, DC_NAME, ZK_SERVER_PORT, true);
+      zkInfo = new ZkInfo(tempDirPath, DC_NAME, DC_ID, ZK_SERVER_PORT, true);
     } catch (IOException e) {
       fail("Failed to instantiate a ZooKeeper server.");
     }

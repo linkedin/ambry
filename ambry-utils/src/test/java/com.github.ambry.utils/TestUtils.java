@@ -160,6 +160,7 @@ public class TestUtils {
    */
   public static class ZkInfo {
     private String dcName;
+    private byte id;
     private int port;
     private String dataDir;
     private String logDir;
@@ -169,10 +170,12 @@ public class TestUtils {
      * Instantiate by starting a Zk server.
      * @param tempDirPath the temporary directory string to use.
      * @param dcName the name of the datacenter.
+     * @param id the id of the datacenter.
      * @param port the port at which this Zk server should run on localhost.
      */
-    public ZkInfo(String tempDirPath, String dcName, int port, boolean start) throws IOException {
+    public ZkInfo(String tempDirPath, String dcName, byte id, int port, boolean start) throws IOException {
       this.dcName = dcName;
+      this.id = id;
       this.port = port;
       this.dataDir = tempDirPath + "/dataDir";
       this.logDir = tempDirPath + "/logDir";
@@ -199,6 +202,10 @@ public class TestUtils {
 
     public String getDcName() {
       return dcName;
+    }
+
+    public byte getId() {
+      return id;
     }
 
     public void shutdown() {

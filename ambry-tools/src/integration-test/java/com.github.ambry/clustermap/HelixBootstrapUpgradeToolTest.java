@@ -39,6 +39,7 @@ public class HelixBootstrapUpgradeToolTest {
   private static String tempDirPath;
   private static final HashMap<String, ZkInfo> dcsToZkInfo = new HashMap<>();
   private static final String dcs[] = new String[]{"DC0", "DC1"};
+  private static final byte ids[] = new byte[]{(byte) 0, (byte) 1};
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final String zkLayoutPath;
@@ -62,8 +63,8 @@ public class HelixBootstrapUpgradeToolTest {
   public static void initialize() throws IOException {
     tempDirPath = getTempDir("helixBootstrapUpgrade-");
     int port = 2200;
-    for (String dcName : dcs) {
-      dcsToZkInfo.put(dcName, new ZkInfo(tempDirPath, dcName, port++, true));
+    for (int i = 0; i < dcs.length; i++) {
+      dcsToZkInfo.put(dcs[i], new ZkInfo(tempDirPath, dcs[i], ids[i], port++, true));
     }
   }
 

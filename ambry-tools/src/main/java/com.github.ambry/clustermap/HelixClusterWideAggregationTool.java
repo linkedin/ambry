@@ -50,10 +50,12 @@ public class HelixClusterWideAggregationTool {
    *               "zkInfo" : [
    *                 {
    *                   "datacenter":"dc1",
+   *                    "id" : "1",
    *                   "zkConnectStr":"abc.example.com:2199",
    *                 },
    *                 {
    *                   "datacenter":"dc2",
+   *                   "id" : "2",
    *                   "zkConnectStr":"def.example.com:2300",
    *                 }
    *               ]
@@ -65,11 +67,12 @@ public class HelixClusterWideAggregationTool {
 
     ArgumentAcceptingOptionSpec<String> zkLayoutPathOpt = parser.accepts("zkLayoutPath",
         "The path to the json file containing zookeeper connect info. This should be of the following form: \n{\n"
-            + "  \"zkInfo\" : [\n" + "     {\n" + "       \"datacenter\":\"dc1\",\n"
+            + "  \"zkInfo\" : [\n" + "     {\n" + "       \"datacenter\":\"dc1\",\n" + "       \"id\":\"1\",\n"
             + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
-            + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
-            + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
-            + "     }\n" + "  ]\n" + "}").
+            + "       \"datacenter\":\"dc2\",\n" + "       \"id\":\"2\",\n"
+            + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n" + "     {\n"
+            + "       \"datacenter\":\"dc3\",\n" + "       \"id\":\"3\",\n"
+            + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n" + "     }\n" + "  ]\n" + "}").
         withRequiredArg().
         describedAs("zk_connect_info_path").
         ofType(String.class);
@@ -100,9 +103,10 @@ public class HelixClusterWideAggregationTool {
     String clusterName = options.valueOf(clusterNameOpt);
     String workflowName = options.valueOf(workflowNameOpt);
     Long recurrentIntervalInMinutes = options.valueOf(recurrentIntervalInMinutesOpt);
-    Map<String, String> dataCenterToZKAddress =
-        ClusterMapUtils.parseZkJsonAndPopulateZkInfo(Utils.readStringFromFile(zkLayoutPath));
-    for (String zkAddress : dataCenterToZKAddress.values()) {
+    Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZKAddress =
+        ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
+    for (ClusterMapUtils.DcZkInfo zkInfo : dataCenterToZKAddress.values()) {
+      String zkAddress = zkInfo.getZkConnectStr();
       ZkClient zkClient = new ZkClient(zkAddress, SESSION_TIMEOUT, CONNECTION_TIMEOUT, new ZNRecordSerializer());
       TaskDriver taskDriver = new TaskDriver(zkClient, clusterName);
       if (isDelete) {

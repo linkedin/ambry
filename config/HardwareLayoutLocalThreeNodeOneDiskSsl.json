@@ -45,7 +45,8 @@
                     "sslport": 7672
                 }
             ],
-            "name": "Datacenter"
+            "name": "Datacenter",
+            "id": "1"
         }
     ]
 }

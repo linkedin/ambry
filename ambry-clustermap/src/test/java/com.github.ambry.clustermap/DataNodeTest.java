@@ -29,7 +29,7 @@ import static org.junit.Assert.*;
 class TestDataNode extends DataNode {
   public TestDataNode(String dataCenterName, JSONObject jsonObject, ClusterMapConfig clusterMapConfig)
       throws JSONException {
-    super(new TestDatacenter(TestUtils.getJsonDatacenter(dataCenterName, new JSONArray()), clusterMapConfig),
+    super(new TestDatacenter(TestUtils.getJsonDatacenter(dataCenterName, (byte) 0, new JSONArray()), clusterMapConfig),
         jsonObject, clusterMapConfig);
   }
 
