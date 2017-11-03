@@ -119,8 +119,7 @@ public class AmbryBlobStorageServiceTest {
   private Container refContainer;
   private Container refDefaultPublicContainer;
   private Container refDefaultPrivateContainer;
-  private InMemAccountService accountService;
-  private AccountAndContainerInjector accountAndContainerInjector;
+  private InMemAccountService accountService = new InMemAccountServiceFactory(false, true).getAccountService();
   private final UrlSigningService urlSigningService;
 
   /**
@@ -142,7 +141,6 @@ public class AmbryBlobStorageServiceTest {
     securityServiceFactory =
         new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null, urlSigningService);
     clusterMap = new MockClusterMap();
-    setupAccountService(false, true);
     accountService.clear();
     refAccount = accountService.createAndAddRandomAccount();
     for (Container container : refAccount.getAllContainers()) {
@@ -543,8 +541,22 @@ public class AmbryBlobStorageServiceTest {
     // it does not matter what AID and CID are supplied when constructing blobId in v1.
     String blobId = new BlobIdV1(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
         refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
+    // expect unknown account and container for v1 blob IDs that went through request processing only.
     verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
         RestServiceErrorCode.NotFound);
+
+    // test response path account injection for V1 blob IDs
+    ByteBuffer content = ByteBuffer.allocate(0);
+    // public blob with service ID that does not correspond to a valid account
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", false, Account.UNKNOWN_ACCOUNT,
+        Container.DEFAULT_PUBLIC_CONTAINER);
+    // private blob with service ID that does not correspond to a valid account
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", true, Account.UNKNOWN_ACCOUNT,
+        Container.DEFAULT_PRIVATE_CONTAINER);
+    // public blob with service ID that corresponds to a valid account
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName(), false, refAccount, refDefaultPublicContainer);
+    // private blob with service ID that corresponds to a valid account
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName(), true, refAccount, refDefaultPrivateContainer);
   }
 
   /**
@@ -554,7 +566,7 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void accountNameMismatchTest() throws Exception {
-    setupAccountService(true, false);
+    accountService = new InMemAccountServiceFactory(true, false).getAccountService();
     ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
@@ -990,19 +1002,6 @@ public class AmbryBlobStorageServiceTest {
   }
 
   // Constructor helpers
-
-  /**
-   * Set {@link #accountService} and {@link #accountAndContainerInjector} to using the provided settings.
-   * @param returnOnlyUnknown Instantiate an {@link AccountService} that will only return
-   *                          {@link Account#UNKNOWN_ACCOUNT}.
-   * @param notifyConsumers if {@code true}, will notify consumers when accounts are updated. This cannot be
-   *                        {@code true} if {@code returnOnlyUnknown} is {@code true}.
-   */
-  private void setupAccountService(boolean returnOnlyUnknown, boolean notifyConsumers) {
-    accountService = new InMemAccountServiceFactory(returnOnlyUnknown, notifyConsumers).getAccountService();
-    accountAndContainerInjector =
-        new AccountAndContainerInjector(accountService, clusterMap, frontendMetrics, frontendConfig);
-  }
 
   /**
    * Sets up and gets an instance of {@link AmbryBlobStorageService}.
@@ -1689,9 +1688,11 @@ public class AmbryBlobStorageServiceTest {
    */
   private void verifyAccountAndContainerFromBlobId(String blobId, Account expectedAccount, Container expectedContainer,
       RestServiceErrorCode expectedRestErrorCode) throws Exception {
-    RestRequest restRequest;
+    if (blobId.startsWith("/")) {
+      blobId = blobId.substring(1);
+    }
     for (RestMethod restMethod : Lists.newArrayList(RestMethod.GET, RestMethod.HEAD, RestMethod.DELETE)) {
-      restRequest = createRestRequest(restMethod, blobId, null, null);
+      RestRequest restRequest = createRestRequest(restMethod, "/" + blobId, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       try {
         doOperation(restRequest, restResponseChannel);
@@ -1701,11 +1702,36 @@ public class AmbryBlobStorageServiceTest {
       } catch (RestServiceException e) {
         assertEquals("Wrong RestServiceErrorCode", expectedRestErrorCode, e.getErrorCode());
       }
-      assertEquals("Wrong account object in RestRequest's args", expectedAccount,
+      BlobId deserializedId = new BlobId(blobId, clusterMap);
+      // Because BlobInfo is not fetched on deletes, V1 Blob IDs will never be reassigned to a known account/container.
+      boolean alwaysExpectUnknown =
+          restMethod == RestMethod.DELETE && deserializedId.getAccountId() == Account.UNKNOWN_ACCOUNT_ID
+              && deserializedId.getContainerId() == Container.UNKNOWN_CONTAINER_ID;
+      assertEquals("Wrong account object in RestRequest's args",
+          alwaysExpectUnknown ? Account.UNKNOWN_ACCOUNT : expectedAccount,
           restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
-      assertEquals("Wrong container object in RestRequest's args", expectedContainer,
+      assertEquals("Wrong container object in RestRequest's args",
+          alwaysExpectUnknown ? Container.UNKNOWN_CONTAINER : expectedContainer,
           restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY));
     }
+  }
+
+  /**
+   * Test response path account and container injection for V1 blob IDs.
+   * @param serviceId the service ID for the blob.
+   * @param isPrivate {@code true} if the blob is private.
+   * @param expectedAccount the expected {@link Account} to verify its presence in {@link RestRequest}.
+   * @param expectedContainer the expected {@link Container} to verify its presence in {@link RestRequest}.
+   * @throws Exception
+   */
+  private void verifyResponsePathAccountAndContainerInjection(String serviceId, boolean isPrivate,
+      Account expectedAccount, Container expectedContainer) throws Exception {
+    BlobProperties blobProperties =
+        new BlobProperties(0, serviceId, "owner", "image/gif", isPrivate, Utils.Infinite_Time,
+            Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
+    ReadableStreamChannel content = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
+    String blobId = router.putBlobWithV1Id(blobProperties, null, content).get();
+    verifyAccountAndContainerFromBlobId(blobId, expectedAccount, expectedContainer, null);
   }
 
   /**
