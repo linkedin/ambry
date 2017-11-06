@@ -52,6 +52,7 @@ public class AccountContainerTest {
   private List<String> refContainerDescriptions;
   private List<ContainerStatus> refContainerStatuses;
   private List<Boolean> refContainerEncryptionValues;
+  private List<Boolean> refContainerPreviousEncryptionValues;
   private List<Boolean> refContainerCachingValues;
   private List<Boolean> refContainerMediaScanDisabledValues;
   private List<JSONObject> containerJsonLikeList;
@@ -101,12 +102,12 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // first container with (id=0, name="0")
     containers.add(new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     // second container with (id=1, name="0")
     containers.add(new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
@@ -118,12 +119,12 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // first container with (id=0, name="0")
     containers.add(new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     // second container with (id=0, name="1")
     containers.add(new ContainerBuilder((short) 0, "1", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
@@ -135,20 +136,20 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // first container with (id=0, name="0")
     containers.add(new ContainerBuilder((short) 0, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     // second container with (id=1, name="0")
     containers.add(new ContainerBuilder((short) 1, "0", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     // third container with (id=10, name="10")
     containers.add(new ContainerBuilder((short) 10, "10", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     // second container with (id=10, name="11")
     containers.add(new ContainerBuilder((short) 10, "11", refContainerStatuses.get(0), refContainerDescriptions.get(0),
-        refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
-        refContainerMediaScanDisabledValues.get(0), refAccountId).build());
+        refContainerEncryptionValues.get(0), refContainerPreviousEncryptionValues.get(0),
+        refContainerCachingValues.get(0), refContainerMediaScanDisabledValues.get(0), refAccountId).build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
 
@@ -178,7 +179,8 @@ public class AccountContainerTest {
     ArrayList<Container> containers = new ArrayList<>();
     // container with parentAccountId = refAccountId + 1
     containers.add(new ContainerBuilder(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
-        refContainerDescriptions.get(0), refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
+        refContainerDescriptions.get(0), refContainerEncryptionValues.get(0),
+        refContainerPreviousEncryptionValues.get(0), refContainerCachingValues.get(0),
         refContainerMediaScanDisabledValues.get(0), (short) (refAccountId + 1)).build());
     createAccountWithBadContainersAndFail(containers, IllegalStateException.class);
   }
@@ -285,7 +287,8 @@ public class AccountContainerTest {
       // build a container with arguments supplied
       containerBuilder =
           new ContainerBuilder(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
-              refContainerDescriptions.get(i), refContainerEncryptionValues.get(i), refContainerCachingValues.get(i),
+              refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
+              refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
               refContainerMediaScanDisabledValues.get(i), refAccountId);
       Container containerFromBuilder = containerBuilder.build();
       assertContainer(containerFromBuilder, i, false);
@@ -301,7 +304,7 @@ public class AccountContainerTest {
         // as the builder should allow multiple sets before building.
         containerFromBuilder =
             new ContainerBuilder(containerFromBuilder).setEncrypted(false).setEncrypted(true).build();
-        assertEncryptionSettings(containerFromBuilder, true, false);
+        assertEncryptionSettings(containerFromBuilder, true, true);
         // turn off encryption, check that previouslyEncrypted is set.
         containerFromBuilder = new ContainerBuilder(containerFromBuilder).setEncrypted(false).build();
         assertEncryptionSettings(containerFromBuilder, false, true);
@@ -472,7 +475,8 @@ public class AccountContainerTest {
     AccountBuilder accountBuilder = new AccountBuilder(origin);
     ContainerBuilder containerBuilder =
         new ContainerBuilder((short) -999, refContainerNames.get(0), refContainerStatuses.get(0),
-            refContainerDescriptions.get(0), refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
+            refContainerDescriptions.get(0), refContainerEncryptionValues.get(0),
+            refContainerPreviousEncryptionValues.get(0), refContainerCachingValues.get(0),
             refContainerMediaScanDisabledValues.get(0), refAccountId);
     Container container = containerBuilder.build();
     accountBuilder.removeContainer(container);
@@ -559,7 +563,8 @@ public class AccountContainerTest {
     // field different from the other one.
     Container updatedContainer =
         new ContainerBuilder(refContainerIds.get(0), refContainerNames.get(0), refContainerStatuses.get(0),
-            "A changed container description", refContainerEncryptionValues.get(0), refContainerCachingValues.get(0),
+            "A changed container description", refContainerEncryptionValues.get(0),
+            refContainerPreviousEncryptionValues.get(0), refContainerCachingValues.get(0),
             refContainerMediaScanDisabledValues.get(0), refAccountId).build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
@@ -615,12 +620,14 @@ public class AccountContainerTest {
     assertEquals("Wrong description", refContainerDescriptions.get(index), container.getDescription());
     assertEquals("Wrong caching setting", refContainerCachingValues.get(index), container.isCacheable());
     assertEquals("Wrong account ID", refAccountId, container.getParentAccountId());
-    assertEquals("Wrong previous encryption setting", false, container.wasPreviouslyEncrypted());
     if (fromUnamendedV1) {
       assertEquals("Wrong encryption setting", false, container.isEncrypted());
+      assertEquals("Wrong previous encryption setting", false, container.wasPreviouslyEncrypted());
       assertEquals("Wrong media scan disabled setting", false, container.isMediaScanDisabled());
     } else {
       assertEquals("Wrong encryption setting", refContainerEncryptionValues.get(index), container.isEncrypted());
+      assertEquals("Wrong previous encryption setting", refContainerPreviousEncryptionValues.get(index),
+          container.wasPreviouslyEncrypted());
       assertEquals("Wrong media scan disabled setting", refContainerMediaScanDisabledValues.get(index),
           container.isMediaScanDisabled());
       assertEquals("Serialization error", containerJsonLikeList.get(index).toString(), container.toJson().toString());
@@ -674,7 +681,7 @@ public class AccountContainerTest {
   private void buildContainerWithMissingFieldsAndFail(String name, ContainerStatus status,
       Class<? extends Exception> exceptionClass) throws Exception {
     ContainerBuilder containerBuilder =
-        new ContainerBuilder((short) 0, name, status, "description", false, false, false, (short) 0);
+        new ContainerBuilder((short) 0, name, status, "description", false, false, false, false, (short) 0);
     TestUtils.assertException(exceptionClass, containerBuilder::build, null);
   }
 
@@ -689,6 +696,7 @@ public class AccountContainerTest {
     refContainerStatuses = new ArrayList<>();
     refContainerDescriptions = new ArrayList<>();
     refContainerEncryptionValues = new ArrayList<>();
+    refContainerPreviousEncryptionValues = new ArrayList<>();
     refContainerCachingValues = new ArrayList<>();
     refContainerMediaScanDisabledValues = new ArrayList<>();
     containerJsonLikeList = new ArrayList<>();
@@ -707,7 +715,9 @@ public class AccountContainerTest {
       refContainerNames.add(containerName);
       refContainerStatuses.add(random.nextBoolean() ? ContainerStatus.ACTIVE : ContainerStatus.INACTIVE);
       refContainerDescriptions.add(UUID.randomUUID().toString());
-      refContainerEncryptionValues.add(random.nextBoolean());
+      boolean encrypted = random.nextBoolean();
+      refContainerEncryptionValues.add(encrypted);
+      refContainerPreviousEncryptionValues.add(encrypted || random.nextBoolean());
       refContainerCachingValues.add(random.nextBoolean());
       refContainerMediaScanDisabledValues.add(random.nextBoolean());
       JSONObject containerJsonLike = buildAmendedV1ContainerJson(i);
@@ -715,7 +725,8 @@ public class AccountContainerTest {
       containerArray.put(containerJsonLike);
       refContainers.add(
           new ContainerBuilder(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
-              refContainerDescriptions.get(i), refContainerEncryptionValues.get(i), refContainerCachingValues.get(i),
+              refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
+              refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
               refContainerMediaScanDisabledValues.get(i), refAccountId).build());
     }
     return containerArray;
@@ -752,7 +763,7 @@ public class AccountContainerTest {
     containerJson.put(DESCRIPTION_KEY, refContainerDescriptions.get(index));
     containerJson.put(IS_PRIVATE_KEY, !refContainerCachingValues.get(index));
     containerJson.put(ENCRYPTED_KEY, refContainerEncryptionValues.get(index));
-    containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, false);
+    containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, refContainerPreviousEncryptionValues.get(index));
     containerJson.put(CACHEABLE_KEY, refContainerCachingValues.get(index));
     containerJson.put(MEDIA_SCAN_DISABLED, refContainerMediaScanDisabledValues.get(index));
     containerJson.put(PARENT_ACCOUNT_ID_KEY, refAccountId);
@@ -772,7 +783,7 @@ public class AccountContainerTest {
     containerJson.put(Container.STATUS_KEY, refContainerStatuses.get(index).name());
     containerJson.put(DESCRIPTION_KEY, refContainerDescriptions.get(index));
     containerJson.put(ENCRYPTED_KEY, refContainerEncryptionValues.get(index));
-    containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, false);
+    containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, refContainerPreviousEncryptionValues.get(index));
     containerJson.put(CACHEABLE_KEY, refContainerCachingValues.get(index));
     containerJson.put(MEDIA_SCAN_DISABLED, refContainerMediaScanDisabledValues.get(index));
     containerJson.put(PARENT_ACCOUNT_ID_KEY, refAccountId);

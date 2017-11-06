@@ -256,7 +256,7 @@ public class RestUtils {
     boolean isPrivate = !container.isCacheable();
     // @todo: Need to pass in isEncrypted here when that support is added.
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(),
-        container.getId(), false);
+        container.getId(), container.isEncrypted());
   }
 
   /**

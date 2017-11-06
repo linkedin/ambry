@@ -130,13 +130,13 @@ public class AccountAndContainerInjector {
 
   /**
    * If a non-unknown {@link Account} and {@link Container} was not previously injected, inject them into the provided
-   * {@link RestRequest}, based on the given {@link BlobInfo}'s service ID and blob privacy setting. This is useful
+   * {@link RestRequest}, based on the given {@link BlobProperties}' service ID and blob privacy setting. This is useful
    * for V1 blob IDs that do not directly encode the account/container ID.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container}.
-   * @param blobInfo The {@link BlobInfo} that contains the service id and blob privacy setting.
+   * @param blobProperties The {@link BlobProperties} that contains the service id and blob privacy setting.
    * @throws RestServiceException if no valid account or container cound be identified for re-injection.
    */
-  void ensureAccountAndContainerInjected(RestRequest restRequest, BlobInfo blobInfo) throws RestServiceException {
+  void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties) throws RestServiceException {
     Account targetAccount = (Account) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
     Container targetContainer = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
     if (targetAccount == null || targetContainer == null) {
@@ -144,8 +144,9 @@ public class AccountAndContainerInjector {
           RestServiceErrorCode.InternalServerError);
     } else if (targetAccount.equals(Account.UNKNOWN_ACCOUNT) && targetContainer.equals(
         Container.UNKNOWN_CONTAINER)) {
-      String serviceId = blobInfo.getBlobProperties().getServiceId();
-      boolean isPrivate = blobInfo.getBlobProperties().isPrivate();
+      // This should only occur for V1 blobs, where the blob ID does not contain the actual account and container IDs.
+      String serviceId = blobProperties.getServiceId();
+      boolean isPrivate = blobProperties.isPrivate();
       injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate);
     }
   }

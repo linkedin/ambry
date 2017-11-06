@@ -28,11 +28,10 @@ public class ContainerBuilder {
   private ContainerStatus status;
   private String description;
   private boolean encrypted;
+  private final boolean previouslyEncrypted;
   private boolean cacheable;
   private boolean mediaScanDisabled;
   private short parentAccountId;
-  private final boolean originEncrypted;
-  private final boolean originPreviouslyEncrypted;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -49,12 +48,10 @@ public class ContainerBuilder {
     status = origin.getStatus();
     description = origin.getDescription();
     encrypted = origin.isEncrypted();
+    previouslyEncrypted = origin.wasPreviouslyEncrypted();
     cacheable = origin.isCacheable();
     mediaScanDisabled = origin.isMediaScanDisabled();
     parentAccountId = origin.getParentAccountId();
-    // for generating the new "previouslyEncrypted" state
-    originEncrypted = origin.isEncrypted();
-    originPreviouslyEncrypted = origin.wasPreviouslyEncrypted();
   }
 
   /**
@@ -64,24 +61,24 @@ public class ContainerBuilder {
    * @param status The status of the {@link Container}.
    * @param description The description of the {@link Container}.
    * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
+   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
+*                            subset of blobs in it could still be encrypted.
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
 *                  this container.
-   * @param mediaScanDisabled
+   * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
    * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
    */
   public ContainerBuilder(short id, String name, ContainerStatus status, String description, boolean encrypted,
-      boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
+      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.description = description;
     this.encrypted = encrypted;
+    this.previouslyEncrypted = previouslyEncrypted;
     this.cacheable = cacheable;
     this.mediaScanDisabled = mediaScanDisabled;
     this.parentAccountId = parentAccountId;
-    // these are false because the usage of this constructor indicates a new container creation.
-    originEncrypted = false;
-    originPreviouslyEncrypted = false;
   }
 
   /**
@@ -171,8 +168,7 @@ public class ContainerBuilder {
    * @throws IllegalStateException If any required fields is not set.
    */
   public Container build() {
-    boolean previouslyEncrypted = originPreviouslyEncrypted || (originEncrypted && !encrypted);
-    return new Container(id, name, status, description, encrypted, previouslyEncrypted, cacheable, mediaScanDisabled,
-        parentAccountId);
+    return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
+        mediaScanDisabled, parentAccountId);
   }
 }

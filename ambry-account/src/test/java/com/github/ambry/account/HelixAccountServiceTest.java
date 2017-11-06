@@ -78,6 +78,7 @@ public class HelixAccountServiceTest {
   private String refContainerDescription;
   private boolean refContainerCaching;
   private boolean refContainerEncryption;
+  private boolean refContainerPreviousEncryption;
   private boolean refContainerMediaScanDisabled;
   private short refParentAccountId;
   private AccountService accountService;
@@ -837,11 +838,13 @@ public class HelixAccountServiceTest {
     refContainerStatus = random.nextBoolean() ? ContainerStatus.ACTIVE : ContainerStatus.INACTIVE;
     refContainerDescription = UUID.randomUUID().toString();
     refContainerEncryption = random.nextBoolean();
+    refContainerPreviousEncryption = refContainerEncryption || random.nextBoolean();
     refContainerCaching = random.nextBoolean();
     refContainerMediaScanDisabled = random.nextBoolean();
     refParentAccountId = refAccountId;
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerEncryption, refContainerCaching, refContainerMediaScanDisabled, refParentAccountId).build();
+        refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
+        refParentAccountId).build();
     refAccount =
         new AccountBuilder(refAccountId, refAccountName, refAccountStatus, Collections.singleton(refContainer)).build();
     generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, NUM_REF_ACCOUNT,

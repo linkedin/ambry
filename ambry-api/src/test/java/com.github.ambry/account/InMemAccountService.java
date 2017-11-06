@@ -146,9 +146,11 @@ public class InMemAccountService implements AccountService {
     Container.ContainerStatus refContainerStatus = Container.ContainerStatus.ACTIVE;
     String refContainerDescription = UtilsTest.getRandomString(10);
     boolean refContainerEncryption = TestUtils.RANDOM.nextBoolean();
+    boolean refContainerPreviousEncryption = refContainerEncryption || TestUtils.RANDOM.nextBoolean();
     boolean refContainerCaching = TestUtils.RANDOM.nextBoolean();
     boolean refContainerMediaScanDisabled = TestUtils.RANDOM.nextBoolean();
     return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerEncryption, refContainerCaching, refContainerMediaScanDisabled, accountId).build();
+        refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
+        accountId).build();
   }
 }

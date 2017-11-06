@@ -266,34 +266,34 @@ public class Container {
     short metadataVersion = (short) metadata.getInt(JSON_VERSION_KEY);
     switch (metadataVersion) {
       case JSON_VERSION_1:
-        this.id = (short) metadata.getInt(CONTAINER_ID_KEY);
-        this.name = metadata.getString(CONTAINER_NAME_KEY);
-        this.status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
-        this.description = metadata.optString(DESCRIPTION_KEY);
-        this.parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
+        id = (short) metadata.getInt(CONTAINER_ID_KEY);
+        name = metadata.getString(CONTAINER_NAME_KEY);
+        status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
+        description = metadata.optString(DESCRIPTION_KEY);
+        parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
         boolean isPrivate = metadata.getBoolean(IS_PRIVATE_KEY);
         // the V1 schema can optionally include the new V2 fields. If not present, some of these can be inferred from
         // the isPrivate flag
-        this.encrypted = metadata.optBoolean(ENCRYPTED_KEY, false);
-        this.previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, false);
-        this.cacheable = metadata.optBoolean(CACHEABLE_KEY, !isPrivate);
-        this.mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, false);
+        encrypted = metadata.optBoolean(ENCRYPTED_KEY, false);
+        previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, encrypted);
+        cacheable = metadata.optBoolean(CACHEABLE_KEY, !isPrivate);
+        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, false);
         break;
       case JSON_VERSION_2:
-        this.id = (short) metadata.getInt(CONTAINER_ID_KEY);
-        this.name = metadata.getString(CONTAINER_NAME_KEY);
-        this.status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
-        this.description = metadata.optString(DESCRIPTION_KEY);
-        this.parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
-        this.encrypted = metadata.getBoolean(ENCRYPTED_KEY);
-        this.previouslyEncrypted = metadata.getBoolean(PREVIOUSLY_ENCRYPTED_KEY);
-        this.cacheable = metadata.getBoolean(CACHEABLE_KEY);
-        this.mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, false);
+        id = (short) metadata.getInt(CONTAINER_ID_KEY);
+        name = metadata.getString(CONTAINER_NAME_KEY);
+        status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
+        description = metadata.optString(DESCRIPTION_KEY);
+        parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
+        encrypted = metadata.getBoolean(ENCRYPTED_KEY);
+        previouslyEncrypted = metadata.getBoolean(PREVIOUSLY_ENCRYPTED_KEY);
+        cacheable = metadata.getBoolean(CACHEABLE_KEY);
+        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, false);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
     }
-    checkRequiredFields();
+    checkPreconditions();
   }
 
   /**
@@ -303,8 +303,8 @@ public class Container {
    * @param status The status of the container. Cannot be null.
    * @param description The description of the container. Can be null.
    * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
-   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, and a subset of blobs
-   *                            in it could still be encrypted.
+   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
+   *                            subset of blobs in it could still be encrypted.
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
    *                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
@@ -321,7 +321,7 @@ public class Container {
     this.cacheable = cacheable;
     this.mediaScanDisabled = mediaScanDisabled;
     this.parentAccountId = parentAccountId;
-    checkRequiredFields();
+    checkPreconditions();
   }
 
   /**
@@ -483,11 +483,15 @@ public class Container {
   }
 
   /**
-   * Checks if any required fields is missing for a {@link Container}.
+   * Checks if any required fields is missing for a {@link Container} or for any incompatible settings.
    */
-  private void checkRequiredFields() {
+  private void checkPreconditions() {
     if (name == null || status == null) {
       throw new IllegalStateException("Either of required fields name=" + name + " or status=" + status + " is null");
+    }
+    if (encrypted && !previouslyEncrypted) {
+      throw new IllegalStateException(
+          "previouslyEncrypted should be true if the container is currently encrypted");
     }
   }
 

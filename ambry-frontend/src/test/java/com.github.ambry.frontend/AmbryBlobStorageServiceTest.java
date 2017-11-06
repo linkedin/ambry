@@ -1730,7 +1730,7 @@ public class AmbryBlobStorageServiceTest {
         new BlobProperties(0, serviceId, "owner", "image/gif", isPrivate, Utils.Infinite_Time,
             Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
     ReadableStreamChannel content = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-    String blobId = router.putBlobWithV1Id(blobProperties, null, content).get();
+    String blobId = router.putBlobWithIdVersion(blobProperties, null, content, BlobId.BLOB_ID_V1).get();
     verifyAccountAndContainerFromBlobId(blobId, expectedAccount, expectedContainer, null);
   }
 
@@ -1928,10 +1928,12 @@ public class AmbryBlobStorageServiceTest {
     Container legacyContainerForPublicBlob =
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false, false, false,
+            false,
             refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", false, true, false,
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", false, false, true,
+            false,
             refAccount.getId()).build();
     Account accountWithTwoDefaultContainers =
         new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)

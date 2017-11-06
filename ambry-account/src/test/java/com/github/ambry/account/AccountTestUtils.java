@@ -122,11 +122,12 @@ class AccountTestUtils {
             random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
         String containerDescription = UUID.randomUUID().toString();
         boolean containerEncryption = random.nextBoolean();
+        boolean containerPreviousEncryption = containerEncryption || TestUtils.RANDOM.nextBoolean();
         boolean containerCaching = random.nextBoolean();
         boolean mediaScanDisabled = random.nextBoolean();
         Container container =
-            new ContainerBuilder(containerId, containerName, containerStatus, containerDescription,
-                containerEncryption, containerCaching, mediaScanDisabled, accountId).build();
+            new ContainerBuilder(containerId, containerName, containerStatus, containerDescription, containerEncryption,
+                containerPreviousEncryption, containerCaching, mediaScanDisabled, accountId).build();
         containers.add(container);
         idToContainers.put(containerId, container);
       }
