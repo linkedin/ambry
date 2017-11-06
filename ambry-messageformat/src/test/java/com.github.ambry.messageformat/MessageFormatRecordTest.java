@@ -48,12 +48,12 @@ public class MessageFormatRecordTest {
 
   @BeforeClass
   public static void saveVersionToUse() {
-    serDeVersionSaved = BlobPropertiesSerDe.CURRENT_VERSION;
+    serDeVersionSaved = BlobPropertiesSerDe.currentVersion;
   }
 
   @After
   public void resetVersionToUse() {
-    BlobPropertiesSerDe.CURRENT_VERSION = serDeVersionSaved;
+    BlobPropertiesSerDe.currentVersion = serDeVersionSaved;
   }
 
   @Test
@@ -187,8 +187,7 @@ public class MessageFormatRecordTest {
     // Test Blob property Format V1 for all versions of BlobPropertiesSerDe
     short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3};
     for (short version : versions) {
-      System.out.println("Version " + version);
-      BlobPropertiesSerDe.CURRENT_VERSION = version;
+      BlobPropertiesSerDe.currentVersion = version;
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
       long ttl = TestUtils.RANDOM.nextInt();

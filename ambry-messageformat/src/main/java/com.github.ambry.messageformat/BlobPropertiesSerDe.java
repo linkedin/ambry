@@ -29,7 +29,7 @@ public class BlobPropertiesSerDe {
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
   static final short VERSION_3 = 3;
-  static short CURRENT_VERSION = VERSION_3;
+  static short currentVersion = VERSION_3;
   private static final int VERSION_FIELD_SIZE_IN_BYTES = Short.BYTES;
   private static final int TTL_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int PRIVATE_FIELD_SIZE_IN_BYTES = Byte.BYTES;
@@ -64,7 +64,7 @@ public class BlobPropertiesSerDe {
   }
 
   /**
-   * Serialize {@link BlobProperties} to buffer in the {@link #CURRENT_VERSION}
+   * Serialize {@link BlobProperties} to buffer in the {@link #currentVersion}
    * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
    * @param properties the {@link BlobProperties} that needs to be serialized
    */
@@ -72,7 +72,7 @@ public class BlobPropertiesSerDe {
     if (outputBuffer.remaining() < getBlobPropertiesSerDeSize(properties)) {
       throw new IllegalArgumentException("Outut buffer does not have sufficient space to serialize blob properties");
     }
-    outputBuffer.putShort(CURRENT_VERSION);
+    outputBuffer.putShort(currentVersion);
     outputBuffer.putLong(properties.getTimeToLiveInSeconds());
     outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
     outputBuffer.putLong(properties.getCreationTimeInMs());

@@ -41,7 +41,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
       throws MessageFormatException {
-    if (MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2) {
+    if (MessageFormatRecord.currentHeaderVersionToUse == MessageFormatRecord.Message_Header_Version_V2) {
       createStreamWithMessageHeaderV2(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
           blobType);
     } else {

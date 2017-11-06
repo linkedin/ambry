@@ -45,12 +45,12 @@ public class MessageFormatSendTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.currentHeaderVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.currentHeaderVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   @Parameterized.Parameters
@@ -105,10 +105,10 @@ public class MessageFormatSendTest {
   public void sendWriteSingleMessageTest() throws Exception {
     if (putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
       ByteBuffer encryptionKey = ByteBuffer.wrap(TestUtils.getRandomBytes(256));
-      MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V1;
+      MessageFormatRecord.currentHeaderVersionToUse = MessageFormatRecord.Message_Header_Version_V1;
       doSendWriteSingleMessageTest(null, null);
       doSendWriteSingleMessageTest(encryptionKey.duplicate(), null);
-      MessageFormatRecord.HEADER_VERSION_TO_USE = MessageFormatRecord.Message_Header_Version_V2;
+      MessageFormatRecord.currentHeaderVersionToUse = MessageFormatRecord.Message_Header_Version_V2;
       doSendWriteSingleMessageTest(null, null);
       doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0));
       doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate());
@@ -271,7 +271,7 @@ public class MessageFormatSendTest {
    */
   @Test
   public void sendWriteCompositeMessagesTest() throws Exception {
-    short savedVersion = MessageFormatRecord.HEADER_VERSION_TO_USE;
+    short savedVersion = MessageFormatRecord.currentHeaderVersionToUse;
     if (!putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
       return;
     }
@@ -312,7 +312,7 @@ public class MessageFormatSendTest {
     doSendWriteCompositeMessagesTest(blob, userMetadata, storeKeys, encryptionKeys, putFormatComposite2,
         headerFormatComposite2);
 
-    MessageFormatRecord.HEADER_VERSION_TO_USE = savedVersion;
+    MessageFormatRecord.currentHeaderVersionToUse = savedVersion;
   }
 
   /**
@@ -342,7 +342,7 @@ public class MessageFormatSendTest {
 
     MessageFormatInputStream[] putStreams = new MessageFormatInputStream[5];
     for (int i = 0; i < 5; i++) {
-      MessageFormatRecord.HEADER_VERSION_TO_USE = headerVersions[i];
+      MessageFormatRecord.currentHeaderVersionToUse = headerVersions[i];
       if (putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName())) {
         putStreams[i] =
             new PutMessageFormatInputStream(storeKeys[i], (ByteBuffer) encryptionKeys[i].rewind(), properties[i],

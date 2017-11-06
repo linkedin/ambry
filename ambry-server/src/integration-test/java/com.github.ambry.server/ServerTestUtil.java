@@ -890,11 +890,11 @@ public final class ServerTestUtil {
       for (int i = 0; i < 11; i++) {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-        propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, true));
+        boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
+        propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, isEncrypted));
         blobIdList.add(
             new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), accountId, containerId, partition));
         dataList.add(TestUtils.getRandomBytes(1000));
-        boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
         if (isEncrypted) {
           encryptionKeyList.add(TestUtils.getRandomBytes(128));
         } else {
@@ -1049,7 +1049,6 @@ public final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       //System.out.println("response from get " + resp3.getError());
       try {
-        // todo: fix once router support encryption. Might have to decrypt to compare data
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
         byte[] blobout = new byte[(int) blobData.getSize()];
         int readsize = 0;
@@ -1430,7 +1429,6 @@ public final class ServerTestUtil {
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, BlockingChannel channel,
       byte[] dataToCheck) throws IOException, MessageFormatException {
-    // todo: fix once router support encryption. Might have to decryt to compare data
     ArrayList<BlobId> listIds = new ArrayList<BlobId>();
     listIds.add(blobId);
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();

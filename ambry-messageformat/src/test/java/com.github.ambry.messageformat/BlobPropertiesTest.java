@@ -47,12 +47,12 @@ public class BlobPropertiesTest {
 
   @BeforeClass
   public static void saveVersionToUse() {
-    serDeVersionSaved = BlobPropertiesSerDe.CURRENT_VERSION;
+    serDeVersionSaved = BlobPropertiesSerDe.currentVersion;
   }
 
   @After
   public void resetVersionToUse() {
-    BlobPropertiesSerDe.CURRENT_VERSION = serDeVersionSaved;
+    BlobPropertiesSerDe.currentVersion = serDeVersionSaved;
   }
 
   /**
@@ -80,7 +80,7 @@ public class BlobPropertiesTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
 
-    BlobPropertiesSerDe.CURRENT_VERSION = version;
+    BlobPropertiesSerDe.currentVersion = version;
 
     short accountIdToExpect = version == BlobPropertiesSerDe.VERSION_1 ? UNKNOWN_ACCOUNT_ID : accountId;
     short containerIdToExpect = version == BlobPropertiesSerDe.VERSION_1 ? UNKNOWN_CONTAINER_ID : containerId;

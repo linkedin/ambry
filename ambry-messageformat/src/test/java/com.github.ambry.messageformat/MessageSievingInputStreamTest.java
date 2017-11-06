@@ -41,12 +41,12 @@ public class MessageSievingInputStreamTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.currentHeaderVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.currentHeaderVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   @Test
@@ -61,7 +61,7 @@ public class MessageSievingInputStreamTest {
     // MessageSievingInputStream contains put records for 3 valid blobs
     // id1(put record for valid blob), id2(put record for valid blob) and id3(put record for valid blob)
 
-    HEADER_VERSION_TO_USE = Message_Header_Version_V1;
+    currentHeaderVersionToUse = Message_Header_Version_V1;
     byte[] encryptionKey = new byte[100];
     TestUtils.RANDOM.nextBytes(encryptionKey);
     // create message stream for blob 1
@@ -171,7 +171,7 @@ public class MessageSievingInputStreamTest {
 
     if (blobVersion == Blob_Version_V2) {
       ByteBufferInputStream stream4 = new ByteBufferInputStream(ByteBuffer.wrap(data4));
-      HEADER_VERSION_TO_USE = Message_Header_Version_V2;
+      currentHeaderVersionToUse = Message_Header_Version_V2;
       messageFormatStream4 =
           new PutMessageFormatInputStream(key4, ByteBuffer.wrap(encryptionKey), prop4, ByteBuffer.wrap(usermetadata4),
               stream4, blobContentSize, blobType);
@@ -197,7 +197,7 @@ public class MessageSievingInputStreamTest {
     }
     if (blobVersion == Blob_Version_V2) {
       ByteBufferInputStream stream5 = new ByteBufferInputStream(ByteBuffer.wrap(data5));
-      HEADER_VERSION_TO_USE = Message_Header_Version_V2;
+      currentHeaderVersionToUse = Message_Header_Version_V2;
       messageFormatStream5 =
           new PutMessageFormatInputStream(key5, null, prop5, ByteBuffer.wrap(usermetadata5), stream5, blobContentSize,
               blobType);
@@ -304,7 +304,7 @@ public class MessageSievingInputStreamTest {
   }
 
   private void testInValidBlobs(short blobVersion, BlobType blobType) throws IOException, MessageFormatException {
-    HEADER_VERSION_TO_USE = Message_Header_Version_V1;
+    currentHeaderVersionToUse = Message_Header_Version_V1;
 
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
     // id1(put record for valid blob), id2(corrupt) and id3(put record for valid blob)
@@ -473,7 +473,7 @@ public class MessageSievingInputStreamTest {
 
     try {
       for (short version : versions) {
-        HEADER_VERSION_TO_USE = version;
+        currentHeaderVersionToUse = version;
         // create message stream for blob 1
         StoreKey key1 = new MockId("id1");
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -565,7 +565,7 @@ public class MessageSievingInputStreamTest {
     } catch (IllegalStateException e) {
       Assert.assertTrue("IllegalStateException thrown as expected ", true);
     }
-    HEADER_VERSION_TO_USE = Message_Header_Version_V1;
+    currentHeaderVersionToUse = Message_Header_Version_V1;
   }
 
   private boolean verifyBlob(MessageSievingInputStream validMessageDetectionInputStream, short headerVersion,

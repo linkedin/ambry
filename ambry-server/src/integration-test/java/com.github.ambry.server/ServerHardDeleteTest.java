@@ -226,7 +226,7 @@ public class ServerHardDeleteTest {
     Random random = new Random();
     for (int i = 0; i < 9; i++) {
       if (i % 2 == 0) {
-        encryptionKey.add(new byte[100 + i]);
+        encryptionKey.add(new byte[100]);
         random.nextBytes(encryptionKey.get(i));
       } else {
         encryptionKey.add(null);
@@ -294,7 +294,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198902);
+    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198896);
 
     getAndVerify(channel, 6);
 
@@ -326,7 +326,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(6).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 298732);
+    ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 298712);
 
     getAndVerify(channel, 9);
   }
