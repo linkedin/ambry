@@ -457,7 +457,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   @Test
-  public void testKMSFailureFailure() throws Exception {
+  public void testKMSFailure() throws Exception {
     if (toEncrypt) {
       // simple Blob
       doPut();
@@ -488,7 +488,7 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   @Test
-  public void testCryptoServiceFailureFailure() throws Exception {
+  public void testCryptoServiceFailure() throws Exception {
     if (toEncrypt) {
       // simple Blob
       doPut();

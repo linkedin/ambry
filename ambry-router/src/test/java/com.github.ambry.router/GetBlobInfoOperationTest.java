@@ -54,6 +54,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.CryptoTestUtils.*;
+import static com.github.ambry.router.PutManagerTest.*;
 
 
 /**
@@ -91,8 +92,8 @@ public class GetBlobInfoOperationTest {
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final GetBlobOptionsInternal options;
-  private KeyManagementService kms = null;
-  private CryptoService cryptoService = null;
+  private CryptoJobExecutorServiceTest.MockKeyManagementService kms = null;
+  private CryptoJobExecutorServiceTest.MockCryptoService cryptoService = null;
   private CryptoJobExecutorService exec = null;
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
@@ -137,9 +138,9 @@ public class GetBlobInfoOperationTest {
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     if (toEncrypt) {
-      kms = new SingleKeyManagementService(new KMSConfig(vprops),
+      kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vprops),
           getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new GCMCryptoService(new CryptoServiceConfig(vprops));
+      cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vprops));
       exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
       exec.start();
     }
@@ -377,6 +378,30 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
+   * Test failure with KMS
+   * @throws Exception
+   */
+  @Test
+  public void testKMSFailure() throws Exception {
+    if (toEncrypt) {
+      kms.exceptionToThrow.set(GSE);
+      assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
+    }
+  }
+
+  /**
+   * Test failure with CryptoService
+   * @throws Exception
+   */
+  @Test
+  public void testCryptoServiceFailure() throws Exception {
+    if (toEncrypt) {
+      cryptoService.exceptionOnDecryption.set(GSE);
+      assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
+    }
+  }
+
+  /**
    * Help test error precedence.
    * @param serverErrorCodesInOrder the list of error codes to set the mock servers with.
    * @param expectedErrorCode the expected router error code for the operation.
@@ -484,6 +509,45 @@ public class GetBlobInfoOperationTest {
 
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     assertSuccess(op);
+  }
+
+  /**
+   * Assert that operation fails with the expected error code
+   * @param errorCode expected error code on failure
+   * @throws RouterException
+   */
+  private void assertOperationFailure(RouterErrorCode errorCode)
+      throws RouterException, IOException, InterruptedException {
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
+            kms, cryptoService, exec, time);
+    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.requestListToFill = requestListToFill;
+    op.poll(requestRegistrationCallback);
+    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
+        correlationIdToGetOperation.size());
+
+    List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
+    for (ResponseInfo responseInfo : responses) {
+      GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+      op.handleResponse(responseInfo, getResponse);
+      if (op.isOperationComplete()) {
+        break;
+      }
+    }
+
+    int timeout = 500;
+    int timeSoFar = 0;
+    while (timeSoFar < timeout && !op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      Thread.sleep(10);
+      timeSoFar += 10;
+    }
+    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(errorCode, routerException.getErrorCode());
   }
 
   /**

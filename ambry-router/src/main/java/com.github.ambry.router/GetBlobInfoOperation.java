@@ -50,10 +50,15 @@ class GetBlobInfoOperation extends GetOperation {
   private final OperationTracker operationTracker;
   private State state = State.Ready;
   private boolean successfullyDeserialized = false;
-  private boolean decryptCallbackResultReady = false;
+  // whether decryption job call result is available to be processed
+  private boolean decryptCallbackResultAvailable = false;
+  // refers to decrypt callback Result after decryption if applicable
   private DecryptJob.DecryptJobResult decryptCallbackResult;
+  // refers to decrypt callback exception after decryption if applicable
   private Exception decryptCallbackException;
+  // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
+  // refers to raw user-metadata received from the server. This has to decrypted if need be before serving to the client
   private ByteBuffer serverUserMetadata;
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
@@ -109,7 +114,7 @@ class GetBlobInfoOperation extends GetOperation {
     //First, check if any of the existing requests have timed out.
     if (!mayBeProcessDecryptCallbackAndComplete()) {
       cleanupExpiredInFlightRequests();
-      checkAndMaybeComplete();
+      checkAndMaybeComplete(true);
       if (!isOperationComplete()) {
         fetchRequests(requestRegistrationCallback);
       }
@@ -117,11 +122,11 @@ class GetBlobInfoOperation extends GetOperation {
   }
 
   /**
-   * May be process decrypt callback and complete the operation if applicable
+   * May be process decrypt callback and complete the operation if applicable. This is a no-op for non-encrypted blobs
    * @return {@code true} if the operation is complete, {@code false} otherwise
    */
   boolean mayBeProcessDecryptCallbackAndComplete() {
-    if (onDecryptMode() && decryptCallbackResultReady) {
+    if (onDecryptMode() && decryptCallbackResultAvailable) {
       if (decryptCallbackException == null) {
         logger.trace("Successfully updating decrypt job callback results for {}", blobId);
         operationResult = new GetBlobResultInternal(new GetBlobResult(
@@ -129,8 +134,7 @@ class GetBlobInfoOperation extends GetOperation {
         decryptCallbackResult = null;
         decryptCallbackException = null;
         state = State.Complete;
-        logger.trace("Moving the state to {} for {}", State.Complete, blobId);
-        checkAndMaybeComplete();
+        checkAndMaybeComplete(true);
       } else {
         logger.error("Exception {} thrown on decryption for {}", decryptCallbackException.getCause(), blobId);
         setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId,
@@ -138,8 +142,7 @@ class GetBlobInfoOperation extends GetOperation {
         decryptCallbackResult = null;
         decryptCallbackException = null;
         state = State.Complete;
-        logger.trace("Moving the state to {} for {}", State.Complete, blobId);
-        checkAndMaybeComplete();
+        checkAndMaybeComplete(false);
       }
       return true;
     }
@@ -266,7 +269,7 @@ class GetBlobInfoOperation extends GetOperation {
         }
       }
     }
-    checkAndMaybeComplete();
+    checkAndMaybeComplete(true);
   }
 
   /**
@@ -342,7 +345,8 @@ class GetBlobInfoOperation extends GetOperation {
   }
 
   /**
-   * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return.
+   * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return if no decryption is required.
+   * If decryption is required, submit a jon for decryption.
    * @param payload the body of the response.
    * @param messageMetadata the {@link MessageMetadata} associated with the message.
    * @throws IOException if there is an IOException while deserializing the body.
@@ -356,6 +360,7 @@ class GetBlobInfoOperation extends GetOperation {
       serverUserMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
       successfullyDeserialized = true;
       if (!serverBlobProperties.isEncrypted()) {
+        // if blob is not encrypted, move the state to Complete
         state = State.Complete;
         if (operationResult == null) {
           operationResult = new GetBlobResultInternal(
@@ -370,7 +375,7 @@ class GetBlobInfoOperation extends GetOperation {
               logger.trace("Handling decrypt job callback results for {}", blobId);
               decryptCallbackResult = result;
               decryptCallbackException = exception;
-              decryptCallbackResultReady = true;
+              decryptCallbackResultAvailable = true;
             }));
       }
     } else {
@@ -408,10 +413,12 @@ class GetBlobInfoOperation extends GetOperation {
   /**
    * Check whether the operation can be completed, if so complete it.
    */
-  private void checkAndMaybeComplete() {
+  private void checkAndMaybeComplete(boolean overrideException) {
     if (operationTracker.isDone()) {
       if (operationTracker.hasSucceeded() && isComplete()) {
-        operationException.set(null);
+        if (overrideException) {
+          operationException.set(null);
+        }
         operationCompleted = true;
       } else if (!operationTracker.hasSucceeded()) {
         operationCompleted = true;
@@ -455,7 +462,7 @@ class GetBlobInfoOperation extends GetOperation {
      * Any GetBlobInfoOperation starts with this mode
      */
     Ready, /**
-     * If blob is encrypted, the operation moves to this mode and stays until the decrypt job results are processed
+     * If blob is encrypted, the operation moves to this mode and stays until the decrypt job callback results are processed
      */
     Decrypting, /**
      * The operation is set to be completed on reaching this state

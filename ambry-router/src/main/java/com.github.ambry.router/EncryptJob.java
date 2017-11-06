@@ -32,10 +32,10 @@ public class EncryptJob implements CryptoJob {
 
   /**
    * Instantiates {@link EncryptJob} for an upload.
-   * @param accountId the accountId of the blob being uploaded
-   * @param containerId the containerId of the blob being uploaded
+   * @param accountId the accountId of the blob that needs to be encrypted
+   * @param containerId the containerId of the blob that needs to be encrypted
    * @param blobContentToEncrypt {@link ByteBuffer} to be encrypted
-   * @param userMetadataToEncrypt user metadata to encrypt
+   * @param userMetadataToEncrypt user metadata to be encrypted
    * @param perBlobKey per blob key to use to encrypt the blob content
    * @param callback {@link Callback} to be invoked on completion
    */
@@ -53,8 +53,8 @@ public class EncryptJob implements CryptoJob {
 
   /**
    * Steps to be performed on encryption
-   * 1. Encrypt blob content using perBlobKey
-   * 2. Encrypt user-metadata using perBlobKey
+   * 1. Encrypt blob content using perBlobKey if not null
+   * 2. Encrypt user-metadata using perBlobKey if not null
    * 2. Fetch ContainerKey from kms for the given blob
    * 3. Encrypt perBlobKey using containerKey
    * 4. Invoke callback with the encryptedKey and encryptedBlobContent

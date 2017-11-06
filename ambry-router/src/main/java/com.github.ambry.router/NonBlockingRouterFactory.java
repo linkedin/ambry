@@ -86,10 +86,10 @@ public class NonBlockingRouterFactory implements RouterFactory {
         routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
     KeyManagementServiceFactory kmsFactory =
         Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,
-            new ClusterMapConfig(verifiableProperties).clusterMapClusterName, clusterMap.getMetricRegistry());
+            new ClusterMapConfig(verifiableProperties).clusterMapClusterName, registry);
     kms = kmsFactory.getKeyManagementService();
     CryptoServiceFactory cryptoServiceFactory =
-        Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, clusterMap.getMetricRegistry());
+        Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, registry);
     cryptoService = cryptoServiceFactory.getCryptoService();
     exec = new CryptoJobExecutorService(routerConfig.routerCryptoJobsWorkerCount);
     logger.trace("Instantiated NonBlockingRouterFactory");
