@@ -52,6 +52,7 @@ class DumpDataHelper {
       throws IOException, MessageFormatException {
     String messageheader = null;
     BlobId blobId = null;
+    String encryptionKey = null;
     String blobProperty = null;
     String usermetadata = null;
     String blobDataOutput = null;
@@ -64,46 +65,70 @@ class DumpDataHelper {
     try {
       randomAccessFile.seek(currentOffset);
       short version = randomAccessFile.readShort();
-      if (version == 1) {
+      MessageFormatRecord.MessageHeader_Format header = null;
+      if (version == MessageFormatRecord.Message_Header_Version_V1) {
         ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize());
         buffer.putShort(version);
         randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
         buffer.clear();
-        MessageFormatRecord.MessageHeader_Format_V1 header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
+        header = new MessageFormatRecord.MessageHeader_Format_V1(buffer);
         messageheader =
             " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
                 + currentOffset + " blobPropertiesRelativeOffset " + header.getBlobPropertiesRecordRelativeOffset()
                 + " userMetadataRelativeOffset " + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
                 + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
         totalRecordSize += header.getMessageSize() + buffer.capacity();
-        // read blob id
-        InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
-        blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
-        totalRecordSize += blobId.sizeInBytes();
-        if (header.getBlobPropertiesRecordRelativeOffset()
-            != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
-          BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
-          expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
-          isExpired = isExpired(expiresAtMs, currentTimeInMs);
-          blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
-              + ", isExpired " + isExpired + " accountId " + props.getAccountId() + " containerId "
-              + props.getContainerId();
-          ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
-          usermetadata = " Metadata - size " + metadata.capacity();
-          BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
-          blobDataOutput = "Blob - size " + blobData.getSize();
-        } else {
-          DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(streamlog);
-          isDeleted = true;
-          deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
-              + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();
-        }
+      } else if (version == MessageFormatRecord.Message_Header_Version_V2) {
+        ByteBuffer buffer = ByteBuffer.allocate(MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize());
+        buffer.putShort(version);
+        randomAccessFile.read(buffer.array(), 2, buffer.capacity() - 2);
+        buffer.clear();
+        header = new MessageFormatRecord.MessageHeader_Format_V2(buffer);
+        messageheader =
+            " Header - version " + header.getVersion() + " messagesize " + header.getMessageSize() + " currentOffset "
+                + currentOffset + " blobEncryptionKeyRelativeOffset "
+                + header.getBlobEncryptionKeyRecordRelativeOffset() + " blobPropertiesRelativeOffset "
+                + header.getBlobPropertiesRecordRelativeOffset() + " userMetadataRelativeOffset "
+                + header.getUserMetadataRecordRelativeOffset() + " dataRelativeOffset "
+                + header.getBlobRecordRelativeOffset() + " crc " + header.getCrc();
+        totalRecordSize += header.getMessageSize() + buffer.capacity();
       } else {
         throw new MessageFormatException("Header version not supported " + version, MessageFormatErrorCodes.IO_Error);
       }
-      return new LogBlobRecordInfo(messageheader, blobId, blobProperty, usermetadata, blobDataOutput, deleteMsg,
-          isDeleted, isExpired, expiresAtMs, totalRecordSize);
-    } finally {
+      // read blob id
+      InputStream streamlog = Channels.newInputStream(randomAccessFile.getChannel());
+      blobId = new BlobId(new DataInputStream(streamlog), clusterMap);
+      totalRecordSize += blobId.sizeInBytes();
+      if (header.getBlobPropertiesRecordRelativeOffset()
+          != MessageFormatRecord.Message_Header_Invalid_Relative_Offset) {
+        ByteBuffer blobEncryptionKey = null;
+        if (header.hasEncryptionKeyRecord()) {
+          blobEncryptionKey = MessageFormatRecord.deserializeBlobEncryptionKey(streamlog);
+          encryptionKey = "EncryptionKey found which is of size " + blobEncryptionKey.remaining();
+        } else {
+          encryptionKey = "No encryptionKey ";
+        }
+        BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
+        expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());
+        isExpired = isExpired(expiresAtMs, currentTimeInMs);
+        blobProperty = " Blob properties - blobSize  " + props.getBlobSize() + " serviceId " + props.getServiceId()
+            + ", isExpired " + isExpired + " accountId " + props.getAccountId() + " containerId "
+            + props.getContainerId();
+        ByteBuffer metadata = MessageFormatRecord.deserializeUserMetadata(streamlog);
+        usermetadata = " Metadata - size " + metadata.capacity();
+        BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
+        blobDataOutput = "Blob - size " + blobData.getSize();
+      } else {
+        DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(streamlog);
+        isDeleted = true;
+        deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
+            + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();
+      }
+      return new LogBlobRecordInfo(messageheader, blobId, encryptionKey, blobProperty, usermetadata, blobDataOutput,
+          deleteMsg, isDeleted, isExpired, expiresAtMs, totalRecordSize);
+    } finally
+
+    {
       context.stop();
     }
   }
@@ -114,6 +139,7 @@ class DumpDataHelper {
   static class LogBlobRecordInfo {
     final String messageHeader;
     final BlobId blobId;
+    final String blobEncryptionKey;
     final String blobProperty;
     final String userMetadata;
     final String blobDataOutput;
@@ -123,11 +149,12 @@ class DumpDataHelper {
     final long expiresAtMs;
     final int totalRecordSize;
 
-    LogBlobRecordInfo(String messageHeader, BlobId blobId, String blobProperty, String userMetadata,
-        String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired, long expiresAtMs,
-        int totalRecordSize) {
+    LogBlobRecordInfo(String messageHeader, BlobId blobId, String blobEncryptionKey, String blobProperty,
+        String userMetadata, String blobDataOutput, String deleteMsg, boolean isDeleted, boolean isExpired,
+        long expiresAtMs, int totalRecordSize) {
       this.messageHeader = messageHeader;
       this.blobId = blobId;
+      this.blobEncryptionKey = blobEncryptionKey;
       this.blobProperty = blobProperty;
       this.userMetadata = userMetadata;
       this.blobDataOutput = blobDataOutput;
