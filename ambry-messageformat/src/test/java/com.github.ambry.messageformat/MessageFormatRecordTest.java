@@ -30,9 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.account.Account.*;
@@ -44,18 +42,6 @@ import static org.junit.Assert.*;
 
 
 public class MessageFormatRecordTest {
-  private static short serDeVersionSaved;
-
-  @BeforeClass
-  public static void saveVersionToUse() {
-    serDeVersionSaved = BlobPropertiesSerDe.currentVersion;
-  }
-
-  @After
-  public void resetVersionToUse() {
-    BlobPropertiesSerDe.currentVersion = serDeVersionSaved;
-  }
-
   @Test
   public void deserializeTest() {
     try {
@@ -187,7 +173,6 @@ public class MessageFormatRecordTest {
     // Test Blob property Format V1 for all versions of BlobPropertiesSerDe
     short[] versions = new short[]{VERSION_1, VERSION_2, VERSION_3};
     for (short version : versions) {
-      BlobPropertiesSerDe.currentVersion = version;
       BlobProperties properties;
       long blobSize = TestUtils.RANDOM.nextLong();
       long ttl = TestUtils.RANDOM.nextInt();

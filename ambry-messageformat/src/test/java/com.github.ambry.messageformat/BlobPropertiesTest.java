@@ -25,14 +25,14 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import org.junit.After;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
+import static com.github.ambry.messageformat.BlobPropertiesSerDe.*;
+import static com.github.ambry.messageformat.MessageFormatRecord.*;
 import static org.junit.Assert.*;
 
 
@@ -43,17 +43,6 @@ import static org.junit.Assert.*;
 public class BlobPropertiesTest {
 
   private final short version;
-  private static short serDeVersionSaved;
-
-  @BeforeClass
-  public static void saveVersionToUse() {
-    serDeVersionSaved = BlobPropertiesSerDe.currentVersion;
-  }
-
-  @After
-  public void resetVersionToUse() {
-    BlobPropertiesSerDe.currentVersion = serDeVersionSaved;
-  }
 
   /**
    * Running for {@link BlobPropertiesSerDe#VERSION_1} and {@link BlobPropertiesSerDe#VERSION_2}
@@ -80,8 +69,6 @@ public class BlobPropertiesTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
 
-    BlobPropertiesSerDe.currentVersion = version;
-
     short accountIdToExpect = version == BlobPropertiesSerDe.VERSION_1 ? UNKNOWN_ACCOUNT_ID : accountId;
     short containerIdToExpect = version == BlobPropertiesSerDe.VERSION_1 ? UNKNOWN_CONTAINER_ID : containerId;
     boolean encryptFlagToExpect = version == BlobPropertiesSerDe.VERSION_3 && isEncrypted;
@@ -89,8 +76,15 @@ public class BlobPropertiesTest {
     BlobProperties blobProperties =
         getBlobProperties(blobSize, isEncrypted, serviceId, accountId, containerId, version);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    ByteBuffer serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
-    BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+    ByteBuffer serializedBuffer = null;
+    if (version == BlobPropertiesSerDe.VERSION_1) {
+      serializedBuffer = getBlobPropsSerDeV1(blobProperties);
+    } else if (version == BlobPropertiesSerDe.VERSION_2) {
+      serializedBuffer = getBlobPropsSerDeV2(blobProperties);
+    } else {
+      serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
+      BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+    }
     serializedBuffer.flip();
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -100,8 +94,15 @@ public class BlobPropertiesTest {
     assertTrue(blobProperties.getCreationTimeInMs() <= System.currentTimeMillis());
 
     blobProperties = getBlobProperties(blobSize, false, serviceId, accountId, containerId, version);
-    serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
-    BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+
+    if (version == BlobPropertiesSerDe.VERSION_1) {
+      serializedBuffer = getBlobPropsSerDeV1(blobProperties);
+    } else if (version == BlobPropertiesSerDe.VERSION_2) {
+      serializedBuffer = getBlobPropsSerDeV2(blobProperties);
+    } else {
+      serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
+      BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+    }
     serializedBuffer.flip();
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -112,8 +113,15 @@ public class BlobPropertiesTest {
         getBlobProperties(blobSize, isEncrypted, serviceId, ownerId, contentType, true, timeToLiveInSeconds, accountId,
             containerId, version);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
-    BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+
+    if (version == BlobPropertiesSerDe.VERSION_1) {
+      serializedBuffer = getBlobPropsSerDeV1(blobProperties);
+    } else if (version == BlobPropertiesSerDe.VERSION_2) {
+      serializedBuffer = getBlobPropsSerDeV2(blobProperties);
+    } else {
+      serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
+      BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+    }
     serializedBuffer.flip();
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -127,36 +135,45 @@ public class BlobPropertiesTest {
         getBlobProperties(blobSize, isEncrypted, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
             creationTimeMs, accountId, containerId, version);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
-    BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+    if (version == BlobPropertiesSerDe.VERSION_1) {
+      serializedBuffer = getBlobPropsSerDeV1(blobProperties);
+    } else if (version == BlobPropertiesSerDe.VERSION_2) {
+      serializedBuffer = getBlobPropsSerDeV2(blobProperties);
+    } else {
+      serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
+      BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+    }
     serializedBuffer.flip();
+
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
         accountIdToExpect, containerIdToExpect, encryptFlagToExpect);
     assertEquals(blobProperties.getCreationTimeInMs(), creationTimeMs);
 
-    long creationTimeInSecs = TimeUnit.MILLISECONDS.toSeconds(creationTimeMs);
-    // valid TTLs
-    long[] validTTLs = new long[]{TimeUnit.HOURS.toSeconds(1), TimeUnit.HOURS.toSeconds(10), TimeUnit.HOURS.toSeconds(
-        100), TimeUnit.DAYS.toSeconds(1), TimeUnit.DAYS.toSeconds(10), TimeUnit.DAYS.toSeconds(
-        100), TimeUnit.DAYS.toSeconds(30 * 12), TimeUnit.DAYS.toSeconds(30 * 12 * 10),
-        Integer.MAX_VALUE - creationTimeInSecs - 1,
-        Integer.MAX_VALUE - creationTimeInSecs,
-        Integer.MAX_VALUE - creationTimeInSecs + 1,
-        Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
-
-    for (long ttl : validTTLs) {
-      blobProperties =
-          getBlobProperties(blobSize, isEncrypted, serviceId, ownerId, contentType, true, ttl, creationTimeMs,
-              accountId, containerId, version);
-      serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
-      BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
-      serializedBuffer.flip();
-      blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
-          new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
-      verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountIdToExpect,
-          containerIdToExpect, encryptFlagToExpect);
+    // testValid TTLs only for latest version
+    if (version == BlobPropertiesSerDe.VERSION_3) {
+      long creationTimeInSecs = TimeUnit.MILLISECONDS.toSeconds(creationTimeMs);
+      // valid TTLs
+      long[] validTTLs = new long[]{TimeUnit.HOURS.toSeconds(1), TimeUnit.HOURS.toSeconds(10), TimeUnit.HOURS.toSeconds(
+          100), TimeUnit.DAYS.toSeconds(1), TimeUnit.DAYS.toSeconds(10), TimeUnit.DAYS.toSeconds(
+          100), TimeUnit.DAYS.toSeconds(30 * 12), TimeUnit.DAYS.toSeconds(30 * 12 * 10),
+          Integer.MAX_VALUE - creationTimeInSecs - 1,
+          Integer.MAX_VALUE - creationTimeInSecs,
+          Integer.MAX_VALUE - creationTimeInSecs + 1,
+          Integer.MAX_VALUE - creationTimeInSecs + 100, Integer.MAX_VALUE - creationTimeInSecs + 10000};
+      for (long ttl : validTTLs) {
+        blobProperties =
+            getBlobProperties(blobSize, isEncrypted, serviceId, ownerId, contentType, true, ttl, creationTimeMs,
+                accountId, containerId, version);
+        serializedBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
+        BlobPropertiesSerDe.serializeBlobProperties(serializedBuffer, blobProperties);
+        serializedBuffer.flip();
+        blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
+            new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
+        verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountIdToExpect,
+            containerIdToExpect, encryptFlagToExpect);
+      }
     }
   }
 
@@ -233,6 +250,52 @@ public class BlobPropertiesTest {
       return new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
           SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
     }
+  }
+
+  /**
+   * Creates BlobPropertiesSerDe in V1 and returns the deserialized version of {@link BlobProperties}
+   * @param blobProperties {@link BlobProperties} that needs to be serialized in V1
+   * @return {@link ByteBuffer} representing the serialized form of {@link BlobProperties} in V1
+   */
+  private ByteBuffer getBlobPropsSerDeV1(BlobProperties blobProperties) {
+    int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
+        + Utils.getNullableStringLength(blobProperties.getContentType()) + Integer.BYTES
+        + Utils.getNullableStringLength(blobProperties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(
+        blobProperties.getServiceId());
+    ByteBuffer outputBuffer = ByteBuffer.allocate(size);
+    outputBuffer.putShort(VERSION_1);
+    outputBuffer.putLong(blobProperties.getTimeToLiveInSeconds());
+    outputBuffer.put(blobProperties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(blobProperties.getCreationTimeInMs());
+    outputBuffer.putLong(blobProperties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, blobProperties.getContentType());
+    Utils.serializeNullableString(outputBuffer, blobProperties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, blobProperties.getServiceId());
+    return outputBuffer;
+  }
+
+  /**
+   * Creates BlobPropertiesSerDe in V2 and returns the deserialized version of {@link BlobProperties}
+   * @param blobProperties {@link BlobProperties} that needs to be serialized in V1
+   * @return {@link ByteBuffer} representing the serialized form of {@link BlobProperties} in V1
+   */
+  private ByteBuffer getBlobPropsSerDeV2(BlobProperties blobProperties) {
+    int size = Version_Field_Size_In_Bytes + Long.BYTES + Byte.BYTES + Long.BYTES + Long.BYTES + Integer.BYTES
+        + Utils.getNullableStringLength(blobProperties.getContentType()) + Integer.BYTES
+        + Utils.getNullableStringLength(blobProperties.getOwnerId()) + Integer.BYTES + Utils.getNullableStringLength(
+        blobProperties.getServiceId()) + Short.BYTES + Short.BYTES;
+    ByteBuffer outputBuffer = ByteBuffer.allocate(size);
+    outputBuffer.putShort(VERSION_2);
+    outputBuffer.putLong(blobProperties.getTimeToLiveInSeconds());
+    outputBuffer.put(blobProperties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(blobProperties.getCreationTimeInMs());
+    outputBuffer.putLong(blobProperties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, blobProperties.getContentType());
+    Utils.serializeNullableString(outputBuffer, blobProperties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, blobProperties.getServiceId());
+    outputBuffer.putShort(blobProperties.getAccountId());
+    outputBuffer.putShort(blobProperties.getContainerId());
+    return outputBuffer;
   }
 
   /**
