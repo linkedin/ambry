@@ -45,12 +45,12 @@ public class BlobStoreHardDeleteTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.currentHeaderVersionToUse;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.currentHeaderVersionToUse = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   @Parameterized.Parameters
@@ -60,7 +60,7 @@ public class BlobStoreHardDeleteTest {
   }
 
   public BlobStoreHardDeleteTest(short headerVersionToUse) {
-    MessageFormatRecord.currentHeaderVersionToUse = headerVersionToUse;
+    MessageFormatRecord.headerVersionToUse = headerVersionToUse;
   }
 
   public class ReadImp implements Read {
@@ -145,7 +145,7 @@ public class BlobStoreHardDeleteTest {
       readSet.addMessage(buffer.position(), keys[2], (int) msg2.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
       HardDeleteRecoveryMetadata hardDeleteRecoveryMetadata =
-          new HardDeleteRecoveryMetadata(MessageFormatRecord.currentHeaderVersionToUse,
+          new HardDeleteRecoveryMetadata(MessageFormatRecord.headerVersionToUse,
               MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[2], blobTypes[2], BLOB_SIZE,
               keys[2]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());
@@ -157,7 +157,7 @@ public class BlobStoreHardDeleteTest {
       // This should succeed.
       readSet.addMessage(buffer.position(), keys[3], (int) msg4.getSize());
       writeToBufferAndCorruptBlobRecord(msg4, (int) msg4.getSize());
-      hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.currentHeaderVersionToUse,
+      hardDeleteRecoveryMetadata = new HardDeleteRecoveryMetadata(MessageFormatRecord.headerVersionToUse,
           MessageFormatRecord.UserMetadata_Version_V1, USERMETADATA_SIZE, blobVersions[3], blobTypes[3], BLOB_SIZE,
           keys[3]);
       recoveryInfoList.add(hardDeleteRecoveryMetadata.toBytes());

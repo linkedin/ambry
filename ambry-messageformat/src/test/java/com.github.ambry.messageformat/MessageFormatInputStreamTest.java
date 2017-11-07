@@ -36,12 +36,12 @@ public class MessageFormatInputStreamTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.currentHeaderVersionToUse;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.currentHeaderVersionToUse = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   /**
@@ -71,7 +71,7 @@ public class MessageFormatInputStreamTest {
     byte[] data = new byte[blobContentSize];
     new Random().nextBytes(data);
     long blobSize = -1;
-    MessageFormatRecord.currentHeaderVersionToUse =
+    MessageFormatRecord.headerVersionToUse =
         useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
       blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
@@ -250,7 +250,7 @@ public class MessageFormatInputStreamTest {
         useV2Header = false;
       } else {
         messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
-        useV2Header = MessageFormatRecord.currentHeaderVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
+        useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
           useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);

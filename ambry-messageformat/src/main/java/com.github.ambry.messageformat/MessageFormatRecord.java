@@ -54,7 +54,7 @@ public class MessageFormatRecord {
   public static final short Metadata_Content_Version_V2 = 2;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
-  static short currentHeaderVersionToUse = Message_Header_Version_V2;
+  static short headerVersionToUse = Message_Header_Version_V2;
 
   static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {

@@ -33,10 +33,10 @@ import java.nio.ByteBuffer;
 public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
   public DeleteMessageFormatInputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException {
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.currentHeaderVersionToUse);
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int deleteRecordSize = MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
-    if (MessageFormatRecord.currentHeaderVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
+    if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
       MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, deleteRecordSize,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,

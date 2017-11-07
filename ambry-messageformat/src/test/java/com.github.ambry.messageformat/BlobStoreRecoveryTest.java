@@ -123,12 +123,12 @@ public class BlobStoreRecoveryTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.currentHeaderVersionToUse;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.currentHeaderVersionToUse = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   @Parameterized.Parameters
@@ -138,7 +138,7 @@ public class BlobStoreRecoveryTest {
   }
 
   public BlobStoreRecoveryTest(short headerVersionToUse) {
-    MessageFormatRecord.currentHeaderVersionToUse = headerVersionToUse;
+    MessageFormatRecord.headerVersionToUse = headerVersionToUse;
   }
 
   public class ReadImp implements Read {
