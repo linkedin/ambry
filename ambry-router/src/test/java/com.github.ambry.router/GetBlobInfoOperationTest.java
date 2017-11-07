@@ -87,7 +87,7 @@ public class GetBlobInfoOperationTest {
   private final BlobProperties blobProperties;
   private final byte[] userMetadata;
   private final byte[] putContent;
-  private final boolean toEncrypt;
+  private final boolean testEncryption;
   private final String operationTrackerType;
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
@@ -119,12 +119,12 @@ public class GetBlobInfoOperationTest {
 
   /**
    * @param operationTrackerType @param operationTrackerType the type of {@link OperationTracker} to use.
-   * @param toEncrypt {@code true} if blob needs to be encrypted. {@code false} otherwise
+   * @param testEncryption {@code true} if blob needs to be encrypted. {@code false} otherwise
    * @throws Exception
    */
-  public GetBlobInfoOperationTest(String operationTrackerType, boolean toEncrypt) throws Exception {
+  public GetBlobInfoOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
     this.operationTrackerType = operationTrackerType;
-    this.toEncrypt = toEncrypt;
+    this.testEncryption = testEncryption;
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
@@ -137,7 +137,7 @@ public class GetBlobInfoOperationTest {
     responseHandler = new ResponseHandler(mockClusterMap);
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
-    if (toEncrypt) {
+    if (testEncryption) {
       kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vprops),
           getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vprops));
@@ -150,7 +150,7 @@ public class GetBlobInfoOperationTest {
     short containerId = Utils.getRandomShort(random);
     blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
-            containerId, toEncrypt);
+            containerId, testEncryption);
     userMetadata = new byte[BLOB_USER_METADATA_SIZE];
     random.nextBytes(userMetadata);
     putContent = new byte[BLOB_SIZE];
@@ -244,7 +244,7 @@ public class GetBlobInfoOperationTest {
       }
     }
 
-    if (toEncrypt) {
+    if (testEncryption) {
       int timeout = 1000;
       int timeSoFar = 0;
       while (timeSoFar < timeout && !op.isOperationComplete()) {
@@ -383,7 +383,7 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testKMSFailure() throws Exception {
-    if (toEncrypt) {
+    if (testEncryption) {
       kms.exceptionToThrow.set(GSE);
       assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
     }
@@ -395,7 +395,7 @@ public class GetBlobInfoOperationTest {
    */
   @Test
   public void testCryptoServiceFailure() throws Exception {
-    if (toEncrypt) {
+    if (testEncryption) {
       cryptoService.exceptionOnDecryption.set(GSE);
       assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
     }

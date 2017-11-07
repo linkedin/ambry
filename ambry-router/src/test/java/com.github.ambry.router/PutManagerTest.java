@@ -71,7 +71,7 @@ import static com.github.ambry.router.CryptoTestUtils.*;
 public class PutManagerTest {
   static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
   private static final long MAX_WAIT_MS = 2000;
-  private final boolean toEncrypt;
+  private final boolean testEncryption;
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
@@ -105,9 +105,10 @@ public class PutManagerTest {
 
   /**
    * Pre-initialization common to all tests.
+   * @param {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public PutManagerTest(boolean toEncrypt) throws Exception {
-    this.toEncrypt = toEncrypt;
+  public PutManagerTest(boolean testEncryption) throws Exception {
+    this.testEncryption = testEncryption;
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -117,7 +118,7 @@ public class PutManagerTest {
     mockServerLayout = new MockServerLayout(mockClusterMap);
     notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
-    if (toEncrypt) {
+    if (testEncryption) {
       VerifiableProperties vProps = new VerifiableProperties(new Properties());
       kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vProps),
           getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
@@ -285,7 +286,7 @@ public class PutManagerTest {
    */
   @Test
   public void testFailureOnKMS() throws Exception {
-    if (toEncrypt) {
+    if (testEncryption) {
       // simple blob
       kms.exceptionToThrow.set(GSE);
       requestAndResultsList.clear();
@@ -320,7 +321,7 @@ public class PutManagerTest {
    */
   @Test
   public void testFailureOnCryptoService() throws Exception {
-    if (toEncrypt) {
+    if (testEncryption) {
       // simple blob
       cryptoService.exceptionOnEncryption.set(GSE);
       requestAndResultsList.clear();
@@ -1016,7 +1017,7 @@ public class PutManagerTest {
 
     RequestAndResult(int blobSize) {
       putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), toEncrypt);
+          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];

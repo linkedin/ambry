@@ -56,7 +56,7 @@ public class GetManagerTest {
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private NonBlockingRouter router;
-  private final boolean toEncrypt;
+  private final boolean testEncryption;
   private KeyManagementService kms = null;
   private CryptoService cryptoService = null;
   private CryptoJobExecutorService exec = null;
@@ -86,10 +86,10 @@ public class GetManagerTest {
 
   /**
    * Pre-initialization common to all tests.
-   * @param toEncrypt {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public GetManagerTest(boolean toEncrypt) throws Exception {
-    this.toEncrypt = toEncrypt;
+  public GetManagerTest(boolean testEncryption) throws Exception {
+    this.testEncryption = testEncryption;
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -97,7 +97,7 @@ public class GetManagerTest {
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
     mockServerLayout = new MockServerLayout(mockClusterMap);
-    if (toEncrypt) {
+    if (testEncryption) {
       VerifiableProperties vProps = new VerifiableProperties(new Properties());
       kms = new SingleKeyManagementService(new KMSConfig(vProps),
           getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
@@ -409,7 +409,7 @@ public class GetManagerTest {
   private void setOperationParams(int blobSize, GetBlobOptions options) {
     this.blobSize = blobSize;
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), toEncrypt);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[blobSize];

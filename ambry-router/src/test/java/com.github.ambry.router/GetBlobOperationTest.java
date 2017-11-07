@@ -98,7 +98,7 @@ public class GetBlobOperationTest {
   private final MockNetworkClient mockNetworkClient;
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
-  private final boolean toEncrypt;
+  private final boolean testEncryption;
   private CryptoJobExecutorServiceTest.MockKeyManagementService kms = null;
   private CryptoJobExecutorServiceTest.MockCryptoService cryptoService = null;
   private CryptoJobExecutorService exec = null;
@@ -168,10 +168,11 @@ public class GetBlobOperationTest {
    * Instantiate a router, perform a put, close the router. The blob that was put will be saved in the MockServer,
    * and can be queried by the getBlob operations in the test.
    * @param operationTrackerType the type of {@link OperationTracker} to use.
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
-  public GetBlobOperationTest(String operationTrackerType, boolean toEncrypt) throws Exception {
+  public GetBlobOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
     this.operationTrackerType = operationTrackerType;
-    this.toEncrypt = toEncrypt;
+    this.testEncryption = testEncryption;
     // Defaults. Tests may override these and do new puts as appropriate.
     maxChunkSize = random.nextInt(1024 * 1024) + 1;
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
@@ -189,7 +190,7 @@ public class GetBlobOperationTest {
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
-    if (toEncrypt) {
+    if (testEncryption) {
       kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vprops),
           getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vprops));
@@ -209,7 +210,7 @@ public class GetBlobOperationTest {
    */
   private void doPut() throws Exception {
     blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(random), Utils.getRandomShort(random), toEncrypt);
+        Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
     putContent = new byte[blobSize];
@@ -458,7 +459,7 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testKMSFailure() throws Exception {
-    if (toEncrypt) {
+    if (testEncryption) {
       // simple Blob
       doPut();
       kms.exceptionToThrow.set(GSE);
@@ -489,7 +490,7 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testCryptoServiceFailure() throws Exception {
-    if (toEncrypt) {
+    if (testEncryption) {
       // simple Blob
       doPut();
       cryptoService.exceptionOnDecryption.set(GSE);

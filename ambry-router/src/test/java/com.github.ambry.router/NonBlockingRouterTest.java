@@ -38,6 +38,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -55,6 +56,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.CryptoTestUtils.*;
 
@@ -62,6 +65,7 @@ import static com.github.ambry.router.CryptoTestUtils.*;
 /**
  * Class to test the {@link NonBlockingRouter}
  */
+@RunWith(Parameterized.class)
 public class NonBlockingRouterTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -88,6 +92,7 @@ public class NonBlockingRouterTest {
   private final CryptoService cryptoService;
   private final CryptoJobExecutorService exec;
   private final MockClusterMap mockClusterMap;
+  private final boolean testEncryption;
 
   // Request params;
   BlobProperties putBlobProperties;
@@ -96,10 +101,21 @@ public class NonBlockingRouterTest {
   ReadableStreamChannel putChannel;
 
   /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
    * Initialize parameters common to all tests.
+   * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
    * @throws Exception
    */
-  public NonBlockingRouterTest() throws Exception {
+  public NonBlockingRouterTest(boolean testEncryption) throws Exception {
+    this.testEncryption = true;
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap();
     NonBlockingRouter.currentOperationsCount.set(0);
@@ -164,7 +180,7 @@ public class NonBlockingRouterTest {
 
   private void setOperationParams() {
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[PUT_CONTENT_SIZE];
@@ -644,11 +660,12 @@ public class NonBlockingRouterTest {
     NetworkClient networkClient =
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
-
-    exec.start();
+    CryptoJobExecutorService execLocal =
+        new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
+    execLocal.start();
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", kms, cryptoService, exec,
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", kms, cryptoService, execLocal,
         mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
@@ -665,7 +682,7 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
         new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), kms, cryptoService, exec,
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), kms, cryptoService, execLocal,
         mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
@@ -753,7 +770,11 @@ public class NonBlockingRouterTest {
     }
     // Poll once again so that the operation gets a chance to complete.
     allRequests.clear();
-    opHelper.pollOpManager(allRequests);
+    if (testEncryption) {
+      awaitOpCompletionOrTimeOut(opHelper, futureResult);
+    } else {
+      opHelper.pollOpManager(allRequests);
+    }
     futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (indexToFail == -1) {
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
@@ -837,7 +858,11 @@ public class NonBlockingRouterTest {
       opHelper.handleResponse(responseInfo);
     }
     allRequests.clear();
-    opHelper.pollOpManager(allRequests);
+    if (testEncryption) {
+      awaitOpCompletionOrTimeOut(opHelper, futureResult);
+    } else {
+      opHelper.pollOpManager(allRequests);
+    }
     try {
       futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
@@ -859,6 +884,24 @@ public class NonBlockingRouterTest {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
       Assert.assertEquals("All operations should have completed if the router is closed", 0,
           router.getOperationsCount());
+    }
+  }
+
+  /**
+   * Polls operation helper at regular intervals until the operation is complete or timeout is reached
+   * @param opHelper {@link OperationHelper} to be polled
+   * @param futureResult {@link FutureResult} that needs to be tested for completion
+   * @throws InterruptedException
+   */
+  private void awaitOpCompletionOrTimeOut(OperationHelper opHelper, FutureResult futureResult)
+      throws InterruptedException {
+    int timer = 0;
+    List<RequestInfo> allRequests = new ArrayList<>();
+    while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {
+      opHelper.pollOpManager(allRequests);
+      Thread.sleep(50);
+      timer += 50;
+      allRequests.clear();
     }
   }
 
