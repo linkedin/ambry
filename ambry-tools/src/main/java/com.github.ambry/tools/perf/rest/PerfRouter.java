@@ -63,7 +63,7 @@ class PerfRouter implements Router {
   public PerfRouter(PerfConfig perfConfig, PerfRouterMetrics perfRouterMetrics) {
     this.perfRouterMetrics = perfRouterMetrics;
     blobProperties = new BlobProperties(perfConfig.perfBlobSize, "PerfRouter", Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID);
+        Container.UNKNOWN_CONTAINER_ID, false);
     usermetadata = getRandomString(perfConfig.perfUserMetadataSize).getBytes();
     chunk = new byte[perfConfig.perfRouterChunkSize];
     random.nextBytes(chunk);

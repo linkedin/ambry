@@ -439,7 +439,7 @@ public class AmbryRequestsTest {
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:
-          BlobProperties properties = new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId());
+          BlobProperties properties = new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
           request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
               ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
           break;

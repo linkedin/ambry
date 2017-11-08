@@ -318,8 +318,8 @@ public class DumpDataTool {
       compareIndexValueToLogEntry(blobId, indexValue, logBlobRecordInfo);
       if (!logBlobRecordInfo.isDeleted) {
         logger.trace("{}", logBlobRecordInfo.messageHeader + "\n " + logBlobRecordInfo.blobId.getID() + "\n"
-            + logBlobRecordInfo.blobProperty + "\n" + logBlobRecordInfo.userMetadata + "\n"
-            + logBlobRecordInfo.blobDataOutput);
+            + logBlobRecordInfo.blobEncryptionKey + "\n" + logBlobRecordInfo.blobProperty + "\n"
+            + logBlobRecordInfo.userMetadata + "\n" + logBlobRecordInfo.blobDataOutput);
       } else {
         logger.trace("{}", logBlobRecordInfo.messageHeader + "\n " + logBlobRecordInfo.blobId.getID() + "\n"
             + logBlobRecordInfo.deleteMsg);

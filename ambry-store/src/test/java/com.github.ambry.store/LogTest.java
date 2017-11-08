@@ -491,8 +491,9 @@ public class LogTest {
       for (int i = 0; i < numToCreate; i++) {
         long pos;
         do {
-          pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+          pos = Utils.getRandomLong(TestUtils.RANDOM, 1000000);
         } while (positionsGenerated.contains(pos));
+        positionsGenerated.add(pos);
         long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
         String name = LogSegmentNameHelper.getName(pos, gen);
         File file = create(LogSegmentNameHelper.nameToFilename(name));
@@ -577,6 +578,9 @@ public class LogTest {
     LogSegment nextSegment = log.getFirstSegment();
     assertNull("Prev segment should be null", log.getPrevSegment(nextSegment));
     for (String segmentName : expectedSegmentNames) {
+      assertNotNull(
+          "Next segment is null -  expectedSegmentNames=" + expectedSegmentNames + ". Expected next=" + segmentName,
+          nextSegment);
       assertEquals("Next segment is not as expected - expectedSegmentNames=" + expectedSegmentNames, segmentName,
           nextSegment.getName());
       LogSegment segment = log.getSegment(segmentName);

@@ -54,9 +54,7 @@ public class MessageFormatRecord {
   public static final short Metadata_Content_Version_V2 = 2;
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
-  // @todo temporary variable to determine whether the new header format to support encryption should be enabled.
-  // @todo Set this to true in nodes of a cluster only after all nodes in the cluster understand reading such records.
-  static short HEADER_VERSION_TO_USE = Message_Header_Version_V1;
+  static short headerVersionToUse = Message_Header_Version_V2;
 
   static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {

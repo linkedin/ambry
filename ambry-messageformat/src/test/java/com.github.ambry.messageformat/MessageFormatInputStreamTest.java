@@ -36,12 +36,12 @@ public class MessageFormatInputStreamTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   /**
@@ -62,7 +62,7 @@ public class MessageFormatInputStreamTest {
     StoreKeyFactory keyFactory = new MockIdFactory();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId);
+    BlobProperties prop = new BlobProperties(10, "servid", accountId, containerId, false);
     byte[] encryptionKey = new byte[100];
     new Random().nextBytes(encryptionKey);
     byte[] usermetadata = new byte[1000];
@@ -71,7 +71,7 @@ public class MessageFormatInputStreamTest {
     byte[] data = new byte[blobContentSize];
     new Random().nextBytes(data);
     long blobSize = -1;
-    MessageFormatRecord.HEADER_VERSION_TO_USE =
+    MessageFormatRecord.headerVersionToUse =
         useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1;
     if (blobVersion == MessageFormatRecord.Blob_Version_V1) {
       blobSize = MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blobContentSize);
@@ -250,7 +250,7 @@ public class MessageFormatInputStreamTest {
         useV2Header = false;
       } else {
         messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
-        useV2Header = MessageFormatRecord.HEADER_VERSION_TO_USE == MessageFormatRecord.Message_Header_Version_V2;
+        useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
           useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);

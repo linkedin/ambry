@@ -42,8 +42,7 @@ public class GetResponse extends Response {
   static final short GET_RESPONSE_VERSION_V_3 = 3;
   static final short GET_RESPONSE_VERSION_V_4 = 4;
 
-  // @todo change this to V4 once V4 is understood by all.
-  static short CURRENT_VERSION = GET_RESPONSE_VERSION_V_3;
+  static short CURRENT_VERSION = GET_RESPONSE_VERSION_V_4;
 
   public GetResponse(int correlationId, String clientId, List<PartitionResponseInfo> partitionResponseInfoList,
       Send send, ServerErrorCode error) {

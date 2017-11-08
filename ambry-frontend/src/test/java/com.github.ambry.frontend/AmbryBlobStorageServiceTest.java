@@ -568,7 +568,7 @@ public class AmbryBlobStorageServiceTest {
     ByteBuffer content = ByteBuffer.allocate(0);
     BlobProperties blobProperties =
         new BlobProperties(0, "userMetadataTestOldStyleServiceID", Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID);
+            Container.UNKNOWN_CONTAINER_ID, false);
     byte[] usermetadata = TestUtils.getRandomBytes(25);
     String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content)).get();
 
@@ -2247,16 +2247,16 @@ class FrontendTestRouter implements Router {
     switch (options.getOperationType()) {
       case BlobInfo:
         result = new GetBlobResult(new BlobInfo(
-            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID),
-            new byte[0]), null);
+            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                false), new byte[0]), null);
         break;
       case Data:
         result = new GetBlobResult(null, new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
         break;
       default:
         result = new GetBlobResult(new BlobInfo(
-            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID),
-            new byte[0]), new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
+            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                false), new byte[0]), new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
         break;
     }
     return completeOperation(result, callback, OpType.GetBlob);
