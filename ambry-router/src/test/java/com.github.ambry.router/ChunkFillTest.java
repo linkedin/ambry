@@ -23,6 +23,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -33,8 +34,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import junit.framework.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import static com.github.ambry.router.CryptoTestUtils.*;
 
 
 /**
@@ -119,7 +118,7 @@ public class ChunkFillTest {
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(vProps),
-        getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     CryptoService cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     CryptoJobExecutorService exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
     exec.start();
@@ -226,7 +225,7 @@ public class ChunkFillTest {
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
     KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(vProps),
-        getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     CryptoService cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     CryptoJobExecutorService exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
     exec.start();

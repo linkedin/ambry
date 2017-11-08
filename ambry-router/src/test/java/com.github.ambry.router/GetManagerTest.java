@@ -44,8 +44,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.CryptoTestUtils.*;
-
 
 @RunWith(Parameterized.class)
 public class GetManagerTest {
@@ -100,7 +98,7 @@ public class GetManagerTest {
     if (testEncryption) {
       VerifiableProperties vProps = new VerifiableProperties(new Properties());
       kms = new SingleKeyManagementService(new KMSConfig(vProps),
-          getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
       exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
       exec.start();

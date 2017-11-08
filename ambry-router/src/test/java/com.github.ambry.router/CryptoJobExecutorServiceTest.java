@@ -62,7 +62,7 @@ public class CryptoJobExecutorServiceTest {
   private CryptoJobExecutorService cryptoJobExecutorService;
 
   public CryptoJobExecutorServiceTest() throws IOException, GeneralSecurityException {
-    defaultKey = getRandomKey(DEFAULT_KEY_SIZE);
+    defaultKey = TestUtils.getRandomKey(DEFAULT_KEY_SIZE);
     Properties props = getKMSProperties(defaultKey, RANDOM_KEY_SIZE_IN_BITS);
     verifiableProperties = new VerifiableProperties((props));
     kms = new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();

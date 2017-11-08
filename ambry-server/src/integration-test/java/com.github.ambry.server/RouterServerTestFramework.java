@@ -65,6 +65,7 @@ class RouterServerTestFramework {
   private final MockClusterMap clusterMap;
   private final MockNotificationSystem notificationSystem;
   private final Router router;
+  private boolean testEncryption = false;
 
   public static String sslSendBytesMetricName = Selector.class.getName() + ".SslSendBytesRate";
   public static String sslReceiveBytesMetricName = Selector.class.getName() + ".SslReceiveBytesRate";
@@ -87,6 +88,14 @@ class RouterServerTestFramework {
     VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProps);
     router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem,
         ServerTestUtil.getSSLFactoryIfRequired(routerVerifiableProps)).getRouter();
+  }
+
+  /**
+   * Sets the {@link #testEncryption} to true. In other words, all utilities in this class will test for encryption
+   * if this is called.
+   */
+  void setTestEncryption() {
+    this.testEncryption = true;
   }
 
   /**
@@ -150,7 +159,7 @@ class RouterServerTestFramework {
     TestUtils.RANDOM.nextBytes(data);
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId, false);
+    BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId, testEncryption);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
     return opChain;
@@ -173,6 +182,7 @@ class RouterServerTestFramework {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", routerDatacenter);
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     return properties;
   }
 

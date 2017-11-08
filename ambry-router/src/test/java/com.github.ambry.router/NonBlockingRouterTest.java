@@ -59,8 +59,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.CryptoTestUtils.*;
-
 
 /**
  * Class to test the {@link NonBlockingRouter}
@@ -121,7 +119,7 @@ public class NonBlockingRouterTest {
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     kms = new SingleKeyManagementService(new KMSConfig(vProps),
-        getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
   }
@@ -152,7 +150,7 @@ public class NonBlockingRouterTest {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "dc1");
     properties.setProperty("clustermap.host.name", "localhost");
-    properties.setProperty("kms.default.container.key", CryptoTestUtils.getRandomKey(128));
+    properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(128));
     return properties;
   }
 

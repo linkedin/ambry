@@ -153,6 +153,20 @@ public class TestUtils {
   }
 
   /**
+   * Generates and returns a random Hex String of the specified size
+   * @param size expected key hex string size
+   * @return the hex string thus generated
+   */
+  public static String getRandomKey(int size) {
+    StringBuilder sb = new StringBuilder();
+    while (sb.length() < size) {
+      sb.append(Integer.toHexString(TestUtils.RANDOM.nextInt()));
+    }
+    sb.setLength(size);
+    return sb.toString();
+  }
+
+  /**
    * Similar to {@link Runnable}, but able to throw checked exceptions.
    */
   public interface ThrowingRunnable {

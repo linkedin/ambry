@@ -43,7 +43,7 @@ public class GCMCryptoServiceTest {
   @Test
   public void testEncryptDecryptBytes() throws Exception {
     for (int j = 0; j < 3; j++) {
-      String key = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+      String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_IN_CHARS);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
@@ -69,11 +69,11 @@ public class GCMCryptoServiceTest {
   @Test
   public void testEncryptDecryptKeys() throws Exception {
     for (int j = 0; j < 5; j++) {
-      String keyToEncrypt = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+      String keyToEncrypt = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       Properties props = getKMSProperties(keyToEncrypt, DEFAULT_KEY_SIZE_IN_CHARS);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       SecretKeySpec secretKeyToEncrypt = new SecretKeySpec(Hex.decode(keyToEncrypt), "AES");
-      String keyToBeEncrypted = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+      String keyToBeEncrypted = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       SecretKeySpec secretKeyToBeEncrypted = new SecretKeySpec(Hex.decode(keyToBeEncrypted), "AES");
       CryptoService<SecretKeySpec> cryptoService =
           new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
@@ -92,12 +92,12 @@ public class GCMCryptoServiceTest {
   public void testEncryptDecryptKeysDiffIvSize() throws Exception {
     int[] ivSizes = {12, 16, 24, 32, 48, 64};
     for (int ivSize : ivSizes) {
-      String keyToEncrypt = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+      String keyToEncrypt = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       Properties props = getKMSProperties(keyToEncrypt, DEFAULT_KEY_SIZE_IN_CHARS);
       props.setProperty("crypto.service.iv.size.in.bytes", Integer.toString(ivSize));
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       SecretKeySpec secretKeyToEncrypt = new SecretKeySpec(Hex.decode(keyToEncrypt), "AES");
-      String keyToBeEncrypted = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+      String keyToBeEncrypted = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
       SecretKeySpec secretKeyToBeEncrypted = new SecretKeySpec(Hex.decode(keyToBeEncrypted), "AES");
       CryptoService<SecretKeySpec> cryptoService =
           new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
@@ -115,7 +115,7 @@ public class GCMCryptoServiceTest {
    */
   @Test
   public void testDecryptionFailure() throws InstantiationException {
-    String key = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
     Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_IN_CHARS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     SecretKeySpec secretKeySpec = new SecretKeySpec(Hex.decode(key), "AES");
@@ -148,7 +148,7 @@ public class GCMCryptoServiceTest {
     new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
 
     // unrecognized mode
-    String key = getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_IN_CHARS);
     Properties props = getKMSProperties(key, DEFAULT_KEY_SIZE_IN_CHARS);
     props.setProperty("crypto.service.encryption.decryption.mode", "CBC");
     verifiableProperties = new VerifiableProperties((props));

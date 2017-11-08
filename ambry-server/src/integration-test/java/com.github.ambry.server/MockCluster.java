@@ -22,6 +22,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -107,6 +108,7 @@ public class MockCluster {
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);

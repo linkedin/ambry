@@ -34,6 +34,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -53,7 +54,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.CryptoTestUtils.*;
 import static com.github.ambry.router.PutManagerTest.*;
 
 
@@ -139,7 +139,7 @@ public class GetBlobInfoOperationTest {
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     if (testEncryption) {
       kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vprops),
-          getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vprops));
       exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
       exec.start();

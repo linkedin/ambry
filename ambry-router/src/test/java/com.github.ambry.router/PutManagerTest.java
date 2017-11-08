@@ -61,8 +61,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import static com.github.ambry.router.CryptoTestUtils.*;
-
 
 /**
  * A class to test the Put implementation of the {@link NonBlockingRouter}.
@@ -121,7 +119,7 @@ public class PutManagerTest {
     if (testEncryption) {
       VerifiableProperties vProps = new VerifiableProperties(new Properties());
       kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vProps),
-          getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vProps));
       exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
       exec.start();
