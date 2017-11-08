@@ -1033,14 +1033,13 @@ public class PutManagerTest {
     Map<String, List<BlobCreatedEvent>> blobCreatedEvents = new HashMap<>();
 
     @Override
-    public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
-        NotificationBlobType notificationBlobType) {
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
       if (events == null) {
         events = new ArrayList<>();
         blobCreatedEvents.put(blobId, events);
       }
-      events.add(new BlobCreatedEvent(blobProperties, userMetadata, notificationBlobType));
+      events.add(new BlobCreatedEvent(blobProperties, notificationBlobType));
     }
 
     /**
@@ -1061,12 +1060,6 @@ public class PutManagerTest {
           RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
       Assert.assertEquals("Expected blob size does not match data in notification event.",
           expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
-      if (!expectedBlobProperties.isEncrypted()) {
-        Assert.assertArrayEquals("User metadata does not match data in notification event.", expectedUserMetadata,
-            event.userMetadata);
-      } else {
-        Assert.assertNull("UserMetadata for an encrypted blob should be null", event.userMetadata);
-      }
     }
 
     /**
@@ -1091,12 +1084,10 @@ public class PutManagerTest {
 
   private static class BlobCreatedEvent {
     BlobProperties blobProperties;
-    byte[] userMetadata;
     NotificationBlobType notificationBlobType;
 
-    BlobCreatedEvent(BlobProperties blobProperties, byte[] userMetadata, NotificationBlobType notificationBlobType) {
+    BlobCreatedEvent(BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
       this.blobProperties = blobProperties;
-      this.userMetadata = userMetadata;
       this.notificationBlobType = notificationBlobType;
     }
   }
