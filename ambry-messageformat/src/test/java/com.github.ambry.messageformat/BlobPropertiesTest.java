@@ -48,7 +48,8 @@ public class BlobPropertiesTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{BlobPropertiesSerDe.VERSION_1}, {BlobPropertiesSerDe.VERSION_2}, {BlobPropertiesSerDe.VERSION_3}});
+    return Arrays.asList(
+        new Object[][]{{BlobPropertiesSerDe.VERSION_1}, {BlobPropertiesSerDe.VERSION_2}, {BlobPropertiesSerDe.VERSION_3}});
   }
 
   public BlobPropertiesTest(short version) {
@@ -73,7 +74,7 @@ public class BlobPropertiesTest {
     BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    ByteBuffer serializedBuffer = serializeBlobPropertiesSerDe(blobProperties, version);
+    ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
@@ -83,7 +84,7 @@ public class BlobPropertiesTest {
 
     blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
-    serializedBuffer = serializeBlobPropertiesSerDe(blobProperties, version);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
@@ -94,7 +95,7 @@ public class BlobPropertiesTest {
             isEncrypted);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
 
-    serializedBuffer = serializeBlobPropertiesSerDe(blobProperties, version);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
@@ -107,7 +108,7 @@ public class BlobPropertiesTest {
         new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, creationTimeMs,
             accountId, containerId, isEncrypted);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    serializedBuffer = serializeBlobPropertiesSerDe(blobProperties, version);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
 
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -128,7 +129,7 @@ public class BlobPropertiesTest {
       blobProperties =
           new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs, accountId,
               containerId, isEncrypted);
-      serializedBuffer = serializeBlobPropertiesSerDe(blobProperties, version);
+      serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
       blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
           new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
       verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountIdToExpect,
@@ -142,7 +143,7 @@ public class BlobPropertiesTest {
    * @param version the version to serialize
    * @return the {@link ByteBuffer} containing the serialized {@link BlobPropertiesSerDe}
    */
-  private ByteBuffer serializeBlobPropertiesSerDe(BlobProperties blobProperties, short version) {
+  private ByteBuffer serializeBlobPropertiesInVersion(BlobProperties blobProperties, short version) {
     ByteBuffer outputBuffer = null;
     switch (version) {
       case BlobPropertiesSerDe.VERSION_1:
@@ -187,7 +188,7 @@ public class BlobPropertiesTest {
     }
     return outputBuffer;
   }
-  
+
   /**
    * Verify {@link BlobProperties} for its constituent values
    * @param blobProperties the {@link BlobProperties} that needs to be compared against

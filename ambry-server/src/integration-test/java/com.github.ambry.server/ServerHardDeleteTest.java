@@ -294,7 +294,7 @@ public class ServerHardDeleteTest {
     notificationSystem.awaitBlobDeletions(blobIdList.get(4).getID());
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
-    // Changes in this patch: a. New header version has 4 more bytes compared to preivous b. BlobProperties increased by 1 byte
+    // Changes in this patch: a. New header version has 4 more bytes compared to previous b. BlobProperties increased by 1 byte
     // c. Encryption Key Record size is 114 for an encryptionKey of size 100. EncryptionKeyRecord could be null if not applicable.
     // Delta: 7 * 4 (headers for 7 records) + 1*6 (BlobProperties for 6 put records) + 114*3 = 376
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap, 198896);
