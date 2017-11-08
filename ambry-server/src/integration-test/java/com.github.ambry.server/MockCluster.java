@@ -244,8 +244,7 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
-      NotificationBlobType notificationBlobType) {
+  public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
     // ignore
   }
 
