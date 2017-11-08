@@ -105,8 +105,6 @@ class DumpDataHelper {
         if (header.hasEncryptionKeyRecord()) {
           blobEncryptionKey = MessageFormatRecord.deserializeBlobEncryptionKey(streamlog);
           encryptionKey = "EncryptionKey found which is of size " + blobEncryptionKey.remaining();
-        } else {
-          encryptionKey = "No encryptionKey ";
         }
         BlobProperties props = MessageFormatRecord.deserializeBlobProperties(streamlog);
         expiresAtMs = Utils.addSecondsToEpochTime(props.getCreationTimeInMs(), props.getTimeToLiveInSeconds());

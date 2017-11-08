@@ -74,7 +74,7 @@ public class BlobPropertiesTest {
     BlobProperties blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
+    ByteBuffer serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
@@ -84,7 +84,7 @@ public class BlobPropertiesTest {
 
     blobProperties = new BlobProperties(blobSize, serviceId, null, null, false, Utils.Infinite_Time,
         SystemTime.getInstance().milliseconds(), accountId, containerId, isEncrypted);
-    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, Utils.Infinite_Time, accountIdToExpect,
@@ -95,7 +95,7 @@ public class BlobPropertiesTest {
             isEncrypted);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
 
-    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds,
@@ -108,7 +108,7 @@ public class BlobPropertiesTest {
         new BlobProperties(blobSize, serviceId, ownerId, contentType, true, timeToLiveInSeconds, creationTimeMs,
             accountId, containerId, isEncrypted);
     System.out.println(blobProperties.toString()); // Provide example of BlobProperties.toString()
-    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
 
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
@@ -129,7 +129,7 @@ public class BlobPropertiesTest {
       blobProperties =
           new BlobProperties(blobSize, serviceId, ownerId, contentType, true, ttl, creationTimeMs, accountId,
               containerId, isEncrypted);
-      serializedBuffer = serializeBlobPropertiesInVersion(blobProperties, version);
+      serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
       blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
           new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
       verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountIdToExpect,
@@ -140,10 +140,9 @@ public class BlobPropertiesTest {
   /**
    * Serialize {@link BlobProperties} using {@link BlobPropertiesSerDe} in the given version
    * @param blobProperties {@link BlobProperties} that needs to be serialized
-   * @param version the version to serialize
    * @return the {@link ByteBuffer} containing the serialized {@link BlobPropertiesSerDe}
    */
-  private ByteBuffer serializeBlobPropertiesInVersion(BlobProperties blobProperties, short version) {
+  private ByteBuffer serializeBlobPropertiesInVersion(BlobProperties blobProperties) {
     ByteBuffer outputBuffer = null;
     switch (version) {
       case BlobPropertiesSerDe.VERSION_1:
