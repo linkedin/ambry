@@ -583,7 +583,6 @@ class GetBlobOperation extends GetOperation {
         blobContentAvailableToProcess = true;
         checkAndMaybeComplete();
         onChunkOperationComplete(this);
-        routerCallback.onPollReady();
         return true;
       }
       return false;
@@ -696,6 +695,7 @@ class GetBlobOperation extends GetOperation {
                           "Exception thrown on decrypting the content for data chunk " + chunkBlobId,
                           RouterErrorCode.UnexpectedInternalError)));
                     }
+                    routerCallback.onPollReady();
                   }));
         }
         successfullyDeserialized = true;
@@ -1022,7 +1022,6 @@ class GetBlobOperation extends GetOperation {
         blobContentAvailableToProcess = true;
         checkAndMaybeComplete();
         onChunkOperationComplete(this);
-        routerCallback.onPollReady();
         return true;
       }
       return false;
@@ -1144,6 +1143,7 @@ class GetBlobOperation extends GetOperation {
                   logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
                       blobId);
                   decryptCallbackResultInfo.set(new DecryptCallBackResultInfo(result, exception));
+                  routerCallback.onPollReady();
                 }));
           } else {
             blobContentAvailableToProcess = true;
@@ -1190,6 +1190,7 @@ class GetBlobOperation extends GetOperation {
                 logger.trace("Handling decrypt job call back for simple blob {} to set decrypt callback results",
                     blobId);
                 decryptCallbackResultInfo.set(new DecryptCallBackResultInfo(result, exception));
+                routerCallback.onPollReady();
               }));
         }
       }
