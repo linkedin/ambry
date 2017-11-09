@@ -466,6 +466,8 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.request.buffer.watermark", "1");
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     properties.put("frontend.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
+    // add key for singleKeyManagementService
+    properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
     return new VerifiableProperties(properties);
   }
 
