@@ -289,7 +289,7 @@ public class PutManagerTest {
       kms.exceptionToThrow.set(GSE);
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
-      Exception expectedException = new RouterException("", RouterErrorCode.UnexpectedInternalError);
+      Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
       submitPutsAndAssertFailure(expectedException, false, true, true);
       // this should not close the router.
       Assert.assertTrue("Router should not be closed", router.isOpen());
@@ -324,7 +324,7 @@ public class PutManagerTest {
       cryptoService.exceptionOnEncryption.set(GSE);
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
-      Exception expectedException = new RouterException("", RouterErrorCode.UnexpectedInternalError);
+      Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
       submitPutsAndAssertFailure(expectedException, false, true, true);
       // this should not close the router.
       Assert.assertTrue("Router should not be closed", router.isOpen());

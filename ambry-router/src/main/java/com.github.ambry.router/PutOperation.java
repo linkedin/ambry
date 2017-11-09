@@ -397,13 +397,13 @@ class PutOperation {
    */
   private void encryptChunk(PutChunk putChunk, boolean encryptContent) {
     try {
-      logger.trace("Chunk at index {} state moves to {}", putChunk.chunkIndex, ChunkState.Encrypting);
+      logger.trace("Chunk at index {} moves to {} state", putChunk.chunkIndex, ChunkState.Encrypting);
       putChunk.state = ChunkState.Encrypting;
       if (encryptContent) {
         putChunk.buf.flip();
         putChunk.chunkBlobSize = putChunk.buf.remaining();
       }
-      logger.trace("Submitting encrypt job for chunk at index " + putChunk.chunkIndex);
+      logger.trace("Submitting encrypt job for chunk at index {}", putChunk.chunkIndex);
       cryptoJobHandler.submitJob(
           new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               encryptContent ? putChunk.buf : null, ByteBuffer.wrap(putChunk.chunkUserMetadata), kms.getRandomKey(),
@@ -420,15 +420,14 @@ class PutOperation {
               // todo: add metrics to track encryption time
             } else {
               if (getOperationException() == null) {
-                logger.trace("Setting exception {} from encrypt of chunk at index {} ", exception.getCause(),
-                    putChunk.chunkIndex);
+                logger.trace("Setting exception {} from encrypt of chunk at index {} ", exception, putChunk.chunkIndex);
                 setOperationExceptionAndComplete(new RouterException(
-                    "Exception thrown on encrypting the content for chunk at index " + putChunk.chunkIndex,
+                    "Exception thrown on encrypting the content for chunk at index " + putChunk.chunkIndex, exception,
                     RouterErrorCode.UnexpectedInternalError));
               } else {
                 logger.trace(
-                    "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
-                    putChunk.chunkIndex, getOperationException().getCause());
+                    "Ignoring exception {} from encrypt job for chunk at index {} as operation exception {} is set already",
+                    exception, putChunk.chunkIndex, getOperationException());
               }
             }
             routerCallback.onPollReady();
@@ -437,7 +436,7 @@ class PutOperation {
     } catch (GeneralSecurityException e) {
       logger.trace("Exception thrown while generating random key for chunk at index {}", putChunk.chunkIndex);
       setOperationExceptionAndComplete(new RouterException(
-          "GeneralSecurityException thrown while generating random key for chunk at index " + putChunk.chunkIndex,
+          "GeneralSecurityException thrown while generating random key for chunk at index " + putChunk.chunkIndex, e,
           RouterErrorCode.UnexpectedInternalError));
     }
   }
