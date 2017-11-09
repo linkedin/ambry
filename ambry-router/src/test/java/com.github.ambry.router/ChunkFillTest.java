@@ -120,13 +120,13 @@ public class ChunkFillTest {
     KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(vProps),
         TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     CryptoService cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-    CryptoJobExecutorService exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
-    exec.start();
+    CryptoJobHandler cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             putUserMetadata, putChannel, futureResult, null,
             new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-            kms, cryptoService, exec, new MockTime(), putBlobProperties);
+            kms, cryptoService, cryptoJobHandler, new MockTime(), putBlobProperties);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
@@ -227,13 +227,13 @@ public class ChunkFillTest {
     KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(vProps),
         TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     CryptoService cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-    CryptoJobExecutorService exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
-    exec.start();
+    CryptoJobHandler cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             putUserMetadata, putChannel, futureResult, null,
             new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-            kms, cryptoService, exec, time, putBlobProperties);
+            kms, cryptoService, cryptoJobHandler, time, putBlobProperties);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];

@@ -122,15 +122,14 @@ class GetBlobOperation extends GetOperation {
    * @param blobIdFactory the factory to use to deserialize keys in a metadata chunk.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param exec {@link CryptoJobExecutorService} to assist in the execution of crypto jobs
+   * @param exec {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobExecutorService exec, Time time)
-      throws RouterException {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler exec, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
         routerMetrics.getBlobLocalColoLatencyMs, routerMetrics.getBlobCrossColoLatencyMs,
         routerMetrics.getBlobPastDueCount, kms, cryptoService, exec, time);
@@ -680,7 +679,7 @@ class GetBlobOperation extends GetOperation {
           state = ChunkState.Decrypting;
           logger.trace("Marking the chunk's state to {} and submitting decrypt job for data chunk {}",
               ChunkState.Decrypting, chunkBlobId);
-          exec.submitJob(
+          cryptoJobHandler.submitJob(
               new DecryptJob(chunkBlobId, encryptionKey, blobData.getStream().getByteBuffer(), null, cryptoService, kms,
                   (DecryptJob.DecryptJobResult result, Exception exception) -> {
                     logger.trace("Handling decrypt job callback for data chunk {}", chunkBlobId);
@@ -1121,7 +1120,7 @@ class GetBlobOperation extends GetOperation {
             blobInfo = null;
             logger.trace("Marking the chunk's state to {} and submitting decrypt job for Metadaata chunk {}",
                 ChunkState.Decrypting, blobId);
-            exec.submitJob(new DecryptJob(blobId, encryptionKey, null,
+            cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptionKey, null,
                 blobInfoFromServer != null ? ByteBuffer.wrap(blobInfoFromServer.getUserMetadata()) : null,
                 cryptoService, kms, (DecryptJob.DecryptJobResult result, Exception exception) -> {
               logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
@@ -1171,7 +1170,7 @@ class GetBlobOperation extends GetOperation {
           blobInfo = null;
           logger.trace("Marking the chunk's state to {} and submitting decrypt job for simple blob {}",
               ChunkState.Decrypting, blobId);
-          exec.submitJob(new DecryptJob(blobId, encryptionKey, blobData.getStream().getByteBuffer(),
+          cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptionKey, blobData.getStream().getByteBuffer(),
               blobInfoFromServer != null ? ByteBuffer.wrap(blobInfoFromServer.getUserMetadata()) : null, cryptoService,
               kms, (DecryptJob.DecryptJobResult result, Exception exception) -> {
             logger.trace("Handling decrypt job call back for simple blob {} to set decrypt callback results", blobId);

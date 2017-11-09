@@ -77,9 +77,9 @@ public class PutManagerTest {
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
-  private CryptoJobExecutorServiceTest.MockKeyManagementService kms;
-  private CryptoJobExecutorServiceTest.MockCryptoService cryptoService;
-  private CryptoJobExecutorService exec;
+  private CryptoJobHandlerTest.MockKeyManagementService kms;
+  private CryptoJobHandlerTest.MockCryptoService cryptoService;
+  private CryptoJobHandler cryptoJobHandler;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
   private int chunkSize;
@@ -118,11 +118,11 @@ public class PutManagerTest {
     instantiateNewRouterForPuts = true;
     if (testEncryption) {
       VerifiableProperties vProps = new VerifiableProperties(new Properties());
-      kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vProps),
+      kms = new CryptoJobHandlerTest.MockKeyManagementService(new KMSConfig(vProps),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vProps));
-      exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
-      exec.start();
+      cryptoService = new CryptoJobHandlerTest.MockCryptoService(new CryptoServiceConfig(vProps));
+      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+      cryptoJobHandler.start();
     }
   }
 
@@ -136,8 +136,8 @@ public class PutManagerTest {
     if (router != null) {
       Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     }
-    if (exec != null) {
-      exec.close();
+    if (cryptoJobHandler != null) {
+      cryptoJobHandler.close();
     }
   }
 
@@ -678,7 +678,7 @@ public class PutManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
-        exec, mockTime);
+        cryptoJobHandler, mockTime);
     return router;
   }
 

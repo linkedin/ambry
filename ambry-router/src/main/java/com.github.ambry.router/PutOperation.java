@@ -87,7 +87,7 @@ class PutOperation {
   private final RouterCallback routerCallback;
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
-  private final CryptoJobExecutorService exec;
+  private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
   private BlobProperties finalBlobProperties;
 
@@ -154,7 +154,7 @@ class PutOperation {
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param exec {@link CryptoJobExecutorService} to assist in the execution of crypto jobs
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
@@ -163,7 +163,7 @@ class PutOperation {
       ResponseHandler responseHandler, NotificationSystem notificationSystem, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobExecutorService exec, Time time,
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
       BlobProperties blobProperties) throws RouterException {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
@@ -179,7 +179,7 @@ class PutOperation {
     this.routerCallback = routerCallback;
     this.kms = kms;
     this.cryptoService = cryptoService;
-    this.exec = exec;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
@@ -404,35 +404,36 @@ class PutOperation {
         putChunk.chunkBlobSize = putChunk.buf.remaining();
       }
       logger.trace("Submitting encrypt job for chunk at index " + putChunk.chunkIndex);
-      exec.submitJob(new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-          encryptContent ? putChunk.buf : null, ByteBuffer.wrap(putChunk.chunkUserMetadata), kms.getRandomKey(),
-          cryptoService, kms, (EncryptJob.EncryptJobResult result, Exception exception) -> {
-        logger.trace("Processing encrypt job callback for chunk at index " + putChunk.chunkIndex);
-        if (exception == null && !isOperationComplete()) {
-          if (encryptContent) {
-            putChunk.buf = result.getEncryptedBlobContent();
-          }
-          putChunk.encryptedPerBlobKey = result.getEncryptedKey();
-          putChunk.chunkUserMetadata = result.getEncryptedUserMetadata().array();
-          logger.trace("Completing encrypt job result for chunk at index " + putChunk.chunkIndex);
-          putChunk.onFillComplete(true);
-          // todo: add metrics to track encryption time
-        } else {
-          if (getOperationException() == null) {
-            logger.trace("Setting exception {} from encrypt of chunk at index {} ", exception.getCause(),
-                putChunk.chunkIndex);
-            setOperationExceptionAndComplete(new RouterException(
-                "Exception thrown on encrypting the content for chunk at index " + putChunk.chunkIndex,
-                RouterErrorCode.UnexpectedInternalError));
-          } else {
-            logger.trace(
-                "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
-                putChunk.chunkIndex, getOperationException().getCause());
-          }
-        }
-        routerCallback.onPollReady();
-        // todo: add metrics to track encryption time
-      }));
+      cryptoJobHandler.submitJob(
+          new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
+              encryptContent ? putChunk.buf : null, ByteBuffer.wrap(putChunk.chunkUserMetadata), kms.getRandomKey(),
+              cryptoService, kms, (EncryptJob.EncryptJobResult result, Exception exception) -> {
+            logger.trace("Processing encrypt job callback for chunk at index " + putChunk.chunkIndex);
+            if (exception == null && !isOperationComplete()) {
+              if (encryptContent) {
+                putChunk.buf = result.getEncryptedBlobContent();
+              }
+              putChunk.encryptedPerBlobKey = result.getEncryptedKey();
+              putChunk.chunkUserMetadata = result.getEncryptedUserMetadata().array();
+              logger.trace("Completing encrypt job result for chunk at index " + putChunk.chunkIndex);
+              putChunk.onFillComplete(true);
+              // todo: add metrics to track encryption time
+            } else {
+              if (getOperationException() == null) {
+                logger.trace("Setting exception {} from encrypt of chunk at index {} ", exception.getCause(),
+                    putChunk.chunkIndex);
+                setOperationExceptionAndComplete(new RouterException(
+                    "Exception thrown on encrypting the content for chunk at index " + putChunk.chunkIndex,
+                    RouterErrorCode.UnexpectedInternalError));
+              } else {
+                logger.trace(
+                    "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
+                    putChunk.chunkIndex, getOperationException().getCause());
+              }
+            }
+            routerCallback.onPollReady();
+            // todo: add metrics to track encryption time
+          }));
     } catch (GeneralSecurityException e) {
       logger.trace("Exception thrown while generating random key for chunk at index {}", putChunk.chunkIndex);
       setOperationExceptionAndComplete(new RouterException(

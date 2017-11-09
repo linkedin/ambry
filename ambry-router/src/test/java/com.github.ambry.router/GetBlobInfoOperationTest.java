@@ -92,9 +92,9 @@ public class GetBlobInfoOperationTest {
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final GetBlobOptionsInternal options;
-  private CryptoJobExecutorServiceTest.MockKeyManagementService kms = null;
-  private CryptoJobExecutorServiceTest.MockCryptoService cryptoService = null;
-  private CryptoJobExecutorService exec = null;
+  private CryptoJobHandlerTest.MockKeyManagementService kms = null;
+  private CryptoJobHandlerTest.MockCryptoService cryptoService = null;
+  private CryptoJobHandler cryptoJobHandler = null;
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -138,14 +138,15 @@ public class GetBlobInfoOperationTest {
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     if (testEncryption) {
-      kms = new CryptoJobExecutorServiceTest.MockKeyManagementService(new KMSConfig(vprops),
+      kms = new CryptoJobHandlerTest.MockKeyManagementService(new KMSConfig(vprops),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new CryptoJobExecutorServiceTest.MockCryptoService(new CryptoServiceConfig(vprops));
-      exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
-      exec.start();
+      cryptoService = new CryptoJobHandlerTest.MockCryptoService(new CryptoServiceConfig(vprops));
+      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+      cryptoJobHandler.start();
     }
     router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
-        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, exec, time);
+        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
+        time);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     blobProperties =
@@ -169,8 +170,8 @@ public class GetBlobInfoOperationTest {
       networkClient.close();
     }
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
-    if (exec != null) {
-      exec.close();
+    if (cryptoJobHandler != null) {
+      cryptoJobHandler.close();
     }
   }
 
@@ -190,7 +191,7 @@ public class GetBlobInfoOperationTest {
     // test a bad case
     try {
       new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", options,
-          getOperationCallback, kms, cryptoService, exec, time);
+          getOperationCallback, kms, cryptoService, cryptoJobHandler, time);
       Assert.fail("Instantiation of GetBlobInfo operation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobInfoOperation",
@@ -200,7 +201,7 @@ public class GetBlobInfoOperationTest {
     // test a good case
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
-            getOperationCallback, kms, cryptoService, exec, time);
+            getOperationCallback, kms, cryptoService, cryptoJobHandler, time);
 
     Assert.assertEquals("Callback must match", getOperationCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
@@ -211,7 +212,7 @@ public class GetBlobInfoOperationTest {
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
       new GetBlobInfoOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
-          getOperationCallback, kms, cryptoService, exec, time);
+          getOperationCallback, kms, cryptoService, cryptoJobHandler, time);
       Assert.fail("Instantiation of GetBlobInfoOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -227,7 +228,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     op.poll(requestRegistrationCallback);
@@ -266,7 +267,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
@@ -291,7 +292,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -326,7 +327,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -412,7 +413,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -469,7 +470,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -521,7 +522,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            kms, cryptoService, exec, time);
+            kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     op.poll(requestRegistrationCallback);

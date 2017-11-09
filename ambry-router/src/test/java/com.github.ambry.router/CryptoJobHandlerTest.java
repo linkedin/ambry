@@ -43,9 +43,9 @@ import static com.github.ambry.utils.Utils.*;
 
 
 /**
- * Tests {@link CryptoJobExecutorService}
+ * Tests {@link CryptoJobHandler}
  */
-public class CryptoJobExecutorServiceTest {
+public class CryptoJobHandlerTest {
   static final int DEFAULT_THREAD_COUNT = 2;
   static final int DEFAULT_KEY_SIZE = 64;
   private static final int MAX_DATA_SIZE_IN_BYTES = 10000;
@@ -59,26 +59,26 @@ public class CryptoJobExecutorServiceTest {
   private final ClusterMap referenceClusterMap;
   private final String defaultKey;
   private final VerifiableProperties verifiableProperties;
-  private CryptoJobExecutorService cryptoJobExecutorService;
+  private CryptoJobHandler cryptoJobHandler;
 
-  public CryptoJobExecutorServiceTest() throws IOException, GeneralSecurityException {
+  public CryptoJobHandlerTest() throws IOException, GeneralSecurityException {
     defaultKey = TestUtils.getRandomKey(DEFAULT_KEY_SIZE);
     Properties props = getKMSProperties(defaultKey, RANDOM_KEY_SIZE_IN_BITS);
     verifiableProperties = new VerifiableProperties((props));
     kms = new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
     cryptoService = new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
-    cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
     referenceClusterMap = new MockClusterMap();
-    cryptoJobExecutorService.start();
+    cryptoJobHandler.start();
   }
 
   @After
   public void cleanup() {
-    cryptoJobExecutorService.close();
+    cryptoJobHandler.close();
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for happy path. i.e. Encrypt and Decrypt jobs are executed and callback invoked
+   * Tests {@link CryptoJobHandler} for happy path. i.e. Encrypt and Decrypt jobs are executed and callback invoked
    * @throws GeneralSecurityException
    * @throws InterruptedException
    */
@@ -98,7 +98,7 @@ public class CryptoJobExecutorServiceTest {
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for with different worker count
+   * Tests {@link CryptoJobHandler} for with different worker count
    * @throws GeneralSecurityException
    * @throws InterruptedException
    */
@@ -106,9 +106,9 @@ public class CryptoJobExecutorServiceTest {
   public void testCryptoJobExecutorServiceDiffThreadCount() throws GeneralSecurityException, InterruptedException {
     int totalDataCount = 10;
     for (int j = 0; j < 5; j++) {
-      cryptoJobExecutorService.close();
-      cryptoJobExecutorService = new CryptoJobExecutorService(j + 1);
-      cryptoJobExecutorService.start();
+      cryptoJobHandler.close();
+      cryptoJobHandler = new CryptoJobHandler(j + 1);
+      cryptoJobHandler.start();
       CountDownLatch encryptCallBackCount = new CountDownLatch(totalDataCount);
       CountDownLatch decryptCallBackCount = new CountDownLatch(totalDataCount);
       SecretKeySpec perBlobKey = kms.getRandomKey();
@@ -121,54 +121,54 @@ public class CryptoJobExecutorServiceTest {
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for failures during encryption
+   * Tests {@link CryptoJobHandler} for failures during encryption
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
   @Test
   public void testEncryptionFailure() throws InterruptedException, GeneralSecurityException {
-    cryptoJobExecutorService.close();
+    cryptoJobHandler.close();
     MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
     mockCryptoService.exceptionOnEncryption.set(
         new GeneralSecurityException("Exception to test", new IllegalStateException()));
-    cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
-    cryptoJobExecutorService.start();
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
     testFailureOnEncryption(perBlobSecretKey, mockCryptoService, kms);
     mockCryptoService.clearStates();
-    cryptoJobExecutorService.close();
+    cryptoJobHandler.close();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
     mockKms.exceptionToThrow.set(new GeneralSecurityException("Exception to test", new IllegalStateException()));
-    cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
-    cryptoJobExecutorService.start();
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
     testFailureOnEncryption(perBlobSecretKey, cryptoService, mockKms);
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for failures during decryption
+   * Tests {@link CryptoJobHandler} for failures during decryption
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
   @Test
   public void testDecryptionFailure() throws InterruptedException, GeneralSecurityException {
-    cryptoJobExecutorService.close();
+    cryptoJobHandler.close();
     MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
     mockCryptoService.exceptionOnDecryption.set(
         new GeneralSecurityException("Exception to test", new IllegalStateException()));
-    cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
-    cryptoJobExecutorService.start();
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
     testFailureOnDecryption(perBlobSecretKey, null, false, mockCryptoService, kms);
     mockCryptoService.clearStates();
-    cryptoJobExecutorService.close();
+    cryptoJobHandler.close();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
-    cryptoJobExecutorService = new CryptoJobExecutorService(DEFAULT_THREAD_COUNT);
-    cryptoJobExecutorService.start();
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
     testFailureOnDecryption(perBlobSecretKey, mockKms, true, cryptoService, mockKms);
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for pending encrypt jobs callback after closing the thread
+   * Tests {@link CryptoJobHandler} for pending encrypt jobs callback after closing the thread
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
@@ -182,7 +182,7 @@ public class CryptoJobExecutorServiceTest {
     for (int i = 0; i < testDataCount; i++) {
       TestBlobData testData = getRandomBlob(referenceClusterMap);
       if (i < closeOnCount) {
-        cryptoJobExecutorService.submitJob(
+        cryptoJobHandler.submitJob(
             new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
                 testData.userMetadata, perBlobKey, cryptoService, kms,
                 (EncryptJob.EncryptJobResult result, Exception exception) -> {
@@ -215,21 +215,21 @@ public class CryptoJobExecutorServiceTest {
     }
     // add special job that will close the thread. Add all the encrypt jobs to the queue before closing the thread.
     TestBlobData probeData = getRandomBlob(referenceClusterMap);
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new EncryptJob(probeData.blobId.getAccountId(), probeData.blobId.getContainerId(), probeData.blobContent,
             probeData.userMetadata, perBlobKey, cryptoService, kms,
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
               for (EncryptJob encryptJob : encryptJobs) {
-                cryptoJobExecutorService.submitJob(encryptJob);
+                cryptoJobHandler.submitJob(encryptJob);
               }
-              new Thread(new ThreadToCloseCryptoHandler(cryptoJobExecutorService)).start();
+              new Thread(new ThreadToCloseCryptoHandler(cryptoJobHandler)).start();
             }));
 
     awaitCountDownLatch(encryptCallBackCount, ENCRYPT_JOB_TYPE);
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for pending decrypt jobs callback after closing the thread
+   * Tests {@link CryptoJobHandler} for pending decrypt jobs callback after closing the thread
    * @throws InterruptedException
    * @throws GeneralSecurityException
    */
@@ -242,7 +242,7 @@ public class CryptoJobExecutorServiceTest {
     List<DecryptJob> decryptJobs = new CopyOnWriteArrayList<>();
     for (int i = 0; i < testDataCount; i++) {
       TestBlobData testData = getRandomBlob(referenceClusterMap);
-      cryptoJobExecutorService.submitJob(
+      cryptoJobHandler.submitJob(
           new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
               testData.userMetadata, perBlobKey, cryptoService, kms,
               (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
@@ -283,36 +283,36 @@ public class CryptoJobExecutorServiceTest {
 
     // add special job that will close the thread. Add all the decrypt jobs to the queue before closing the thread.
     TestBlobData probeData = getRandomBlob(referenceClusterMap);
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new EncryptJob(probeData.blobId.getAccountId(), probeData.blobId.getContainerId(), probeData.blobContent,
             probeData.userMetadata, perBlobKey, cryptoService, kms,
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
               for (DecryptJob decryptJob : decryptJobs) {
-                cryptoJobExecutorService.submitJob(decryptJob);
+                cryptoJobHandler.submitJob(decryptJob);
               }
-              new Thread(new ThreadToCloseCryptoHandler(cryptoJobExecutorService)).start();
+              new Thread(new ThreadToCloseCryptoHandler(cryptoJobHandler)).start();
             }));
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
   }
 
   /**
-   * Tests {@link CryptoJobExecutorService} for encrypt and decrypt calls after closing the thread
+   * Tests {@link CryptoJobHandler} for encrypt and decrypt calls after closing the thread
    * @throws GeneralSecurityException
    */
   @Test
   public void testCryptoJobHandlerClose() throws GeneralSecurityException {
     SecretKeySpec perBlobKey = kms.getRandomKey();
     TestBlobData randomData = getRandomBlob(referenceClusterMap);
-    cryptoJobExecutorService.close();
+    cryptoJobHandler.close();
 
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new EncryptJob(randomData.blobId.getAccountId(), randomData.blobId.getContainerId(), randomData.blobContent,
             randomData.userMetadata, perBlobKey, cryptoService, kms,
             (EncryptJob.EncryptJobResult result, Exception exception) -> {
               Assert.fail("Callback should not have been called since CryptoWorker is closed");
             }));
 
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new DecryptJob(randomData.blobId, randomData.blobContent, randomData.blobContent, randomData.userMetadata,
             cryptoService, kms, (DecryptJob.DecryptJobResult result, Exception exception) -> {
           Assert.fail("Callback should not have been called since CryptoWorker is closed");
@@ -320,12 +320,12 @@ public class CryptoJobExecutorServiceTest {
   }
 
   /**
-   * Thread to close the {@link CryptoJobExecutorService} asynchronously
+   * Thread to close the {@link CryptoJobHandler} asynchronously
    */
   private class ThreadToCloseCryptoHandler implements Runnable {
-    private final CryptoJobExecutorService cryptoJobHandler;
+    private final CryptoJobHandler cryptoJobHandler;
 
-    private ThreadToCloseCryptoHandler(CryptoJobExecutorService cryptoJobHandler) {
+    private ThreadToCloseCryptoHandler(CryptoJobHandler cryptoJobHandler) {
       this.cryptoJobHandler = cryptoJobHandler;
     }
 
@@ -347,7 +347,7 @@ public class CryptoJobExecutorServiceTest {
     TestBlobData randomData = getRandomBlob(referenceClusterMap);
     ByteBuffer content = mode != Mode.UserMetadata ? randomData.blobContent : null;
     ByteBuffer userMetadata = mode != Mode.Data ? randomData.userMetadata : null;
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new EncryptJob(randomData.blobId.getAccountId(), randomData.blobId.getContainerId(), content, userMetadata,
             perBlobKey, cryptoService, kms, new EncryptCallbackVerifier(randomData.blobId, false, encryptCallBackCount,
             new DecryptCallbackVerifier(randomData.blobId, content, userMetadata, false, decryptCallBackCount), mode)));
@@ -362,7 +362,7 @@ public class CryptoJobExecutorServiceTest {
       throws InterruptedException {
     TestBlobData testData = getRandomBlob(referenceClusterMap);
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
             testData.userMetadata, perBlobKey, cryptoService, kms,
             new EncryptCallbackVerifier(testData.blobId, true, encryptCallBackCount, null, Mode.Both)));
@@ -382,7 +382,7 @@ public class CryptoJobExecutorServiceTest {
     TestBlobData testData = getRandomBlob(referenceClusterMap);
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     CountDownLatch decryptCallBackCount = new CountDownLatch(1);
-    cryptoJobExecutorService.submitJob(
+    cryptoJobHandler.submitJob(
         new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
             testData.userMetadata, perBlobKey, cryptoService, kms,
             (EncryptJob.EncryptJobResult encryptJobResult, Exception exception) -> {
@@ -399,7 +399,7 @@ public class CryptoJobExecutorServiceTest {
                 mockKMS.exceptionToThrow.set(
                     new GeneralSecurityException("Exception to test", new IllegalStateException()));
               }
-              cryptoJobExecutorService.submitJob(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
+              cryptoJobHandler.submitJob(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
                   encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(),
                   cryptoService, kms, (DecryptJob.DecryptJobResult result, Exception e) -> {
                 decryptCallBackCount.countDown();
@@ -449,7 +449,7 @@ public class CryptoJobExecutorServiceTest {
               encryptJobResult.getEncryptedUserMetadata());
         }
         Assert.assertNotNull("Encrypted key should not be null", encryptJobResult.getEncryptedKey());
-        cryptoJobExecutorService.submitJob(
+        cryptoJobHandler.submitJob(
             new DecryptJob(blobId, encryptJobResult.getEncryptedKey(), encryptJobResult.getEncryptedBlobContent(),
                 encryptJobResult.getEncryptedUserMetadata(), cryptoService, kms, decryptCallBackVerifier));
       } else {

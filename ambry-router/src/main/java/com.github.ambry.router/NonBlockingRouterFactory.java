@@ -48,7 +48,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final NetworkClientFactory networkClientFactory;
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
-  private final CryptoJobExecutorService exec;
+  private final CryptoJobHandler cryptoJobHandler;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -91,7 +91,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     CryptoServiceFactory cryptoServiceFactory =
         Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, registry);
     cryptoService = cryptoServiceFactory.getCryptoService();
-    exec = new CryptoJobExecutorService(routerConfig.routerCryptoJobsWorkerCount);
+    cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
@@ -104,7 +104,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter() throws InstantiationException {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, exec, time);
+          kms, cryptoService, cryptoJobHandler, time);
     } catch (IOException e) {
       throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
     }

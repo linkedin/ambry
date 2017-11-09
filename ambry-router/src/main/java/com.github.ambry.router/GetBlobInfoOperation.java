@@ -76,14 +76,14 @@ class GetBlobInfoOperation extends GetOperation {
    * @param callback the callback that is to be called when the operation completes.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param exec {@link CryptoJobExecutorService} to assist in the execution of crypto jobs
+   * @param exec {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, KeyManagementService kms, CryptoService cryptoService,
-      CryptoJobExecutorService exec, Time time) throws RouterException {
+      CryptoJobHandler exec, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, exec, time);
@@ -370,13 +370,14 @@ class GetBlobInfoOperation extends GetOperation {
         // submit decrypt job
         state = State.Decrypting;
         logger.trace("Moving the state to {} and submitting decrypt job for {}", State.Decrypting, blobId);
-        exec.submitJob(new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
-            (DecryptJob.DecryptJobResult result, Exception exception) -> {
-              logger.trace("Handling decrypt job callback results for {}", blobId);
-              decryptCallbackResult = result;
-              decryptCallbackException = exception;
-              decryptCallbackResultAvailable = true;
-            }));
+        cryptoJobHandler.submitJob(
+            new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
+                (DecryptJob.DecryptJobResult result, Exception exception) -> {
+                  logger.trace("Handling decrypt job callback results for {}", blobId);
+                  decryptCallbackResult = result;
+                  decryptCallbackException = exception;
+                  decryptCallbackResultAvailable = true;
+                }));
       }
     } else {
       // If the successTarget is 1, this case will never get executed.

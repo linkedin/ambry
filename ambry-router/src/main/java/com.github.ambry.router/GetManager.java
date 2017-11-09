@@ -49,7 +49,7 @@ class GetManager {
   private final Set<GetOperation> getOperations;
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
-  private final CryptoJobExecutorService exec;
+  private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
   // This helps the GetManager quickly find the appropriate GetOperation to hand over the response to.
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
@@ -89,12 +89,12 @@ class GetManager {
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param exec {@link CryptoJobExecutorService} to assist in the execution of crypto jobs
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time The {@link Time} instance to use.
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
       NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobExecutorService exec, Time time) {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
@@ -103,7 +103,7 @@ class GetManager {
     this.routerCallback = routerCallback;
     this.kms = kms;
     this.cryptoService = cryptoService;
-    this.exec = exec;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     getOperations = Collections.newSetFromMap(new ConcurrentHashMap<GetOperation, Boolean>());
   }
@@ -120,11 +120,11 @@ class GetManager {
       if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                callback, kms, cryptoService, exec, time);
+                callback, kms, cryptoService, cryptoJobHandler, time);
       } else {
         getOperation =
             new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-                routerCallback, blobIdFactory, kms, cryptoService, exec, time);
+                routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {

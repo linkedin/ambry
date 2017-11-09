@@ -57,7 +57,7 @@ public class GetManagerTest {
   private final boolean testEncryption;
   private KeyManagementService kms = null;
   private CryptoService cryptoService = null;
-  private CryptoJobExecutorService exec = null;
+  private CryptoJobHandler cryptoJobHandler = null;
   private RouterConfig routerConfig;
   private int chunkSize;
   private int requestParallelism;
@@ -100,8 +100,8 @@ public class GetManagerTest {
       kms = new SingleKeyManagementService(new KMSConfig(vProps),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-      exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
-      exec.start();
+      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+      cryptoJobHandler.start();
     }
   }
 
@@ -114,8 +114,8 @@ public class GetManagerTest {
   public void postCheck() {
     Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     Assert.assertEquals("Router operations count must be zero", 0, router.getOperationsCount());
-    if (exec != null) {
-      exec.close();
+    if (cryptoJobHandler != null) {
+      cryptoJobHandler.close();
     }
   }
 
@@ -395,7 +395,7 @@ public class GetManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
-        cryptoService, exec, mockTime);
+        cryptoService, cryptoJobHandler, mockTime);
     return router;
   }
 

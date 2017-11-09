@@ -49,7 +49,7 @@ abstract class GetOperation {
   protected final GetBlobOptionsInternal options;
   protected final KeyManagementService kms;
   protected final CryptoService cryptoService;
-  protected final CryptoJobExecutorService exec;
+  protected final CryptoJobHandler cryptoJobHandler;
   protected final Time time;
   private final Histogram localColoTracker;
   private final Histogram crossColoTracker;
@@ -75,14 +75,14 @@ abstract class GetOperation {
    * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param exec {@link CryptoJobExecutorService} to assist in the execution of crypto jobs
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> getOperationCallback, Histogram localColoTracker, Histogram crossColoTracker,
-      Counter pastDueCounter, KeyManagementService kms, CryptoService cryptoService, CryptoJobExecutorService exec,
+      Counter pastDueCounter, KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
       Time time) throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -95,7 +95,7 @@ abstract class GetOperation {
     this.pastDueCounter = pastDueCounter;
     this.kms = kms;
     this.cryptoService = cryptoService;
-    this.exec = exec;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     submissionTimeMs = time.milliseconds();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);

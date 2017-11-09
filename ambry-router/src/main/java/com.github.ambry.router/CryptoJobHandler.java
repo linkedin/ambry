@@ -24,29 +24,29 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Responsible for handling crypto jobs. {@link Router} instantiates this {@link CryptoJobExecutorService} and gives a
+ * Responsible for handling crypto jobs. {@link Router} instantiates this {@link CryptoJobHandler} and gives a
  * reference of the same to PutManager, GetBlobOperation and GetBlobInfoOperation which will add jobs via
  * {@link #submitJob(CryptoJob)}. On close, all pending jobs will be processed(either successfully or exception is set)
  * and any new jobs submitted after close will be ignored.
  */
-class CryptoJobExecutorService implements Closeable {
+class CryptoJobHandler implements Closeable {
   private final int threadCount;
   private final AtomicBoolean enabled = new AtomicBoolean(false);
   private static final GeneralSecurityException CLOSED_EXCEPTION =
-      new GeneralSecurityException("CryptoJobExecutorService closed");
+      new GeneralSecurityException("CryptoJobHandler closed");
   private ExecutorService scheduler;
 
-  private static final Logger logger = LoggerFactory.getLogger(CryptoJobExecutorService.class);
+  private static final Logger logger = LoggerFactory.getLogger(CryptoJobHandler.class);
 
   /**
-   * Instantiates {@link CryptoJobExecutorService}
+   * Instantiates {@link CryptoJobHandler}
    */
-  CryptoJobExecutorService(int threadCount) {
+  CryptoJobHandler(int threadCount) {
     this.threadCount = threadCount;
   }
 
   /**
-   * Starts up {@link CryptoJobExecutorService} by instantiating the scheduler
+   * Starts up {@link CryptoJobHandler} by instantiating the scheduler
    */
   void start() {
     enabled.set(true);
@@ -54,7 +54,7 @@ class CryptoJobExecutorService implements Closeable {
   }
 
   /**
-   * Submits new job to the {@link CryptoJobExecutorService}
+   * Submits new job to the {@link CryptoJobHandler}
    * @param cryptoJob the {@link CryptoJob} that needs to be executed
    */
   void submitJob(CryptoJob cryptoJob) {

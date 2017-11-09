@@ -88,7 +88,7 @@ public class NonBlockingRouterTest {
   private final MockTime mockTime;
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
-  private final CryptoJobExecutorService exec;
+  private final CryptoJobHandler cryptoJobHandler;
   private final MockClusterMap mockClusterMap;
   private final boolean testEncryption;
 
@@ -121,7 +121,7 @@ public class NonBlockingRouterTest {
     kms = new SingleKeyManagementService(new KMSConfig(vProps),
         TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-    exec = new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
   }
 
   @After
@@ -173,7 +173,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
-        cryptoService, exec, mockTime);
+        cryptoService, cryptoJobHandler, mockTime);
   }
 
   private void setOperationParams() {
@@ -341,7 +341,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, kms, cryptoService, exec, mockTime);
+        mockClusterMap, kms, cryptoService, cryptoJobHandler, mockTime);
 
     assertExpectedThreadCounts(2, 1);
 
@@ -416,7 +416,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, exec, mockTime);
+        cryptoService, cryptoJobHandler, mockTime);
 
     setOperationParams();
 
@@ -486,7 +486,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, exec, mockTime);
+        cryptoService, cryptoJobHandler, mockTime);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     String deleteServiceId = "delete-service";
@@ -574,7 +574,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, exec, mockTime);
+        cryptoService, cryptoJobHandler, mockTime);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.deleteBlob(blobId, deleteServiceId, null).get();
@@ -658,8 +658,7 @@ public class NonBlockingRouterTest {
     NetworkClient networkClient =
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
-    CryptoJobExecutorService execLocal =
-        new CryptoJobExecutorService(CryptoJobExecutorServiceTest.DEFAULT_THREAD_COUNT);
+    CryptoJobHandler execLocal = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     execLocal.start();
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
