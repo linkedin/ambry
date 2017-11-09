@@ -22,21 +22,43 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 /**
  * The multi node single partition test needs to run with clean stores as it checks replication token offset values
  * so it has been put into a separate class with per-test initialization and cleanup
  */
+@RunWith(Parameterized.class)
 public class ServerPlaintextTokenTest {
   private Properties routerProps;
   private MockNotificationSystem notificationSystem;
   private MockCluster plaintextCluster;
+  private final boolean testEncryption;
+
+  /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
+   * Instantiates {@link ServerPlaintextTokenTest}
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   */
+  public ServerPlaintextTokenTest(boolean testEncryption) {
+    this.testEncryption = testEncryption;
+  }
 
   @Before
   public void initializeTests() throws Exception {
@@ -66,6 +88,6 @@ public class ServerPlaintextTokenTest {
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, notificationSystem,
-        routerProps);
+        routerProps, testEncryption);
   }
 }

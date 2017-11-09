@@ -33,8 +33,11 @@ import javax.net.ssl.SSLSocketFactory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
+@RunWith(Parameterized.class)
 public class ServerSSLTokenTest {
   private static SSLFactory sslFactory;
   private static SSLConfig clientSSLConfig;
@@ -44,6 +47,24 @@ public class ServerSSLTokenTest {
   private static Properties routerProps;
   private static MockNotificationSystem notificationSystem;
   private static MockCluster sslCluster;
+  private final boolean testEncryption;
+
+  /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
+   * Instantiates {@link ServerSSLTokenTest}
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   */
+  public ServerSSLTokenTest(boolean testEncryption) {
+    this.testEncryption = testEncryption;
+  }
 
   @Before
   public void initializeTests() throws Exception {
@@ -84,6 +105,6 @@ public class ServerSSLTokenTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "DC2,DC3", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster, clientSSLConfig, clientSSLSocketFactory,
-        notificationSystem, routerProps);
+        notificationSystem, routerProps, testEncryption);
   }
 }

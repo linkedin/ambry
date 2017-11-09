@@ -16,7 +16,9 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.messageformat.BlobAll;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -124,6 +126,12 @@ class Verifier implements Runnable {
                             + " actual " + propertyOutput.getContainerId());
                     throw new IllegalStateException();
                   }
+                  if (propertyOutput.isEncrypted() != payload.blobProperties.isEncrypted()) {
+                    System.out.println(
+                        "IsEncrypted not matching " + " expected " + payload.blobProperties.isEncrypted() + " actual "
+                            + propertyOutput.isEncrypted());
+                    throw new IllegalStateException();
+                  }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();
                   throw new IllegalStateException();
@@ -178,6 +186,35 @@ class Verifier implements Runnable {
                   int readsize = 0;
                   while (readsize < blobData.getSize()) {
                     readsize += blobData.getStream().read(blobout, readsize, (int) blobData.getSize() - readsize);
+                  }
+                  if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
+                    throw new IllegalStateException();
+                  }
+                } catch (MessageFormatException e) {
+                  e.printStackTrace();
+                  throw new IllegalStateException();
+                }
+              }
+
+              // get blob all
+              getRequest =
+                  new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+              channel1.send(getRequest);
+              stream = channel1.receive().getInputStream();
+              resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+              if (resp.getError() != ServerErrorCode.No_Error) {
+                System.out.println("Error after get blob " + resp.getError());
+                throw new IllegalStateException();
+              } else {
+                try {
+                  BlobAll blobAll =
+                      MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), new BlobIdFactory(clusterMap));
+                  byte[] blobout = new byte[(int) blobAll.getBlobData().getSize()];
+                  int readsize = 0;
+                  while (readsize < blobAll.getBlobData().getSize()) {
+                    readsize += blobAll.getBlobData()
+                        .getStream()
+                        .read(blobout, readsize, (int) blobAll.getBlobData().getSize() - readsize);
                   }
                   if (ByteBuffer.wrap(blobout).compareTo(ByteBuffer.wrap(payload.blob)) != 0) {
                     throw new IllegalStateException();
