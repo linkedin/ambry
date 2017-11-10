@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -106,14 +107,15 @@ public final class ServerTestUtil {
       new Random().nextBytes(usermetadata);
       new Random().nextBytes(data);
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
-      BlobId blobId1 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partitionIds.get(0));
-      BlobId blobId2 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partitionIds.get(0));
-      BlobId blobId3 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partitionIds.get(0));
-      BlobId blobId4 = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partitionIds.get(0));
+      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+      BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0));
+      BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0));
+      BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0));
+      BlobId blobId4 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0));
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
@@ -283,8 +285,8 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), properties.getAccountId(),
-          properties.getContainerId(), partition));
+      ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          clusterMap.getLocalDatacenterId(), properties.getAccountId(), properties.getContainerId(), partition));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -892,8 +894,8 @@ public final class ServerTestUtil {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         boolean isEncrypted = TestUtils.RANDOM.nextBoolean();
         propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, isEncrypted));
-        blobIdList.add(
-            new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), accountId, containerId, partition));
+        blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+            clusterMap.getLocalDatacenterId(), accountId, containerId, partition));
         dataList.add(TestUtils.getRandomBytes(1000));
         if (isEncrypted) {
           encryptionKeyList.add(TestUtils.getRandomBytes(128));
@@ -1080,8 +1082,9 @@ public final class ServerTestUtil {
       // get blob properties
       ids = new ArrayList<BlobId>();
       mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
-      ids.add(new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), propertyList.get(0).getAccountId(),
-          propertyList.get(0).getContainerId(), mockPartitionId));
+      ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          clusterMap.getLocalDatacenterId(), propertyList.get(0).getAccountId(), propertyList.get(0).getContainerId(),
+          mockPartitionId));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);

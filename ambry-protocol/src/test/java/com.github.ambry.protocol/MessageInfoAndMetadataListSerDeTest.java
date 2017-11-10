@@ -16,6 +16,7 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
@@ -58,10 +59,12 @@ public class MessageInfoAndMetadataListSerDeTest {
     MockPartitionId partitionId = new MockPartitionId();
     short[] accountIds = {100, 101, 102, 103};
     short[] containerIds = {10, 11, 12, 13};
-    StoreKey[] keys =
-        {new BlobId((byte) 0, (byte) 0, accountIds[0], containerIds[0], partitionId), new BlobId((byte) 0, (byte) 0,
-            accountIds[1], containerIds[1], partitionId), new BlobId((byte) 0, (byte) 0, accountIds[2], containerIds[2],
-            partitionId), new BlobId((byte) 0, (byte) 0, accountIds[3], containerIds[3], partitionId)};
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    StoreKey[] keys = {new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[0], containerIds[0],
+        partitionId), new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[1], containerIds[1],
+        partitionId), new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2],
+        partitionId), new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[3], containerIds[3],
+        partitionId)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
     long[] operationTimes = {SystemTime.getInstance().milliseconds(),
         SystemTime.getInstance().milliseconds() + 10,

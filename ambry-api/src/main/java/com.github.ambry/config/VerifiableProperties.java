@@ -14,9 +14,11 @@
 package com.github.ambry.config;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,6 +121,24 @@ public class VerifiableProperties {
     } else {
       throw new IllegalArgumentException(
           name + " has value " + v + " which is not in the range " + start + "-" + end + ".");
+    }
+  }
+
+  /**
+   * Read a short from the properties instance. Throw an exception if the value is not among the allowed values
+   * @param name The property name
+   * @param defaultVal The default value to use if the property is not found
+   * @param allowedValues The array of allowed values for this property.
+   * @return the Short value
+   */
+  public short getShortFromAllowedValues(String name, Short defaultVal, Short[] allowedValues) {
+    Set<Object> allowedValuesSet = new HashSet<>(Arrays.asList(allowedValues));
+    Short v = containsKey(name) ? Short.parseShort(getProperty(name)) : defaultVal;
+    if (allowedValuesSet.contains(v)) {
+      return v;
+    } else {
+      throw new IllegalArgumentException(
+          name + " has value " + v + " which is not among the allowed values: " + allowedValuesSet);
     }
   }
 

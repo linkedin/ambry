@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
@@ -320,9 +321,11 @@ public class ReplicationTest {
 
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       // add an expired message to the remote host only
       StoreKey id =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId);
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+              containerId, partitionId);
       Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
@@ -335,7 +338,8 @@ public class ReplicationTest {
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
       // add a corrupt message to the remote host only
-      id = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId);
+      id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+          containerId, partitionId);
       putMsgInfo = getPutMessage(id, accountId, containerId);
       byte[] data = putMsgInfo.getFirst().array();
       // flip every bit in the array
@@ -567,8 +571,9 @@ public class ReplicationTest {
     for (int i = 0; i < count; i++) {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      BlobId id =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, partitionId);
+      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+      BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
+          containerId, partitionId);
       ids.add(id);
       Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
       for (Host host : hosts) {

@@ -17,7 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdV1;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -203,8 +203,8 @@ public class InMemoryRouter implements Router {
     FutureResult<String> futureResult = new FutureResult<>();
     handlePrechecks(futureResult, callback);
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);
-    operationPool.submit(
-        new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap, BlobId.CURRENT_VERSION));
+    operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
+        CommonTestUtils.getCurrentBlobIdVersion()));
     return futureResult;
   }
 
@@ -258,8 +258,7 @@ public class InMemoryRouter implements Router {
       ReadableStreamChannel channel, Short blobIdVersion) {
     FutureResult<String> futureResult = new FutureResult<>();
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, null);
-    operationPool.submit(
-        new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap, blobIdVersion));
+    operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap, blobIdVersion));
     return futureResult;
   }
 
@@ -354,7 +353,9 @@ class InMemoryBlobPoster implements Runnable {
     String operationResult = null;
     Exception exception = null;
     try {
-      String blobId = getBlobId();
+      String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+          postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
+          getPartitionForPut()).getID();
       if (blobs.containsKey(blobId)) {
         exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }
@@ -373,24 +374,6 @@ class InMemoryBlobPoster implements Runnable {
       exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
     } finally {
       InMemoryRouter.completeOperation(postData.getFuture(), postData.getCallback(), operationResult, exception);
-    }
-  }
-
-  /**
-   * @return a blob ID to use for the POST request.
-   */
-  private String getBlobId() throws RouterException {
-    switch (blobIdVersion) {
-      case BlobId.BLOB_ID_V1:
-        return new BlobIdV1(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-            postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
-            getPartitionForPut()).getID();
-      case BlobId.BLOB_ID_V2:
-        return new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-            postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
-            getPartitionForPut()).getID();
-      default:
-        throw new IllegalArgumentException("blobId version=" + blobIdVersion + " not supported");
     }
   }
 

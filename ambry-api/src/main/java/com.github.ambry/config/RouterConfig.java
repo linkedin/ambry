@@ -147,6 +147,13 @@ public class RouterConfig {
   public final double routerLatencyToleranceQuantile;
 
   /**
+   * The version to use for new BlobIds.
+   */
+  @Config("router.blobid.current.version")
+  @Default("2")
+  public final short routerBlobIdCurrentVersion;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -180,5 +187,8 @@ public class RouterConfig {
         verifiableProperties.getString("router.get.operation.tracker.type", "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
+    routerBlobIdCurrentVersion =
+        verifiableProperties.getShortFromAllowedValues("router.blobid.current.version", (short) 2,
+            new Short[]{1, 2, 3});
   }
 }

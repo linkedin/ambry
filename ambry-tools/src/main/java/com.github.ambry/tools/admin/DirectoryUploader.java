@@ -25,6 +25,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -68,17 +69,21 @@ import joptsimple.OptionSpec;
  * 4. Write the output to out file
  */
 public class DirectoryUploader {
-  private ConnectionPool connectionPool;
   private PartitionId partitionId;
   private DataNodeId dataNodeId = null;
+  private final ConnectionPool connectionPool;
+  private final short blobIdVersion;
 
   private DirectoryUploader() throws Exception {
     Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "localDC");
     ToolUtils.addClusterMapProperties(properties);
     VerifiableProperties vProps = new VerifiableProperties(properties);
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
     SSLConfig sslConfig = new SSLConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+    blobIdVersion = new RouterConfig(vProps).routerBlobIdCurrentVersion;
     connectionPool =
         new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
     connectionPool.start();
@@ -155,8 +160,8 @@ public class DirectoryUploader {
         FileInputStream stream = null;
         try {
           int replicaCount = 0;
-          BlobId blobId =
-              new BlobId(BlobId.DEFAULT_FLAG, datacenterId, props.getAccountId(), props.getContainerId(), partitionId);
+          BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, datacenterId, props.getAccountId(),
+              props.getContainerId(), partitionId);
           List<ReplicaId> successList = new ArrayList<>();
           List<ReplicaId> failureList = new ArrayList<>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {

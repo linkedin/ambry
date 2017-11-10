@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
@@ -94,8 +95,9 @@ public class GetSignedUrlHandlerTest {
     restRequest.setArg(RestUtils.Headers.TARGET_CONTAINER_NAME, REF_CONTAINER.getName());
     verifySigningUrl(restRequest, urlSigningServiceFactory.signedUrlToReturn, REF_ACCOUNT, REF_CONTAINER);
 
-    BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(),
-        REF_CONTAINER.getId(), CLUSTER_MAP.getWritablePartitionIds().get(0));
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
+        CLUSTER_MAP.getWritablePartitionIds().get(0));
     idConverterFactory.translation = blobId.getID();
     // GET (also makes sure that the IDConverter is used)
     restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);

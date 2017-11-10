@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -491,7 +492,7 @@ public class CryptoJobExecutorServiceTest {
    * @param referenceClusterMap clusterMap from which partition info to be fetched
    * @return a Pair of BlobId and ByteBuffer with random data
    */
-  static Pair<BlobId, ByteBuffer> getRandomBlob(ClusterMap referenceClusterMap) {
+  Pair<BlobId, ByteBuffer> getRandomBlob(ClusterMap referenceClusterMap) {
     BlobId blobId = getNewBlobId(referenceClusterMap);
     int size = TestUtils.RANDOM.nextInt(MAX_DATA_SIZE_IN_BYTES);
     byte[] data = new byte[size];
@@ -505,11 +506,11 @@ public class CryptoJobExecutorServiceTest {
    * @param referenceClusterMap clusterMap from which partition info to be fetched
    * @return newly generated {@link BlobId}
    */
-  private static BlobId getNewBlobId(ClusterMap referenceClusterMap) {
-    byte[] bytes = new byte[2];
-    TestUtils.RANDOM.nextBytes(bytes);
-    return new BlobId(bytes[0], bytes[1], getRandomShort(TestUtils.RANDOM), getRandomShort(TestUtils.RANDOM),
-        referenceClusterMap.getWritablePartitionIds().get(0));
+  private BlobId getNewBlobId(ClusterMap referenceClusterMap) {
+    byte dc = (byte) TestUtils.RANDOM.nextInt(3);
+    BlobId.BlobIdType type = TestUtils.RANDOM.nextBoolean() ? BlobId.BlobIdType.NATIVE : BlobId.BlobIdType.CRAFTED;
+    return new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), type, dc, getRandomShort(TestUtils.RANDOM),
+        getRandomShort(TestUtils.RANDOM), referenceClusterMap.getWritablePartitionIds().get(0));
   }
 
   /**
