@@ -223,7 +223,7 @@ class PutOperation {
     if (isOperationComplete()) {
       boolean composite = !getSuccessfullyPutChunkIdsIfComposite().isEmpty();
       if (composite) {
-        metadataPutChunk.notifyForFirstChunkCreation();
+        metadataPutChunk.maybeNotifyForFirstChunkCreation();
       }
       if (blobId != null) {
         notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(),
@@ -345,7 +345,6 @@ class PutOperation {
             bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
             if (chunkToFill.isReady()) {
               routerCallback.onPollReady();
-              updateChunkFillerWaitTimeMetrics();
             }
             if (!channelReadBuffer.hasRemaining()) {
               chunkFillerChannel.resolveOldestChunk(null);
@@ -367,15 +366,8 @@ class PutOperation {
           if (chunkCounter != 0 && lastChunk.buf.position() == 0) {
             logger.trace("The last buffer(s) received from chunkFillerChannel have no data, discarding them.");
           } else {
-            if (!passedInBlobProperties.isEncrypted()) {
-              lastChunk.buf.flip();
-              lastChunk.chunkBlobSize = lastChunk.buf.remaining();
-              lastChunk.onFillComplete(true);
-              updateChunkFillerWaitTimeMetrics();
-            } else {
-              updateChunkFillerWaitTimeMetrics();
-              encryptChunk(lastChunk, true);
-            }
+            lastChunk.onFillComplete(true, true);
+            updateChunkFillerWaitTimeMetrics();
           }
         }
         routerCallback.onPollReady();
@@ -399,10 +391,7 @@ class PutOperation {
     try {
       logger.trace("Chunk at index {} moves to {} state", putChunk.chunkIndex, ChunkState.Encrypting);
       putChunk.state = ChunkState.Encrypting;
-      if (encryptContent) {
-        putChunk.buf.flip();
-        putChunk.chunkBlobSize = putChunk.buf.remaining();
-      }
+      putChunk.chunkEncryptReadyAtMs = time.milliseconds();
       logger.trace("Submitting encrypt job for chunk at index {}", putChunk.chunkIndex);
       cryptoJobHandler.submitJob(
           new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
@@ -416,8 +405,8 @@ class PutOperation {
               putChunk.encryptedPerBlobKey = result.getEncryptedKey();
               putChunk.chunkUserMetadata = result.getEncryptedUserMetadata().array();
               logger.trace("Completing encrypt job result for chunk at index " + putChunk.chunkIndex);
-              putChunk.onFillComplete(true);
-              // todo: add metrics to track encryption time
+              putChunk.prepareForSending();
+              putChunk.chunkReadyAtMs = time.milliseconds();
             } else {
               if (getOperationException() == null) {
                 logger.trace("Setting exception {} from encrypt of chunk at index {} ", exception, putChunk.chunkIndex);
@@ -430,8 +419,8 @@ class PutOperation {
                     exception, putChunk.chunkIndex, getOperationException());
               }
             }
+            routerMetrics.chunkEncryptTimeMs.update(time.milliseconds() - putChunk.chunkEncryptReadyAtMs);
             routerCallback.onPollReady();
-            // todo: add metrics to track encryption time
           }));
     } catch (GeneralSecurityException e) {
       logger.trace("Exception thrown while generating random key for chunk at index {}", putChunk.chunkIndex);
@@ -684,6 +673,8 @@ class PutOperation {
     protected byte[] chunkUserMetadata;
     // the most recent time at which this chunk became Free.
     private long chunkFreeAtMs;
+    // the most recent time at which this chunk became ready to be encrypted.
+    private long chunkEncryptReadyAtMs;
     // the most recent time at which this chunk became ready.
     private long chunkReadyAtMs;
     // The exception encountered while putting the current chunk. Not all errors are irrecoverable. An error may or
@@ -887,12 +878,19 @@ class PutOperation {
     /**
      * Do the actions required when the chunk has been completely built.
      * @param updateMetric whether chunk fill completion metrics should be updated.
+     * @param encryptContent {@code true} if chunk's content need to be encrypted. {@code false} otherwise
      */
-    void onFillComplete(boolean updateMetric) {
-      prepareForSending();
-      chunkReadyAtMs = time.milliseconds();
+    void onFillComplete(boolean updateMetric, boolean encryptContent) {
+      buf.flip();
+      chunkBlobSize = buf.remaining();
       if (updateMetric) {
-        routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
+        routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
+      }
+      if (!passedInBlobProperties.isEncrypted()) {
+        prepareForSending();
+        chunkReadyAtMs = time.milliseconds();
+      } else {
+        encryptChunk(this, encryptContent);
       }
     }
 
@@ -913,15 +911,8 @@ class PutOperation {
         buf.put(channelReadBuffer);
       }
       if (!buf.hasRemaining()) {
-        if (!passedInBlobProperties.isEncrypted()) {
-          buf.flip();
-          chunkBlobSize = buf.remaining();
-          onFillComplete(true);
-          updateChunkFillerWaitTimeMetrics();
-        } else {
-          updateChunkFillerWaitTimeMetrics();
-          encryptChunk(this, true);
-        }
+        onFillComplete(true, true);
+        updateChunkFillerWaitTimeMetrics();
       }
       return toWrite;
     }
@@ -1258,8 +1249,8 @@ class PutOperation {
      * Notify for the creation of the first chunk. To be called after the overall operation is completed if the overall
      * blob is composite. If no first chunk was put successfully, this will do nothing.
      */
-    void notifyForFirstChunkCreation() {
-      if (firstChunkIdAndProperties != null) {
+    void maybeNotifyForFirstChunkCreation() {
+      if (indexToChunkIds.get(0) != null) {
         // reason to check for not null: with encryption in play, there are chances that 2nd chunk's encrypt job callback
         // was invoked before 1st chunk's. So, 2nd chunk would have been completed, but 1st might have been failed.
         // In such cases, even though metadata chunk might return some successfully completed chunkIds, the first chunk may be null
@@ -1295,13 +1286,7 @@ class PutOperation {
         List<StoreKey> orderedChunkIdList = new ArrayList<>(indexToChunkIds.values());
         buf = MetadataContentSerDe.serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, getBlobSize(),
             orderedChunkIdList);
-        buf.flip();
-        if (!finalBlobProperties.isEncrypted()) {
-          onFillComplete(false);
-        } else {
-          // if the blob is expected to be encrypted, only user-metadata needs to be encrypted for Metadata blobs
-          encryptChunk(this, false);
-        }
+        onFillComplete(false, false);
       } else {
         // if there is only one chunk
         blobId = (BlobId) indexToChunkIds.get(0);

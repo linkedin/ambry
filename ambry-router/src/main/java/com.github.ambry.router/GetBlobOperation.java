@@ -686,14 +686,15 @@ class GetBlobOperation extends GetOperation {
                   (DecryptJob.DecryptJobResult result, Exception exception) -> {
                     logger.trace("Handling decrypt job callback for data chunk {}", chunkBlobId);
                     if (chunkBlobId.equals(result.getBlobId())) {
-                      decryptCallbackResultInfo.set(new DecryptCallBackResultInfo(result, exception));
+                      decryptCallbackResultInfo.get().setResultAndException(result, exception);
                       logger.trace("Successfully stored decrypt job results for data chunk {}", chunkBlobId);
                     } else {
                       logger.error("BlobId mismatch in decryption callback for data chunk. Expected {}, actual {}",
                           chunkBlobId, result.getBlobId());
-                      decryptCallbackResultInfo.set(new DecryptCallBackResultInfo(null, new RouterException(
-                          "Exception thrown on decrypting the content for data chunk " + chunkBlobId,
-                          RouterErrorCode.UnexpectedInternalError)));
+                      decryptCallbackResultInfo.get()
+                          .setResultAndException(null, new RouterException(
+                              "Exception thrown on decrypting the content for data chunk " + chunkBlobId,
+                              RouterErrorCode.UnexpectedInternalError));
                     }
                     routerCallback.onPollReady();
                   }));
@@ -927,10 +928,12 @@ class GetBlobOperation extends GetOperation {
     Exception exception;
     DecryptJob.DecryptJobResult result;
 
-    DecryptCallBackResultInfo() {
-    }
-
-    DecryptCallBackResultInfo(DecryptJob.DecryptJobResult result, Exception exception) {
+    /**
+     * Sets the result and exception from decrypt job callback
+     * @param result {@link DecryptJob.DecryptJobResult} from the decrypt job callback. Could be null on failure.
+     * @param exception {@link Exception} from the decrypt job callback. Could be null if the decrypt job succeeded.
+     */
+    void setResultAndException(DecryptJob.DecryptJobResult result, Exception exception) {
       this.result = result;
       this.exception = exception;
       this.resultAvailable = true;
@@ -1142,7 +1145,7 @@ class GetBlobOperation extends GetOperation {
                     kms, (DecryptJob.DecryptJobResult result, Exception exception) -> {
                   logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
                       blobId);
-                  decryptCallbackResultInfo.set(new DecryptCallBackResultInfo(result, exception));
+                  decryptCallbackResultInfo.get().setResultAndException(result, exception);
                   routerCallback.onPollReady();
                 }));
           } else {
@@ -1189,7 +1192,7 @@ class GetBlobOperation extends GetOperation {
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
                 logger.trace("Handling decrypt job call back for simple blob {} to set decrypt callback results",
                     blobId);
-                decryptCallbackResultInfo.set(new DecryptCallBackResultInfo(result, exception));
+                decryptCallbackResultInfo.get().setResultAndException(result, exception);
                 routerCallback.onPollReady();
               }));
         }
