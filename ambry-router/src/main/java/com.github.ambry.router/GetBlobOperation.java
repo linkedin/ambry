@@ -438,14 +438,8 @@ class GetBlobOperation extends GetOperation {
     private BlobId chunkBlobId;
     // whether the operation on the current chunk has completed.
     private boolean chunkCompleted;
-
+    // AtomicRef to DecryptCallBackResultInfo that holds all info about decrypt job callback
     protected AtomicReference<DecryptCallBackResultInfo> decryptCallbackResultInfo;
-    // refers to decrypt callback Result after decryption, if applicable
-    // protected DecryptJob.DecryptJobResult decryptCallbackResult;
-    // refers to decrypt callback exception after decryption, if applicable
-    // protected Exception decryptCallbackException;
-    // refers to decryption job call result is available to be processed
-    // protected boolean decryptCallbackResultAvailable;
     // In general, when the operation tracker returns success, any previously saved exceptions are cleared. This flag
     // indicates that the set chunk exception should not be overwritten even when the operation tracker reports success.
     protected boolean retainChunkExceptionOnSuccess;
@@ -564,7 +558,7 @@ class GetBlobOperation extends GetOperation {
      * Maybe process decrypt callback and complete the operation if applicable. This is a no-op for non-encrypted blobs
      * @return {@code true} if the operation is complete, {@code false} otherwise
      */
-    boolean maybeProcessDecryptCallbackAndCompleteOperation() {
+    protected boolean maybeProcessDecryptCallbackAndCompleteOperation() {
       if (onDecryptMode() && decryptCallbackResultInfo.get().resultAvailable) {
         logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
         DecryptCallBackResultInfo resultInfo = decryptCallbackResultInfo.get();
@@ -921,26 +915,6 @@ class GetBlobOperation extends GetOperation {
   }
 
   /**
-   * Holds info about decryption job callback
-   */
-  class DecryptCallBackResultInfo {
-    boolean resultAvailable;
-    Exception exception;
-    DecryptJob.DecryptJobResult result;
-
-    /**
-     * Sets the result and exception from decrypt job callback
-     * @param result {@link DecryptJob.DecryptJobResult} from the decrypt job callback. Could be null on failure.
-     * @param exception {@link Exception} from the decrypt job callback. Could be null if the decrypt job succeeded.
-     */
-    void setResultAndException(DecryptJob.DecryptJobResult result, Exception exception) {
-      this.result = result;
-      this.exception = exception;
-      this.resultAvailable = true;
-    }
-  }
-
-  /**
    * Special GetChunk used to retrieve and hold the first chunk of a blob. The first chunk is special because it
    * could either be a metadata chunk of a composite blob, or the single chunk of a simple blob,
    * and whether a chunk is composite or simple can only be determined after the first chunk is fetched.
@@ -985,7 +959,7 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    boolean maybeProcessDecryptCallbackAndCompleteOperation() {
+    protected boolean maybeProcessDecryptCallbackAndCompleteOperation() {
       if (onDecryptMode() && decryptCallbackResultInfo.get().resultAvailable) {
         DecryptCallBackResultInfo resultInfo = decryptCallbackResultInfo.get();
         // incase of Metadata blob, only user-metadata needs decryption if the blob is encrypted

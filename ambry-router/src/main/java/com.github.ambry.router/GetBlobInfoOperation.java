@@ -37,6 +37,7 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,18 +48,16 @@ import org.slf4j.LoggerFactory;
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
 class GetBlobInfoOperation extends GetOperation {
+  // the callback to use to complete the operation.
+  private final RouterCallback routerCallback;
   private final OperationTracker operationTracker;
   private State state = State.Ready;
   private boolean successfullyDeserialized = false;
-  // whether decryption job call result is available to be processed
-  private boolean decryptCallbackResultAvailable = false;
-  // refers to decrypt callback Result after decryption if applicable
-  private DecryptJob.DecryptJobResult decryptCallbackResult;
-  // refers to decrypt callback exception after decryption if applicable
-  private Exception decryptCallbackException;
+  // AtomicRef to DecryptCallBackResultInfo that holds all info about decrypt job callback
+  private AtomicReference<DecryptCallBackResultInfo> decryptCallbackResultInfo;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
-  // refers to raw user-metadata received from the server. This has to decrypted if need be before serving to the client
+  // refers to raw user-metadata received from the server. This has to decrypted if need be, before serving to the client
   private ByteBuffer serverUserMetadata;
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
@@ -74,6 +73,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @param blobIdStr the blob id associated with the operation in string form.
    * @param options the {@link GetBlobOptionsInternal} containing the options associated with this operation.
    * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback the {@link RouterCallback} to use to complete operations.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param exec {@link CryptoJobHandler} to assist in the execution of crypto jobs
@@ -82,12 +82,15 @@ class GetBlobInfoOperation extends GetOperation {
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, KeyManagementService kms, CryptoService cryptoService,
-      CryptoJobHandler exec, Time time) throws RouterException {
+      Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler exec, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, exec, time);
+    this.routerCallback = routerCallback;
     operationTracker = getOperationTracker(blobId.getPartition());
+    decryptCallbackResultInfo = new AtomicReference<>();
+    decryptCallbackResultInfo.set(new DecryptCallBackResultInfo());
   }
 
   @Override
@@ -112,7 +115,7 @@ class GetBlobInfoOperation extends GetOperation {
   @Override
   void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     //First, check if any of the existing requests have timed out.
-    if (!mayBeProcessDecryptCallbackAndComplete()) {
+    if (!maybeProcessDecryptCallbackAndComplete()) {
       cleanupExpiredInFlightRequests();
       checkAndMaybeComplete(true);
       if (!isOperationComplete()) {
@@ -122,25 +125,24 @@ class GetBlobInfoOperation extends GetOperation {
   }
 
   /**
-   * May be process decrypt callback and complete the operation if applicable. This is a no-op for non-encrypted blobs
+   * Maybe process decrypt callback and complete the operation if applicable. This is a no-op for non-encrypted blobs
    * @return {@code true} if the operation is complete, {@code false} otherwise
    */
-  boolean mayBeProcessDecryptCallbackAndComplete() {
-    if (onDecryptMode() && decryptCallbackResultAvailable) {
-      if (decryptCallbackException == null) {
+  private boolean maybeProcessDecryptCallbackAndComplete() {
+    if (onDecryptMode() && decryptCallbackResultInfo.get().resultAvailable) {
+      DecryptCallBackResultInfo resultInfo = decryptCallbackResultInfo.get();
+      if (resultInfo.exception == null) {
         logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-        operationResult = new GetBlobResultInternal(new GetBlobResult(
-            new BlobInfo(serverBlobProperties, decryptCallbackResult.getDecryptedUserMetadata().array()), null), null);
-        decryptCallbackResult = null;
-        decryptCallbackException = null;
+        operationResult = new GetBlobResultInternal(
+            new GetBlobResult(new BlobInfo(serverBlobProperties, resultInfo.result.getDecryptedUserMetadata().array()),
+                null), null);
         state = State.Complete;
         checkAndMaybeComplete(true);
       } else {
-        logger.error("Exception {} thrown on decryption for {}", decryptCallbackException.getCause(), blobId);
-        setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId,
-            RouterErrorCode.UnexpectedInternalError));
-        decryptCallbackResult = null;
-        decryptCallbackException = null;
+        logger.trace("Exception {} thrown on decryption for {}", resultInfo.exception, blobId);
+        setOperationException(
+            new RouterException("Exception thrown on decrypting the content for " + blobId, resultInfo.exception,
+                RouterErrorCode.UnexpectedInternalError));
         state = State.Complete;
         checkAndMaybeComplete(false);
       }
@@ -374,9 +376,8 @@ class GetBlobInfoOperation extends GetOperation {
             new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
                 (DecryptJob.DecryptJobResult result, Exception exception) -> {
                   logger.trace("Handling decrypt job callback results for {}", blobId);
-                  decryptCallbackResult = result;
-                  decryptCallbackException = exception;
-                  decryptCallbackResultAvailable = true;
+                  decryptCallbackResultInfo.get().setResultAndException(result, exception);
+                  routerCallback.onPollReady();
                 }));
       }
     } else {

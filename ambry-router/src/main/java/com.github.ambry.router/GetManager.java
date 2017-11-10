@@ -120,7 +120,7 @@ class GetManager {
       if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                callback, kms, cryptoService, cryptoJobHandler, time);
+                callback, routerCallback, kms, cryptoService, cryptoJobHandler, time);
       } else {
         getOperation =
             new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
