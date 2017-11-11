@@ -37,7 +37,6 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,10 +50,10 @@ class GetBlobInfoOperation extends GetOperation {
   // the callback to use to complete the operation.
   private final RouterCallback routerCallback;
   private final OperationTracker operationTracker;
+  // DecryptCallBackResultInfo that holds all info about decrypt job callback
+  private final DecryptCallBackResultInfo decryptCallbackResultInfo;
   private State state = State.Ready;
   private boolean successfullyDeserialized = false;
-  // AtomicRef to DecryptCallBackResultInfo that holds all info about decrypt job callback
-  private AtomicReference<DecryptCallBackResultInfo> decryptCallbackResultInfo;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // refers to raw user-metadata received from the server. This has to decrypted if need be, before serving to the client
@@ -76,21 +75,20 @@ class GetBlobInfoOperation extends GetOperation {
    * @param routerCallback the {@link RouterCallback} to use to complete operations.
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
-   * @param exec {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler exec, Time time) throws RouterException {
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
-        routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, exec, time);
+        routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;
     operationTracker = getOperationTracker(blobId.getPartition());
-    decryptCallbackResultInfo = new AtomicReference<>();
-    decryptCallbackResultInfo.set(new DecryptCallBackResultInfo());
+    decryptCallbackResultInfo = new DecryptCallBackResultInfo();
   }
 
   @Override
@@ -115,40 +113,11 @@ class GetBlobInfoOperation extends GetOperation {
   @Override
   void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     //First, check if any of the existing requests have timed out.
-    if (!maybeProcessDecryptCallbackAndComplete()) {
-      cleanupExpiredInFlightRequests();
-      checkAndMaybeComplete(true);
-      if (!isOperationComplete()) {
-        fetchRequests(requestRegistrationCallback);
-      }
+    cleanupExpiredInFlightRequests();
+    checkAndMaybeComplete(true);
+    if (!isOperationComplete() && !successfullyDeserialized) {
+      fetchRequests(requestRegistrationCallback);
     }
-  }
-
-  /**
-   * Maybe process decrypt callback and complete the operation if applicable. This is a no-op for non-encrypted blobs
-   * @return {@code true} if the operation is complete, {@code false} otherwise
-   */
-  private boolean maybeProcessDecryptCallbackAndComplete() {
-    if (onDecryptMode() && decryptCallbackResultInfo.get().resultAvailable) {
-      DecryptCallBackResultInfo resultInfo = decryptCallbackResultInfo.get();
-      if (resultInfo.exception == null) {
-        logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-        operationResult = new GetBlobResultInternal(
-            new GetBlobResult(new BlobInfo(serverBlobProperties, resultInfo.result.getDecryptedUserMetadata().array()),
-                null), null);
-        state = State.Complete;
-        checkAndMaybeComplete(true);
-      } else {
-        logger.trace("Exception {} thrown on decryption for {}", resultInfo.exception, blobId);
-        setOperationException(
-            new RouterException("Exception thrown on decrypting the content for " + blobId, resultInfo.exception,
-                RouterErrorCode.UnexpectedInternalError));
-        state = State.Complete;
-        checkAndMaybeComplete(false);
-      }
-      return true;
-    }
-    return false;
   }
 
   /**
@@ -212,9 +181,11 @@ class GetBlobInfoOperation extends GetOperation {
    */
   @Override
   void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
-    if (isOperationComplete()) {
+    if (isOperationComplete() || successfullyDeserialized) {
       return;
     }
+    // If the successTarget is more than 1, then, different responses will have to be reconciled in some way. Here is where that
+    // would be done. Since the store is immutable, currently we handle this by ignoring subsequent responses.
     int correlationId = ((GetRequest) responseInfo.getRequestInfo().getRequest()).getCorrelationId();
     // Get the GetOperation that generated the request.
     GetRequestInfo getRequestInfo = correlationIdToGetRequestInfo.remove(correlationId);
@@ -356,34 +327,39 @@ class GetBlobInfoOperation extends GetOperation {
    */
   private void handleBody(InputStream payload, MessageMetadata messageMetadata)
       throws IOException, MessageFormatException {
-    if (!successfullyDeserialized) {
-      ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
-      serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
-      serverUserMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
-      successfullyDeserialized = true;
-      if (!serverBlobProperties.isEncrypted()) {
-        // if blob is not encrypted, move the state to Complete
-        state = State.Complete;
-        if (operationResult == null) {
-          operationResult = new GetBlobResultInternal(
-              new GetBlobResult(new BlobInfo(serverBlobProperties, serverUserMetadata.array()), null), null);
-        }
-      } else {
-        // submit decrypt job
-        state = State.Decrypting;
-        logger.trace("Moving the state to {} and submitting decrypt job for {}", State.Decrypting, blobId);
-        cryptoJobHandler.submitJob(
-            new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
-                (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                  logger.trace("Handling decrypt job callback results for {}", blobId);
-                  decryptCallbackResultInfo.get().setResultAndException(result, exception);
-                  routerCallback.onPollReady();
-                }));
+    ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
+    serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
+    serverUserMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
+    successfullyDeserialized = true;
+    if (!serverBlobProperties.isEncrypted()) {
+      // if blob is not encrypted, move the state to Complete
+      state = State.Complete;
+      if (operationResult == null) {
+        operationResult = new GetBlobResultInternal(
+            new GetBlobResult(new BlobInfo(serverBlobProperties, serverUserMetadata.array()), null), null);
       }
     } else {
-      // If the successTarget is 1, this case will never get executed.
-      // If it is more than 1, then, different responses will have to be reconciled in some way. Here is where that
-      // would be done. Since the store is immutable, currently we handle this by ignoring subsequent responses.
+      // submit decrypt job
+      state = State.Decrypting;
+      logger.trace("Moving the state to {} and submitting decrypt job for {}", State.Decrypting, blobId);
+      cryptoJobHandler.submitJob(
+          new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
+              (DecryptJob.DecryptJobResult result, Exception exception) -> {
+                logger.trace("Handling decrypt job callback results for {}", blobId);
+                if (decryptCallbackResultInfo.exception == null) {
+                  logger.trace("Successfully updating decrypt job callback results for {}", blobId);
+                  operationResult = new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties,
+                      decryptCallbackResultInfo.result.getDecryptedUserMetadata().array()), null), null);
+                  state = State.Complete;
+                  checkAndMaybeComplete(true);
+                } else {
+                  logger.trace("Exception {} thrown on decryption for {}", decryptCallbackResultInfo.exception, blobId);
+                  setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId,
+                      decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
+                  state = State.Complete;
+                  checkAndMaybeComplete(false);
+                }
+              }));
     }
   }
 
