@@ -243,6 +243,12 @@ public class Container {
   static final short JSON_VERSION_2 = 2;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
 
+  // field default values
+  static final boolean ENCRYPTED_DEFAULT_VALUE = false;
+  static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
+  static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
+  static final boolean CACHEABLE_DEFAULT_VALUE = true;
+
   // container field variables
   private final short id;
   private final String name;
@@ -271,13 +277,10 @@ public class Container {
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
         description = metadata.optString(DESCRIPTION_KEY);
         parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
-        boolean isPrivate = metadata.getBoolean(IS_PRIVATE_KEY);
-        // the V1 schema can optionally include the new V2 fields. If not present, some of these can be inferred from
-        // the isPrivate flag
-        encrypted = metadata.optBoolean(ENCRYPTED_KEY, false);
-        previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, encrypted);
-        cacheable = metadata.optBoolean(CACHEABLE_KEY, !isPrivate);
-        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, false);
+        encrypted = ENCRYPTED_DEFAULT_VALUE;
+        previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+        cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
+        mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -285,10 +288,10 @@ public class Container {
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
         description = metadata.optString(DESCRIPTION_KEY);
         parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
-        encrypted = metadata.getBoolean(ENCRYPTED_KEY);
-        previouslyEncrypted = metadata.getBoolean(PREVIOUSLY_ENCRYPTED_KEY);
-        cacheable = metadata.getBoolean(CACHEABLE_KEY);
-        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, false);
+        encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
+        previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
+        cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
+        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -349,11 +352,6 @@ public class Container {
     metadata.put(DESCRIPTION_KEY, description);
     metadata.put(IS_PRIVATE_KEY, !cacheable);
     metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
-    // adding extra fields to the old version of the record will not cause parsing issues.
-    metadata.put(ENCRYPTED_KEY, encrypted);
-    metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);
-    metadata.put(CACHEABLE_KEY, cacheable);
-    metadata.put(MEDIA_SCAN_DISABLED, mediaScanDisabled);
     return metadata;
   }
 
@@ -490,8 +488,7 @@ public class Container {
       throw new IllegalStateException("Either of required fields name=" + name + " or status=" + status + " is null");
     }
     if (encrypted && !previouslyEncrypted) {
-      throw new IllegalStateException(
-          "previouslyEncrypted should be true if the container is currently encrypted");
+      throw new IllegalStateException("previouslyEncrypted should be true if the container is currently encrypted");
     }
   }
 

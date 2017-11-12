@@ -837,11 +837,12 @@ public class HelixAccountServiceTest {
     refContainerName = UUID.randomUUID().toString();
     refContainerStatus = random.nextBoolean() ? ContainerStatus.ACTIVE : ContainerStatus.INACTIVE;
     refContainerDescription = UUID.randomUUID().toString();
-    refContainerEncryption = random.nextBoolean();
-    refContainerPreviousEncryption = refContainerEncryption || random.nextBoolean();
     refContainerCaching = random.nextBoolean();
-    refContainerMediaScanDisabled = random.nextBoolean();
     refParentAccountId = refAccountId;
+    // TODO make these randomly generated once V2 container writes are enabled
+    refContainerEncryption = Container.ENCRYPTED_DEFAULT_VALUE;
+    refContainerPreviousEncryption = Container.PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+    refContainerMediaScanDisabled = Container.MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
         refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
         refParentAccountId).build();

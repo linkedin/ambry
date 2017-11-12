@@ -254,7 +254,6 @@ public class RestUtils {
     // This field should not matter on newly created blobs, because all privacy/cacheability decisions should be made
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
-    // @todo: Need to pass in isEncrypted here when that support is added.
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(),
         container.getId(), container.isEncrypted());
   }

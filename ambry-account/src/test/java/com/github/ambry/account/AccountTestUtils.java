@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import org.json.JSONException;
 
 import static org.junit.Assert.*;
 
@@ -59,7 +60,13 @@ class AccountTestUtils {
     Account accountFoundByName = accountService.getAccountByName(account.getName());
     assertEquals("Account got by id from accountService does not match account got by name.", accountFoundById,
         accountFoundByName);
-    assertEquals("Account got by id from accountService does not match the assert to assert", accountFoundById,
+    try {
+      System.out.println(accountFoundById.toJson());
+      System.out.println(account.toJson());
+    } catch (JSONException e) {
+      e.printStackTrace();
+    }
+    assertEquals("Account got by id from accountService does not match the account to assert", accountFoundById,
         account);
     assertEquals("The number of containers in the account is wrong.", accountFoundById.getAllContainers().size(),
         account.getAllContainers().size());
@@ -121,10 +128,11 @@ class AccountTestUtils {
         Container.ContainerStatus containerStatus =
             random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
         String containerDescription = UUID.randomUUID().toString();
-        boolean containerEncryption = random.nextBoolean();
-        boolean containerPreviousEncryption = containerEncryption || TestUtils.RANDOM.nextBoolean();
         boolean containerCaching = random.nextBoolean();
-        boolean mediaScanDisabled = random.nextBoolean();
+        // TODO make these randomly generated once V2 container writes are enabled
+        boolean containerEncryption = Container.ENCRYPTED_DEFAULT_VALUE;
+        boolean containerPreviousEncryption = Container.PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+        boolean mediaScanDisabled = Container.MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         Container container =
             new ContainerBuilder(containerId, containerName, containerStatus, containerDescription, containerEncryption,
                 containerPreviousEncryption, containerCaching, mediaScanDisabled, accountId).build();

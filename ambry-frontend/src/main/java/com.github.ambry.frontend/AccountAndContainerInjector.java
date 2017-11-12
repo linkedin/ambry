@@ -39,7 +39,7 @@ import static com.github.ambry.rest.RestUtils.*;
 /**
  * Helper class to resolve and add {@link Account} and {@link Container} details to requests.
  */
-public class AccountAndContainerInjector {
+class AccountAndContainerInjector {
   private static final Set<String> requiredAmbryHeadersForPutWithServiceId = Collections.singleton(Headers.SERVICE_ID);
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
