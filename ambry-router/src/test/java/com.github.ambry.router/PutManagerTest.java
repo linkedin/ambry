@@ -98,7 +98,7 @@ public class PutManagerTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true}});
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   /**
