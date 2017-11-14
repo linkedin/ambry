@@ -60,12 +60,6 @@ class AccountTestUtils {
     Account accountFoundByName = accountService.getAccountByName(account.getName());
     assertEquals("Account got by id from accountService does not match account got by name.", accountFoundById,
         accountFoundByName);
-    try {
-      System.out.println(accountFoundById.toJson());
-      System.out.println(account.toJson());
-    } catch (JSONException e) {
-      e.printStackTrace();
-    }
     assertEquals("Account got by id from accountService does not match the account to assert", accountFoundById,
         account);
     assertEquals("The number of containers in the account is wrong.", accountFoundById.getAllContainers().size(),

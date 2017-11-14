@@ -153,7 +153,7 @@ public class Account {
    * @param status The status of the account. Cannot be null.
    * @param containers A collection of {@link Container}s to be part of this account.
    */
-  public Account(short id, String name, AccountStatus status, Collection<Container> containers) {
+  Account(short id, String name, AccountStatus status, Collection<Container> containers) {
     this.id = id;
     this.name = name;
     this.status = status;

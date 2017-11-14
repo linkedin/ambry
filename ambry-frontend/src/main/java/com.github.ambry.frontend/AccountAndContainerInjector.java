@@ -75,7 +75,7 @@ class AccountAndContainerInjector {
     } else if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
       frontendMetrics.putWithServiceIdForAccountNameRate.mark();
-      String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
+      String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, true);
       boolean isPrivate = isPrivate(restRequest.getArgs());
       injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate);
     } else {
@@ -89,7 +89,7 @@ class AccountAndContainerInjector {
    * Obtains the target {@link Account} and {@link Container} id from the blobId string, queries the {@link AccountService}
    * to get the corresponding {@link Account} and {@link Container}, and injects the target {@link Account} and
    * {@link Container} into the {@link RestRequest}.
-   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id。
+   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id.
    * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
    * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be found; or 2)
    *                              either {@link Account} or {@link Container} were explicitly specified as
