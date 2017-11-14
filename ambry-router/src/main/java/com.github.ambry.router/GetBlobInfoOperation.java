@@ -127,7 +127,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @return {@code true} if the operation is complete, {@code false} otherwise
    */
   private boolean maybeProcessDecryptCallbackAndComplete() {
-    if (onDecryptMode() && decryptCallbackResultInfo.resultAvailable) {
+    if (isDecrypting() && decryptCallbackResultInfo.resultAvailable) {
       if (decryptCallbackResultInfo.exception == null) {
         logger.trace("Successfully updating decrypt job callback results for {}", blobId);
         operationResult = new GetBlobResultInternal(new GetBlobResult(
@@ -437,7 +437,7 @@ class GetBlobInfoOperation extends GetOperation {
   /**
    * @return true if the content is being decrypted
    */
-  private boolean onDecryptMode() {
+  private boolean isDecrypting() {
     return state == State.Decrypting;
   }
 
