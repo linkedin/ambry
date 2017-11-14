@@ -30,6 +30,7 @@ public class AccountBuilder {
   private short id;
   private String name;
   private AccountStatus status;
+  private int snapshotVersion = Account.SNAPSHOT_VERSION_DEFAULT_VALUE;
   private Map<Short, Container> idToContainerMetadataMap = new HashMap<>();
 
   /**
@@ -44,6 +45,7 @@ public class AccountBuilder {
     id = origin.getId();
     name = origin.getName();
     status = origin.getStatus();
+    snapshotVersion = origin.getSnapshotVersion();
     for (Container container : origin.getAllContainers()) {
       idToContainerMetadataMap.put(container.getId(), container);
     }
@@ -57,17 +59,11 @@ public class AccountBuilder {
    *           calling {@link #build()}.
    * @param status The status of the {@link Account}. Can be {@code null}, but should be set before
    *           calling {@link #build()}.
-   * @param containers A collection of {@link Container}s to add. Can be {@code null}.
    */
-  public AccountBuilder(short id, String name, AccountStatus status, Collection<Container> containers) {
+  public AccountBuilder(short id, String name, AccountStatus status) {
     this.id = id;
     this.name = name;
     this.status = status;
-    if (containers != null) {
-      for (Container container : containers) {
-        idToContainerMetadataMap.put(container.getId(), container);
-      }
-    }
   }
 
   /**
@@ -75,7 +71,7 @@ public class AccountBuilder {
    * @param id The id to set.
    * @return This builder.
    */
-  public AccountBuilder setId(short id) {
+  public AccountBuilder id(short id) {
     this.id = id;
     return this;
   }
@@ -85,7 +81,7 @@ public class AccountBuilder {
    * @param name The name to set.
    * @return This builder.
    */
-  public AccountBuilder setName(String name) {
+  public AccountBuilder name(String name) {
     this.name = name;
     return this;
   }
@@ -95,8 +91,33 @@ public class AccountBuilder {
    * @param status The id to set.
    * @return This builder.
    */
-  public AccountBuilder setStatus(AccountStatus status) {
+  public AccountBuilder status(AccountStatus status) {
     this.status = status;
+    return this;
+  }
+
+  /**
+   * Sets the snapshot version of the {@link Account} to build.
+   * @param snapshotVersion The version to set.
+   * @return This builder.
+   */
+  public AccountBuilder snapshotVersion(int snapshotVersion) {
+    this.snapshotVersion = snapshotVersion;
+    return this;
+  }
+
+  /**
+   * Clear the set of containers for the {@link Account} to build and add the provided ones.
+   * @param containers A collection of {@link Container}s to use. Can be {@code null} to just remove all containers.
+   * @return This builder.
+   */
+  public AccountBuilder containers(Collection<Container> containers) {
+    idToContainerMetadataMap.clear();
+    if (containers != null) {
+      for (Container container : containers) {
+        idToContainerMetadataMap.put(container.getId(), container);
+      }
+    }
     return this;
   }
 
@@ -137,6 +158,6 @@ public class AccountBuilder {
    * @throws IllegalStateException If any required fields is not set or there is inconsistency in containers.
    */
   public Account build() {
-    return new Account(id, name, status, idToContainerMetadataMap.values());
+    return new Account(id, name, status, snapshotVersion, idToContainerMetadataMap.values());
   }
 }

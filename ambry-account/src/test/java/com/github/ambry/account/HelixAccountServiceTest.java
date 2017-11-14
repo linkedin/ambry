@@ -16,10 +16,15 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.HelixStoreOperator;
 import com.github.ambry.commons.Notifier;
+import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,6 +38,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.junit.After;
@@ -65,6 +73,7 @@ public class HelixAccountServiceTest {
   private static final Map<Short, Account> idToRefAccountMap = new HashMap<>();
   private static final Map<Short, Map<Short, Container>> idToRefContainerMap = new HashMap<>();
   private final Properties helixConfigProps = new Properties();
+  private final Path accountBackupDir;
   private VerifiableProperties vHelixConfigProps;
   private HelixPropertyStoreConfig storeConfig;
   private Account refAccount;
@@ -98,6 +107,8 @@ public class HelixAccountServiceTest {
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "zk.client.connect.string",
         ZK_CONNECT_STRING);
     helixConfigProps.setProperty(HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "root.path", STORE_ROOT_PATH);
+    accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
+    helixConfigProps.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     notifier = new MockNotifier<>();
@@ -155,7 +166,7 @@ public class HelixAccountServiceTest {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertEquals("The number of account in HelixAccountService is incorrect", 0,
         accountService.getAllAccounts().size());
-    boolean res = accountService.updateAccounts(new ArrayList<>(idToRefAccountMap.values()));
+    boolean res = accountService.updateAccounts(idToRefAccountMap.values());
     assertTrue("Failed to update accounts", res);
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
   }
@@ -177,30 +188,29 @@ public class HelixAccountServiceTest {
     assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
 
     // add a new account
-    Account newAccountWithoutContainer =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    Account newAccountWithoutContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     List<Account> accountsToUpdate = Collections.singletonList(newAccountWithoutContainer);
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
 
     // update all existing reference accounts (not the new account)
     accountsToUpdate = new ArrayList<>();
-    for (Account account : idToRefAccountMap.values()) {
+    for (Account account : accountService.getAllAccounts()) {
       AccountBuilder accountBuilder = new AccountBuilder(account);
-      accountBuilder.setName(account.getName() + "-extra");
-      accountBuilder.setStatus(
+      accountBuilder.name(account.getName() + "-extra");
+      accountBuilder.status(
           account.getStatus().equals(AccountStatus.ACTIVE) ? AccountStatus.INACTIVE : AccountStatus.ACTIVE);
       accountsToUpdate.add(accountBuilder.build());
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
 
     // add one container to the new account
-    AccountBuilder accountBuilder = new AccountBuilder(newAccountWithoutContainer);
+    AccountBuilder accountBuilder = new AccountBuilder(accountService.getAccountById(refAccountId));
     accountsToUpdate = Collections.singletonList(accountBuilder.addOrUpdateContainer(refContainer).build());
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
 
     // update existing containers for all the reference accounts (not for the new account)
     accountsToUpdate = new ArrayList<>();
-    for (Account account : idToRefAccountMap.values()) {
+    for (Account account : accountService.getAllAccounts()) {
       accountBuilder = new AccountBuilder(account);
       for (Container container : account.getAllContainers()) {
         ContainerBuilder containerBuilder = new ContainerBuilder(container);
@@ -371,8 +381,8 @@ public class HelixAccountServiceTest {
   public void testUpdateNameConflictingAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
-    conflictAccounts.add(new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build());
+    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
+    conflictAccounts.add(new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE).build());
     assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
   }
 
@@ -385,8 +395,8 @@ public class HelixAccountServiceTest {
   public void testUpdateIdConflictingAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
-    conflictAccounts.add(new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build());
+    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
+    conflictAccounts.add(new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE).build());
     assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
   }
 
@@ -398,8 +408,8 @@ public class HelixAccountServiceTest {
   public void testUpdateDuplicateAccounts() throws Exception {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     List<Account> conflictAccounts = new ArrayList<>();
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
-    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
+    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
+    conflictAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
     assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
   }
 
@@ -413,8 +423,9 @@ public class HelixAccountServiceTest {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
+    Account accountToUpdate = accountService.getAccountById((short) 1);
     Collection<Account> nonConflictAccounts =
-        Collections.singleton((new AccountBuilder((short) 1, "a", AccountStatus.ACTIVE, null).build()));
+        Collections.singleton(new AccountBuilder(accountToUpdate).status(AccountStatus.ACTIVE).build());
     updateAccountsAndAssertAccountExistence(nonConflictAccounts, 2, true);
   }
 
@@ -429,8 +440,9 @@ public class HelixAccountServiceTest {
     accountService = mockHelixAccountServiceFactory.getAccountService();
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
+    Account accountToUpdate = accountService.getAccountById((short) 1);
     Collection<Account> nonConflictAccounts =
-        Collections.singleton((new AccountBuilder((short) 1, "c", AccountStatus.ACTIVE, null).build()));
+        Collections.singleton((new AccountBuilder(accountToUpdate).status(AccountStatus.ACTIVE).build()));
     updateAccountsAndAssertAccountExistence(nonConflictAccounts, 2, true);
   }
 
@@ -446,7 +458,7 @@ public class HelixAccountServiceTest {
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> nonConflictAccounts =
-        Collections.singleton((new AccountBuilder((short) 3, "c", AccountStatus.ACTIVE, null).build()));
+        Collections.singleton((new AccountBuilder((short) 3, "c", AccountStatus.ACTIVE).build()));
     updateAccountsAndAssertAccountExistence(nonConflictAccounts, 3, true);
   }
 
@@ -461,7 +473,7 @@ public class HelixAccountServiceTest {
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
-        Collections.singleton((new AccountBuilder((short) 3, "a", AccountStatus.INACTIVE, null).build()));
+        Collections.singleton((new AccountBuilder((short) 3, "a", AccountStatus.INACTIVE).build()));
     assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
     assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
     assertNull("Wrong account got from HelixAccountService", accountService.getAccountById((short) 3));
@@ -479,7 +491,7 @@ public class HelixAccountServiceTest {
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Collection<Account> conflictAccounts =
-        Collections.singleton((new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE, null).build()));
+        Collections.singleton((new AccountBuilder((short) 1, "b", AccountStatus.INACTIVE).build()));
     assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
     assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
     assertEquals("Wrong account name got from HelixAccountService", "a",
@@ -495,8 +507,8 @@ public class HelixAccountServiceTest {
   @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase1() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
-    Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
-    Account account2 = new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build();
+    Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build();
+    Account account2 = new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE).build();
     conflictAccounts.add(account1);
     conflictAccounts.add(account2);
     readAndUpdateBadRecord(conflictAccounts);
@@ -509,10 +521,10 @@ public class HelixAccountServiceTest {
   @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase2() throws Exception {
     List<Account> conflictAccounts = new ArrayList<>();
-    Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
-    Account account2 = new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE, null).build();
-    Account account3 = new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE, null).build();
-    Account account4 = new AccountBuilder((short) 3, "b", AccountStatus.INACTIVE, null).build();
+    Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build();
+    Account account2 = new AccountBuilder((short) 2, "a", AccountStatus.INACTIVE).build();
+    Account account3 = new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE).build();
+    Account account4 = new AccountBuilder((short) 3, "b", AccountStatus.INACTIVE).build();
     conflictAccounts.add(account1);
     conflictAccounts.add(account2);
     conflictAccounts.add(account3);
@@ -531,17 +543,17 @@ public class HelixAccountServiceTest {
    */
   @Test
   public void testReadConflictAccountDataFromHelixPropertyStoreCase3() throws Exception {
-    Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build();
+    Account account1 = new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build();
     List<Account> accounts = Collections.singletonList(account1);
     writeAccountsToHelixPropertyStore(accounts, false);
     accountService = mockHelixAccountServiceFactory.getAccountService();
     assertAccountInAccountService(account1, accountService);
 
-    Account account2 = new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE, null).build();
+    Account account2 = new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE).build();
     accounts = Collections.singletonList(account2);
     writeAccountsToHelixPropertyStore(accounts, false);
 
-    Account conflictingAccount = new AccountBuilder((short) 3, "b", AccountStatus.INACTIVE, null).build();
+    Account conflictingAccount = new AccountBuilder((short) 3, "b", AccountStatus.INACTIVE).build();
     accounts = Collections.singletonList(conflictingAccount);
     assertFalse(accountService.updateAccounts(accounts));
     assertEquals("Number of account is wrong.", 1, accountService.getAllAccounts().size());
@@ -562,27 +574,23 @@ public class HelixAccountServiceTest {
     // add consumer
     int numOfConsumers = 10;
     List<Collection<Account>> updatedAccountsReceivedByConsumers = new ArrayList<>();
-    List<Consumer<Collection<Account>>> accountUpdateConsumers = new ArrayList<>();
-    for (int i = 0; i < numOfConsumers; i++) {
-      Consumer<Collection<Account>> accountUpdateConsumer = updatedAccounts -> {
-        updatedAccountsReceivedByConsumers.add(updatedAccounts);
-      };
-      accountService.addAccountUpdateConsumer(accountUpdateConsumer);
-      accountUpdateConsumers.add(accountUpdateConsumer);
-    }
+    List<Consumer<Collection<Account>>> accountUpdateConsumers = IntStream.range(0, numOfConsumers)
+        .mapToObj(i -> (Consumer<Collection<Account>>) updatedAccountsReceivedByConsumers::add)
+        .peek(accountService::addAccountUpdateConsumer)
+        .collect(Collectors.toList());
 
     // listen to adding a new account
-    Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
-    Set<Account> accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
+    Account newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
+    Set<Account> accountsToUpdate = Collections.singleton(newAccount);
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
-    assertAccountUpdateConsumers(Collections.singleton(newAccount), numOfConsumers, updatedAccountsReceivedByConsumers);
+    assertAccountUpdateConsumers(accountsToUpdate, numOfConsumers, updatedAccountsReceivedByConsumers);
 
     // listen to modification of existing accounts. Only updated accounts will be received by consumers.
     updatedAccountsReceivedByConsumers.clear();
     accountsToUpdate = new HashSet<>();
-    for (Account account : idToRefAccountMap.values()) {
+    for (Account account : accountService.getAllAccounts()) {
       AccountBuilder accountBuilder = new AccountBuilder(account);
-      accountBuilder.setName(account.getName() + "-extra");
+      accountBuilder.name(account.getName() + "-extra");
       accountsToUpdate.add(accountBuilder.build());
     }
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
@@ -593,8 +601,9 @@ public class HelixAccountServiceTest {
     for (Consumer<Collection<Account>> accountUpdateConsumer : accountUpdateConsumers) {
       accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
     }
-    newAccount = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
-    accountsToUpdate = new HashSet<>(Collections.singleton(newAccount));
+    Account account = accountService.getAccountById(refAccountId);
+    Account updatedAccount = new AccountBuilder(account).name(account.getName() + "-extra").build();
+    accountsToUpdate = new HashSet<>(Collections.singleton(updatedAccount));
     updateAccountsAndAssertAccountExistence(accountsToUpdate, 1 + NUM_REF_ACCOUNT, true);
     assertAccountUpdateConsumers(Collections.emptySet(), 0, updatedAccountsReceivedByConsumers);
   }
@@ -609,8 +618,7 @@ public class HelixAccountServiceTest {
    */
   @Test
   public void testBackgroundUpdater() throws Exception {
-    helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "1");
+    helixConfigProps.setProperty(HelixAccountServiceConfig.UPDATER_POLLING_INTERVAL_MS_KEY, "1");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
@@ -631,8 +639,7 @@ public class HelixAccountServiceTest {
    */
   @Test
   public void testDisableBackgroundUpdater() throws Exception {
-    helixConfigProps.setProperty(
-        HelixPropertyStoreConfig.HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms", "0");
+    helixConfigProps.setProperty(HelixAccountServiceConfig.UPDATER_POLLING_INTERVAL_MS_KEY, "0");
     vHelixConfigProps = new VerifiableProperties(helixConfigProps);
     storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
     String updaterThreadPrefix = UUID.randomUUID().toString();
@@ -650,19 +657,15 @@ public class HelixAccountServiceTest {
    *                            received by one {@link Consumer}.
    */
   private void assertAccountUpdateConsumers(Set<Account> expectedAccounts, int expectedNumberOfConsumers,
-      List<Collection<Account>> accountsInConsumers) {
+      List<Collection<Account>> accountsInConsumers) throws Exception {
     assertEquals("Wrong number of consumers", expectedNumberOfConsumers, accountsInConsumers.size());
     for (Collection<Account> accounts : accountsInConsumers) {
       assertEquals("Wrong number of updated accounts received by consumers", expectedAccounts.size(), accounts.size());
       for (Account account : accounts) {
-        assertTrue("Account should be received by the consumers but not.", expectedAccounts.contains(account));
+        assertTrue("Account should be received by the consumers but not.",
+            expectedAccounts.contains(adjustSnapshotVersion(account, -1)));
       }
-      try {
-        accounts.add(Account.UNKNOWN_ACCOUNT);
-        fail("Should have thrown");
-      } catch (UnsupportedOperationException e) {
-        // expected
-      }
+      TestUtils.assertException(UnsupportedOperationException.class, () -> accounts.add(Account.UNKNOWN_ACCOUNT), null);
     }
   }
 
@@ -673,8 +676,8 @@ public class HelixAccountServiceTest {
    */
   private void writeAccountsForConflictTest() throws Exception {
     List<Account> existingAccounts = new ArrayList<>();
-    existingAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE, null).build());
-    existingAccounts.add(new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE, null).build());
+    existingAccounts.add(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).build());
+    existingAccounts.add(new AccountBuilder((short) 2, "b", AccountStatus.INACTIVE).build());
     updateAccountsAndAssertAccountExistence(existingAccounts, 2, true);
   }
 
@@ -698,7 +701,7 @@ public class HelixAccountServiceTest {
    * @param accounts A collection of {@link Account}s to update through {@link HelixAccountService}.
    */
   private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
-      boolean shouldUpdateSucceed) {
+      boolean shouldUpdateSucceed) throws Exception {
     boolean hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
     assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
@@ -847,7 +850,7 @@ public class HelixAccountServiceTest {
         refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
         refParentAccountId).build();
     refAccount =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, Collections.singleton(refContainer)).build();
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(refContainer).build();
     generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, NUM_REF_ACCOUNT,
         NUM_CONTAINER_PER_ACCOUNT);
   }

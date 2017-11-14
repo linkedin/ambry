@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.MockHelixPropertyStore;
 import com.github.ambry.commons.Notifier;
+import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
@@ -30,8 +31,9 @@ import org.apache.helix.ZNRecord;
  */
 public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
   private final HelixPropertyStoreConfig storeConfig;
+  private final HelixAccountServiceConfig accountServiceConfig;
   private final AccountServiceMetrics accountServiceMetrics;
-  private final Notifier notifier;
+  private final Notifier<String> notifier;
   private final String updaterThreadPrefix;
   private final Map<String, MockHelixPropertyStore<ZNRecord>> storeKeyToMockStoreMap = new HashMap<>();
 
@@ -45,6 +47,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
       Notifier<String> notifier, String updaterThreadPrefix) {
     super(verifiableProperties, metricRegistry, notifier);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
+    accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
     this.notifier = notifier;
     this.updaterThreadPrefix = updaterThreadPrefix;
@@ -52,9 +55,14 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
 
   @Override
   public AccountService getAccountService() {
-    ScheduledExecutorService scheduler =
-        storeConfig.accountUpdaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
-    return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler, storeConfig);
+    try {
+      ScheduledExecutorService scheduler =
+          accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
+      return new HelixAccountService(getHelixStore(storeConfig), accountServiceMetrics, notifier, scheduler,
+          accountServiceConfig);
+    } catch (Exception e) {
+      throw new IllegalStateException("Could not instantiate HelixAccountService", e);
+    }
   }
 
   /**

@@ -56,7 +56,7 @@ public class ContainerBuilder {
 
   /**
    * Constructor for a {@link ContainerBuilder} taking individual arguments.
-   * @param id The id of the {@link Container} to build.
+   * @param id The setId of the {@link Container} to build.
    * @param name The name of the {@link Container}.
    * @param status The status of the {@link Container}.
    * @param description The description of the {@link Container}.
@@ -66,7 +66,7 @@ public class ContainerBuilder {
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
 *                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
-   * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
+   * @param parentAccountId The setId of the parent {@link Account} of the {@link Container} to build.
    */
   public ContainerBuilder(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
@@ -82,8 +82,8 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets the id of the {@link Container} to build.
-   * @param id The id to set.
+   * Sets the setId of the {@link Container} to build.
+   * @param id The setId to set.
    * @return This builder.
    */
   public ContainerBuilder setId(short id) {
@@ -152,8 +152,8 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets the id of the parent {@link Account} of the {@link Container} to build.
-   * @param parentAccountId The parent {@link Account} id to set.
+   * Sets the setId of the parent {@link Account} of the {@link Container} to build.
+   * @param parentAccountId The parent {@link Account} setId to set.
    * @return This builder.
    */
   public ContainerBuilder setParentAccountId(short parentAccountId) {
@@ -162,7 +162,7 @@ public class ContainerBuilder {
   }
 
   /**
-   * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
+   * Builds a {@link Container} object. {@code setId}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
    * @return A {@link Container} object.
    * @throws IllegalStateException If any required fields is not set.

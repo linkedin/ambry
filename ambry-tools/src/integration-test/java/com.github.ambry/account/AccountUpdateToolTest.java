@@ -146,7 +146,8 @@ public class AccountUpdateToolTest {
   public void testCreateAccount() throws Exception {
     assertEquals("Wrong number of accounts", 0, accountService.getAllAccounts().size());
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT,
+        accountService);
   }
 
   /**
@@ -157,14 +158,15 @@ public class AccountUpdateToolTest {
   public void testUpdateAccount() throws Exception {
     // first, create NUM_REF_ACCOUNT accounts through the tool
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT,
+        accountService);
 
     // then, update the name of all the accounts again through the tool
     String accountNameAppendix = "-accountNameAppendix";
     String containerNameAppendix = "-containerNameAppendix";
     Collection<Account> updatedAccounts = new ArrayList<>();
     for (Account account : accountService.getAllAccounts()) {
-      AccountBuilder accountBuilder = new AccountBuilder(account).setName(account.getName() + accountNameAppendix);
+      AccountBuilder accountBuilder = new AccountBuilder(account).name(account.getName() + accountNameAppendix);
       for (Container container : account.getAllContainers()) {
         accountBuilder.addOrUpdateContainer(
             new ContainerBuilder(container).setName(container.getName() + containerNameAppendix).build());
@@ -183,10 +185,8 @@ public class AccountUpdateToolTest {
   public void testUpdateConflictAccounts() throws Exception {
     Collection<Account> idConflictAccounts = new ArrayList<>();
     // id conflict
-    idConflictAccounts.add(new AccountBuilder((short) 1, "account1", Account.AccountStatus.INACTIVE, null).build());
-    idConflictAccounts.add(new AccountBuilder((short) 1, "account2", Account.AccountStatus.INACTIVE, null).build());
-    TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(idConflictAccounts),
-        null);
+    idConflictAccounts.add(new AccountBuilder((short) 1, "account1", Account.AccountStatus.INACTIVE).build());
+    idConflictAccounts.add(new AccountBuilder((short) 1, "account2", Account.AccountStatus.INACTIVE).build());
     TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(idConflictAccounts),
         null);
     Thread.sleep(100);
@@ -194,10 +194,8 @@ public class AccountUpdateToolTest {
 
     // name conflict
     Collection<Account> nameConflictAccounts = new ArrayList<>();
-    nameConflictAccounts.add(new AccountBuilder((short) 1, "account1", Account.AccountStatus.INACTIVE, null).build());
-    nameConflictAccounts.add(new AccountBuilder((short) 2, "account1", Account.AccountStatus.INACTIVE, null).build());
-    TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(nameConflictAccounts),
-        null);
+    nameConflictAccounts.add(new AccountBuilder((short) 1, "account1", Account.AccountStatus.INACTIVE).build());
+    nameConflictAccounts.add(new AccountBuilder((short) 2, "account1", Account.AccountStatus.INACTIVE).build());
     TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(nameConflictAccounts),
         null);
     Thread.sleep(100);
@@ -247,7 +245,7 @@ public class AccountUpdateToolTest {
   private static void writeAccountsToFile(Collection<Account> accounts, String filePath) throws Exception {
     JSONArray accountArray = new JSONArray();
     for (Account account : accounts) {
-      accountArray.put(account.toJson());
+      accountArray.put(account.toJson(false));
     }
     writeJsonArrayToFile(accountArray, filePath);
   }

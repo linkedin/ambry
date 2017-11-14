@@ -73,6 +73,17 @@ import org.json.JSONObject;
  * </p>
  */
 public class Account {
+  // static variables
+  static final String JSON_VERSION_KEY = "version";
+  static final String ACCOUNT_ID_KEY = "accountId";
+  static final String ACCOUNT_NAME_KEY = "accountName";
+  static final String STATUS_KEY = "status";
+  static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
+  static final String CONTAINERS_KEY = "containers";
+  static final short JSON_VERSION_1 = 1;
+  static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
+  static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
+
   /**
    * The id of {@link #UNKNOWN_ACCOUNT}.
    */
@@ -84,32 +95,21 @@ public class Account {
   public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
 
   /**
-   * The status of {@link #UNKNOWN_ACCOUNT}.
-   */
-  public static final AccountStatus UNKNOWN_ACCOUNT_STATUS = AccountStatus.ACTIVE;
-
-  /**
    * An account defined specifically for the blobs put without specifying target account and container. In the
    * pre-containerization world, a put-blob request does not carry any information which account/container to store
-   * the blob. These blobs are literally put under this account, because the target account information is unknown.
+   * the blob. Thee blobs are put under this account if their service ID does not match a valid account, because the
+   * target account information is unknown.
    */
   public static final Account UNKNOWN_ACCOUNT =
-      new Account(UNKNOWN_ACCOUNT_ID, UNKNOWN_ACCOUNT_NAME, UNKNOWN_ACCOUNT_STATUS,
+      new Account(UNKNOWN_ACCOUNT_ID, UNKNOWN_ACCOUNT_NAME, AccountStatus.ACTIVE, SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER));
 
-  // static variables
-  static final String JSON_VERSION_KEY = "version";
-  static final String ACCOUNT_ID_KEY = "accountId";
-  static final String ACCOUNT_NAME_KEY = "accountName";
-  static final String STATUS_KEY = "status";
-  static final String CONTAINERS_KEY = "containers";
-  static final short JSON_VERSION_1 = 1;
-  static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   // account member variables
   private final short id;
   private final String name;
   private AccountStatus status;
+  private final int snapshotVersion;
   // internal data structure
   private final Map<Short, Container> containerIdToContainerMap = new HashMap<>();
   private final Map<String, Container> containerNameToContainerMap = new HashMap<>();
@@ -129,6 +129,7 @@ public class Account {
         id = (short) metadata.getInt(ACCOUNT_ID_KEY);
         name = metadata.getString(ACCOUNT_NAME_KEY);
         status = AccountStatus.valueOf(metadata.getString(STATUS_KEY));
+        snapshotVersion = metadata.optInt(SNAPSHOT_VERSION_KEY, SNAPSHOT_VERSION_DEFAULT_VALUE);
         checkRequiredFieldsForBuild();
         JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
@@ -151,12 +152,14 @@ public class Account {
    * @param id The id of the account. Cannot be null.
    * @param name The name of the account. Cannot be null.
    * @param status The status of the account. Cannot be null.
+   * @param snapshotVersion the expected snapshot version for the account record.
    * @param containers A collection of {@link Container}s to be part of this account.
    */
-  Account(short id, String name, AccountStatus status, Collection<Container> containers) {
+  Account(short id, String name, AccountStatus status, int snapshotVersion, Collection<Container> containers) {
     this.id = id;
     this.name = name;
     this.status = status;
+    this.snapshotVersion = snapshotVersion;
     checkRequiredFieldsForBuild();
     if (containers != null) {
       for (Container container : containers) {
@@ -168,32 +171,27 @@ public class Account {
   }
 
   /**
-   * Gets the id of the account.
-   * @return The id of the account.
-   */
-  public short getId() {
-    return id;
-  }
-
-  /**
-   * Gets the name of the account.
-   * @return The name of the account.
-   */
-  public String getName() {
-    return name;
-  }
-
-  /**
-   * Gets the metadata of the account in {@link JSONObject}.
+   * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one.
    * @return The metadata of the account in {@link JSONObject}.
    * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
    */
   JSONObject toJson() throws JSONException {
+    return toJson(true);
+  }
+
+  /**
+   * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one.
+   * @param incrementSnapshotVersion {@code true} to increment the snapshot version by one.
+   * @return The metadata of the account in {@link JSONObject}.
+   * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
+   */
+  JSONObject toJson(boolean incrementSnapshotVersion) throws JSONException {
     JSONObject metadata = new JSONObject();
     metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
     metadata.put(ACCOUNT_ID_KEY, id);
     metadata.put(ACCOUNT_NAME_KEY, name);
     metadata.put(STATUS_KEY, status);
+    metadata.put(SNAPSHOT_VERSION_KEY, incrementSnapshotVersion ? snapshotVersion + 1 : snapshotVersion);
     JSONArray containerArray = new JSONArray();
     for (Container container : containerIdToContainerMap.values()) {
       containerArray.put(container.toJson());
@@ -201,6 +199,7 @@ public class Account {
     metadata.put(CONTAINERS_KEY, containerArray);
     return metadata;
   }
+
 
   /**
    * Deserializes a {@link JSONObject} to an account object.
@@ -213,11 +212,34 @@ public class Account {
   }
 
   /**
-   * Gets the status of the account.
+   * @return The id of the account.
+   */
+  public short getId() {
+    return id;
+  }
+
+  /**
+   * @return The name of the account.
+   */
+  public String getName() {
+    return name;
+  }
+
+  /**
    * @return The status of the account.
    */
   public AccountStatus getStatus() {
     return status;
+  }
+
+  /**
+   * The snapshot version is generally the number of modifications to the account that were expected to have occurred
+   * before the current time. This is used to validate that there were no unexpected account modifications that could be
+   * inadvertently overwritten by an account update.
+   * @return the expected version for the account record.
+   */
+  public int getSnapshotVersion() {
+    return snapshotVersion;
   }
 
   /**
@@ -255,7 +277,7 @@ public class Account {
    */
   @Override
   public String toString() {
-    return "Account[" + getId() + "]";
+    return "Account[" + getId() + "," + getSnapshotVersion() + "]";
   }
 
   @Override
@@ -276,6 +298,9 @@ public class Account {
       return false;
     }
     if (status != account.status) {
+      return false;
+    }
+    if (snapshotVersion != account.snapshotVersion) {
       return false;
     }
     if (!containerIdToContainerMap.equals(account.containerIdToContainerMap)) {
@@ -325,8 +350,7 @@ public class Account {
    */
   private void checkRequiredFieldsForBuild() {
     if (name == null || status == null) {
-      throw new IllegalStateException(
-          "Either of required fields name=" + name + " or status=" + status + " is null");
+      throw new IllegalStateException("Either of required fields name=" + name + " or status=" + status + " is null");
     }
   }
 
