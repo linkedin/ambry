@@ -91,11 +91,11 @@ class RouterServerTestFramework {
   }
 
   /**
-   * Sets the {@link #testEncryption} to true. In other words, all utilities in this class will test for encryption
-   * if this is called.
+   * Sets {@link #testEncryption}
+   * @param testEncryption {@code true} if encryption needs to be tested. {@code false} otherwise
    */
-  void setTestEncryption() {
-    this.testEncryption = true;
+  void setTestEncryption(boolean testEncryption) {
+    this.testEncryption = testEncryption;
   }
 
   /**

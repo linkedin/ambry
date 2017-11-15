@@ -50,9 +50,11 @@ class GetBlobInfoOperation extends GetOperation {
   // the callback to use to complete the operation.
   private final RouterCallback routerCallback;
   private final OperationTracker operationTracker;
-  // AtomicRef to DecryptCallBackResultInfo that holds all info about decrypt job callback
-  private final DecryptCallBackResultInfo decryptCallbackResultInfo;
-  private State state = State.Ready;
+  private boolean decryptionRequired = false;
+  // used to track decryption job status if applicable
+  private final DecryptionStatusTracker decryptionStatusTracker = new DecryptionStatusTracker();
+  // DecryptCallBackResultInfo that holds all info about decrypt job callback
+  private final DecryptCallBackResultInfo decryptCallbackResultInfo = new DecryptCallBackResultInfo();
   private boolean successfullyDeserialized = false;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
@@ -88,7 +90,6 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;
     operationTracker = getOperationTracker(blobId.getPartition());
-    decryptCallbackResultInfo = new DecryptCallBackResultInfo();
   }
 
   @Override
@@ -113,12 +114,11 @@ class GetBlobInfoOperation extends GetOperation {
   @Override
   void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     //First, check if any of the existing requests have timed out.
-    if (!maybeProcessDecryptCallbackAndComplete()) {
-      cleanupExpiredInFlightRequests();
-      checkAndMaybeComplete(true);
-      if (!isOperationComplete()) {
-        fetchRequests(requestRegistrationCallback);
-      }
+    maybeProcessDecryptCallbackAndComplete();
+    cleanupExpiredInFlightRequests();
+    checkAndMaybeComplete();
+    if (!isOperationComplete()) {
+      fetchRequests(requestRegistrationCallback);
     }
   }
 
@@ -127,20 +127,18 @@ class GetBlobInfoOperation extends GetOperation {
    * @return {@code true} if the operation is complete, {@code false} otherwise
    */
   private boolean maybeProcessDecryptCallbackAndComplete() {
-    if (isDecrypting() && decryptCallbackResultInfo.resultAvailable) {
+    if (decryptionRequired && decryptCallbackResultInfo.resultAvailable) {
       if (decryptCallbackResultInfo.exception == null) {
         logger.trace("Successfully updating decrypt job callback results for {}", blobId);
         operationResult = new GetBlobResultInternal(new GetBlobResult(
             new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array()),
             null), null);
-        state = State.Complete;
-        checkAndMaybeComplete(true);
+        decryptionStatusTracker.succeeded = true;
       } else {
         logger.trace("Exception {} thrown on decryption for {}", decryptCallbackResultInfo.exception, blobId);
         setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId,
             decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
-        state = State.Complete;
-        checkAndMaybeComplete(false);
+        decryptionStatusTracker.failed = true;
       }
       return true;
     }
@@ -269,7 +267,7 @@ class GetBlobInfoOperation extends GetOperation {
         }
       }
     }
-    checkAndMaybeComplete(true);
+    checkAndMaybeComplete();
   }
 
   /**
@@ -360,15 +358,14 @@ class GetBlobInfoOperation extends GetOperation {
     successfullyDeserialized = true;
     if (!serverBlobProperties.isEncrypted()) {
       // if blob is not encrypted, move the state to Complete
-      state = State.Complete;
       if (operationResult == null) {
         operationResult = new GetBlobResultInternal(
             new GetBlobResult(new BlobInfo(serverBlobProperties, serverUserMetadata.array()), null), null);
       }
     } else {
       // submit decrypt job
-      state = State.Decrypting;
-      logger.trace("Moving the state to {} and submitting decrypt job for {}", State.Decrypting, blobId);
+      decryptionRequired = true;
+      logger.trace("Submitting decrypt job for {}", blobId);
       cryptoJobHandler.submitJob(
           new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
@@ -407,13 +404,15 @@ class GetBlobInfoOperation extends GetOperation {
   /**
    * Check whether the operation can be completed, if so complete it.
    */
-  private void checkAndMaybeComplete(boolean overrideException) {
+  private void checkAndMaybeComplete() {
     if (operationTracker.isDone()) {
-      if (operationTracker.hasSucceeded() && isComplete()) {
-        if (overrideException) {
+      if (operationTracker.hasSucceeded()) {
+        if (!decryptionRequired || decryptionStatusTracker.isSucceeded()) {
           operationException.set(null);
+          operationCompleted = true;
+        } else if (decryptionRequired && decryptionStatusTracker.failed) {
+          operationCompleted = true;
         }
-        operationCompleted = true;
       } else if (!operationTracker.hasSucceeded()) {
         operationCompleted = true;
       }
@@ -432,36 +431,6 @@ class GetBlobInfoOperation extends GetOperation {
       routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
-  }
-
-  /**
-   * @return true if the content is being decrypted
-   */
-  private boolean isDecrypting() {
-    return state == State.Decrypting;
-  }
-
-  /**
-   * @return true if the operation is complete.
-   */
-  private boolean isComplete() {
-    return state == State.Complete;
-  }
-
-  /**
-   * Different states of the operation.
-   */
-  enum State {
-    /**
-     * Any GetBlobInfoOperation starts with this mode
-     */
-    Ready, /**
-     * If blob is encrypted, the operation moves to this mode and stays until the decrypt job callback results are processed
-     */
-    Decrypting, /**
-     * The operation is set to be completed on reaching this state
-     */
-    Complete
   }
 }
 

@@ -93,8 +93,8 @@ public class GetBlobInfoOperationTest {
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final GetBlobOptionsInternal options;
-  private CryptoJobHandlerTest.MockKeyManagementService kms = null;
-  private CryptoJobHandlerTest.MockCryptoService cryptoService = null;
+  private MockKeyManagementService kms = null;
+  private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
@@ -139,9 +139,9 @@ public class GetBlobInfoOperationTest {
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     if (testEncryption) {
-      kms = new CryptoJobHandlerTest.MockKeyManagementService(new KMSConfig(vprops),
+      kms = new MockKeyManagementService(new KMSConfig(vprops),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new CryptoJobHandlerTest.MockCryptoService(new CryptoServiceConfig(vprops));
+      cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
       cryptoJobHandler.start();
     }

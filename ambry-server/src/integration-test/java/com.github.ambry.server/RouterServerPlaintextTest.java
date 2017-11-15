@@ -61,9 +61,7 @@ public class RouterServerPlaintextTest {
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
   public RouterServerPlaintextTest(boolean testEncryption) {
-    if (testEncryption) {
-      testFramework.setTestEncryption();
-    }
+    testFramework.setTestEncryption(testEncryption);
   }
 
   @BeforeClass

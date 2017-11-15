@@ -106,7 +106,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
           kms, cryptoService, cryptoJobHandler, time);
     } catch (IOException e) {
-      throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
+      throw new IllegalStateException("Error instantiating NonBlocking Router", e);
     }
   }
 }

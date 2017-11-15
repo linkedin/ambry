@@ -64,9 +64,7 @@ public class RouterServerSSLTest {
    * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
    */
   public RouterServerSSLTest(boolean testEncryption) {
-    if (testEncryption) {
-      testFramework.setTestEncryption();
-    }
+    testFramework.setTestEncryption(testEncryption);
   }
 
   @BeforeClass

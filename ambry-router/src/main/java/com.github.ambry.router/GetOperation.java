@@ -277,3 +277,19 @@ class DecryptCallBackResultInfo {
   }
 }
 
+/**
+ * Tracks decryption job status
+ */
+class DecryptionStatusTracker {
+  boolean succeeded;
+  boolean failed;
+
+  public boolean isSucceeded() {
+    return succeeded;
+  }
+
+  public boolean isFailed() {
+    return failed;
+  }
+}
+

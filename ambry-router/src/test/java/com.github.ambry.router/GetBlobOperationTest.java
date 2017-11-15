@@ -98,8 +98,8 @@ public class GetBlobOperationTest {
   private final RouterCallback routerCallback;
   private final String operationTrackerType;
   private final boolean testEncryption;
-  private CryptoJobHandlerTest.MockKeyManagementService kms = null;
-  private CryptoJobHandlerTest.MockCryptoService cryptoService = null;
+  private MockKeyManagementService kms = null;
+  private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
 
   // Certain tests recreate the routerConfig with different properties.
@@ -190,9 +190,9 @@ public class GetBlobOperationTest {
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     if (testEncryption) {
-      kms = new CryptoJobHandlerTest.MockKeyManagementService(new KMSConfig(vprops),
+      kms = new MockKeyManagementService(new KMSConfig(vprops),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new CryptoJobHandlerTest.MockCryptoService(new CryptoServiceConfig(vprops));
+      cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     }
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
@@ -460,6 +460,7 @@ public class GetBlobOperationTest {
   public void testKMSFailure() throws Exception {
     if (testEncryption) {
       // simple Blob
+      blobSize = random.nextInt(maxChunkSize) + 1;
       doPut();
       kms.exceptionToThrow.set(GSE);
       GetBlobOperation op = createOperationAndComplete(null);
@@ -491,6 +492,7 @@ public class GetBlobOperationTest {
   public void testCryptoServiceFailure() throws Exception {
     if (testEncryption) {
       // simple Blob
+      blobSize = random.nextInt(maxChunkSize) + 1;
       doPut();
       cryptoService.exceptionOnDecryption.set(GSE);
       GetBlobOperation op = createOperationAndComplete(null);

@@ -167,18 +167,6 @@ public class TestUtils {
   }
 
   /**
-   * Similar to {@link Runnable}, but able to throw checked exceptions.
-   */
-  public interface ThrowingRunnable {
-
-    /**
-     * Run the action.
-     * @throws Exception
-     */
-    void run() throws Exception;
-  }
-
-  /**
    * A class to initialize and hold information about each Zk Server.
    */
   public static class ZkInfo {
@@ -236,6 +224,17 @@ public class TestUtils {
         zkServer.shutdown();
       }
     }
+  }
+
+  /**
+   * Similar to {@link Runnable}, but able to throw checked exceptions.
+   */
+  public interface ThrowingRunnable {
+    /**
+     * Run the action.
+     * @throws Exception
+     */
+    void run() throws Exception;
   }
 
   /**

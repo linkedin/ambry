@@ -32,7 +32,6 @@ import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.After;
 import org.junit.Assert;
@@ -570,61 +569,6 @@ public class CryptoJobHandlerTest {
       this.blobId = blobId;
       this.userMetadata = userMetadata;
       this.blobContent = blobContent;
-    }
-  }
-
-  /**
-   * MockCryptoService to assist in testing exception cases
-   */
-  static class MockCryptoService extends GCMCryptoService {
-
-    AtomicReference<GeneralSecurityException> exceptionOnEncryption = new AtomicReference<>();
-    AtomicReference<GeneralSecurityException> exceptionOnDecryption = new AtomicReference<>();
-
-    MockCryptoService(CryptoServiceConfig cryptoServiceConfig) {
-      super(cryptoServiceConfig);
-    }
-
-    @Override
-    public ByteBuffer encrypt(ByteBuffer toEncrypt, SecretKeySpec key) throws GeneralSecurityException {
-      if (exceptionOnEncryption.get() != null) {
-        throw exceptionOnEncryption.get();
-      }
-      return super.encrypt(toEncrypt, key);
-    }
-
-    @Override
-    public ByteBuffer decrypt(ByteBuffer toDecrypt, SecretKeySpec key) throws GeneralSecurityException {
-      if (exceptionOnDecryption.get() != null) {
-        throw exceptionOnDecryption.get();
-      }
-      return super.decrypt(toDecrypt, key);
-    }
-
-    void clearStates() {
-      exceptionOnEncryption = new AtomicReference<>();
-      exceptionOnDecryption = new AtomicReference<>();
-    }
-  }
-
-  /**
-   * MockKeyManagementService to assist in testing exception cases
-   */
-  static class MockKeyManagementService extends SingleKeyManagementService {
-
-    AtomicReference<GeneralSecurityException> exceptionToThrow = new AtomicReference<>();
-
-    MockKeyManagementService(KMSConfig KMSConfig, String defaultKey) throws GeneralSecurityException {
-      super(KMSConfig, defaultKey);
-    }
-
-    @Override
-    public SecretKeySpec getKey(short accountId, short containerId) throws GeneralSecurityException {
-      if (exceptionToThrow.get() != null) {
-        throw exceptionToThrow.get();
-      } else {
-        return super.getKey(accountId, containerId);
-      }
     }
   }
 }

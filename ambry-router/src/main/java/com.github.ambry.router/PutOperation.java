@@ -408,7 +408,7 @@ class PutOperation {
               putChunk.prepareForSending();
               putChunk.chunkReadyAtMs = time.milliseconds();
             } else {
-              if (getOperationException() == null) {
+              if (!isOperationComplete()) {
                 logger.trace("Setting exception from encrypt of chunk at index {} ", putChunk.chunkIndex, exception);
                 setOperationExceptionAndComplete(new RouterException(
                     "Exception thrown on encrypting the content for chunk at index " + putChunk.chunkIndex, exception,

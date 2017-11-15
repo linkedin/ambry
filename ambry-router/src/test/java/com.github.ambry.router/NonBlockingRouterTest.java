@@ -87,6 +87,7 @@ public class NonBlockingRouterTest {
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private final MockTime mockTime;
   private final KeyManagementService kms;
+  private final String singleKeyForKMS;
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final MockClusterMap mockClusterMap;
@@ -113,13 +114,13 @@ public class NonBlockingRouterTest {
    * @throws Exception
    */
   public NonBlockingRouterTest(boolean testEncryption) throws Exception {
-    this.testEncryption = true;
+    this.testEncryption = testEncryption;
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap();
     NonBlockingRouter.currentOperationsCount.set(0);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
-    kms = new SingleKeyManagementService(new KMSConfig(vProps),
-        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+    singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
+    kms = new SingleKeyManagementService(new KMSConfig(vProps), singleKeyForKMS);
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
   }
@@ -660,10 +661,11 @@ public class NonBlockingRouterTest {
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
     CryptoJobHandler execLocal = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     execLocal.start();
+    KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", kms, cryptoService, execLocal,
-        mockTime);
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", localKMS, cryptoService,
+        execLocal, mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -679,7 +681,7 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
         new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), kms, cryptoService, execLocal,
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService, execLocal,
         mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);

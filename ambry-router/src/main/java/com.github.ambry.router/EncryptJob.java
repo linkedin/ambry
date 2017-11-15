@@ -34,8 +34,8 @@ public class EncryptJob implements CryptoJob {
    * Instantiates {@link EncryptJob} for an upload.
    * @param accountId the accountId of the blob that needs to be encrypted
    * @param containerId the containerId of the blob that needs to be encrypted
-   * @param blobContentToEncrypt {@link ByteBuffer} to be encrypted
-   * @param userMetadataToEncrypt user metadata to be encrypted
+   * @param blobContentToEncrypt {@link ByteBuffer} to be encrypted. Could be {@code null} for a metadata chunk.
+   * @param userMetadataToEncrypt user metadata to be encrypted. Could be {@code null} for data chunks.
    * @param perBlobKey per blob key to use to encrypt the blob content
    * @param callback {@link Callback} to be invoked on completion
    */

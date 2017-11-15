@@ -77,9 +77,10 @@ public class PutManagerTest {
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
-  private CryptoJobHandlerTest.MockKeyManagementService kms;
-  private CryptoJobHandlerTest.MockCryptoService cryptoService;
+  private MockKeyManagementService kms;
+  private MockCryptoService cryptoService;
   private CryptoJobHandler cryptoJobHandler;
+  private boolean instantiateEncryptionCast = true;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
   private int chunkSize;
@@ -116,14 +117,6 @@ public class PutManagerTest {
     mockServerLayout = new MockServerLayout(mockClusterMap);
     notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
-    if (testEncryption) {
-      VerifiableProperties vProps = new VerifiableProperties(new Properties());
-      kms = new CryptoJobHandlerTest.MockKeyManagementService(new KMSConfig(vProps),
-          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new CryptoJobHandlerTest.MockCryptoService(new CryptoServiceConfig(vProps));
-      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-      cryptoJobHandler.start();
-    }
   }
 
   /**
@@ -136,9 +129,6 @@ public class PutManagerTest {
     if (router != null) {
       Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     }
-    if (cryptoJobHandler != null) {
-      cryptoJobHandler.close();
-    }
   }
 
   /**
@@ -150,7 +140,7 @@ public class PutManagerTest {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize));
     submitPutsAndAssertSuccess(true);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 1; i++) {
       // size in [1, chunkSize]
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
@@ -285,8 +275,10 @@ public class PutManagerTest {
   @Test
   public void testFailureOnKMS() throws Exception {
     if (testEncryption) {
-      // simple blob
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
       kms.exceptionToThrow.set(GSE);
+      // simple blob
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
       Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
@@ -295,6 +287,9 @@ public class PutManagerTest {
       Assert.assertTrue("Router should not be closed", router.isOpen());
       assertCloseCleanup();
 
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      kms.exceptionToThrow.set(GSE);
       // composite blob : multiple of chunk size
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
@@ -303,6 +298,9 @@ public class PutManagerTest {
       Assert.assertTrue("Router should not be closed", router.isOpen());
       assertCloseCleanup();
 
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      kms.exceptionToThrow.set(GSE);
       // composite blob : not a multiple of chunk size
       requestAndResultsList.clear();
       requestAndResultsList.add(
@@ -320,8 +318,10 @@ public class PutManagerTest {
   @Test
   public void testFailureOnCryptoService() throws Exception {
     if (testEncryption) {
-      // simple blob
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
       cryptoService.exceptionOnEncryption.set(GSE);
+      // simple blob
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
       Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
@@ -330,6 +330,9 @@ public class PutManagerTest {
       Assert.assertTrue("Router should not be closed", router.isOpen());
       assertCloseCleanup();
 
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      cryptoService.exceptionOnEncryption.set(GSE);
       // composite blob : multiple of chunk size
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
@@ -338,6 +341,9 @@ public class PutManagerTest {
       Assert.assertTrue("Router should not be closed", router.isOpen());
       assertCloseCleanup();
 
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      cryptoService.exceptionOnEncryption.set(GSE);
       // composite blob : not a multiple of chunk size
       requestAndResultsList.clear();
       requestAndResultsList.add(
@@ -667,7 +673,7 @@ public class PutManagerTest {
   /**
    * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private NonBlockingRouter getNonBlockingRouter() throws IOException {
+  private NonBlockingRouter getNonBlockingRouter() throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
@@ -675,11 +681,27 @@ public class PutManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
+    if (testEncryption && instantiateEncryptionCast) {
+      setupEncryptionCast(vProps);
+    }
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, mockTime);
     return router;
+  }
+
+  /**
+   * Instantiates KMS, Crypto service and CryptoJobHandler to assist in encryption
+   * @param vProps {@link VerifiableProperties} instance to use for instantiation
+   * @throws GeneralSecurityException
+   */
+  private void setupEncryptionCast(VerifiableProperties vProps) throws GeneralSecurityException {
+    kms = new MockKeyManagementService(new KMSConfig(vProps),
+        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+    cryptoService = new MockCryptoService(new CryptoServiceConfig(vProps));
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    cryptoJobHandler.start();
   }
 
   /**

@@ -331,6 +331,14 @@ class NonBlockingRouter implements Router {
     shutDownOperationControllers();
     // wait for all the threads to actually exit
     waitForResponseHandlerThreadExit();
+    // close the KeyManagementService
+    if (kms != null) {
+      try {
+        kms.close();
+      } catch (IOException e) {
+        logger.error("Exception thrown on closing KMS", e);
+      }
+    }
     // close the crypto job handler
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
