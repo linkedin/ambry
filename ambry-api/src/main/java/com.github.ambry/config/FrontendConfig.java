@@ -40,7 +40,7 @@ public class FrontendConfig {
    * Value of "Access-Control-Allow-Methods" in response headers for OPTIONS requests.
    */
   @Config("frontend.options.allow.methods")
-  @Default("POST, GET, OPTIONS")
+  @Default("POST, GET, OPTIONS, HEAD, DELETE")
   public final String frontendOptionsAllowMethods;
 
   /**
@@ -134,7 +134,7 @@ public class FrontendConfig {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendOptionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
     frontendOptionsAllowMethods =
-        verifiableProperties.getString("frontend.options.allow.methods", "POST, GET, OPTIONS");
+        verifiableProperties.getString("frontend.options.allow.methods", "POST, GET, OPTIONS, HEAD, DELETE");
     frontendIdConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
         "com.github.ambry.frontend.AmbryIdConverterFactory");
     frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
