@@ -338,6 +338,8 @@ class AmbryBlobStorageService implements BlobStorageService {
       long securityResponseProcessingEndTime = System.currentTimeMillis();
       frontendMetrics.optionsSecurityResponseTimeInMs.update(
           securityResponseProcessingEndTime - securityRequestProcessingEndTime);
+    } catch (ExecutionException e) {
+      exception = extractCause(e);
     } catch (Exception e) {
       exception = e;
     }

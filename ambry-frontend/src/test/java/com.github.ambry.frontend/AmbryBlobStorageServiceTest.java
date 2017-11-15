@@ -1602,8 +1602,7 @@ public class AmbryBlobStorageServiceTest {
         fail("Operation " + restMethod
             + " should have failed because an external service would have thrown an exception");
       } catch (Exception e) {
-        Throwable t = Utils.getRootCause(e);
-        assertEquals("Unexpected exception message", expectedExceptionMsg, t.getMessage());
+        assertEquals("Unexpected exception message", expectedExceptionMsg, e.getMessage());
       }
     }
   }
