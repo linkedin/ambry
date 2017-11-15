@@ -89,4 +89,14 @@ public interface BlobStorageService {
    * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
    */
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel);
+
+  /**
+   * Handles an OPTIONS request.
+   * <p/>
+   * The {@code restRequest} provided will have both metadata and any content associated with the request. The
+   * {@code restResponseChannel} can be used to send responses to the client.
+   * @param restRequest the {@link RestRequest} that needs to be handled.
+   * @param restResponseChannel the {@link RestResponseChannel} over which response to {@code restRequest} can be sent.
+   */
+  public void handleOptions(RestRequest restRequest, RestResponseChannel restResponseChannel);
 }

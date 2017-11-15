@@ -203,6 +203,11 @@ public class NettyRequestTest {
       nettyRequest = createNettyRequest(HttpMethod.HEAD, uri, headers, channel);
       validateRequest(nettyRequest, RestMethod.HEAD, uri, headers, params, cookies, channel);
       closeRequestAndValidate(nettyRequest, channel);
+
+      uri = "/OPTIONS" + uriAttachment;
+      nettyRequest = createNettyRequest(HttpMethod.OPTIONS, uri, headers, channel);
+      validateRequest(nettyRequest, RestMethod.OPTIONS, uri, headers, params, cookies, channel);
+      closeRequestAndValidate(nettyRequest, channel);
     }
   }
 

@@ -188,8 +188,7 @@ public class StoreConfig {
   @Config(storeWriteStatusDelegateEnableName)
   @Default("false")
   public final boolean storeWriteStatusDelegateEnable;
-  public static final String storeWriteStatusDelegateEnableName =
-      "store.write.status.delegate.enable";
+  public static final String storeWriteStatusDelegateEnableName = "store.write.status.delegate.enable";
 
   /**
    * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW

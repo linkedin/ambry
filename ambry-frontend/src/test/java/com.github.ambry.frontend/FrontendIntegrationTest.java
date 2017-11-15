@@ -341,6 +341,26 @@ public class FrontendIntegrationTest {
     verifyGetBlobResponse(responseParts, null, headers, container.isPrivate(), content);
   }
 
+  /**
+   * Tests for handling of {@link HttpMethod#OPTIONS}.
+   * @throws Exception
+   */
+  @Test
+  public void optionsTest() throws Exception {
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.OPTIONS, "", null, null);
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+    assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
+    assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS,
+        FRONTEND_CONFIG.frontendOptionsAllowMethods,
+        response.headers().get(HttpHeaderNames.ACCESS_CONTROL_ALLOW_METHODS));
+    assertEquals("Unexpected value for " + HttpHeaderNames.ACCESS_CONTROL_MAX_AGE,
+        FRONTEND_CONFIG.frontendOptionsValiditySeconds,
+        Long.parseLong(response.headers().get(HttpHeaderNames.ACCESS_CONTROL_MAX_AGE)));
+  }
+
   // helpers
   // general
 

@@ -225,6 +225,7 @@ public class AmbryBlobStorageServiceTest {
     doNullInputsForFunctionsTest("handlePost");
     doNullInputsForFunctionsTest("handleDelete");
     doNullInputsForFunctionsTest("handleHead");
+    doNullInputsForFunctionsTest("handleOptions");
   }
 
   /**
@@ -884,6 +885,27 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Tests for handling of {@link RestMethod#OPTIONS}.
+   * @throws Exception
+   */
+  @Test
+  public void optionsTest() throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.OPTIONS, "/", null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
+    assertEquals("Unexpected content length", 0,
+        Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS,
+        frontendConfig.frontendOptionsAllowMethods,
+        restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS));
+    assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_MAX_AGE,
+        frontendConfig.frontendOptionsValiditySeconds,
+        Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_MAX_AGE)));
+  }
+
   // helpers
   // general
 
@@ -974,6 +996,9 @@ public class AmbryBlobStorageServiceTest {
         break;
       case HEAD:
         ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
+        break;
+      case OPTIONS:
+        ambryBlobStorageService.handleOptions(restRequest, restResponseChannel);
         break;
       default:
         fail("RestMethod not supported: " + restRequest.getRestMethod());
@@ -1519,7 +1544,8 @@ public class AmbryBlobStorageServiceTest {
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             converterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
-    doExternalServicesBadInputTest(RestMethod.values(), expectedExceptionMsg);
+    RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    doExternalServicesBadInputTest(restMethods, expectedExceptionMsg);
   }
 
   /**
@@ -1535,7 +1561,9 @@ public class AmbryBlobStorageServiceTest {
       securityFactory.mode = mode;
       RestMethod[] restMethods;
       if (mode.equals(FrontendTestSecurityServiceFactory.Mode.ProcessResponse)) {
-        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST};
+        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.OPTIONS};
+      } else if (mode.equals(FrontendTestSecurityServiceFactory.Mode.PostProcessRequest)) {
+        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.DELETE};
       } else {
         restMethods = RestMethod.values();
       }
@@ -1574,7 +1602,8 @@ public class AmbryBlobStorageServiceTest {
         fail("Operation " + restMethod
             + " should have failed because an external service would have thrown an exception");
       } catch (Exception e) {
-        assertEquals("Unexpected exception message", expectedExceptionMsg, e.getMessage());
+        Throwable t = Utils.getRootCause(e);
+        assertEquals("Unexpected exception message", expectedExceptionMsg, t.getMessage());
       }
     }
   }
