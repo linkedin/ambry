@@ -51,6 +51,9 @@ class FrontendMetrics {
   // POST
   public final RestRequestMetrics postBlobMetrics;
   public final RestRequestMetrics postBlobSSLMetrics;
+  // OPTIONS
+  public final RestRequestMetrics optionsMetrics;
+  public final RestRequestMetrics optionsSSLMetrics;
 
   // Rates
   // AmbrySecurityService
@@ -71,6 +74,10 @@ class FrontendMetrics {
   // POST
   public final Histogram blobPropsBuildTimeInMs;
   public final Histogram postPreProcessingTimeInMs;
+  // OPTIONS
+  public final Histogram optionsPreProcessingTimeInMs;
+  public final Histogram optionsSecurityRequestTimeInMs;
+  public final Histogram optionsSecurityResponseTimeInMs;
   // DeleteCallback
   public final Histogram deleteCallbackProcessingTimeInMs;
   public final Histogram deleteTimeInMs;
@@ -191,6 +198,9 @@ class FrontendMetrics {
     // POST
     postBlobMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob", metricRegistry);
     postBlobSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "PostBlob" + SSL_SUFFIX, metricRegistry);
+    // OPTIONS
+    optionsMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options", metricRegistry);
+    optionsSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options" + SSL_SUFFIX, metricRegistry);
 
     // Rates
     // AmbrySecurityService
@@ -219,6 +229,13 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "BlobPropsBuildTimeInMs"));
     postPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "PostPreProcessingTimeInMs"));
+    // OPTIONS
+    optionsPreProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OptionsPreProcessingTimeInMs"));
+    optionsSecurityRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OptionsSecurityRequestTimeInMs"));
+    optionsSecurityResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryBlobStorageService.class, "OptionsSecurityResponseTimeInMs"));
     // DeleteCallback
     deleteCallbackProcessingTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(AmbryBlobStorageService.class, "DeleteCallbackProcessingTimeInMs"));

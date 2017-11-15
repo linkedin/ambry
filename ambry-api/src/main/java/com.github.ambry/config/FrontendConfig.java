@@ -30,6 +30,20 @@ public class FrontendConfig {
   public final long frontendCacheValiditySeconds;
 
   /**
+   * Value of "Access-Control-Max-Age" in response headers for OPTIONS requests.
+   */
+  @Config("frontend.options.validity.seconds")
+  @Default("24 * 60 * 60")
+  public final long frontendOptionsValiditySeconds;
+
+  /**
+   * Value of "Access-Control-Allow-Methods" in response headers for OPTIONS requests.
+   */
+  @Config("frontend.options.allow.methods")
+  @Default("POST, GET, OPTIONS, HEAD, DELETE")
+  public final String frontendOptionsAllowMethods;
+
+  /**
    * The IdConverterFactory that needs to be used by AmbryBlobStorageService to convert IDs.
    */
   @Config("frontend.id.converter.factory")
@@ -118,6 +132,9 @@ public class FrontendConfig {
 
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
+    frontendOptionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
+    frontendOptionsAllowMethods =
+        verifiableProperties.getString("frontend.options.allow.methods", "POST, GET, OPTIONS, HEAD, DELETE");
     frontendIdConverterFactory = verifiableProperties.getString("frontend.id.converter.factory",
         "com.github.ambry.frontend.AmbryIdConverterFactory");
     frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",

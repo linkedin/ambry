@@ -27,7 +27,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -95,11 +94,11 @@ class AmbrySecurityService implements SecurityService {
     Exception exception = null;
     frontendMetrics.securityServiceProcessResponseRate.mark();
     long startTimeMs = System.currentTimeMillis();
-    FutureResult<Void> futureResult = new FutureResult<Void>();
     if (!isOpen) {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else {
-      if (restRequest == null || responseChannel == null || blobInfo == null) {
+      if (restRequest == null || responseChannel == null || (!restRequest.getRestMethod().equals(RestMethod.OPTIONS)
+          && blobInfo == null)) {
         throw new IllegalArgumentException("One of the required params is null");
       }
       try {
@@ -145,6 +144,8 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
             responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+            break;
+          case OPTIONS:
             break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,

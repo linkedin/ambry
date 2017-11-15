@@ -148,6 +148,8 @@ class NettyRequest implements RestRequest {
       restMethod = RestMethod.DELETE;
     } else if (HttpMethod.HEAD.equals(httpMethod)) {
       restMethod = RestMethod.HEAD;
+    } else if (HttpMethod.OPTIONS.equals(httpMethod)) {
+      restMethod = RestMethod.OPTIONS;
     } else {
       nettyMetrics.unsupportedHttpMethodError.inc();
       throw new RestServiceException("http method not supported: " + httpMethod,

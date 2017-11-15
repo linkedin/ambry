@@ -142,6 +142,20 @@ public class MockBlobStorageService implements BlobStorageService {
     }
   }
 
+  @Override
+  public void handleOptions(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    if (shouldProceed(restRequest, restResponseChannel)) {
+      Exception exception = null;
+      try {
+        restResponseChannel.setStatus(ResponseStatus.Ok);
+      } catch (RestServiceException e) {
+        exception = e;
+      } finally {
+        handleResponse(restRequest, restResponseChannel, null, exception);
+      }
+    }
+  }
+
   /**
    * All operations block until {@link #releaseAllOperations()} is called.
    * @throws IllegalStateException each call to this function must (eventually) be followed by a call to
