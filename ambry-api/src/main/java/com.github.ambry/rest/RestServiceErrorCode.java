@@ -134,6 +134,11 @@ public enum RestServiceErrorCode {
   RequestResponseQueuingFailure,
 
   /**
+   * The request is larger than what the server is willing or is configured to accept.
+   */
+  RequestTooLarge,
+
+  /**
    * Indicates that an internal service is unavailable either because it is not started, is shutdown or has crashed.
    */
   ServiceUnavailable,

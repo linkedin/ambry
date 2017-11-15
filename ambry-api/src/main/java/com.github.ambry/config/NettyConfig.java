@@ -110,6 +110,17 @@ public class NettyConfig {
   @Default("")
   public final Set<String> nettyBlacklistedQueryParams;
 
+  /**
+   * The threshold (in bytes) for POSTs via multipart/form-data.
+   * <p/>
+   * The current netty implementation cannot stream POSTs that come as multipart/form-data. It is useful to set this to
+   * reasonable number to ensure that memory usage is kept in check (i.e. protect against large blob uploads via
+   * multipart/form-data).
+   */
+  @Config("netty.multipart.post.max.size.bytes")
+  @Default("20 * 1024 * 1024")
+  public final long nettyMultipartPostMaxSizeBytes;
+
   public NettyConfig(VerifiableProperties verifiableProperties) {
     nettyServerBossThreadCount = verifiableProperties.getInt("netty.server.boss.thread.count", 1);
     nettyServerIdleTimeSeconds = verifiableProperties.getInt("netty.server.idle.time.seconds", 60);
@@ -126,5 +137,7 @@ public class NettyConfig {
             Integer.MAX_VALUE);
     nettyBlacklistedQueryParams = new HashSet<>(
         Arrays.asList(verifiableProperties.getString("netty.server.blacklisted.query.params", "").split(",")));
+    nettyMultipartPostMaxSizeBytes =
+        verifiableProperties.getLongInRange("netty.multipart.post.max.size.bytes", 20 * 1024 * 1024, 0, Long.MAX_VALUE);
   }
 }

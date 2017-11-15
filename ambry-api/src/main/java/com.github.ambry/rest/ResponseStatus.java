@@ -75,6 +75,11 @@ public enum ResponseStatus {
   Gone,
 
   /**
+   * 413 Request Entity Too Large - The request is larger than what the server is willing to accept
+   */
+  RequestTooLarge,
+
+  /**
    * 416 Range Not Satisfiable - A range request is invalid or outside of the bounds of an object.
    */
   RangeNotSatisfiable,
@@ -92,6 +97,8 @@ public enum ResponseStatus {
    */
   public static ResponseStatus getResponseStatus(RestServiceErrorCode restServiceErrorCode) {
     switch (restServiceErrorCode) {
+      case RequestTooLarge:
+        return ResponseStatus.RequestTooLarge;
       case Deleted:
         return ResponseStatus.Gone;
       case NotFound:

@@ -88,6 +88,8 @@ public class NettyResponseChannelTest {
         HttpResponseStatus.INTERNAL_SERVER_ERROR);
     REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.RangeNotSatisfiable,
         HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
+    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.RequestTooLarge,
+        HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE);
   }
 
   /**
