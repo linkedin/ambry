@@ -281,15 +281,36 @@ class DecryptCallBackResultInfo {
  * Tracks decryption job status
  */
 class DecryptionStatusTracker {
-  boolean succeeded;
-  boolean failed;
+  private boolean succeeded;
+  private boolean done;
 
-  public boolean isSucceeded() {
-    return succeeded;
+  /**
+   * Updates the decryption status as completed and succeeded
+   */
+  void setSucceeded() {
+    this.succeeded = true;
+    this.done = true;
   }
 
-  public boolean isFailed() {
-    return failed;
+  /**
+   * Updates the decryption status as completed and failed
+   */
+  void setFailed() {
+    this.done = true;
+  }
+
+  /**
+   * @return {@code true} if the decryption is completed. {@code false} otherwise
+   */
+  boolean isDone() {
+    return done;
+  }
+
+  /**
+   * @return {@code true} if the decryption has succeeded. {@code false} if failed.
+   */
+  boolean hasSucceeded() {
+    return succeeded;
   }
 }
 

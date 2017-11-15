@@ -37,6 +37,7 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +51,9 @@ class GetBlobInfoOperation extends GetOperation {
   // the callback to use to complete the operation.
   private final RouterCallback routerCallback;
   private final OperationTracker operationTracker;
-  private boolean decryptionRequired = false;
+  // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
+  private final ProgressTracker progressTracker;
+  private AtomicBoolean decryptionRequired = new AtomicBoolean(false);
   // used to track decryption job status if applicable
   private final DecryptionStatusTracker decryptionStatusTracker = new DecryptionStatusTracker();
   // DecryptCallBackResultInfo that holds all info about decrypt job callback
@@ -90,6 +93,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;
     operationTracker = getOperationTracker(blobId.getPartition());
+    progressTracker = new ProgressTracker(operationTracker, decryptionRequired, decryptionStatusTracker);
   }
 
   @Override
@@ -127,18 +131,18 @@ class GetBlobInfoOperation extends GetOperation {
    * @return {@code true} if the operation is complete, {@code false} otherwise
    */
   private boolean maybeProcessDecryptCallbackAndComplete() {
-    if (decryptionRequired && decryptCallbackResultInfo.resultAvailable) {
+    if (decryptionRequired.get() && decryptCallbackResultInfo.resultAvailable) {
       if (decryptCallbackResultInfo.exception == null) {
         logger.trace("Successfully updating decrypt job callback results for {}", blobId);
         operationResult = new GetBlobResultInternal(new GetBlobResult(
             new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array()),
             null), null);
-        decryptionStatusTracker.succeeded = true;
+        decryptionStatusTracker.setSucceeded();
       } else {
         logger.trace("Exception {} thrown on decryption for {}", decryptCallbackResultInfo.exception, blobId);
         setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId,
             decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
-        decryptionStatusTracker.failed = true;
+        decryptionStatusTracker.setFailed();
       }
       return true;
     }
@@ -364,12 +368,14 @@ class GetBlobInfoOperation extends GetOperation {
       }
     } else {
       // submit decrypt job
-      decryptionRequired = true;
+      decryptionRequired.set(true);
       logger.trace("Submitting decrypt job for {}", blobId);
+      long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
           new DecryptJob(blobId, encryptionKey.duplicate(), null, serverUserMetadata, cryptoService, kms,
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
                 logger.trace("Handling decrypt job callback results for {}", blobId);
+                routerMetrics.contentDecryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
                 decryptCallbackResultInfo.setResultAndException(result, exception);
                 routerCallback.onPollReady();
               }));
@@ -405,17 +411,11 @@ class GetBlobInfoOperation extends GetOperation {
    * Check whether the operation can be completed, if so complete it.
    */
   private void checkAndMaybeComplete() {
-    if (operationTracker.isDone()) {
-      if (operationTracker.hasSucceeded()) {
-        if (!decryptionRequired || decryptionStatusTracker.isSucceeded()) {
-          operationException.set(null);
-          operationCompleted = true;
-        } else if (decryptionRequired && decryptionStatusTracker.failed) {
-          operationCompleted = true;
-        }
-      } else if (!operationTracker.hasSucceeded()) {
-        operationCompleted = true;
+    if (progressTracker.isDone()) {
+      if (progressTracker.hasSucceeded()) {
+        operationException.set(null);
       }
+      operationCompleted = true;
     }
 
     if (operationCompleted) {

@@ -95,8 +95,10 @@ public class NonBlockingRouterMetrics {
   public final Histogram deleteManagerHandleResponseTimeMs;
   // time spent in getting a chunk filled once it is available.
   public final Histogram chunkFillTimeMs;
-  // time spent in encryptin a chunk once filling is complete
+  // time spent in encrypting a chunk once filling is complete
   public final Histogram chunkEncryptTimeMs;
+  // time spent in decrypting content for a single getChunk or UserMetadata in case of GetBlobInfo
+  public final Histogram contentDecryptTimeMs;
   // time spent waiting for a chunk to become available for filling once data is available.
   public final Histogram waitTimeForFreeChunkAvailabilityMs;
   // time spent by a chunk waiting for data to become available in the channel.
@@ -243,6 +245,7 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(DeleteManager.class, "DeleteManagerHandleResponseTimeMs"));
     chunkFillTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkFillTimeMs"));
     chunkEncryptTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ChunkEncryptTimeMs"));
+    contentDecryptTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "ContentDecryptTimeMs"));
     waitTimeForFreeChunkAvailabilityMs =
         metricRegistry.histogram(MetricRegistry.name(PutManager.class, "WaitTimeForFreeChunkAvailabilityMs"));
     waitTimeForChannelDataAvailabilityMs =
