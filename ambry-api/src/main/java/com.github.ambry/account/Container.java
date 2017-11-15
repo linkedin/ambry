@@ -265,10 +265,11 @@ public class Container {
    * @param metadata The metadata of the container in JSON.
    * @throws JSONException If fails to parse metadata.
    */
-  private Container(JSONObject metadata) throws JSONException {
+  private Container(JSONObject metadata, short parentAccountId) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
+    this.parentAccountId = parentAccountId;
     short metadataVersion = (short) metadata.getInt(JSON_VERSION_KEY);
     switch (metadataVersion) {
       case JSON_VERSION_1:
@@ -276,7 +277,6 @@ public class Container {
         name = metadata.getString(CONTAINER_NAME_KEY);
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
         description = metadata.optString(DESCRIPTION_KEY);
-        parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
         encrypted = ENCRYPTED_DEFAULT_VALUE;
         previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
@@ -287,7 +287,6 @@ public class Container {
         name = metadata.getString(CONTAINER_NAME_KEY);
         status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
         description = metadata.optString(DESCRIPTION_KEY);
-        parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
         encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
         previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
         cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
@@ -330,11 +329,13 @@ public class Container {
   /**
    * Deserializes a {@link JSONObject} to a container object.
    * @param json The {@link JSONObject} to deserialize.
+   * @param parentAccountId The ID of the parent {@link Account} of this container. This is passed in because it is
+   *                        not always included in the JSON record.
    * @return A container object deserialized from the {@link JSONObject}.
    * @throws JSONException If parsing the {@link JSONObject} fails.
    */
-  public static Container fromJson(JSONObject json) throws JSONException {
-    return new Container(json);
+  public static Container fromJson(JSONObject json, short parentAccountId) throws JSONException {
+    return new Container(json, parentAccountId);
   }
 
   /**
@@ -352,6 +353,16 @@ public class Container {
     metadata.put(DESCRIPTION_KEY, description);
     metadata.put(IS_PRIVATE_KEY, !cacheable);
     metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
+    // code to write in V2 (will be enabled once read support is fully deployed)
+    // metadata.put(Container.JSON_VERSION_KEY, Container.JSON_VERSION_2);
+    // metadata.put(CONTAINER_ID_KEY, id);
+    // metadata.put(CONTAINER_NAME_KEY, name);
+    // metadata.put(Container.STATUS_KEY, status);
+    // metadata.put(DESCRIPTION_KEY, description);
+    // metadata.put(ENCRYPTED_KEY, encrypted);
+    // metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);
+    // metadata.put(CACHEABLE_KEY, cacheable);
+    // metadata.put(MEDIA_SCAN_DISABLED, mediaScanDisabled);
     return metadata;
   }
 

@@ -133,7 +133,7 @@ public class Account {
         JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
           for (int index = 0; index < containerArray.length(); index++) {
-            Container container = Container.fromJson(containerArray.getJSONObject(index));
+            Container container = Container.fromJson(containerArray.getJSONObject(index), id);
             checkParentAccountIdInContainers(container);
             checkDuplicateContainerNameOrId(container);
             updateContainerMap(container);

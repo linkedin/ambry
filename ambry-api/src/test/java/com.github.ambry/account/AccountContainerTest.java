@@ -162,10 +162,10 @@ public class AccountContainerTest {
   public void testConstructContainerFromJson() throws JSONException {
     for (int i = 0; i < CONTAINER_COUNT; i++) {
       // container generated from v1 JSON
-      Container containerFromJson = Container.fromJson(v1ContainerJsonList.get(i));
+      Container containerFromJson = Container.fromJson(v1ContainerJsonList.get(i), refAccountId);
       assertContainer(containerFromJson, i, Container.JSON_VERSION_1);
       // container generated from v2 JSON
-      containerFromJson = Container.fromJson(v2ContainerJsonList.get(i));
+      containerFromJson = Container.fromJson(v2ContainerJsonList.get(i), refAccountId);
       assertContainer(containerFromJson, i, Container.JSON_VERSION_2);
     }
   }
@@ -211,20 +211,21 @@ public class AccountContainerTest {
     TestUtils.assertException(IllegalArgumentException.class, () -> Account.fromJson(badMetadata4), null);
 
     // null container metadata
-    TestUtils.assertException(IllegalArgumentException.class, () -> Container.fromJson(null), null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> Container.fromJson(null, refAccountId), null);
 
     // invalid container status
     JSONObject badMetadata5 = deepCopy(v1ContainerJsonList.get(0)).put(Container.STATUS_KEY, "invalidContainerStatus");
-    TestUtils.assertException(IllegalArgumentException.class, () -> Container.fromJson(badMetadata5), null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> Container.fromJson(badMetadata5, refAccountId),
+        null);
 
     // required fields are missing.
     JSONObject badMetadata6 = deepCopy(v1ContainerJsonList.get(0));
     badMetadata6.remove(CONTAINER_ID_KEY);
-    TestUtils.assertException(JSONException.class, () -> Container.fromJson(badMetadata6), null);
+    TestUtils.assertException(JSONException.class, () -> Container.fromJson(badMetadata6, refAccountId), null);
 
     // unsupported container json version
     JSONObject badMetadata8 = deepCopy(v1ContainerJsonList.get(0)).put(Container.JSON_VERSION_KEY, 3);
-    TestUtils.assertException(IllegalStateException.class, () -> Container.fromJson(badMetadata8), null);
+    TestUtils.assertException(IllegalStateException.class, () -> Container.fromJson(badMetadata8, refAccountId), null);
   }
 
   /**
@@ -236,7 +237,7 @@ public class AccountContainerTest {
     Account account = Account.fromJson(refAccountJson);
     assertEquals("Account[" + account.getId() + "]", account.toString());
     for (int i = 0; i < CONTAINER_COUNT; i++) {
-      Container container = Container.fromJson(v1ContainerJsonList.get(i));
+      Container container = Container.fromJson(v1ContainerJsonList.get(i), refAccountId);
       assertEquals("Container[" + account.getId() + ":" + container.getId() + "]", container.toString());
     }
   }
@@ -257,7 +258,7 @@ public class AccountContainerTest {
     // set containers
     List<Container> containers = new ArrayList<>();
     for (int i = 0; i < CONTAINER_COUNT; i++) {
-      Container container = Container.fromJson(v2ContainerJsonList.get(i));
+      Container container = Container.fromJson(v2ContainerJsonList.get(i), refAccountId);
       containers.add(container);
       accountBuilder.addOrUpdateContainer(container);
     }
@@ -450,8 +451,9 @@ public class AccountContainerTest {
    */
   @Test
   public void testUpdateContainerParentAccountId() throws JSONException {
-    ContainerBuilder containerBuilder = new ContainerBuilder(Container.fromJson(v1ContainerJsonList.get(0)));
-    short newParentAccountId = (short) (refContainerIds.get(0) + 1);
+    ContainerBuilder containerBuilder =
+        new ContainerBuilder(Container.fromJson(v1ContainerJsonList.get(0), refAccountId));
+    short newParentAccountId = (short) (refAccountId + 1);
     containerBuilder.setParentAccountId(newParentAccountId);
     assertEquals("Container's parent account id is incorrectly updated.", newParentAccountId,
         containerBuilder.build().getParentAccountId());
@@ -643,7 +645,7 @@ public class AccountContainerTest {
     }
     // only test serde chain if the version to serialize in will include all of the expected fields.
     if (LATEST_CONTAINER_JSON_VERSION == Container.CURRENT_JSON_VERSION) {
-      assertEquals("Serde chain error", Container.fromJson(container.toJson()), container);
+      assertEquals("Serde chain error", Container.fromJson(container.toJson(), refAccountId), container);
     }
   }
 
@@ -657,7 +659,7 @@ public class AccountContainerTest {
       throws JSONException {
     assertEquals("encrypted wrong", encrypted, container.isEncrypted());
     assertEquals("previouslyEncrypted wrong", previouslyEncrypted, container.wasPreviouslyEncrypted());
-    assertEquals("Deserialization failed", container, Container.fromJson(buildV2ContainerJson(container)));
+    assertEquals("Deserialization failed", container, Container.fromJson(buildV2ContainerJson(container), refAccountId));
   }
 
   /**
@@ -774,7 +776,6 @@ public class AccountContainerTest {
     containerJson.put(PREVIOUSLY_ENCRYPTED_KEY, container.wasPreviouslyEncrypted());
     containerJson.put(CACHEABLE_KEY, container.isCacheable());
     containerJson.put(MEDIA_SCAN_DISABLED, container.isMediaScanDisabled());
-    containerJson.put(PARENT_ACCOUNT_ID_KEY, container.getParentAccountId());
     return containerJson;
   }
 
