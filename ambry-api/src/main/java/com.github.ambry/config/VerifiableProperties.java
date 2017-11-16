@@ -17,8 +17,8 @@ import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,14 +131,14 @@ public class VerifiableProperties {
    * @param allowedValues The array of allowed values for this property.
    * @return the Short value
    */
-  public short getShortFromAllowedValues(String name, Short defaultVal, Short[] allowedValues) {
-    Set<Object> allowedValuesSet = new HashSet<>(Arrays.asList(allowedValues));
+  public Short getShortFromAllowedValues(String name, Short defaultVal, Short[] allowedValues) {
+    List<Short> allowedValuesList = Arrays.asList(allowedValues);
     Short v = containsKey(name) ? Short.parseShort(getProperty(name)) : defaultVal;
-    if (allowedValuesSet.contains(v)) {
+    if (allowedValuesList.contains(v)) {
       return v;
     } else {
       throw new IllegalArgumentException(
-          name + " has value " + v + " which is not among the allowed values: " + allowedValuesSet);
+          name + " has value " + v + " which is not among the allowed values: " + allowedValuesList);
     }
   }
 

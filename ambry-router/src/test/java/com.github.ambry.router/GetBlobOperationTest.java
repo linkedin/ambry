@@ -222,7 +222,7 @@ public class GetBlobOperationTest {
           e.getErrorCode());
     }
 
-    blobIdStr = new BlobId(routerConfig.routerBlobIdCurrentVersion, BlobId.BlobIdType.NATIVE,
+    blobIdStr = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), mockClusterMap.getWritablePartitionIds().get(0)).getID();
     // test a good case

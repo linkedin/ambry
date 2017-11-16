@@ -83,7 +83,7 @@ public class DirectoryUploader {
     ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
     SSLConfig sslConfig = new SSLConfig(vProps);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
-    blobIdVersion = new RouterConfig(vProps).routerBlobIdCurrentVersion;
+    blobIdVersion = new RouterConfig(vProps).routerBlobidCurrentVersion;
     connectionPool =
         new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
     connectionPool.start();

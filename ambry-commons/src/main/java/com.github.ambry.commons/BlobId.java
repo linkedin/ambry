@@ -87,23 +87,23 @@ public class BlobId extends StoreKey {
   private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
   private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
-  private Short version;
+  private final short version;
   private final BlobIdType type;
   private final Byte datacenterId;
   private final Short accountId;
   private final Short containerId;
   private final PartitionId partitionId;
-  protected final String uuid;
+  private final String uuid;
 
   /**
    * Constructs a new BlobId by taking arguments for the required fields.
    * Not all the fields in the constructor may be used in constructing it. The current active version determines what
    * fields will be used.
    * @param version the version in which this blob should be created.
-   * @param type The {@link BlobIdType} of the blob to be created.
-   * @param datacenterId The id of the datacenter to be embedded into the blob.
-   * @param accountId The id of the {@link Account} to be embedded into the blob.
-   * @param containerId The id of the {@link Container} to be embedded into the blob.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
@@ -339,10 +339,13 @@ public class BlobId extends StoreKey {
    */
   @Override
   public int compareTo(StoreKey o) {
+    if (this == o) {
+      return 0;
+    }
     BlobId other = (BlobId) o;
     int result = 0;
     if (version < BLOB_ID_V3 || other.version < BLOB_ID_V3) {
-      result = version.compareTo(other.version);
+      result = Short.compare(version, other.version);
     }
     if (result == 0) {
       switch (version) {
@@ -394,7 +397,7 @@ public class BlobId extends StoreKey {
 
   @Override
   public int hashCode() {
-    return Utils.hashcode(new Object[]{uuid});
+    return uuid.hashCode();
   }
 
   /**

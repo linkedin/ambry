@@ -112,13 +112,14 @@ public class BlobIdTest {
   }
 
   /**
-   * Tests blobIds in v1 and v2 are comparable, and the comparison should expect blobIdV1 is always smaller than
-   * blobIdV2, because this is determined by the version field.
-   * @throws Exception Any unexpected exception.
+   * Tests blobIds comparisons. Among other things, ensures the following requirements are met:
+   * <br>
+   * V1s are always lesser than V2s and V3s.
+   * V2s are always lesser than V3s.
    */
   @Test
-  public void testInterVersionComparison() throws Exception {
-    // the version check is to do this inter-version test just once
+  public void testComparisons() throws Exception {
+    // the version check is to do this inter-version test just once (since this is a parametrized test).
     if (version == BLOB_ID_V1) {
       for (int i = 0; i < 100; i++) {
         BlobId blobIdV1 = getRandomBlobId(BLOB_ID_V1);
@@ -126,16 +127,38 @@ public class BlobIdTest {
         BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
 
         assertTrue("blobIdV1 should be less than blobIdV2", blobIdV1.compareTo(blobIdV2) < 0);
+        assertFalse(blobIdV1.equals(blobIdV2));
         assertTrue("blobIdV1 should be less than blobIdV3", blobIdV1.compareTo(blobIdV3) < 0);
+        assertFalse(blobIdV1.equals(blobIdV3));
         assertTrue("blobIdV2 should be less than blobIdV3", blobIdV2.compareTo(blobIdV3) < 0);
+        assertFalse(blobIdV2.equals(blobIdV3));
 
         assertTrue("blobIdV3 should be greater than blobIdV2", blobIdV3.compareTo(blobIdV2) > 0);
+        assertFalse(blobIdV3.equals(blobIdV2));
         assertTrue("blobIdV3 should be greater than blobIdV1", blobIdV3.compareTo(blobIdV1) > 0);
+        assertFalse(blobIdV3.equals(blobIdV1));
         assertTrue("blobIdV2 should be greater than blobIdV1", blobIdV2.compareTo(blobIdV1) > 0);
+        assertFalse(blobIdV2.equals(blobIdV1));
 
         assertTrue("blobIdV1 should be equal to blobIdV1", blobIdV1.compareTo(blobIdV1) == 0);
+        assertTrue(blobIdV1.equals(blobIdV1));
         assertTrue("blobIdV2 should be equal to blobIdV2", blobIdV2.compareTo(blobIdV2) == 0);
+        assertTrue(blobIdV2.equals(blobIdV2));
         assertTrue("blobIdV3 should be equal to blobIdV3", blobIdV3.compareTo(blobIdV3) == 0);
+        assertTrue(blobIdV3.equals(blobIdV3));
+
+        BlobId blobIdV1Alt = getRandomBlobId(BLOB_ID_V1);
+        BlobId blobIdV2Alt = getRandomBlobId(BLOB_ID_V2);
+        BlobId blobIdV3Alt = getRandomBlobId(BLOB_ID_V3);
+
+        assertFalse("Two randomly generated V1 blob ids should be unequal", blobIdV1.compareTo(blobIdV1Alt) == 0);
+        assertFalse("Two randomly generated V1 blob ids should be unequal", blobIdV1.equals(blobIdV1Alt));
+
+        assertFalse("Two randomly generated V2 blob ids should be unequal", blobIdV2.compareTo(blobIdV2Alt) == 0);
+        assertFalse("Two randomly generated V2 blob ids should be unequal", blobIdV2.equals(blobIdV2Alt));
+
+        assertFalse("Two randomly generated V3 blob ids should be unequal", blobIdV3.compareTo(blobIdV3Alt) == 0);
+        assertFalse("Two randomly generated V3 blob ids should be unequal", blobIdV3.equals(blobIdV3Alt));
       }
     }
   }

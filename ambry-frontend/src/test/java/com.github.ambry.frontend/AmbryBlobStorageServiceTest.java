@@ -132,8 +132,6 @@ public class AmbryBlobStorageServiceTest {
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
-    configProps.setProperty("router.hostname", "localhost");
-    configProps.setProperty("router.datacenter.name", "localDC");
     verifiableProperties = new VerifiableProperties(configProps);
     frontendConfig = new FrontendConfig(verifiableProperties);
     urlSigningService = new AmbryUrlSigningService(frontendConfig.frontendUrlSignerUploadEndpoint,

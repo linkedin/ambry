@@ -30,6 +30,6 @@ public class CommonTestUtils {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "localDC");
-    return new RouterConfig(new VerifiableProperties(props)).routerBlobIdCurrentVersion;
+    return new RouterConfig(new VerifiableProperties(props)).routerBlobidCurrentVersion;
   }
 }

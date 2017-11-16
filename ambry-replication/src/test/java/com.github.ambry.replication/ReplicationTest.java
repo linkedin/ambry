@@ -310,6 +310,7 @@ public class ReplicationTest {
     Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
     Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
 
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
     Map<PartitionId, List<StoreKey>> idsToBeIgnoredByPartition = new HashMap<>();
     for (int i = 0; i < partitionIds.size(); i++) {
@@ -321,7 +322,6 @@ public class ReplicationTest {
 
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       // add an expired message to the remote host only
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,

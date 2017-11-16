@@ -325,7 +325,7 @@ public class ServerWritePerformance {
       Properties props = new Properties();
       props.setProperty("router.hostname", "localhost");
       props.setProperty("router.datacenter.name", "localDC");
-      blobIdVersion = new RouterConfig(new VerifiableProperties(props)).routerBlobIdCurrentVersion;
+      blobIdVersion = new RouterConfig(new VerifiableProperties(props)).routerBlobidCurrentVersion;
     }
 
     public void run() {
