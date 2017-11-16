@@ -68,7 +68,7 @@ class GetSignedUrlHandler {
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? metrics.getSignedUrlMetrics : metrics.getSignedUrlSSLMetrics;
+        restRequest.getSSLSession() != null ? metrics.getSignedUrlSSLMetrics : metrics.getSignedUrlMetrics;
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     String restMethodInSignedUrlStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.URL_TYPE, true);
     RestMethod restMethodInUrl;
