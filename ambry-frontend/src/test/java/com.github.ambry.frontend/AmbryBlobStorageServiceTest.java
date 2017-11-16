@@ -225,6 +225,7 @@ public class AmbryBlobStorageServiceTest {
     doNullInputsForFunctionsTest("handlePost");
     doNullInputsForFunctionsTest("handleDelete");
     doNullInputsForFunctionsTest("handleHead");
+    doNullInputsForFunctionsTest("handleOptions");
   }
 
   /**
@@ -581,7 +582,7 @@ public class AmbryBlobStorageServiceTest {
     ByteBuffer content = ByteBuffer.allocate(0);
     BlobProperties blobProperties =
         new BlobProperties(0, "userMetadataTestOldStyleServiceID", Account.UNKNOWN_ACCOUNT_ID,
-            Container.UNKNOWN_CONTAINER_ID);
+            Container.UNKNOWN_CONTAINER_ID, false);
     byte[] usermetadata = TestUtils.getRandomBytes(25);
     String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content)).get();
 
@@ -897,6 +898,27 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Tests for handling of {@link RestMethod#OPTIONS}.
+   * @throws Exception
+   */
+  @Test
+  public void optionsTest() throws Exception {
+    RestRequest restRequest = createRestRequest(RestMethod.OPTIONS, "/", null, null);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
+    assertEquals("Unexpected content length", 0,
+        Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH)));
+    assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS,
+        frontendConfig.frontendOptionsAllowMethods,
+        restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_ALLOW_METHODS));
+    assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_MAX_AGE,
+        frontendConfig.frontendOptionsValiditySeconds,
+        Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_MAX_AGE)));
+  }
+
   // helpers
   // general
 
@@ -987,6 +1009,9 @@ public class AmbryBlobStorageServiceTest {
         break;
       case HEAD:
         ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
+        break;
+      case OPTIONS:
+        ambryBlobStorageService.handleOptions(restRequest, restResponseChannel);
         break;
       default:
         fail("RestMethod not supported: " + restRequest.getRestMethod());
@@ -1532,7 +1557,8 @@ public class AmbryBlobStorageServiceTest {
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
             converterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
-    doExternalServicesBadInputTest(RestMethod.values(), expectedExceptionMsg);
+    RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    doExternalServicesBadInputTest(restMethods, expectedExceptionMsg);
   }
 
   /**
@@ -1548,7 +1574,9 @@ public class AmbryBlobStorageServiceTest {
       securityFactory.mode = mode;
       RestMethod[] restMethods;
       if (mode.equals(FrontendTestSecurityServiceFactory.Mode.ProcessResponse)) {
-        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST};
+        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.OPTIONS};
+      } else if (mode.equals(FrontendTestSecurityServiceFactory.Mode.PostProcessRequest)) {
+        restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.DELETE};
       } else {
         restMethods = RestMethod.values();
       }
@@ -2290,16 +2318,16 @@ class FrontendTestRouter implements Router {
     switch (options.getOperationType()) {
       case BlobInfo:
         result = new GetBlobResult(new BlobInfo(
-            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID),
-            new byte[0]), null);
+            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                false), new byte[0]), null);
         break;
       case Data:
         result = new GetBlobResult(null, new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
         break;
       default:
         result = new GetBlobResult(new BlobInfo(
-            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID),
-            new byte[0]), new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
+            new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+                false), new byte[0]), new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));
         break;
     }
     return completeOperation(result, callback, OpType.GetBlob);

@@ -158,6 +158,10 @@ public class AmbrySecurityServiceTest {
           RestServiceErrorCode.InternalServerError);
     }
 
+    // OPTIONS (should be no errors)
+    securityService.processResponse(createRestRequest(RestMethod.OPTIONS, "/", null), new MockRestResponseChannel(),
+        null).get();
+
     // HEAD
     // normal
     testHeadBlobWithVariousRanges(DEFAULT_INFO);

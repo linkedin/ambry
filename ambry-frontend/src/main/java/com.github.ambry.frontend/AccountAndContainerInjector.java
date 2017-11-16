@@ -255,9 +255,10 @@ class AccountAndContainerInjector {
   private void ensureAccountNameMatch(Account account, RestRequest restRequest) throws RestServiceException {
     String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
     if (accountNameFromHeader != null && !accountNameFromHeader.equals(account.getName())) {
-      throw new RestServiceException("Account name in request did not match account name returned by backend. " +
-              "Account in header: '" + accountNameFromHeader + "'. Account returned by backend: '" + account.getName() + "'.",
-              RestServiceErrorCode.InternalServerError);
+      throw new RestServiceException(
+          "Account name in request did not match account name returned by backend. " + "Account in header: '"
+              + accountNameFromHeader + "'. Account returned by backend: '" + account.getName() + "'.",
+          RestServiceErrorCode.InternalServerError);
     }
   }
 }

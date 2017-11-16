@@ -191,14 +191,16 @@ public class DumpLogTool {
         if (!logBlobRecordInfo.isDeleted) {
           if (blobs != null) {
             if (blobs.contains(logBlobRecordInfo.blobId.getID())) {
-              logger.info("{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
-                  logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput);
+              logger.info("{}\n{}\n{}\n{}\n{}\n{}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
+                  logBlobRecordInfo.blobEncryptionKey, logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata,
+                  logBlobRecordInfo.blobDataOutput);
               updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                   !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);
             }
           } else if (!silent) {
-            logger.info("{}\n{}\n{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader, logBlobRecordInfo.blobId,
-                logBlobRecordInfo.blobProperty, logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput,
+            logger.info("{}\n{}\n{}\n{}\n{}\n{} end offset {}", logBlobRecordInfo.messageHeader,
+                logBlobRecordInfo.blobId, logBlobRecordInfo.blobEncryptionKey, logBlobRecordInfo.blobProperty,
+                logBlobRecordInfo.userMetadata, logBlobRecordInfo.blobDataOutput,
                 (currentOffset + logBlobRecordInfo.totalRecordSize));
             updateBlobIdToLogRecordMap(blobIdToLogRecord, logBlobRecordInfo.blobId.getID(), currentOffset,
                 !logBlobRecordInfo.isDeleted, logBlobRecordInfo.isExpired);

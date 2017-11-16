@@ -310,6 +310,42 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
   }
 
+  @Override
+  public void handleOptions(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    long processingStartTime = System.currentTimeMillis();
+    handlePrechecks(restRequest, restResponseChannel);
+    RestRequestMetrics requestMetrics =
+        restRequest.getSSLSession() != null ? frontendMetrics.optionsSSLMetrics : frontendMetrics.optionsMetrics;
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    Exception exception = null;
+    try {
+      logger.trace("Handling OPTIONS request - {}", restRequest.getUri());
+      checkAvailable();
+      long preProcessingEndTime = System.currentTimeMillis();
+      frontendMetrics.optionsPreProcessingTimeInMs.update(preProcessingEndTime - processingStartTime);
+
+      // making this blocking for now. TODO: convert to non blocking
+      securityService.processRequest(restRequest).get();
+      long securityRequestProcessingEndTime = System.currentTimeMillis();
+      frontendMetrics.optionsSecurityRequestTimeInMs.update(securityRequestProcessingEndTime - preProcessingEndTime);
+
+      restResponseChannel.setStatus(ResponseStatus.Ok);
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+      restResponseChannel.setHeader(Headers.ACCESS_CONTROL_ALLOW_METHODS, frontendConfig.frontendOptionsAllowMethods);
+      restResponseChannel.setHeader(Headers.ACCESS_CONTROL_MAX_AGE, frontendConfig.frontendOptionsValiditySeconds);
+      securityService.processResponse(restRequest, restResponseChannel, null).get();
+      long securityResponseProcessingEndTime = System.currentTimeMillis();
+      frontendMetrics.optionsSecurityResponseTimeInMs.update(
+          securityResponseProcessingEndTime - securityRequestProcessingEndTime);
+    } catch (ExecutionException e) {
+      exception = extractCause(e);
+    } catch (Exception e) {
+      exception = e;
+    }
+    submitResponse(restRequest, restResponseChannel, null, exception);
+  }
+
   /**
    * Submits the response and {@code responseBody} (and any {@code exception})for the {@code restRequest} to the
    * {@code responseHandler}.

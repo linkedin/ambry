@@ -237,7 +237,7 @@ public class NettyMessageProcessorTest {
 
     // unsupported method
     channel = createChannel();
-    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.OPTIONS, "/", null));
+    channel.writeInbound(RestTestUtils.createRequest(HttpMethod.TRACE, "/", null));
     // channel should be closed by now
     assertFalse("Channel is not closed", channel.isOpen());
     response = (HttpResponse) channel.readOutbound();

@@ -123,12 +123,12 @@ public class BlobStoreRecoveryTest {
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
-    messageFormatHeaderVersionSaved = MessageFormatRecord.HEADER_VERSION_TO_USE;
+    messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
-    MessageFormatRecord.HEADER_VERSION_TO_USE = messageFormatHeaderVersionSaved;
+    MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
   }
 
   @Parameterized.Parameters
@@ -138,7 +138,7 @@ public class BlobStoreRecoveryTest {
   }
 
   public BlobStoreRecoveryTest(short headerVersionToUse) {
-    MessageFormatRecord.HEADER_VERSION_TO_USE = headerVersionToUse;
+    MessageFormatRecord.headerVersionToUse = headerVersionToUse;
   }
 
   public class ReadImp implements Read {
@@ -171,13 +171,13 @@ public class BlobStoreRecoveryTest {
 
       // 2nd message
       PutMessageFormatInputStream msg2 = new PutMessageFormatInputStream(keys[1], ByteBuffer.wrap(encryptionKey),
-          new BlobProperties(4000, "test", accountId, containerId), ByteBuffer.wrap(usermetadata),
+          new BlobProperties(4000, "test", accountId, containerId, false), ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 3rd message (null encryption key)
-      PutMessageFormatInputStream msg3 =
-          new PutMessageFormatInputStream(keys[2], null, new BlobProperties(4000, "test", accountId, containerId),
-              ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      PutMessageFormatInputStream msg3 = new PutMessageFormatInputStream(keys[2], null,
+          new BlobProperties(4000, "test", accountId, containerId, false), ByteBuffer.wrap(usermetadata),
+          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       // 4th message
       DeleteMessageFormatInputStream msg4 =
@@ -185,7 +185,7 @@ public class BlobStoreRecoveryTest {
 
       // 5th message
       PutMessageFormatInputStream msg5 = new PutMessageFormatInputStream(keys[3], ByteBuffer.wrap(encryptionKey),
-          new BlobProperties(4000, "test", accountId, containerId), ByteBuffer.wrap(usermetadata),
+          new BlobProperties(4000, "test", accountId, containerId, false), ByteBuffer.wrap(usermetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
       buffer = ByteBuffer.allocate(

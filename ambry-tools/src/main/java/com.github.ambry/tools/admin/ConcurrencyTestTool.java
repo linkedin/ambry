@@ -619,7 +619,7 @@ public class ConcurrencyTestTool {
       final byte[] blob = new byte[randomNum];
       byte[] usermetadata = new byte[random.nextInt(1024)];
       BlobProperties props =
-          new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
+          new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
       final FutureResult futureResult = new FutureResult();
       try {
         final long startTimeInMs = SystemTime.getInstance().milliseconds();

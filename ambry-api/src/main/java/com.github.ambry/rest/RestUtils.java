@@ -169,6 +169,16 @@ public class RestUtils {
      * has been modified after the value set for this header.
      */
     public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
+
+    /**
+     * Header that is set in the response of OPTIONS request that specifies the allowed methods.
+     */
+    public static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
+
+    /**
+     * Header that is set in the response of OPTIONS request that specifies the validity of the options returned.
+     */
+    public static final String ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
   }
 
   /**

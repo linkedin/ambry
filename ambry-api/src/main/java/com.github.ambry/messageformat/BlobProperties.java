@@ -38,10 +38,11 @@ public class BlobProperties {
    * @param serviceId The service id that is creating this blob
    * @param accountId accountId of the user who owns the blob
    * @param containerId containerId of the blob
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
    */
-  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId) {
+  public BlobProperties(long blobSize, String serviceId, short accountId, short containerId, boolean isEncrypted) {
     this(blobSize, serviceId, null, null, false, Utils.Infinite_Time, SystemTime.getInstance().milliseconds(),
-        accountId, containerId, false);
+        accountId, containerId, isEncrypted);
   }
 
   /**

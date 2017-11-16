@@ -118,11 +118,11 @@ public class ClusterMapConfig {
 
   /**
    * Indicates if a reverse DNS lookup should be used to try and obtain the fully qualified domain names of cluster map
-   * host entries. By default this is enabled and disabling should only be needed when a node's name cannot be 
+   * host entries. By default this is enabled and disabling should only be needed when a node's name cannot be
    * looked-up via a reverse lookup. For example when the node is known to Ambry by a CNAME record.
-   * 
-   * Beware that disabling this option also prevents Ambry from checking if a nodes naming configuration is 
-   * correct. For example there is no way for Ambry to check if the node config for 'host1.example.com' is actually 
+   *
+   * Beware that disabling this option also prevents Ambry from checking if a nodes naming configuration is
+   * correct. For example there is no way for Ambry to check if the node config for 'host1.example.com' is actually
    * deployed on a host called 'host1.example.com'.
    */
   @Config("clustermap.resolve.hostnames")

@@ -437,6 +437,9 @@ class AsyncRequestWorker implements Runnable {
         case HEAD:
           blobStorageService.handleHead(restRequest, restResponseChannel);
           break;
+        case OPTIONS:
+          blobStorageService.handleOptions(restRequest, restResponseChannel);
+          break;
         default:
           metrics.unknownRestMethodError.inc();
           RestServiceException e = new RestServiceException("Unsupported REST method: " + restMethod,

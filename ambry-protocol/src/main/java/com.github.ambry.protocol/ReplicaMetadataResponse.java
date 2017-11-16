@@ -41,8 +41,7 @@ public class ReplicaMetadataResponse extends Response {
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_3 = 3;
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_4 = 4;
 
-  // @todo change this to V4 once all servers understand V4.
-  private static final short CURRENT_VERSION = REPLICA_METADATA_RESPONSE_VERSION_V_3;
+  private static final short CURRENT_VERSION = REPLICA_METADATA_RESPONSE_VERSION_V_4;
 
   public ReplicaMetadataResponse(int correlationId, String clientId, ServerErrorCode error,
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList) {
