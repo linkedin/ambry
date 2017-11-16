@@ -665,7 +665,7 @@ public class AmbrySecurityServiceTest {
       Assert.assertNull("Pragma value should not have been set",
           restResponseChannel.getHeader(RestUtils.Headers.PRAGMA));
     } else {
-      Assert.assertEquals("Expires value is incorrect for private blob",
+      Assert.assertEquals("Expires value is incorrect for non-cacheable blob",
           restResponseChannel.getHeader(RestUtils.Headers.DATE),
           restResponseChannel.getHeader(RestUtils.Headers.EXPIRES));
       Assert.assertEquals("Cache-Control value not as expected", "private, no-cache, no-store, proxy-revalidate",

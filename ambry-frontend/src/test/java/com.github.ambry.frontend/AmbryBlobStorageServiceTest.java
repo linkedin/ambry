@@ -546,7 +546,6 @@ public class AmbryBlobStorageServiceTest {
         RestServiceErrorCode.NotFound);
 
     // test response path account injection for V1 blob IDs
-    ByteBuffer content = ByteBuffer.allocate(0);
     // public blob with service ID that does not correspond to a valid account
     verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", false, Account.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PUBLIC_CONTAINER);
