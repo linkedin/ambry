@@ -68,7 +68,6 @@ public class CryptoJobHandlerTest {
     cryptoService = new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
     referenceClusterMap = new MockClusterMap();
-    cryptoJobHandler.start();
   }
 
   @After
@@ -107,7 +106,6 @@ public class CryptoJobHandlerTest {
     for (int j = 0; j < 5; j++) {
       cryptoJobHandler.close();
       cryptoJobHandler = new CryptoJobHandler(j + 1);
-      cryptoJobHandler.start();
       CountDownLatch encryptCallBackCount = new CountDownLatch(totalDataCount);
       CountDownLatch decryptCallBackCount = new CountDownLatch(totalDataCount);
       SecretKeySpec perBlobKey = kms.getRandomKey();
@@ -131,7 +129,6 @@ public class CryptoJobHandlerTest {
     mockCryptoService.exceptionOnEncryption.set(
         new GeneralSecurityException("Exception to test", new IllegalStateException()));
     cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
     testFailureOnEncryption(perBlobSecretKey, mockCryptoService, kms);
     mockCryptoService.clearStates();
@@ -139,7 +136,6 @@ public class CryptoJobHandlerTest {
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
     mockKms.exceptionToThrow.set(new GeneralSecurityException("Exception to test", new IllegalStateException()));
     cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
     testFailureOnEncryption(perBlobSecretKey, cryptoService, mockKms);
   }
 
@@ -155,14 +151,12 @@ public class CryptoJobHandlerTest {
     mockCryptoService.exceptionOnDecryption.set(
         new GeneralSecurityException("Exception to test", new IllegalStateException()));
     cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
     testFailureOnDecryption(perBlobSecretKey, null, false, mockCryptoService, kms);
     mockCryptoService.clearStates();
     cryptoJobHandler.close();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
     cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
     testFailureOnDecryption(perBlobSecretKey, mockKms, true, cryptoService, mockKms);
   }
 

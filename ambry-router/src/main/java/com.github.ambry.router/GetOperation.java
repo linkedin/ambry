@@ -261,7 +261,7 @@ class GetRequestInfo {
  * Holds info about decryption job callback
  */
 class DecryptCallBackResultInfo {
-  boolean resultAvailable;
+  boolean decryptJobComplete;
   Exception exception;
   DecryptJob.DecryptJobResult result;
 
@@ -273,7 +273,7 @@ class DecryptCallBackResultInfo {
   void setResultAndException(DecryptJob.DecryptJobResult result, Exception exception) {
     this.result = result;
     this.exception = exception;
-    this.resultAvailable = true;
+    this.decryptJobComplete = true;
   }
 }
 

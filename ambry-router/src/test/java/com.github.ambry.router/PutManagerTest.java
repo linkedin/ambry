@@ -701,7 +701,6 @@ public class PutManagerTest {
         TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
     cryptoService = new MockCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
   }
 
   /**

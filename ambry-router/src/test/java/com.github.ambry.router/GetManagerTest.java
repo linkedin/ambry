@@ -101,7 +101,6 @@ public class GetManagerTest {
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-      cryptoJobHandler.start();
     }
   }
 

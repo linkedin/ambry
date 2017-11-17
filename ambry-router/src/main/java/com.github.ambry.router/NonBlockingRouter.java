@@ -96,9 +96,6 @@ class NonBlockingRouter implements Router {
     this.kms = kms;
     this.cryptoService = cryptoService;
     this.cryptoJobHandler = cryptoJobHandler;
-    if (cryptoJobHandler != null) {
-      cryptoJobHandler.start();
-    }
     this.time = time;
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();

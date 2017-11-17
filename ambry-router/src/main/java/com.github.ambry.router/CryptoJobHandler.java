@@ -43,12 +43,6 @@ class CryptoJobHandler implements Closeable {
    */
   CryptoJobHandler(int threadCount) {
     this.threadCount = threadCount;
-  }
-
-  /**
-   * Starts up {@link CryptoJobHandler} by instantiating the scheduler
-   */
-  void start() {
     enabled.set(true);
     scheduler = Executors.newFixedThreadPool(threadCount);
   }

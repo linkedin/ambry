@@ -17,13 +17,10 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.config.CryptoServiceConfig;
-import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -117,16 +114,11 @@ public class ChunkFillTest {
     FutureResult<String> futureResult = new FutureResult<String>();
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
-    KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(vProps),
-        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-    CryptoService cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-    CryptoJobHandler cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             putUserMetadata, putChannel, futureResult, null,
             new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-            kms, cryptoService, cryptoJobHandler, new MockTime(), putBlobProperties);
+            null, null, null, new MockTime(), putBlobProperties);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
@@ -224,16 +216,11 @@ public class ChunkFillTest {
     FutureResult<String> futureResult = new FutureResult<String>();
     MockTime time = new MockTime();
     MockNetworkClientFactory networkClientFactory = new MockNetworkClientFactory(vProps, null, 0, 0, 0, null, time);
-    KeyManagementService kms = new SingleKeyManagementService(new KMSConfig(vProps),
-        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-    CryptoService cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-    CryptoJobHandler cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-    cryptoJobHandler.start();
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             putUserMetadata, putChannel, futureResult, null,
             new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-            kms, cryptoService, cryptoJobHandler, time, putBlobProperties);
+            null, null, null, time, putBlobProperties);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];

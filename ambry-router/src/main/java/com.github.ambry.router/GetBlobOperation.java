@@ -71,7 +71,7 @@ import org.slf4j.LoggerFactory;
  * become eligible to be fetched.
  */
 class GetBlobOperation extends GetOperation {
-  // the callback to use to complete the operation.
+  // the callback to use to notify the router about events and state changes
   private final RouterCallback routerCallback;
   // whether the operationCallback has been called already.
   private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
@@ -439,7 +439,7 @@ class GetBlobOperation extends GetOperation {
     private boolean chunkCompleted;
     protected AtomicBoolean decryptionRequired = new AtomicBoolean(false);
     // tracks decryption job status if applicable
-    protected DecryptionStatusTracker decryptionStatusTracker = new DecryptionStatusTracker();
+    protected DecryptionStatusTracker decryptionStatusTracker;
     // DecryptCallBackResultInfo that holds all info about decrypt job callback
     protected DecryptCallBackResultInfo decryptCallbackResultInfo;
     // In general, when the operation tracker returns success, any previously saved exceptions are cleared. This flag
@@ -506,7 +506,7 @@ class GetBlobOperation extends GetOperation {
       successfullyDeserialized = false;
       decryptionRequired = new AtomicBoolean(false);
       decryptionStatusTracker = new DecryptionStatusTracker();
-      decryptCallbackResultInfo = new DecryptCallBackResultInfo();
+      decryptCallbackResultInfo = null;
       correlationIdToGetRequestInfo.clear();
       state = ChunkState.Free;
     }
@@ -543,9 +543,9 @@ class GetBlobOperation extends GetOperation {
      *                                    created as part of this poll operation.
      */
     void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
-      if (!maybeProcessDecryptCallbackAndCompleteOperation()) {
-        //First, check if any of the existing requests have timed out.
-        cleanupExpiredInFlightRequests();
+      //First, check if any of the existing requests have timed out.
+      cleanupExpiredInFlightRequests();
+      if (!maybeProcessCallbacksAndCompleteOperation()) {
         checkAndMaybeComplete();
         if (!isComplete()) {
           fetchRequests(requestRegistrationCallback);
@@ -554,11 +554,12 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
-     * Maybe process decrypt callback and complete the operation if applicable. This is a no-op for non-encrypted blobs
+     * Maybe process callbacks and complete the operation if applicable. This is a no-op for blobs that doesn't need
+     * any async processing. As of now, decryption is the only async processing that could happen if applicable.
      * @return {@code true} if the operation is complete, {@code false} otherwise
      */
-    protected boolean maybeProcessDecryptCallbackAndCompleteOperation() {
-      if (decryptionRequired.get() && decryptCallbackResultInfo.resultAvailable) {
+    protected boolean maybeProcessCallbacksAndCompleteOperation() {
+      if (decryptionRequired.get() && decryptCallbackResultInfo.decryptJobComplete) {
         logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
         if (decryptCallbackResultInfo.exception == null && (getChunkException() == null
             || !retainChunkExceptionOnSuccess)) {
@@ -668,6 +669,7 @@ class GetBlobOperation extends GetOperation {
           chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(blobData.getStream().getByteBuffer()));
           numChunksRetrieved++;
         } else {
+          decryptCallbackResultInfo = new DecryptCallBackResultInfo();
           decryptionRequired.set(true);
           logger.trace("Submitting decrypt job for data chunk {}", chunkBlobId);
           long startTimeMs = System.currentTimeMillis();
@@ -940,8 +942,8 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    protected boolean maybeProcessDecryptCallbackAndCompleteOperation() {
-      if (decryptionRequired.get() && decryptCallbackResultInfo.resultAvailable) {
+    protected boolean maybeProcessCallbacksAndCompleteOperation() {
+      if (decryptionRequired.get() && decryptCallbackResultInfo.decryptJobComplete) {
         // in case of Metadata blob, only user-metadata needs decryption if the blob is encrypted
         if (blobType == BlobType.MetadataBlob) {
           if (decryptCallbackResultInfo.exception == null) {
@@ -965,11 +967,10 @@ class GetBlobOperation extends GetOperation {
           }
           logger.trace("BlobContent available to process for Metadata blob {}", blobId);
         } else {
-          // Incase of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
-          // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
           if (decryptCallbackResultInfo.exception == null) {
             logger.trace("Processing stored decryption callback result for simple blob {}", blobId);
-            // setting right BlobInfo if applicable
+            // Incase of simple blobs, user-metadata may or may not be passed into decryption job based on GetOptions flag.
+            // Only in-case of GetBlobInfo and GetBlobAll, user-metadata is required to be decrypted
             if (blobInfo != null) {
               blobInfo = new BlobInfo(blobInfo.getBlobProperties(),
                   decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
@@ -1093,6 +1094,7 @@ class GetBlobOperation extends GetOperation {
           // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
           // is expected to be encrypted). Incase of GetBlob, Metadata blob does not need any decryption even if BlobProperties says so
           if (getOperationFlag() != MessageFormatFlags.Blob && blobInfo.getBlobProperties().isEncrypted()) {
+            decryptCallbackResultInfo = new DecryptCallBackResultInfo();
             decryptionRequired.set(true);
             logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
             long startTimeMs = System.currentTimeMillis();
@@ -1146,6 +1148,7 @@ class GetBlobOperation extends GetOperation {
         } else {
           logger.trace("Submitting decrypt job for simple blob {}", blobId);
           long startTimeMs = System.currentTimeMillis();
+          decryptCallbackResultInfo = new DecryptCallBackResultInfo();
           decryptionRequired.set(true);
           cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptionKey, blobData.getStream().getByteBuffer(),
               blobInfo != null ? ByteBuffer.wrap(blobInfo.getUserMetadata()) : null, cryptoService, kms,
