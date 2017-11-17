@@ -96,6 +96,11 @@ public class BlobProperties {
     return blobSize;
   }
 
+  /**
+   * This should only be used to determine the "virtual container" for blobs with V1 IDs.
+   * @return whether the blob was private at creation time.
+   */
+  @Deprecated
   public boolean isPrivate() {
     return isPrivate;
   }

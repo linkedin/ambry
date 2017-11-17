@@ -76,7 +76,10 @@ public class HelixAccountServiceTest {
   private String refContainerName;
   private ContainerStatus refContainerStatus;
   private String refContainerDescription;
-  private boolean refContainerPrivacy;
+  private boolean refContainerCaching;
+  private boolean refContainerEncryption;
+  private boolean refContainerPreviousEncryption;
+  private boolean refContainerMediaScanDisabled;
   private short refParentAccountId;
   private AccountService accountService;
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
@@ -206,7 +209,6 @@ public class HelixAccountServiceTest {
         containerBuilder.setStatus(
             container.getStatus().equals(ContainerStatus.ACTIVE) ? ContainerStatus.INACTIVE : ContainerStatus.ACTIVE);
         containerBuilder.setDescription(container.getDescription() + "--extra");
-        containerBuilder.setIsPrivate(!container.isPrivate());
         accountBuilder.addOrUpdateContainer(containerBuilder.build());
       }
       accountsToUpdate.add(accountBuilder.build());
@@ -835,10 +837,15 @@ public class HelixAccountServiceTest {
     refContainerName = UUID.randomUUID().toString();
     refContainerStatus = random.nextBoolean() ? ContainerStatus.ACTIVE : ContainerStatus.INACTIVE;
     refContainerDescription = UUID.randomUUID().toString();
-    refContainerPrivacy = random.nextBoolean();
+    refContainerCaching = random.nextBoolean();
     refParentAccountId = refAccountId;
+    // TODO make these randomly generated once V2 container writes are enabled
+    refContainerEncryption = Container.ENCRYPTED_DEFAULT_VALUE;
+    refContainerPreviousEncryption = Container.PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+    refContainerMediaScanDisabled = Container.MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerPrivacy, refParentAccountId).build();
+        refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
+        refParentAccountId).build();
     refAccount =
         new AccountBuilder(refAccountId, refAccountName, refAccountStatus, Collections.singleton(refContainer)).build();
     generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, NUM_REF_ACCOUNT,

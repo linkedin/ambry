@@ -19,9 +19,12 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -72,7 +75,9 @@ class AccountAndContainerInjector {
     } else if (frontendConfig.frontendAllowServiceIdBasedPostRequest) {
       ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForPutWithServiceId);
       frontendMetrics.putWithServiceIdForAccountNameRate.mark();
-      injectAccountAndContainerUsingServiceId(restRequest);
+      String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, true);
+      boolean isPrivate = isPrivate(restRequest.getArgs());
+      injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate);
     } else {
       throw new RestServiceException(
           "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
@@ -84,7 +89,7 @@ class AccountAndContainerInjector {
    * Obtains the target {@link Account} and {@link Container} id from the blobId string, queries the {@link AccountService}
    * to get the corresponding {@link Account} and {@link Container}, and injects the target {@link Account} and
    * {@link Container} into the {@link RestRequest}.
-   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id。
+   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id.
    * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
    * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be found; or 2)
    *                              either {@link Account} or {@link Container} were explicitly specified as
@@ -124,25 +129,56 @@ class AccountAndContainerInjector {
   }
 
   /**
-   * Injects {@link Account} and {@link Container} for the put request that does not carry the target account or
-   * target container header but a serviceId. The serviceId will be used as account name to query for the target
-   * {@link Account}.
+   * If a non-unknown {@link Account} and {@link Container} was not previously injected, inject them into the provided
+   * {@link RestRequest}, based on the given {@link BlobProperties}' service ID and blob privacy setting. This is useful
+   * for V1 blob IDs that do not directly encode the account/container ID.
+   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container}.
+   * @param blobProperties The {@link BlobProperties} that contains the service id and blob privacy setting.
+   * @throws RestServiceException if no valid account or container cound be identified for re-injection.
+   */
+  void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties) throws RestServiceException {
+    Account targetAccount = (Account) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
+    Container targetContainer = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
+    if (targetAccount == null || targetContainer == null) {
+      throw new RestServiceException("Account and container were not injected by BlobStorageService",
+          RestServiceErrorCode.InternalServerError);
+    } else if (targetAccount.equals(Account.UNKNOWN_ACCOUNT) && targetContainer.equals(
+        Container.UNKNOWN_CONTAINER)) {
+      // This should only occur for V1 blobs, where the blob ID does not contain the actual account and container IDs.
+      String serviceId = blobProperties.getServiceId();
+      boolean isPrivate = blobProperties.isPrivate();
+      injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate);
+    }
+  }
+
+  /**
+   * Inject {@link Account} and {@link Container} into a {@link RestRequest} based on a blob's service ID and
+   * privacy setting.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @param serviceId The service ID associated with the blob.
+   * @param isPrivate The blob's privacy setting.
    * @throws RestServiceException if either of {@link Account} or {@link Container} object could not be found.
    */
-  private void injectAccountAndContainerUsingServiceId(RestRequest restRequest) throws RestServiceException {
-    String accountName = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false);
-    Account targetAccount = accountService.getAccountByName(accountName);
+  private void injectAccountAndContainerUsingServiceId(RestRequest restRequest, String serviceId, boolean isPrivate)
+      throws RestServiceException {
+    // First, try to see if a migrated account exists for the service ID.
+    Account targetAccount = accountService.getAccountByName(serviceId);
     if (targetAccount == null) {
       frontendMetrics.unrecognizedServiceIdCount.inc();
       logger.debug(
-          "Account cannot be found for accountName={} in put request with serviceId. Setting targetAccount to UNKNOWN_ACCOUNT",
-          accountName);
+          "Account cannot be found for put request with serviceId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
+          serviceId);
+      // If a migrated account does not exist fall back to the UNKNOWN_ACCOUNT.
       targetAccount = Account.UNKNOWN_ACCOUNT;
     }
-    boolean isBlobPrivate = isPrivate(restRequest.getArgs());
+    // Either the UNKNOWN_ACCOUNT, or the migrated account should contain default public/private containers
     Container targetContainer = targetAccount.getContainerById(
-        isBlobPrivate ? Container.DEFAULT_PRIVATE_CONTAINER_ID : Container.DEFAULT_PUBLIC_CONTAINER_ID);
+        isPrivate ? Container.DEFAULT_PRIVATE_CONTAINER_ID : Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    if (targetContainer == null) {
+      throw new RestServiceException(
+          "Invalid account or container to inject; serviceId=" + serviceId + ", isPrivate=" + isPrivate,
+          RestServiceErrorCode.InternalServerError);
+    }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);
   }
 
@@ -206,7 +242,7 @@ class AccountAndContainerInjector {
       Container targetContainer) throws RestServiceException {
     restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, targetAccount);
     restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, targetContainer);
-    logger.trace("Sets targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
+    logger.trace("Setting targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
         restRequest);
   }
 

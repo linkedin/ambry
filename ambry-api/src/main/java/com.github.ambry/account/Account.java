@@ -35,7 +35,7 @@ import org.json.JSONObject;
  *   registration process.
  * </p>
  * <p>
- *   Account is serialized into {@link JSONObject} in the {@code CURRENT_JSON_VERSION}, which is version 1 for now.
+ *   Account is serialized into {@link JSONObject} in the {@code currentJsonVersion}, which is version 1 for now.
  *   Below lists all the json versions and their formats:
  * </p>
  * <pre><code>
@@ -107,7 +107,7 @@ public class Account {
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   // account member variables
-  private final Short id;
+  private final short id;
   private final String name;
   private AccountStatus status;
   // internal data structure
@@ -130,10 +130,10 @@ public class Account {
         name = metadata.getString(ACCOUNT_NAME_KEY);
         status = AccountStatus.valueOf(metadata.getString(STATUS_KEY));
         checkRequiredFieldsForBuild();
-        JSONArray containerArray = metadata.getJSONArray(CONTAINERS_KEY);
+        JSONArray containerArray = metadata.optJSONArray(CONTAINERS_KEY);
         if (containerArray != null) {
           for (int index = 0; index < containerArray.length(); index++) {
-            Container container = Container.fromJson(containerArray.getJSONObject(index));
+            Container container = Container.fromJson(containerArray.getJSONObject(index), id);
             checkParentAccountIdInContainers(container);
             checkDuplicateContainerNameOrId(container);
             updateContainerMap(container);
@@ -153,7 +153,7 @@ public class Account {
    * @param status The status of the account. Cannot be null.
    * @param containers A collection of {@link Container}s to be part of this account.
    */
-  Account(Short id, String name, AccountStatus status, Collection<Container> containers) {
+  Account(short id, String name, AccountStatus status, Collection<Container> containers) {
     this.id = id;
     this.name = name;
     this.status = status;
@@ -188,7 +188,7 @@ public class Account {
    * @return The metadata of the account in {@link JSONObject}.
    * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
    */
-  public JSONObject toJson() throws JSONException {
+  JSONObject toJson() throws JSONException {
     JSONObject metadata = new JSONObject();
     metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
     metadata.put(ACCOUNT_ID_KEY, id);
@@ -208,7 +208,7 @@ public class Account {
    * @return An account object deserialized from the {@link JSONObject}.
    * @throws JSONException If parsing the {@link JSONObject} fails.
    */
-  public static Account fromJson(JSONObject json) throws JSONException {
+  static Account fromJson(JSONObject json) throws JSONException {
     return new Account(json);
   }
 
@@ -263,13 +263,13 @@ public class Account {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof Account)) {
+    if (o == null || getClass() != o.getClass()) {
       return false;
     }
 
     Account account = (Account) o;
 
-    if (!id.equals(account.id)) {
+    if (id != account.id) {
       return false;
     }
     if (!name.equals(account.name)) {
@@ -324,9 +324,9 @@ public class Account {
    * @throws IllegalStateException If any of the required field is missing.
    */
   private void checkRequiredFieldsForBuild() {
-    if (id == null || name == null || status == null) {
+    if (name == null || status == null) {
       throw new IllegalStateException(
-          "Either of required fields id=" + id + " or name=" + name + " or status=" + status + " is null");
+          "Either of required fields name=" + name + " or status=" + status + " is null");
     }
   }
 

@@ -30,7 +30,7 @@ import org.json.JSONObject;
  *   within the same {@link Account}, but can be the same across different {@link Account}s.
  * </p>
  * <p>
- *   Container is serialized into {@link JSONObject} in the {@code CURRENT_JSON_VERSION}, which is version 1
+ *   Container is serialized into {@link JSONObject} in the {@code currentJsonVersion}, which is version 1
  *   for now. Below lists all the metadata versions and their formats:
  * </p>
  *  <pre><code>
@@ -50,6 +50,33 @@ import org.json.JSONObject;
  *  </p>
  */
 public class Container {
+
+  // constants
+  static final String JSON_VERSION_KEY = "version";
+  static final String CONTAINER_NAME_KEY = "containerName";
+  static final String CONTAINER_ID_KEY = "containerId";
+  static final String STATUS_KEY = "status";
+  static final String DESCRIPTION_KEY = "description";
+  static final String IS_PRIVATE_KEY = "isPrivate";
+  static final String ENCRYPTED_KEY = "encrypted";
+  static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
+  static final String CACHEABLE_KEY = "cacheable";
+  static final String MEDIA_SCAN_DISABLED = "mediaScanDisabled";
+  static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
+  static final boolean ENCRYPTED_DEFAULT_VALUE = false;
+  static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
+  static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
+  static final boolean CACHEABLE_DEFAULT_VALUE = true;
+  static final short JSON_VERSION_1 = 1;
+  static final short JSON_VERSION_2 = 2;
+
+  /**
+   * The current version to serialize in. This can be set through the {@link #setCurrentJsonVersion(short)} method.
+   * This variable should be declared/initialized before the default containers are constructed. Otherwise, this
+   * field will not be initialized when those constructors are called and it will fail.
+   */
+  private static short currentJsonVersion = JSON_VERSION_1;
+
   /**
    * The id of {@link #UNKNOWN_CONTAINER}.
    */
@@ -122,21 +149,64 @@ public class Container {
       "This is a container for the blobs without specifying a target account and container when they are put and isPrivate flag is true";
 
   /**
-   * The privacy setting of {@link #UNKNOWN_CONTAINER}.
+   * The encryption setting of {@link #UNKNOWN_CONTAINER}.
    */
-  public static final boolean UNKNOWN_CONTAINER_IS_PRIVATE_SETTING = false;
+  public static final boolean UNKNOWN_CONTAINER_ENCRYPTED_SETTING = ENCRYPTED_DEFAULT_VALUE;
 
   /**
-   * The privacy setting for the containers to be associated with the blobs that are put without specifying a target
-   * container, but are specified private. {@link #DEFAULT_PRIVATE_CONTAINER} is one of the containers that use it.
+   * The encryption setting of {@link #DEFAULT_PUBLIC_CONTAINER}.
    */
-  public static final boolean DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING = false;
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING = ENCRYPTED_DEFAULT_VALUE;
 
   /**
-   * The privacy setting for the containers to be associated with the blobs that are put without specifying a target
-   * container, but are specified public. {@link #DEFAULT_PUBLIC_CONTAINER} is one of the containers that use it.
+   * The encryption setting of {@link #DEFAULT_PRIVATE_CONTAINER}.
    */
-  public static final boolean DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING = true;
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING = ENCRYPTED_DEFAULT_VALUE;
+
+  /**
+   * The previously encrypted flag for {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+
+  /**
+   * The previously encrypted flag for {@link #DEFAULT_PUBLIC_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+
+  /**
+   * The previously encrypted flag for {@link #DEFAULT_PRIVATE_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+
+  /**
+   * The cache setting of {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_CACHEABLE_SETTING = true;
+
+  /**
+   * The cache setting of {@link #DEFAULT_PUBLIC_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING = true;
+
+  /**
+   * The cache setting of {@link #DEFAULT_PRIVATE_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING = false;
+
+  /**
+   * The media scan disabled setting for {@link #UNKNOWN_CONTAINER}.
+   */
+  public static final boolean UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+
+  /**
+   * The media scan disabled setting for {@link #DEFAULT_PUBLIC_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+
+  /**
+   * The media scan disabled setting for {@link #DEFAULT_PRIVATE_CONTAINER}.
+   */
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
 
   /**
    * The parent account id of {@link #UNKNOWN_CONTAINER}.
@@ -160,7 +230,9 @@ public class Container {
    */
   public static final Container UNKNOWN_CONTAINER =
       new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
-          UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_IS_PRIVATE_SETTING, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
+          UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
+          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -168,8 +240,9 @@ public class Container {
    */
   public static final Container DEFAULT_PUBLIC_CONTAINER =
       new Container(DEFAULT_PUBLIC_CONTAINER_ID, DEFAULT_PUBLIC_CONTAINER_NAME, DEFAULT_PUBLIC_CONTAINER_STATUS,
-          DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_IS_PRIVATE_SETTING,
-          DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
+          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -177,71 +250,158 @@ public class Container {
    */
   public static final Container DEFAULT_PRIVATE_CONTAINER =
       new Container(DEFAULT_PRIVATE_CONTAINER_ID, DEFAULT_PRIVATE_CONTAINER_NAME, DEFAULT_PRIVATE_CONTAINER_STATUS,
-          DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_IS_PRIVATE_SETTING,
-          DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
+          DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
+          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
 
-  // static variables
-  static final String JSON_VERSION_KEY = "version";
-  static final String CONTAINER_NAME_KEY = "containerName";
-  static final String CONTAINER_ID_KEY = "containerId";
-  static final String STATUS_KEY = "status";
-  static final String DESCRIPTION_KEY = "description";
-  static final String IS_PRIVATE_KEY = "isPrivate";
-  static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
-  static final short JSON_VERSION_1 = 1;
-  static final short CURRENT_JSON_VERSION = JSON_VERSION_1;
   // container field variables
-  private final Short id;
+  private final short id;
   private final String name;
   private final ContainerStatus status;
   private final String description;
-  private final Boolean isPrivate;
-  private final Short parentAccountId;
+  private final boolean encrypted;
+  private final boolean previouslyEncrypted;
+  private final boolean cacheable;
+  private final boolean mediaScanDisabled;
+  private final short parentAccountId;
 
   /**
    * Constructing an {@link Container} object from container metadata.
    * @param metadata The metadata of the container in JSON.
    * @throws JSONException If fails to parse metadata.
    */
-  private Container(JSONObject metadata) throws JSONException {
+  private Container(JSONObject metadata, short parentAccountId) throws JSONException {
     if (metadata == null) {
       throw new IllegalArgumentException("metadata cannot be null.");
     }
+    this.parentAccountId = parentAccountId;
     short metadataVersion = (short) metadata.getInt(JSON_VERSION_KEY);
     switch (metadataVersion) {
       case JSON_VERSION_1:
-        this.id = (short) metadata.getInt(CONTAINER_ID_KEY);
-        this.name = metadata.getString(CONTAINER_NAME_KEY);
-        this.status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
-        this.description = metadata.optString(DESCRIPTION_KEY);
-        this.isPrivate = metadata.getBoolean(IS_PRIVATE_KEY);
-        this.parentAccountId = (short) metadata.getInt(PARENT_ACCOUNT_ID_KEY);
-        checkRequiredFields();
+        id = (short) metadata.getInt(CONTAINER_ID_KEY);
+        name = metadata.getString(CONTAINER_NAME_KEY);
+        status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
+        description = metadata.optString(DESCRIPTION_KEY);
+        encrypted = ENCRYPTED_DEFAULT_VALUE;
+        previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+        cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
+        mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
         break;
-
+      case JSON_VERSION_2:
+        id = (short) metadata.getInt(CONTAINER_ID_KEY);
+        name = metadata.getString(CONTAINER_NAME_KEY);
+        status = ContainerStatus.valueOf(metadata.getString(STATUS_KEY));
+        description = metadata.optString(DESCRIPTION_KEY);
+        encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
+        previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
+        cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
+        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
+        break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
     }
+    checkPreconditions(name, status, encrypted, previouslyEncrypted);
   }
 
   /**
    * Constructor that takes individual arguments. Cannot be null.
-   * @param id The id of the container. Cannot be null.
+   * @param id The id of the container.
    * @param name The name of the container. Cannot be null.
    * @param status The status of the container. Cannot be null.
    * @param description The description of the container. Can be null.
-   * @param isPrivate The privacy setting of the container. Cannot be null.
-   * @param parentAccountId The id of the parent {@link Account} of this container. Cannot be null.
+   * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
+   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
+   *                            subset of blobs in it could still be encrypted.
+   * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
+   *                  this container.
+   * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
+   * @param parentAccountId The id of the parent {@link Account} of this container.
    */
-  Container(Short id, String name, ContainerStatus status, String description, Boolean isPrivate,
-      Short parentAccountId) {
+  Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
+      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
+    checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
     this.status = status;
     this.description = description;
-    this.isPrivate = isPrivate;
+    this.cacheable = cacheable;
     this.parentAccountId = parentAccountId;
-    checkRequiredFields();
+    switch (currentJsonVersion) {
+      case JSON_VERSION_1:
+        this.encrypted = ENCRYPTED_DEFAULT_VALUE;
+        this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+        this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+        break;
+      case JSON_VERSION_2:
+        this.encrypted = encrypted;
+        this.previouslyEncrypted = previouslyEncrypted;
+        this.mediaScanDisabled = mediaScanDisabled;
+        break;
+      default:
+        throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
+    }
+  }
+
+  /**
+   * @return the JSON version to serialize in.
+   */
+  static short getCurrentJsonVersion() {
+    return currentJsonVersion;
+  }
+
+  /**
+   * Set the JSON version to serialize in. Note that this is a static setting that will affect all {@link Container}
+   * serialization.
+   * @param currentJsonVersion the JSON version to serialize in.
+   */
+  static void setCurrentJsonVersion(short currentJsonVersion) {
+    Container.currentJsonVersion = currentJsonVersion;
+  }
+
+  /**
+   * Deserializes a {@link JSONObject} to a container object.
+   * @param json The {@link JSONObject} to deserialize.
+   * @param parentAccountId The ID of the parent {@link Account} of this container. This is passed in because it is
+   *                        not always included in the JSON record.
+   * @return A container object deserialized from the {@link JSONObject}.
+   * @throws JSONException If parsing the {@link JSONObject} fails.
+   */
+  static Container fromJson(JSONObject json, short parentAccountId) throws JSONException {
+    return new Container(json, parentAccountId);
+  }
+
+  /**
+   * Gets the metadata of the container.
+   * @return The metadata of the container.
+   * @throws JSONException If fails to compose metadata.
+   */
+  JSONObject toJson() throws JSONException {
+    JSONObject metadata = new JSONObject();
+    switch (currentJsonVersion) {
+      case JSON_VERSION_1:
+        metadata.put(JSON_VERSION_KEY, JSON_VERSION_1);
+        metadata.put(CONTAINER_ID_KEY, id);
+        metadata.put(CONTAINER_NAME_KEY, name);
+        metadata.put(STATUS_KEY, status);
+        metadata.put(DESCRIPTION_KEY, description);
+        metadata.put(IS_PRIVATE_KEY, !cacheable);
+        metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
+        break;
+      case JSON_VERSION_2:
+        metadata.put(Container.JSON_VERSION_KEY, JSON_VERSION_2);
+        metadata.put(CONTAINER_ID_KEY, id);
+        metadata.put(CONTAINER_NAME_KEY, name);
+        metadata.put(Container.STATUS_KEY, status);
+        metadata.put(DESCRIPTION_KEY, description);
+        metadata.put(ENCRYPTED_KEY, encrypted);
+        metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);
+        metadata.put(CACHEABLE_KEY, cacheable);
+        metadata.put(MEDIA_SCAN_DISABLED, mediaScanDisabled);
+        break;
+      default:
+        throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
+    }
+    return metadata;
   }
 
   /**
@@ -277,11 +437,33 @@ public class Container {
   }
 
   /**
-   * Gets the boolean value if the entries in this container is private.
-   * @return A boolean indicating if the entries in this container are private.
+   * @return {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
    */
-  public boolean isPrivate() {
-    return isPrivate;
+  public boolean isEncrypted() {
+    return encrypted;
+  }
+
+  /**
+   * @return {@code true} if this {@link Container} was encrypted in the past, and a subset of blobs in it could still
+   *         be encrypted.
+   */
+  public boolean wasPreviouslyEncrypted() {
+    return previouslyEncrypted;
+  }
+
+  /**
+   * @return {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in this
+   * container.
+   */
+  public boolean isCacheable() {
+    return cacheable;
+  }
+
+  /**
+   * @return {@code true} if media scans should be disabled on content created in this container.
+   */
+  public boolean isMediaScanDisabled() {
+    return mediaScanDisabled;
   }
 
   /**
@@ -290,23 +472,6 @@ public class Container {
    */
   public short getParentAccountId() {
     return parentAccountId;
-  }
-
-  /**
-   * Gets the metadata of the container.
-   * @return The metadata of the container.
-   * @throws JSONException If fails to compose metadata.
-   */
-  public JSONObject toJson() throws JSONException {
-    JSONObject metadata = new JSONObject();
-    metadata.put(JSON_VERSION_KEY, CURRENT_JSON_VERSION);
-    metadata.put(CONTAINER_ID_KEY, id);
-    metadata.put(CONTAINER_NAME_KEY, name);
-    metadata.put(STATUS_KEY, status);
-    metadata.put(DESCRIPTION_KEY, description);
-    metadata.put(IS_PRIVATE_KEY, isPrivate);
-    metadata.put(PARENT_ACCOUNT_ID_KEY, parentAccountId);
-    return metadata;
   }
 
   /**
@@ -324,13 +489,28 @@ public class Container {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof Container)) {
+    if (o == null || getClass() != o.getClass()) {
       return false;
     }
 
     Container container = (Container) o;
 
-    if (!id.equals(container.id)) {
+    if (id != container.id) {
+      return false;
+    }
+    if (encrypted != container.encrypted) {
+      return false;
+    }
+    if (previouslyEncrypted != container.previouslyEncrypted) {
+      return false;
+    }
+    if (cacheable != container.cacheable) {
+      return false;
+    }
+    if (mediaScanDisabled != container.mediaScanDisabled) {
+      return false;
+    }
+    if (parentAccountId != container.parentAccountId) {
       return false;
     }
     if (!name.equals(container.name)) {
@@ -339,13 +519,7 @@ public class Container {
     if (status != container.status) {
       return false;
     }
-    if (description != null ? !description.equals(container.description) : container.description != null) {
-      return false;
-    }
-    if (!isPrivate.equals(container.isPrivate)) {
-      return false;
-    }
-    return parentAccountId.equals(container.parentAccountId);
+    return description != null ? description.equals(container.description) : container.description == null;
   }
 
   @Override
@@ -356,31 +530,27 @@ public class Container {
   }
 
   /**
+   * Checks if any required fields is missing for a {@link Container} or for any incompatible settings.
+   * @param name The name of the container. Cannot be null.
+   * @param status The status of the container. Cannot be null.
+   * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
+   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
+   *                            subset of blobs in it could still be encrypted.
+   */
+  private void checkPreconditions(String name, ContainerStatus status, boolean encrypted, boolean previouslyEncrypted) {
+    if (name == null || status == null) {
+      throw new IllegalStateException("Either of required fields name=" + name + " or status=" + status + " is null");
+    }
+    if (encrypted && !previouslyEncrypted) {
+      throw new IllegalStateException("previouslyEncrypted should be true if the container is currently encrypted");
+    }
+  }
+
+  /**
    * Status of the container. {@code ACTIVE} means this container is in operational state, and {@code INACTIVE} means
    * the container has been deactivated.
    */
   public enum ContainerStatus {
     ACTIVE, INACTIVE
-  }
-
-  /**
-   * Deserializes a {@link JSONObject} to a container object.
-   * @param json The {@link JSONObject} to deserialize.
-   * @return A container object deserialized from the {@link JSONObject}.
-   * @throws JSONException If parsing the {@link JSONObject} fails.
-   */
-  public static Container fromJson(JSONObject json) throws JSONException {
-    return new Container(json);
-  }
-
-  /**
-   * Checks if any required fields is missing for a {@link Container}.
-   */
-  private void checkRequiredFields() {
-    if (id == null || name == null || status == null || isPrivate == null || parentAccountId == null) {
-      throw new IllegalStateException(
-          "Either of required fields id=" + id + " or name=" + name + " or status=" + status + " or isPrivate="
-              + isPrivate + " or parentAccountId=" + parentAccountId + " is null");
-    }
   }
 }

@@ -240,16 +240,8 @@ public class RestUtils {
    *                                    expected.
    */
   public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
-    Account account = (Account) args.get(InternalKeys.TARGET_ACCOUNT_KEY);
-    if (account == null) {
-      throw new RestServiceException(InternalKeys.TARGET_ACCOUNT_KEY + " is not set",
-          RestServiceErrorCode.InternalServerError);
-    }
-    Container container = (Container) args.get(InternalKeys.TARGET_CONTAINER_KEY);
-    if (container == null) {
-      throw new RestServiceException(InternalKeys.TARGET_CONTAINER_KEY + " is not set",
-          RestServiceErrorCode.InternalServerError);
-    }
+    Account account = getAccountFromArgs(args);
+    Container container = getContainerFromArgs(args);
     String serviceId = getHeader(args, Headers.SERVICE_ID, true);
     String contentType = getHeader(args, Headers.AMBRY_CONTENT_TYPE, true);
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
@@ -269,9 +261,11 @@ public class RestUtils {
       }
     }
 
-    // @todo: Need to pass in isEncrypted here when that support is added.
-    return new BlobProperties(-1, serviceId, ownerId, contentType, container.isPrivate(), ttl, account.getId(),
-        container.getId(), false);
+    // This field should not matter on newly created blobs, because all privacy/cacheability decisions should be made
+    // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
+    boolean isPrivate = !container.isCacheable();
+    return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(),
+        container.getId(), container.isEncrypted());
   }
 
   /**
@@ -659,6 +653,44 @@ public class RestUtils {
       }
     }
     return null;
+  }
+
+  /**
+   * Extract the injected {@link Account} from a map of arguments.
+   * @param args a map of arguments that possibly contains the injected {@link Account} and {@link Container}.
+   * @return the {@link Account}
+   * @throws RestServiceException
+   */
+  public static Account getAccountFromArgs(Map<String, Object> args) throws RestServiceException {
+    Object account = args.get(InternalKeys.TARGET_ACCOUNT_KEY);
+    if (account == null) {
+      throw new RestServiceException(InternalKeys.TARGET_ACCOUNT_KEY + " is not set",
+          RestServiceErrorCode.InternalServerError);
+    }
+    if (!(account instanceof Account)) {
+      throw new RestServiceException(InternalKeys.TARGET_ACCOUNT_KEY + " not instance of Account",
+          RestServiceErrorCode.InternalServerError);
+    }
+    return (Account) account;
+  }
+
+  /**
+   * Extract the injected {@link Container} from a map of arguments.
+   * @param args a map of arguments that possibly contains the injected {@link Account} and {@link Container}.
+   * @return a {@link Container}
+   * @throws RestServiceException
+   */
+  public static Container getContainerFromArgs(Map<String, Object> args) throws RestServiceException {
+    Object container = args.get(InternalKeys.TARGET_CONTAINER_KEY);
+    if (container == null) {
+      throw new RestServiceException(InternalKeys.TARGET_CONTAINER_KEY + " is not set",
+          RestServiceErrorCode.InternalServerError);
+    }
+    if (!(container instanceof Container)) {
+      throw new RestServiceException(InternalKeys.TARGET_CONTAINER_KEY + " not instance of Container",
+          RestServiceErrorCode.InternalServerError);
+    }
+    return (Container) container;
   }
 
   /**
