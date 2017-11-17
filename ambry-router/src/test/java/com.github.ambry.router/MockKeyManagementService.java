@@ -23,7 +23,6 @@ import javax.crypto.spec.SecretKeySpec;
  * MockKeyManagementService to assist in testing exception cases
  */
 class MockKeyManagementService extends SingleKeyManagementService {
-
   AtomicReference<GeneralSecurityException> exceptionToThrow = new AtomicReference<>();
 
   MockKeyManagementService(KMSConfig KMSConfig, String defaultKey) throws GeneralSecurityException {

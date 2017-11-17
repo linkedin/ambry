@@ -140,7 +140,7 @@ public class PutManagerTest {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize));
     submitPutsAndAssertSuccess(true);
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 10; i++) {
       // size in [1, chunkSize]
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));

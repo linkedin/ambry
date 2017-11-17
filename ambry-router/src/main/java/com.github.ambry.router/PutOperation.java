@@ -1252,9 +1252,9 @@ class PutOperation {
      */
     void maybeNotifyForFirstChunkCreation() {
       if (indexToChunkIds.get(0) != null) {
-        // reason to check for not null: with encryption in play, there are chances that 2nd chunk's encrypt job callback
-        // was invoked before 1st chunk's. So, 2nd chunk would have been completed, but 1st might have been failed.
-        // In such cases, even though metadata chunk might return some successfully completed chunkIds, the first chunk may be null
+        // reason to check for not null: there are chances that 2nd chunk would completes before the first chunk and
+        // the first chunk failed later. In such cases, even though metadata chunk might return some successfully
+        // completed chunkIds, the first chunk may be null
         String chunkId = firstChunkIdAndProperties.getFirst().getID();
         BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
         notificationSystem.onBlobCreated(chunkId, chunkProperties, NotificationBlobType.DataChunk);
