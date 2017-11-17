@@ -165,7 +165,7 @@ public class BlobId extends StoreKey {
         containerId = stream.readShort();
         break;
       case BLOB_ID_V3:
-        type = BlobIdType.values()[stream.readByte()];
+        type = BlobIdType.values()[stream.readByte() & 0x3];
         datacenterId = stream.readByte();
         accountId = stream.readShort();
         containerId = stream.readShort();
@@ -278,7 +278,7 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
-        idBuf.put((byte) (type.ordinal()));
+        idBuf.put((byte) (type.ordinal() & 0x3));
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);

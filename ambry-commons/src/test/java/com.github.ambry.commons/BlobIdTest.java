@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -100,6 +102,31 @@ public class BlobIdTest {
     BlobId blobId = new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
         referencePartitionId);
     deserializeBlobIdAndAssert(version, blobId.getID());
+    BlobId blobIdSerDed =
+        new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
+    // Ensure that deserialized blob is exactly the same as the original in comparisons.
+    Assert.assertTrue(blobId.equals(blobIdSerDed));
+    Assert.assertTrue(blobIdSerDed.equals(blobId));
+    Assert.assertEquals(blobId.hashCode(), blobIdSerDed.hashCode());
+    Assert.assertEquals(0, blobId.compareTo(blobIdSerDed));
+    Assert.assertEquals(0, blobIdSerDed.compareTo(blobId));
+  }
+
+  /**
+   * Test that the {@link BlobIdType} is honored by V3 and above.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobIdType() throws Exception {
+    if (version >= BLOB_ID_V3) {
+      for (BlobIdType type : BlobIdType.values()) {
+        BlobId blobId = new BlobId(BLOB_ID_V3, type, referenceDatacenterId, referenceAccountId, referenceContainerId,
+            referencePartitionId);
+        BlobId blobIdSerDed =
+            new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
+        assertEquals("The type should match the original's type", type, blobIdSerDed.getType());
+      }
+    }
   }
 
   /**

@@ -24,7 +24,7 @@ import java.util.Properties;
 public class CommonTestUtils {
   /**
    * Get the current active blob id version via {@link RouterConfig}
-   * @return the current active blbo id version.
+   * @return the current active blob id version.
    */
   public static short getCurrentBlobIdVersion() {
     Properties props = new Properties();
