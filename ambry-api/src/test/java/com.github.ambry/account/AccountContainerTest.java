@@ -61,6 +61,10 @@ public class AccountContainerTest {
   private List<JSONObject> containerJsonList;
   private List<Container> refContainers;
 
+  /**
+   * Run this test for all versions of the container schema.
+   * @return the constructor arguments to use.
+   */
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{Container.JSON_VERSION_1}, {Container.JSON_VERSION_2}});
@@ -68,6 +72,7 @@ public class AccountContainerTest {
 
   /**
    * Initialize the metadata in JsonObject for account and container.
+   * @param containerJsonVersion the container JSON version to use in the test.
    * @throws JSONException
    */
   public AccountContainerTest(short containerJsonVersion) throws JSONException {
