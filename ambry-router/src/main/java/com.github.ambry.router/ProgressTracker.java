@@ -13,9 +13,6 @@
  */
 package com.github.ambry.router;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
-
 /**
  * An operation progress tracker that assist in keeping track of the chunk(GetChunk) or an operation(GetBlobInfo) state.
  * Exposes methods like {@link #isDone()} and {@link #hasSucceeded()} to assist in tracking when the operation is complete
@@ -23,21 +20,31 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 class ProgressTracker {
   OperationTracker operationTracker;
-  AtomicBoolean decryptionRequired;
   DecryptionStatusTracker decryptionStatusTracker;
 
   /**
    * Instantiates {@link ProgressTracker}
    * @param operationTracker {@link OperationTracker} instance to assist in tracking the status of the operation based on
    *                                                 requests sent to the storage nodes.
-   * @param decryptionRequired {@link AtomicBoolean} set to {@code true} if decryption is required. {@code false} otherwise
+   */
+  ProgressTracker(OperationTracker operationTracker) {
+    this.operationTracker = operationTracker;
+  }
+
+  /**
+   * Sets the {@link DecryptionStatusTracker}
    * @param decryptionStatusTracker {@link DecryptionStatusTracker} to assist in tracking the status of decryption
    */
-  ProgressTracker(OperationTracker operationTracker, AtomicBoolean decryptionRequired,
-      DecryptionStatusTracker decryptionStatusTracker) {
-    this.operationTracker = operationTracker;
-    this.decryptionRequired = decryptionRequired;
+  void setDecryptionStatusTracker(DecryptionStatusTracker decryptionStatusTracker) {
     this.decryptionStatusTracker = decryptionStatusTracker;
+  }
+
+  void setDecryptionSuccess() {
+    decryptionStatusTracker.setSucceeded();
+  }
+
+  void setDecryptionFailed() {
+    decryptionStatusTracker.setFailed();
   }
 
   /**
@@ -46,7 +53,7 @@ class ProgressTracker {
    * @return {@code true} if the operation has completed.
    */
   boolean isDone() {
-    return operationTracker.isDone() && (!decryptionRequired.get() || decryptionStatusTracker.isDone());
+    return operationTracker.isDone() && (decryptionStatusTracker == null || decryptionStatusTracker.isDone());
   }
 
   /**
@@ -56,6 +63,7 @@ class ProgressTracker {
    * @return {@code true} if the operation has successfully completed. {@code false} if the operation has failed
    */
   boolean hasSucceeded() {
-    return operationTracker.hasSucceeded() && (!decryptionRequired.get() || decryptionStatusTracker.hasSucceeded());
+    return operationTracker.hasSucceeded() && (decryptionStatusTracker == null
+        || decryptionStatusTracker.hasSucceeded());
   }
 }

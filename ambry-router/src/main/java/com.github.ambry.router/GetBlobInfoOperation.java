@@ -37,7 +37,6 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,15 +49,9 @@ import org.slf4j.LoggerFactory;
 class GetBlobInfoOperation extends GetOperation {
   // the callback to use to notify the router about events and state changes
   private final RouterCallback routerCallback;
-  private final OperationTracker operationTracker;
+  private volatile OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
-  private final ProgressTracker progressTracker;
-  private AtomicBoolean decryptionRequired = new AtomicBoolean(false);
-  // used to track decryption job status if applicable
-  private final DecryptionStatusTracker decryptionStatusTracker = new DecryptionStatusTracker();
-  // DecryptCallBackResultInfo that holds all info about decrypt job callback
-  private DecryptCallBackResultInfo decryptCallbackResultInfo;
-  private boolean successfullyDeserialized = false;
+  private volatile ProgressTracker progressTracker;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // map of correlation id to the request metadata for every request issued for this operation.
@@ -91,7 +84,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;
     operationTracker = getOperationTracker(blobId.getPartition());
-    progressTracker = new ProgressTracker(operationTracker, decryptionRequired, decryptionStatusTracker);
+    progressTracker = new ProgressTracker(operationTracker);
   }
 
   @Override
@@ -115,33 +108,11 @@ class GetBlobInfoOperation extends GetOperation {
    */
   @Override
   void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
-    cleanupExpiredInFlightRequests();
     //First, check if any of the existing requests have timed out.
-    maybeProcessCallbacksAndComplete();
+    cleanupExpiredInFlightRequests();
     checkAndMaybeComplete();
     if (!isOperationComplete()) {
       fetchRequests(requestRegistrationCallback);
-    }
-  }
-
-  /**
-   * Maybe process callbacks and complete the operation if applicable. This is a no-op for blobs that doesn't need
-   * any async processing of response. As of now, decryption is the only async processing that could happen if applicable.
-   */
-  private void maybeProcessCallbacksAndComplete() {
-    if (decryptionRequired.get() && decryptCallbackResultInfo.decryptJobComplete) {
-      if (decryptCallbackResultInfo.exception == null) {
-        logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-        operationResult = new GetBlobResultInternal(new GetBlobResult(
-            new BlobInfo(serverBlobProperties, decryptCallbackResultInfo.result.getDecryptedUserMetadata().array()),
-            null), null);
-        decryptionStatusTracker.setSucceeded();
-      } else {
-        logger.trace("Exception {} thrown on decryption for {}", decryptCallbackResultInfo.exception, blobId);
-        setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId,
-            decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
-        decryptionStatusTracker.setFailed();
-      }
     }
   }
 
@@ -355,18 +326,14 @@ class GetBlobInfoOperation extends GetOperation {
     ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
     serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
     ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
-    successfullyDeserialized = true;
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
-      if (operationResult == null) {
-        operationResult =
-            new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null),
-                null);
-      }
+      operationResult =
+          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null),
+              null);
     } else {
       // submit decrypt job
-      decryptCallbackResultInfo = new DecryptCallBackResultInfo();
-      decryptionRequired.set(true);
+      progressTracker.setDecryptionStatusTracker(new DecryptionStatusTracker());
       logger.trace("Submitting decrypt job for {}", blobId);
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
@@ -374,7 +341,19 @@ class GetBlobInfoOperation extends GetOperation {
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
                 logger.trace("Handling decrypt job callback results for {}", blobId);
                 routerMetrics.contentDecryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-                decryptCallbackResultInfo.setResultAndException(result, exception);
+                if (exception == null) {
+                  logger.trace("Successfully updating decrypt job callback results for {}", blobId);
+                  operationResult = new GetBlobResultInternal(
+                      new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
+                          null), null);
+                  progressTracker.setDecryptionSuccess();
+                } else {
+                  logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
+                  setOperationException(
+                      new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
+                          RouterErrorCode.UnexpectedInternalError));
+                }
+                progressTracker.setDecryptionFailed();
                 routerCallback.onPollReady();
               }));
     }
