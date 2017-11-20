@@ -51,6 +51,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,6 +75,7 @@ public class PutManagerTest {
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
+  private final ExecutorService executorService = Executors.newSingleThreadExecutor();
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
@@ -129,6 +132,7 @@ public class PutManagerTest {
     if (router != null) {
       Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     }
+    executorService.shutdown();
   }
 
   /**
@@ -140,7 +144,7 @@ public class PutManagerTest {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize));
     submitPutsAndAssertSuccess(true);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 1; i++) {
       // size in [1, chunkSize]
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
@@ -835,7 +839,10 @@ public class PutManagerTest {
       if (properties.isEncrypted()) {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-        Thread thread = new Thread(
+        // reason to execute via executor service is that, any exception(and assertion failures) thrown by a different
+        // thread than the main thread will not fail the test. With this approach, future.get() will rethrow Exceptions
+        // and Errors as ExecutionException
+        Future<?> future = executorService.submit(new Thread(
             new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService,
                 kms, new Callback<DecryptJob.DecryptJobResult>() {
               @Override
@@ -845,9 +852,8 @@ public class PutManagerTest {
                 Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
                     result.getDecryptedUserMetadata().array());
               }
-            }));
-        thread.start();
-        thread.join();
+            })));
+        future.get();
       } else {
         Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata, request.getUsermetadata().array());
       }
@@ -883,7 +889,10 @@ public class PutManagerTest {
           InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
           byte[] dataBlobContent = Utils.readBytesFromStream(dataBlobStream, dataBlobLength);
           // decrypt and verify the blob content and user-metadata matches
-          Thread thread = new Thread(
+          // reason to execute via executor service is that, any exception(and assertion failures) thrown by a different
+          // thread than the main thread will not fail the test. With this approach, future.get() will rethrow Exceptions
+          // and Errors as ExecutionException
+          Future<?> future = executorService.submit(new Thread(
               new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
                   ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService,
                   kms, new Callback<DecryptJob.DecryptJobResult>() {
@@ -904,9 +913,8 @@ public class PutManagerTest {
                         (originalPutContent.length - 1) % chunkSize + 1, resultSize);
                   }
                 }
-              }));
-          thread.start();
-          thread.join();
+              })));
+          future.get();
           Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
           notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
               dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
@@ -925,7 +933,10 @@ public class PutManagerTest {
       } else {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-        Thread thread = new Thread(
+        // reason to execute via executor service is that, any exception(and assertion failures) thrown by a different
+        // thread than the main thread will not fail the test. With this approach, future.get() will rethrow Exceptions
+        // and Errors as ExecutionException
+        Future<?> future = executorService.submit(new Thread(
             new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content),
                 userMetadata, cryptoService, kms, new Callback<DecryptJob.DecryptJobResult>() {
               @Override
@@ -937,12 +948,11 @@ public class PutManagerTest {
                 Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
                     result.getDecryptedUserMetadata().array());
               }
-            }));
-        thread.start();
-        thread.join();
-        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(), null);
+            })));
+        future.get();
       }
     }
+    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(), null);
   }
 
   /**

@@ -904,12 +904,7 @@ public class GetBlobOperationTest {
                     RouterTestHelpers.haveEquivalentFields(blobProperties, blobInfo.getBlobProperties()));
                 Assert.assertEquals("Blob size should in received blobProperties should be the same as actual",
                     blobSize, blobInfo.getBlobProperties().getBlobSize());
-                if (!blobProperties.isEncrypted()) {
-                  Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
-                } else {
-                  // encrypt and verify userMetadata
-
-                }
+                Assert.assertArrayEquals("User metadata must be the same", userMetadata, blobInfo.getUserMetadata());
                 break;
               case Data:
                 Assert.assertNull("Unexpected blob info in operation result", result.getBlobResult.getBlobInfo());
