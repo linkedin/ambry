@@ -401,13 +401,6 @@ public class BlobId extends StoreKey {
   }
 
   /**
-   * @return The version of this BlobId
-   */
-  protected short getVersion() {
-    return version;
-  }
-
-  /**
    * @return all valid versions of BlobId.
    */
   public static Short[] getAllValidVersions() {
@@ -421,7 +414,9 @@ public class BlobId extends StoreKey {
     /**
      * Indicates natively created BlobId (in the context of a PUT operation)
      */
-    NATIVE, /**
+    NATIVE,
+
+    /**
      * Indicates BlobId that was crafted (for example, converted from an older version) and not natively created in the
      * context of a PUT operation.
      */
