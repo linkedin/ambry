@@ -19,8 +19,8 @@ package com.github.ambry.router;
  * and if yes, whether it succeeded or failed.
  */
 class ProgressTracker {
-  OperationTracker operationTracker;
-  DecryptionStatusTracker decryptionStatusTracker;
+  private final OperationTracker operationTracker;
+  private DecryptionStatusTracker decryptionStatusTracker;
 
   /**
    * Instantiates {@link ProgressTracker}
@@ -32,17 +32,29 @@ class ProgressTracker {
   }
 
   /**
-   * Sets the {@link DecryptionStatusTracker}
-   * @param decryptionStatusTracker {@link DecryptionStatusTracker} to assist in tracking the status of decryption
+   * Starts the {@link DecryptionStatusTracker}
    */
-  void setDecryptionStatusTracker(DecryptionStatusTracker decryptionStatusTracker) {
-    this.decryptionStatusTracker = decryptionStatusTracker;
+  void startDecryptionTracker() {
+    this.decryptionStatusTracker = new DecryptionStatusTracker();
   }
 
+  /**
+   * @return {@code true} if decryption is required. {@code false} otherwise
+   */
+  boolean isDecryptionRequired() {
+    return decryptionStatusTracker != null;
+  }
+
+  /**
+   * Sets decryption as succeeded
+   */
   void setDecryptionSuccess() {
     decryptionStatusTracker.setSucceeded();
   }
 
+  /**
+   * Sets decryption as failed
+   */
   void setDecryptionFailed() {
     decryptionStatusTracker.setFailed();
   }

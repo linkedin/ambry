@@ -333,7 +333,7 @@ class GetBlobInfoOperation extends GetOperation {
               null);
     } else {
       // submit decrypt job
-      progressTracker.setDecryptionStatusTracker(new DecryptionStatusTracker());
+      progressTracker.startDecryptionTracker();
       logger.trace("Submitting decrypt job for {}", blobId);
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
