@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.Random;
 import org.junit.Assert;
@@ -39,8 +40,8 @@ public class RouterUtilsTest {
       fail("Should not get any exception.");
     }
     partition = clusterMap.getWritablePartitionIds().get(0);
-    originalBlobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), Utils.getRandomShort(random),
-        Utils.getRandomShort(random), partition);
+    originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        clusterMap.getLocalDatacenterId(), Utils.getRandomShort(random), Utils.getRandomShort(random), partition);
     blobIdStr = originalBlobId.getID();
   }
 

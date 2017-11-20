@@ -33,31 +33,42 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 
 
 /**
- * <p>
- *   BlobId primarily consists of a uuid to uniquely identifies a stored blob. A blobId is a reference that is
- *   returned back to a caller when posting a blob, and later will be required to fetch the blob.
- * </p>
- * <p>
- *   There are two versions of format for BlobId de/serialization. Version 1, which includes {@code partitionId}
- *   of the blob. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this
- *   blob is assigned.
- * </p>
+ * BlobId consists of a uuid to uniquely identify a stored blob. A blobId is a reference that is
+ * returned back to a caller when posting a blob, and later will be required to fetch the blob. The id can
+ * also embed other important metadata associated with the blob, and these are version dependent.
+ * <br>
+ * There are three BlobId versions:
+ * <br>
+ * Version 1, which includes {@code partitionId}
+ * of the blob. The {@code partitionId} is the {@link PartitionId} to which this blob is assigned.
+ * <br>
  * <pre>
  * +---------------------------------------------+
  * | version | partitionId | uuidSize | uuid     |
  * | (short) | (n bytes)   | (int)    | (n bytes)|
  * +---------------------------------------------+
  * </pre>
- * <p>
- *   Version 2, which includes {@code flag}, {@code accountId}, {@code containerId}, {@code datacenterId},
- *   and {@code partitionId} of the blob. {@code flag} is a single byte that carries the meta information
- *   for this blobId. It will be a place holder and assigned {@link #DEFAULT_FLAG} (i.e., no bit is set)
- *   before the assignment of each bit is determined. The {@code datacenterId} is the id of the datacenter
- *   where this blob was originally posted (not through replication). The {@code accountId} is the id of
- *   the {@link Account} the blob belongs to. The {@code containerId} is the {@link Container} the blob
- *   belongs to. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this
- *   blob is assigned.
- * </p>
+ * <br>
+ * Version 2, which includes {@code flag}, {@code accountId}, {@code containerId}, {@code datacenterId},
+ * and {@code partitionId} of the blob. {@code flag} is a single byte that is unused for V2. The {@code datacenterId} is
+ * the id of the datacenter where this blob was originally posted (not through replication). The {@code accountId} is
+ * the id of the {@link Account} the blob belongs to. The {@code containerId} is the {@link Container} the blob
+ * belongs to. The {@code partitionId} is the {@link com.github.ambry.clustermap.Partition} to which this
+ * blob is assigned.
+ * <br>
+ * <pre>
+ * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
+ * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
+ * | (short) | (byte)| (byte)       | (short)   | (short)     | (n bytes)   | (int)    | (n bytes)|
+ * +---------+----------------------+-----------+-------------+-------------+----------+----------+
+ * </pre>
+ * <br>
+ * Version 3, which is the same as Version 2 with one exception. The least significant bit of the flag byte will be used
+ * to distinguish between different types of ids. V3 makes the distinction of two types of ids: One that is created
+ * natively by the router in the context of a PUT operation; and the second that is "crafted" outside of the router.
+ * Crafting an id outside of the router is useful if we want to convert V1 and V2 ids that exist in storage without any
+ * ownership information (accounts and containers) associated with them into a V3 version that has the right ownership.
+ * <br>
  * <pre>
  * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
  * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
@@ -65,55 +76,56 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * +---------+----------------------+-----------+-------------+-------------+----------+----------+
  * </pre>
  */
+
 public class BlobId extends StoreKey {
-  public static final byte DEFAULT_FLAG = 0;
   public static final short BLOB_ID_V1 = 1;
   public static final short BLOB_ID_V2 = 2;
-  public static final short CURRENT_VERSION = BLOB_ID_V2;
+  public static final short BLOB_ID_V3 = 3;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
   private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
   private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
-  // the version to indicate the serialized format.
-  private final Short version;
-  private final Byte flag;
+  private final short version;
+  private final BlobIdType type;
   private final Byte datacenterId;
   private final Short accountId;
   private final Short containerId;
   private final PartitionId partitionId;
-  protected final String uuid;
+  private final String uuid;
 
   /**
-   * Constructs a new BlobId by taking arguments for the required fields. The constructed BlobId will be serialized
-   * into {@link #CURRENT_VERSION}. If {@code CURRENT_VERSION == BLOB_ID_V1}, it will serialize itself into
-   * {@code BLOB_ID_V1}, ignoring {@code flag}, {@code datacenterId}, {@code containerId}, and {@code containerId}
-   * regardless they are set or not.
-   * @param flag A byte to embed additional information of this blobId. Will be reset to {@link #DEFAULT_FLAG} if
-   *             {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
-   * @param datacenterId The id of the datacenter to be embedded into the blob. Will be reset to
-   *             {@link ClusterMapUtils#UNKNOWN_DATACENTER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
-   * @param accountId The id of the {@link Account} to be embedded into the blob. Will be reset to
-   *             {@link Account#UNKNOWN_ACCOUNT_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
-   * @param containerId The id of the {@link Container} to be embedded into the blob. Will be reset to
-   *             {@link Container#UNKNOWN_CONTAINER_ID} if {@link #CURRENT_VERSION} is {@link #BLOB_ID_V1}.
+   * Constructs a new BlobId by taking arguments for the required fields.
+   * Not all the fields in the constructor may be used in constructing it. The current active version determines what
+   * fields will be used.
+   * @param version the version in which this blob should be created.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    */
-  public BlobId(byte flag, byte datacenterId, short accountId, short containerId, PartitionId partitionId) {
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
+      PartitionId partitionId) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
-    version = getCurrentVersion();
     switch (version) {
       case BLOB_ID_V1:
-        this.flag = DEFAULT_FLAG;
+        this.type = BlobIdType.NATIVE;
         this.datacenterId = UNKNOWN_DATACENTER_ID;
         this.accountId = UNKNOWN_ACCOUNT_ID;
         this.containerId = UNKNOWN_CONTAINER_ID;
         break;
       case BLOB_ID_V2:
-        this.flag = flag;
+        this.type = BlobIdType.NATIVE;
+        this.datacenterId = datacenterId;
+        this.accountId = accountId;
+        this.containerId = containerId;
+        break;
+      case BLOB_ID_V3:
+        this.type = type;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
@@ -121,6 +133,7 @@ public class BlobId extends StoreKey {
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
+    this.version = version;
     this.partitionId = partitionId;
     uuid = UUID.randomUUID().toString();
   }
@@ -139,13 +152,20 @@ public class BlobId extends StoreKey {
     version = stream.readShort();
     switch (version) {
       case BLOB_ID_V1:
-        flag = DEFAULT_FLAG;
+        type = BlobIdType.NATIVE;
         datacenterId = UNKNOWN_DATACENTER_ID;
         accountId = UNKNOWN_ACCOUNT_ID;
         containerId = UNKNOWN_CONTAINER_ID;
         break;
       case BLOB_ID_V2:
-        flag = stream.readByte();
+        stream.readByte();
+        type = BlobIdType.NATIVE;
+        datacenterId = stream.readByte();
+        accountId = stream.readShort();
+        containerId = stream.readShort();
+        break;
+      case BLOB_ID_V3:
+        type = BlobIdType.values()[stream.readByte() & 0x3];
         datacenterId = stream.readByte();
         accountId = stream.readShort();
         containerId = stream.readShort();
@@ -197,6 +217,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V1:
         return sizeForBlobIdV1;
       case BLOB_ID_V2:
+      case BLOB_ID_V3:
         return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
       default:
@@ -240,12 +261,12 @@ public class BlobId extends StoreKey {
   }
 
   /**
-   * Gets the flag metadata of this blobId. If this information was not available when the blobId was formed, it
-   * will return {@link #DEFAULT_FLAG}.
+   * Gets the BlobId type of this blobId. If this information was not available when the blobId was formed, it
+   * will return {@link BlobIdType#NATIVE}.
    * @return The flag of the blobId.
    */
-  public byte getFlag() {
-    return flag;
+  public BlobIdType getType() {
+    return type;
   }
 
   @Override
@@ -256,7 +277,8 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V1:
         break;
       case BLOB_ID_V2:
-        idBuf.put(flag);
+      case BLOB_ID_V3:
+        idBuf.put((byte) (type.ordinal() & 0x3));
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);
@@ -284,7 +306,8 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V1:
         break;
       case BLOB_ID_V2:
-        sb.append(":").append(flag);
+      case BLOB_ID_V3:
+        sb.append(":").append(type);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
         sb.append(":").append(containerId);
@@ -302,10 +325,28 @@ public class BlobId extends StoreKey {
     return getID();
   }
 
+  /**
+   * Compare two BlobIds.
+   * <br>
+   * <br>
+   * Starting with V3, only UUIDs will be used for comparison. UUID is the component ensuring uniqueness of
+   * different blob ids. Rest of the information embedded in the BlobId is really the associated "metadata"
+   * and is not meant for distinguishing blobs.
+   * <br>
+   * @param o the StoreKey to compare with.
+   * @return 0 if this key is equal to the given key; a value less than 0 if this key is less than the given key;
+   *         and a value greater than 0 if this key is greater than the given key.
+   */
   @Override
   public int compareTo(StoreKey o) {
+    if (this == o) {
+      return 0;
+    }
     BlobId other = (BlobId) o;
-    int result = version.compareTo(other.version);
+    int result = 0;
+    if (version < BLOB_ID_V3 || other.version < BLOB_ID_V3) {
+      result = Short.compare(version, other.version);
+    }
     if (result == 0) {
       switch (version) {
         case BLOB_ID_V1:
@@ -315,7 +356,7 @@ public class BlobId extends StoreKey {
           }
           break;
         case BLOB_ID_V2:
-          result = flag.compareTo(other.flag);
+          result = type.compareTo(other.type);
           if (result == 0) {
             result = datacenterId.compareTo(other.datacenterId);
             if (result == 0) {
@@ -331,6 +372,9 @@ public class BlobId extends StoreKey {
               }
             }
           }
+          break;
+        case BLOB_ID_V3:
+          result = uuid.compareTo(other.uuid);
           break;
         default:
           throw new IllegalArgumentException("Unrecognized blobId version " + version);
@@ -353,21 +397,30 @@ public class BlobId extends StoreKey {
 
   @Override
   public int hashCode() {
-    return Utils.hashcode(new Object[]{version, partitionId, uuid});
+    return uuid.hashCode();
   }
 
-  /**<p>
-   *   Gets the value of {@link #CURRENT_VERSION}.
-   * </p>
-   * <p>
-   *   It is typically not a good practice to call overridable methods from constructor. However, there could not be
-   *   cleaner way to set the {@link #version} field by either calling this method, or by reading from an input stream
-   *   from {@link BlobId#BlobId(String, ClusterMap)}, and also because this method simply returns a static final value
-   *   that does not depend on the state of an instance.
-   * </p>
-   * @return The value of {@link #CURRENT_VERSION}.
+  /**
+   * @return all valid versions of BlobId.
    */
-  protected short getCurrentVersion() {
-    return CURRENT_VERSION;
+  public static Short[] getAllValidVersions() {
+    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3};
+  }
+
+  /**
+   * Indicates the context in which a {@link BlobId} gets created.
+   */
+  public enum BlobIdType {
+    /**
+     * Indicates natively created BlobId (in the context of a PUT operation)
+     */
+    NATIVE,
+
+    /**
+     * Indicates BlobId that was crafted (for example, converted from an older version) and not natively created in the
+     * context of a PUT operation.
+     */
+    CRAFTED
   }
 }
+

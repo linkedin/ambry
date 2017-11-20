@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
@@ -261,8 +262,9 @@ public class FrontendIntegrationTest {
     List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
-      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, partitionId);
+      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+          partitionId);
       FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
           blobId.getID() + "/" + RestUtils.SubResource.Replicas, Unpooled.buffer(0));
       Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();

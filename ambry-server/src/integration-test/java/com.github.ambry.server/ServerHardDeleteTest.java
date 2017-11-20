@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
@@ -263,9 +264,9 @@ public class ServerHardDeleteTest {
     PartitionId chosenPartition = partitionIds.get(0);
     blobIdList = new ArrayList<>(9);
     for (int i = 0; i < 9; i++) {
-      blobIdList.add(
-          new BlobId(BlobId.DEFAULT_FLAG, mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(),
-              properties.get(i).getContainerId(), chosenPartition));
+      blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
+          chosenPartition));
     }
 
     BlockingChannel channel =

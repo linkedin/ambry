@@ -22,6 +22,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -59,9 +60,13 @@ public class MessageInfoAndMetadataListSerDeTest {
     short[] accountIds = {100, 101, 102, 103};
     short[] containerIds = {10, 11, 12, 13};
     StoreKey[] keys =
-        {new BlobId((byte) 0, (byte) 0, accountIds[0], containerIds[0], partitionId), new BlobId((byte) 0, (byte) 0,
-            accountIds[1], containerIds[1], partitionId), new BlobId((byte) 0, (byte) 0, accountIds[2], containerIds[2],
-            partitionId), new BlobId((byte) 0, (byte) 0, accountIds[3], containerIds[3], partitionId)};
+        {new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
+            accountIds[0], containerIds[0], partitionId), new BlobId(
+            TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[1],
+            containerIds[1], partitionId), new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()),
+            BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2], partitionId), new BlobId(
+            TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[3],
+            containerIds[3], partitionId)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
     long[] operationTimes = {SystemTime.getInstance().milliseconds(),
         SystemTime.getInstance().milliseconds() + 10,

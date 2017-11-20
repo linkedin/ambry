@@ -26,8 +26,8 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdV1;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
@@ -112,6 +112,7 @@ public class AmbryBlobStorageServiceTest {
   private final ClusterMap clusterMap;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
+  private final short blobIdVersion;
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -152,10 +153,11 @@ public class AmbryBlobStorageServiceTest {
         refContainer = container;
       }
     }
+    blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
-    referenceBlobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
+    referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+        Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0));
     referenceBlobIdStr = referenceBlobId.getID();
     ambryBlobStorageService = getAmbryBlobStorageService();
     responseHandler.start();
@@ -475,55 +477,58 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void injectionAccountAndContainerForGetHeadDeleteBlobIdV2Test() throws Exception {
-    populateAccountService();
+  public void injectionAccountAndContainerForGetHeadDeleteBlobIdTest() throws Exception {
+    for (short version : new Short[]{BlobId.BLOB_ID_V2, BlobId.BLOB_ID_V3}) {
+      populateAccountService();
 
-    // aid=refAId, cid=refCId
-    String blobId =
-        new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), refContainer.getId(),
-            clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, refAccount, refContainer, RestServiceErrorCode.NotFound);
+      // aid=refAId, cid=refCId
+      String blobId =
+          new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+              refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, refAccount, refContainer, RestServiceErrorCode.NotFound);
 
-    // aid=refAId, cid=unknownCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
+      // aid=refAId, cid=unknownCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+          Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
-    // aid=refAId, cid=nonExistCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(), (short) -1234,
-        clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
+      // aid=refAId, cid=nonExistCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
+          (short) -1234, clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
-    // aid=unknownAId, cid=refCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
+      // aid=unknownAId, cid=refCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+          Account.UNKNOWN_ACCOUNT_ID, refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
-    // aid=unknownAId, cid=unknownCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
-        RestServiceErrorCode.NotFound);
+      // aid=unknownAId, cid=unknownCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+          clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
+          RestServiceErrorCode.NotFound);
 
-    // aid=unknownAId, cid=nonExistCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-        (short) -1234, clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
+      // aid=unknownAId, cid=nonExistCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+          Account.UNKNOWN_ACCOUNT_ID, (short) -1234, clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
-    // aid=nonExistAId, cid=refCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, refContainer.getId(),
-        clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
+      // aid=nonExistAId, cid=refCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+          refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
-    // aid=nonExistAId, cid=unknownCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
-        Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
+      // aid=nonExistAId, cid=unknownCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+          Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
-    // aid=nonExistAId, cid=nonExistCId
-    blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234, (short) -11,
-        clusterMap.getWritablePartitionIds().get(0)).getID();
-    verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
+      // aid=nonExistAId, cid=nonExistCId
+      blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
+          (short) -11, clusterMap.getWritablePartitionIds().get(0)).getID();
+      verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
+    }
   }
 
   /**
@@ -540,9 +545,9 @@ public class AmbryBlobStorageServiceTest {
   public void injectionAccountAndContainerForGetHeadDeleteBlobIdV1Test() throws Exception {
     populateAccountService();
     // it does not matter what AID and CID are supplied when constructing blobId in v1.
-    String blobId = new BlobIdV1(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-        refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
     // expect unknown account and container for v1 blob IDs that went through request processing only.
+    String blobId = new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+        refAccount.getId(), refContainer.getId(), clusterMap.getWritablePartitionIds().get(0)).getID();
     verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
         RestServiceErrorCode.NotFound);
 
@@ -776,8 +781,8 @@ public class AmbryBlobStorageServiceTest {
     List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
-      BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID,
-          Container.UNKNOWN_CONTAINER_ID, partitionId);
+      BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
+          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId);
       RestRequest restRequest =
           createRestRequest(RestMethod.GET, blobId.getID() + "/" + RestUtils.SubResource.Replicas, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -933,6 +938,7 @@ public class AmbryBlobStorageServiceTest {
    * @throws UnsupportedEncodingException
    * @throws URISyntaxException
    */
+
   private RestRequest createRestRequest(RestMethod restMethod, String uri, JSONObject headers,
       List<ByteBuffer> contents) throws JSONException, UnsupportedEncodingException, URISyntaxException {
     JSONObject request = new JSONObject();
@@ -1608,8 +1614,8 @@ public class AmbryBlobStorageServiceTest {
         contents = new ArrayList<>(1);
         contents.add(null);
       }
-      String blobIdStr = new BlobId((byte) -1, (byte) -1, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-          clusterMap.getAllPartitionIds().get(0)).getID();
+      String blobIdStr = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds().get(0)).getID();
       try {
         doOperation(createRestRequest(restMethod, blobIdStr, headers, contents), new MockRestResponseChannel());
         fail("Operation " + restMethod
@@ -1955,13 +1961,11 @@ public class AmbryBlobStorageServiceTest {
     Container legacyContainerForPublicBlob =
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false, false, false,
-            false,
-            refAccount.getId()).build();
+            false, refAccount.getId()).build();
     Container legacyContainerForPrivateBlob =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
             Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", false, false, true,
-            false,
-            refAccount.getId()).build();
+            false, refAccount.getId()).build();
     Account accountWithTwoDefaultContainers =
         new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
             .addOrUpdateContainer(legacyContainerForPublicBlob)

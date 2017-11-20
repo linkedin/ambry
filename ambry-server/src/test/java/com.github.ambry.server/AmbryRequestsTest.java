@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
@@ -433,13 +434,14 @@ public class AmbryRequestsTest {
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = UtilsTest.getRandomString(10);
-      BlobId blobId =
-          new BlobId(BlobId.DEFAULT_FLAG, ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-              Utils.getRandomShort(TestUtils.RANDOM), id);
+      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), id);
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:
-          BlobProperties properties = new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
+          BlobProperties properties =
+              new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
           request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
               ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
           break;

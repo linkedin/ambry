@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -286,21 +287,22 @@ public class ServerWritePerformance {
 
   public static class ServerWritePerfRun implements Runnable {
 
-    private Throttler throttler;
-    private AtomicBoolean isShutdown;
-    private CountDownLatch latch;
-    private ClusterMap clusterMap;
-    private Random rand = new Random();
-    private int minBlobSize;
-    private int maxBlobSize;
-    private FileWriter blobIdWriter;
-    private FileWriter performanceWriter;
-    private AtomicLong totalTimeTaken;
-    private AtomicLong totalWrites;
-    private long measurementIntervalNs;
-    private boolean enableVerboseLogging;
-    private int threadIndex;
-    private ConnectionPool connectionPool;
+    private final Throttler throttler;
+    private final AtomicBoolean isShutdown;
+    private final CountDownLatch latch;
+    private final ClusterMap clusterMap;
+    private final Random rand = new Random();
+    private final int minBlobSize;
+    private final int maxBlobSize;
+    private final FileWriter blobIdWriter;
+    private final FileWriter performanceWriter;
+    private final AtomicLong totalTimeTaken;
+    private final AtomicLong totalWrites;
+    private final long measurementIntervalNs;
+    private final boolean enableVerboseLogging;
+    private final int threadIndex;
+    private final ConnectionPool connectionPool;
+    private final short blobIdVersion;
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
         int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
@@ -320,6 +322,10 @@ public class ServerWritePerformance {
       this.measurementIntervalNs = measurementIntervalNs;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
+      Properties props = new Properties();
+      props.setProperty("router.hostname", "localhost");
+      props.setProperty("router.datacenter.name", "localDC");
+      blobIdVersion = new RouterConfig(new VerifiableProperties(props)).routerBlobidCurrentVersion;
     }
 
     public void run() {
@@ -343,8 +349,8 @@ public class ServerWritePerformance {
             List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
-            BlobId blobId = new BlobId(BlobId.DEFAULT_FLAG, clusterMap.getLocalDatacenterId(), props.getAccountId(),
-                props.getContainerId(), partitionId);
+            BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+                props.getAccountId(), props.getContainerId(), partitionId);
             PutRequest putRequest =
                 new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
                     props.getBlobSize(), BlobType.DataBlob, null);

@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
@@ -194,11 +195,12 @@ public class IndexWritePerformance {
   }
 
   public static class IndexWritePerfRun implements Runnable {
-    private ArrayList<BlobIndexMetrics> indexesWithMetrics;
-    private Throttler throttler;
-    private AtomicBoolean isShutdown;
-    private CountDownLatch latch;
-    private ClusterMap map;
+    private final ArrayList<BlobIndexMetrics> indexesWithMetrics;
+    private final Throttler throttler;
+    private final AtomicBoolean isShutdown;
+    private final CountDownLatch latch;
+    private final ClusterMap map;
+    private final short blobIdVersion;
 
     public IndexWritePerfRun(ArrayList<BlobIndexMetrics> indexesWithMetrics, Throttler throttler,
         AtomicBoolean isShutdown, CountDownLatch latch, ClusterMap map) {
@@ -207,6 +209,10 @@ public class IndexWritePerformance {
       this.isShutdown = isShutdown;
       this.latch = latch;
       this.map = map;
+      Properties props = new Properties();
+      props.setProperty("router.hostname", "localhost");
+      props.setProperty("router.datacenter.name", "localDC");
+      blobIdVersion = new RouterConfig(new VerifiableProperties(props)).routerBlobidCurrentVersion;
     }
 
     public void run() {
@@ -220,9 +226,8 @@ public class IndexWritePerformance {
           // Does not matter what partition we use
           PartitionId partition = map.getWritablePartitionIds().get(0);
           indexesWithMetrics.get(indexToUse)
-              .addToIndexRandomData(
-                  new BlobId(BlobId.DEFAULT_FLAG, map.getLocalDatacenterId(), Account.UNKNOWN_ACCOUNT_ID,
-                      Container.UNKNOWN_CONTAINER_ID, partition));
+              .addToIndexRandomData(new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, map.getLocalDatacenterId(),
+                  Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partition));
           throttler.maybeThrottle(1);
         }
       } catch (Exception e) {

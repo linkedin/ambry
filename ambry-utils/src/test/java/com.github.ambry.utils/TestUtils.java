@@ -76,6 +76,15 @@ public class TestUtils {
   }
 
   /**
+   * Gets a random element from the given array of elements.
+   * @param elements the array of elements.
+   * @param <T> the type of the elements.
+   */
+  public static <T> T getRandomElement(T[] elements) {
+    return elements[RANDOM.nextInt(elements.length)];
+  }
+
+  /**
    * Awaits on the passed-in {@link CountDownLatch}. If times out throws an exception.
    * @param latch The latch to await on.
    * @param timeoutMs Timeout in millisecond.
