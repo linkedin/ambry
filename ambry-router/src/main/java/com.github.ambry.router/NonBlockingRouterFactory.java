@@ -59,7 +59,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
    * @param sslFactory the {@link SSLFactory} to support SSL transmissions. Required if SSL is enabled for any
    *                   datacenters.
-   * @throws IllegalArgumentException if any of the arguments are null.
+   * @throws Exception if any of the arguments are null or if instantiation of KMS or CryptoService fails
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
@@ -98,15 +98,14 @@ public class NonBlockingRouterFactory implements RouterFactory {
   /**
    * Construct and return a {@link NonBlockingRouter}
    * @return a {@link NonBlockingRouter}
-   * @throws InstantiationException
    */
   @Override
-  public Router getRouter() throws InstantiationException {
+  public Router getRouter() {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
           kms, cryptoService, cryptoJobHandler, time);
     } catch (IOException e) {
-      throw new IllegalStateException("Error instantiating NonBlocking Router", e);
+      throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }
   }
 }

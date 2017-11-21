@@ -89,9 +89,9 @@ public class NonBlockingRouterTest {
   private final KeyManagementService kms;
   private final String singleKeyForKMS;
   private final CryptoService cryptoService;
-  private final CryptoJobHandler cryptoJobHandler;
   private final MockClusterMap mockClusterMap;
   private final boolean testEncryption;
+  private CryptoJobHandler cryptoJobHandler;
 
   // Request params;
   BlobProperties putBlobProperties;
@@ -659,12 +659,12 @@ public class NonBlockingRouterTest {
     NetworkClient networkClient =
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
-    CryptoJobHandler execLocal = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", localKMS, cryptoService,
-        execLocal, mockTime);
+        cryptoJobHandler, mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -680,8 +680,8 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
         new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService, execLocal,
-        mockTime);
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
+        cryptoJobHandler, mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
@@ -769,7 +769,7 @@ public class NonBlockingRouterTest {
     // Poll once again so that the operation gets a chance to complete.
     allRequests.clear();
     if (testEncryption) {
-      awaitOpCompletionOrTimeOut(opHelper, futureResult);
+      opHelper.awaitOpCompletionOrTimeOut(futureResult);
     } else {
       opHelper.pollOpManager(allRequests);
     }
@@ -857,7 +857,7 @@ public class NonBlockingRouterTest {
     }
     allRequests.clear();
     if (testEncryption) {
-      awaitOpCompletionOrTimeOut(opHelper, futureResult);
+      opHelper.awaitOpCompletionOrTimeOut(futureResult);
     } else {
       opHelper.pollOpManager(allRequests);
     }
@@ -882,24 +882,6 @@ public class NonBlockingRouterTest {
       Assert.assertFalse("Router should be closed if there are no worker threads running", router.isOpen());
       Assert.assertEquals("All operations should have completed if the router is closed", 0,
           router.getOperationsCount());
-    }
-  }
-
-  /**
-   * Polls operation helper at regular intervals until the operation is complete or timeout is reached
-   * @param opHelper {@link OperationHelper} to be polled
-   * @param futureResult {@link FutureResult} that needs to be tested for completion
-   * @throws InterruptedException
-   */
-  private void awaitOpCompletionOrTimeOut(OperationHelper opHelper, FutureResult futureResult)
-      throws InterruptedException {
-    int timer = 0;
-    List<RequestInfo> allRequests = new ArrayList<>();
-    while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {
-      opHelper.pollOpManager(allRequests);
-      Thread.sleep(50);
-      timer += 50;
-      allRequests.clear();
     }
   }
 
@@ -996,6 +978,22 @@ public class NonBlockingRouterTest {
         case DELETE:
           deleteManager.poll(requestInfos);
           break;
+      }
+    }
+
+    /**
+     * Polls all managers at regular intervals until the operation is complete or timeout is reached
+     * @param futureResult {@link FutureResult} that needs to be tested for completion
+     * @throws InterruptedException
+     */
+    void awaitOpCompletionOrTimeOut(FutureResult futureResult) throws InterruptedException {
+      int timer = 0;
+      List<RequestInfo> allRequests = new ArrayList<>();
+      while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {
+        pollOpManager(allRequests);
+        Thread.sleep(50);
+        timer += 50;
+        allRequests.clear();
       }
     }
 

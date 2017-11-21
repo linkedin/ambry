@@ -197,9 +197,7 @@ public class CryptoJobHandlerTest {
                   } else {
                     assertTrue("Exception cause should have been GeneralSecurityException",
                         exception instanceof GeneralSecurityException);
-                    assertNull("Encrypted contents should have been null", result.getEncryptedBlobContent());
-                    assertNull("Encrypted user-metadata should have been null", result.getEncryptedUserMetadata());
-                    assertNull("Encrypted key should have been null", result.getEncryptedKey());
+                    assertNull("Result should have been null", result);
                   }
                 }));
       }
@@ -436,9 +434,7 @@ public class CryptoJobHandlerTest {
         assertNotNull("Exception should have been thrown to encrypt contents for " + blobId, exception);
         assertTrue("Exception cause should have been GeneralSecurityException",
             exception instanceof GeneralSecurityException);
-        assertNull("Encrypted contents should have been null", encryptJobResult.getEncryptedBlobContent());
-        assertNull("Encrypted user-metadata should have been null", encryptJobResult.getEncryptedUserMetadata());
-        assertNull("Encrypted key should have been null", encryptJobResult.getEncryptedKey());
+        assertNull("Result should have been null", encryptJobResult);
       }
     }
   }

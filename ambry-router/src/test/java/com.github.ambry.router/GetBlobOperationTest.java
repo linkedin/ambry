@@ -466,17 +466,9 @@ public class GetBlobOperationTest {
       GetBlobOperation op = createOperationAndComplete(null);
       assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
 
-      // composite blob : multiple of chunk size
+      // composite blob
       kms.exceptionToThrow.set(null);
       blobSize = maxChunkSize * random.nextInt(10);
-      doPut();
-      kms.exceptionToThrow.set(GSE);
-      op = createOperationAndComplete(null);
-      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
-
-      // composite blob : not a multiple of chunk size
-      kms.exceptionToThrow.set(null);
-      blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
       doPut();
       kms.exceptionToThrow.set(GSE);
       op = createOperationAndComplete(null);
@@ -498,17 +490,9 @@ public class GetBlobOperationTest {
       GetBlobOperation op = createOperationAndComplete(null);
       assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
 
-      // composite blob : multiple of chunk size
+      // composite blob
       cryptoService.exceptionOnDecryption.set(null);
       blobSize = maxChunkSize * random.nextInt(10);
-      doPut();
-      cryptoService.exceptionOnDecryption.set(GSE);
-      op = createOperationAndComplete(null);
-      assertFailureAndCheckErrorCode(op, RouterErrorCode.UnexpectedInternalError);
-
-      // composite blob : not a multiple of chunk size
-      cryptoService.exceptionOnDecryption.set(null);
-      blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
       doPut();
       cryptoService.exceptionOnDecryption.set(GSE);
       op = createOperationAndComplete(null);

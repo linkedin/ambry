@@ -257,23 +257,3 @@ class GetRequestInfo {
   }
 }
 
-/**
- * Holds info about decryption job callback
- */
-class DecryptCallBackResultInfo {
-  boolean decryptJobComplete;
-  Exception exception;
-  DecryptJob.DecryptJobResult result;
-
-  /**
-   * Sets the result and exception from decrypt job callback
-   * @param result {@link DecryptJob.DecryptJobResult} from the decrypt job callback. Could be null on failure.
-   * @param exception {@link Exception} from the decrypt job callback. Could be null if the decrypt job succeeded.
-   */
-  void setResultAndException(DecryptJob.DecryptJobResult result, Exception exception) {
-    this.result = result;
-    this.exception = exception;
-    this.decryptJobComplete = true;
-  }
-}
-

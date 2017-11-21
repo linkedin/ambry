@@ -47,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -79,7 +81,7 @@ public class GetBlobInfoOperationTest {
   private final ResponseHandler responseHandler;
   private final MockNetworkClientFactory networkClientFactory;
   private final NetworkClient networkClient;
-  private final RouterCallback routerCallback;
+  private MockRouterCallback routerCallback;
   private final MockTime time = new MockTime();
   private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
   private final NonBlockingRouter router;
@@ -159,7 +161,7 @@ public class GetBlobInfoOperationTest {
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
     networkClient = networkClientFactory.getNetworkClient();
-    routerCallback = new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>());
+    routerCallback = new MockRouterCallback(networkClient, Collections.EMPTY_LIST);
   }
 
   @After
@@ -236,6 +238,10 @@ public class GetBlobInfoOperationTest {
     Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
         correlationIdToGetOperation.size());
 
+    CountDownLatch onPollLatch = new CountDownLatch(1);
+    if (testEncryption) {
+      routerCallback.setOnPollLatch(onPollLatch);
+    }
     List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
     for (ResponseInfo responseInfo : responses) {
       GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
@@ -245,15 +251,9 @@ public class GetBlobInfoOperationTest {
         break;
       }
     }
-
     if (testEncryption) {
-      int timeout = 1000;
-      int timeSoFar = 0;
-      while (timeSoFar < timeout && !op.isOperationComplete()) {
-        op.poll(requestRegistrationCallback);
-        Thread.sleep(10);
-        timeSoFar += 10;
-      }
+      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
+      op.poll(requestRegistrationCallback);
     }
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     assertSuccess(op);
@@ -530,6 +530,9 @@ public class GetBlobInfoOperationTest {
     Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
         correlationIdToGetOperation.size());
 
+    CountDownLatch onPollLatch = new CountDownLatch(1);
+    routerCallback.setOnPollLatch(onPollLatch);
+
     List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
     for (ResponseInfo responseInfo : responses) {
       GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
@@ -540,12 +543,9 @@ public class GetBlobInfoOperationTest {
       }
     }
 
-    int timeout = 500;
-    int timeSoFar = 0;
-    while (timeSoFar < timeout && !op.isOperationComplete()) {
+    if (!op.isOperationComplete()) {
+      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
       op.poll(requestRegistrationCallback);
-      Thread.sleep(10);
-      timeSoFar += 10;
     }
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     RouterException routerException = (RouterException) op.getOperationException();
@@ -601,6 +601,34 @@ public class GetBlobInfoOperationTest {
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     return properties;
+  }
+}
+
+/**
+ * Mocks {@link RouterCallback}
+ */
+class MockRouterCallback extends RouterCallback {
+
+  private CountDownLatch onPollLatch;
+
+  MockRouterCallback(NetworkClient networkClient, List<BackgroundDeleteRequest> backgroundDeleteRequests) {
+    super(networkClient, backgroundDeleteRequests);
+  }
+
+  @Override
+  public void onPollReady() {
+    super.onPollReady();
+    if (onPollLatch != null) {
+      onPollLatch.countDown();
+    }
+  }
+
+  /**
+   * Sets {@link CountDownLatch} to be counted down on {@link #onPollReady()}
+   * @param onPollLatch {@link CountDownLatch} that needs to be set
+   */
+  void setOnPollLatch(CountDownLatch onPollLatch) {
+    this.onPollLatch = onPollLatch;
   }
 }
 

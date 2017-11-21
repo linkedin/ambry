@@ -49,9 +49,9 @@ import org.slf4j.LoggerFactory;
 class GetBlobInfoOperation extends GetOperation {
   // the callback to use to notify the router about events and state changes
   private final RouterCallback routerCallback;
-  private volatile OperationTracker operationTracker;
+  private final OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
-  private volatile ProgressTracker progressTracker;
+  private final ProgressTracker progressTracker;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // map of correlation id to the request metadata for every request issued for this operation.
@@ -333,7 +333,7 @@ class GetBlobInfoOperation extends GetOperation {
               null);
     } else {
       // submit decrypt job
-      progressTracker.startDecryptionTracker();
+      progressTracker.initializeDecryptionTracker();
       logger.trace("Submitting decrypt job for {}", blobId);
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
@@ -352,8 +352,8 @@ class GetBlobInfoOperation extends GetOperation {
                   setOperationException(
                       new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
                           RouterErrorCode.UnexpectedInternalError));
+                  progressTracker.setDecryptionFailed();
                 }
-                progressTracker.setDecryptionFailed();
                 routerCallback.onPollReady();
               }));
     }

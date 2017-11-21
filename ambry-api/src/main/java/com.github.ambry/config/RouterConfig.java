@@ -157,12 +157,14 @@ public class RouterConfig {
    * The KeyManagementServiceFactory that will be used to fetch {@link com.github.ambry.router.KeyManagementService}
    */
   @Config("router.key.management.service.factory")
+  @Default("com.github.ambry.router.SingleKeyManagementServiceFactory")
   public final String routerKeyManagementServiceFactory;
 
   /**
    * The CryptoServiceFactory that will be used to fetch {@link com.github.ambry.router.CryptoService}
    */
   @Config("router.crypto.service.factory")
+  @Default("com.github.ambry.router.GCMCryptoServiceFactory")
   public final String routerCryptoServiceFactory;
 
   /**

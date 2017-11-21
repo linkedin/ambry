@@ -144,7 +144,7 @@ public class PutManagerTest {
     requestAndResultsList.clear();
     requestAndResultsList.add(new RequestAndResult(chunkSize));
     submitPutsAndAssertSuccess(true);
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 10; i++) {
       // size in [1, chunkSize]
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
@@ -294,21 +294,9 @@ public class PutManagerTest {
       setupEncryptionCast(new VerifiableProperties(new Properties()));
       instantiateEncryptionCast = false;
       kms.exceptionToThrow.set(GSE);
-      // composite blob : multiple of chunk size
+      // composite blob
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
-      submitPutsAndAssertFailure(expectedException, false, true, true);
-      // this should not close the router.
-      Assert.assertTrue("Router should not be closed", router.isOpen());
-      assertCloseCleanup();
-
-      setupEncryptionCast(new VerifiableProperties(new Properties()));
-      instantiateEncryptionCast = false;
-      kms.exceptionToThrow.set(GSE);
-      // composite blob : not a multiple of chunk size
-      requestAndResultsList.clear();
-      requestAndResultsList.add(
-          new RequestAndResult(chunkSize * random.nextInt(10) + random.nextInt(chunkSize - 1) + 1));
       submitPutsAndAssertFailure(expectedException, false, true, true);
       // this should not close the router.
       Assert.assertTrue("Router should not be closed", router.isOpen());
@@ -337,21 +325,9 @@ public class PutManagerTest {
       setupEncryptionCast(new VerifiableProperties(new Properties()));
       instantiateEncryptionCast = false;
       cryptoService.exceptionOnEncryption.set(GSE);
-      // composite blob : multiple of chunk size
+      // composite blob
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
-      submitPutsAndAssertFailure(expectedException, false, true, true);
-      // this should not close the router.
-      Assert.assertTrue("Router should not be closed", router.isOpen());
-      assertCloseCleanup();
-
-      setupEncryptionCast(new VerifiableProperties(new Properties()));
-      instantiateEncryptionCast = false;
-      cryptoService.exceptionOnEncryption.set(GSE);
-      // composite blob : not a multiple of chunk size
-      requestAndResultsList.clear();
-      requestAndResultsList.add(
-          new RequestAndResult(chunkSize * random.nextInt(10) + random.nextInt(chunkSize - 1) + 1));
       submitPutsAndAssertFailure(expectedException, false, true, true);
       // this should not close the router.
       Assert.assertTrue("Router should not be closed", router.isOpen());
@@ -839,12 +815,10 @@ public class PutManagerTest {
       if (properties.isEncrypted()) {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-        // reason to execute via executor service is that, any exception(and assertion failures) thrown by a different
-        // thread than the main thread will not fail the test. With this approach, future.get() will rethrow Exceptions
-        // and Errors as ExecutionException
-        Future<?> future = executorService.submit(new Thread(
-            new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService,
-                kms, new Callback<DecryptJob.DecryptJobResult>() {
+        // reason to directly call run() instead of spinning up a thread and calling .start() is that, any exceptions or
+        // assertion failures in non main thread will not fail the test.
+        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
+            new Callback<DecryptJob.DecryptJobResult>() {
               @Override
               public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
                 Assert.assertNull("Exception should not be thrown", exception);
@@ -852,8 +826,7 @@ public class PutManagerTest {
                 Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
                     result.getDecryptedUserMetadata().array());
               }
-            })));
-        future.get();
+            }).run();
       } else {
         Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata, request.getUsermetadata().array());
       }
@@ -888,14 +861,11 @@ public class PutManagerTest {
           int dataBlobLength = (int) dataBlobPutRequest.getBlobSize();
           InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
           byte[] dataBlobContent = Utils.readBytesFromStream(dataBlobStream, dataBlobLength);
-          // decrypt and verify the blob content and user-metadata matches
-          // reason to execute via executor service is that, any exception(and assertion failures) thrown by a different
-          // thread than the main thread will not fail the test. With this approach, future.get() will rethrow Exceptions
-          // and Errors as ExecutionException
-          Future<?> future = executorService.submit(new Thread(
-              new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
-                  ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService,
-                  kms, new Callback<DecryptJob.DecryptJobResult>() {
+          // reason to directly call run() instead of spinning up a thread and calling .start() is that, any exceptions or
+          // assertion failures in non main thread will not fail the test.
+          new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
+              ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
+              new Callback<DecryptJob.DecryptJobResult>() {
                 @Override
                 public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
                   Assert.assertNull("Exception should not be thrown", exception);
@@ -913,8 +883,7 @@ public class PutManagerTest {
                         (originalPutContent.length - 1) % chunkSize + 1, resultSize);
                   }
                 }
-              })));
-          future.get();
+              }).run();
           Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
           notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
               dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
@@ -933,23 +902,19 @@ public class PutManagerTest {
       } else {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-        // reason to execute via executor service is that, any exception(and assertion failures) thrown by a different
-        // thread than the main thread will not fail the test. With this approach, future.get() will rethrow Exceptions
-        // and Errors as ExecutionException
-        Future<?> future = executorService.submit(new Thread(
-            new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content),
-                userMetadata, cryptoService, kms, new Callback<DecryptJob.DecryptJobResult>() {
-              @Override
-              public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
-                Assert.assertNull("Exception should not be thrown", exception);
-                Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-                Assert.assertArrayEquals("Content mismatch", originalPutContent,
-                    result.getDecryptedBlobContent().array());
-                Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                    result.getDecryptedUserMetadata().array());
-              }
-            })));
-        future.get();
+        // reason to directly call run() instead of spinning up a thread and calling .start() is that, any exceptions or
+        // assertion failures in non main thread will not fail the test.
+        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,
+            cryptoService, kms, new Callback<DecryptJob.DecryptJobResult>() {
+          @Override
+          public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
+            Assert.assertNull("Exception should not be thrown", exception);
+            Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+            Assert.assertArrayEquals("Content mismatch", originalPutContent, result.getDecryptedBlobContent().array());
+            Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                result.getDecryptedUserMetadata().array());
+          }
+        }).run();
       }
     }
     notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(), null);
