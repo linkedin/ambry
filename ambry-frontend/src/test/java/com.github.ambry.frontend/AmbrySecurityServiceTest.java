@@ -96,14 +96,18 @@ public class AmbrySecurityServiceTest {
   @Test
   public void processRequestTest() throws Exception {
     //rest request being null
+    TestUtils.assertException(IllegalArgumentException.class, () -> securityService.preProcessRequest(null).get(),
+        null);
     TestUtils.assertException(IllegalArgumentException.class, () -> securityService.processRequest(null).get(), null);
     TestUtils.assertException(IllegalArgumentException.class, () -> securityService.postProcessRequest(null).get(),
         null);
 
     // without callbacks
-    RestMethod[] methods = new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
+    RestMethod[] methods =
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
+      securityService.preProcessRequest(restRequest).get();
       securityService.processRequest(restRequest).get();
       securityService.postProcessRequest(restRequest).get();
     }
@@ -111,6 +115,7 @@ public class AmbrySecurityServiceTest {
     // with GET sub resources
     for (RestUtils.SubResource subResource : RestUtils.SubResource.values()) {
       RestRequest restRequest = createRestRequest(RestMethod.GET, "/sampleId/" + subResource, null);
+      securityService.preProcessRequest(restRequest).get();
       securityService.processRequest(restRequest).get();
       securityService.postProcessRequest(restRequest).get();
     }
@@ -161,6 +166,10 @@ public class AmbrySecurityServiceTest {
     // OPTIONS (should be no errors)
     securityService.processResponse(createRestRequest(RestMethod.OPTIONS, "/", null), new MockRestResponseChannel(),
         null).get();
+
+    // GET signed URL (shoud be no errors)
+    securityService.processResponse(createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, null),
+        new MockRestResponseChannel(), null).get();
 
     // HEAD
     // normal
@@ -316,16 +325,17 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
-   * Tests exception cases for {@link SecurityService#processRequest(RestRequest, Callback)} and
+   * Tests exception cases for {@link SecurityService#preProcessRequest(RestRequest, Callback)} and
+   * {@link SecurityService#processRequest(RestRequest, Callback)} and
    * {@link SecurityService#postProcessRequest(RestRequest)}
    * @param restRequest the {@link RestRequest} to provide as input.
    * @param expectedErrorCode the {@link RestServiceErrorCode} expected in the exception returned.
-   * @param includePostProcessRequest {@code true} if
-   * {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)} needs to be tested for the same behavior.
+   * @param testAllRequestProcessing {@code true} if all request processing functions need to be tested for the same
+   *                                              behavior.
    * @throws Exception
    */
   private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode,
-      boolean includePostProcessRequest) throws Exception {
+      boolean testAllRequestProcessing) throws Exception {
     TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
       Assert.assertTrue("Exception should have been an instance of RestServiceException",
           e.getCause() instanceof RestServiceException);
@@ -333,9 +343,11 @@ public class AmbrySecurityServiceTest {
       Assert.assertEquals("Unexpected RestServerErrorCode (Future)", expectedErrorCode, re.getErrorCode());
     };
 
-    TestUtils.assertException(ExecutionException.class, () -> securityService.processRequest(restRequest).get(),
+    TestUtils.assertException(ExecutionException.class, () -> securityService.preProcessRequest(restRequest).get(),
         errorAction);
-    if (includePostProcessRequest) {
+    if (testAllRequestProcessing) {
+      TestUtils.assertException(ExecutionException.class, () -> securityService.processRequest(restRequest).get(),
+          errorAction);
       TestUtils.assertException(ExecutionException.class, () -> securityService.postProcessRequest(restRequest).get(),
           errorAction);
     }

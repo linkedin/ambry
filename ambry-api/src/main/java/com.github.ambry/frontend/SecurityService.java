@@ -31,7 +31,15 @@ import java.util.concurrent.Future;
 public interface SecurityService extends Closeable {
 
   /**
-   * Perform security validations (if any) on the {@link RestRequest} asynchronously and invokes the
+   * Performs security validations (if any) before any processing of the {@code restRequest} begins and invokes the
+   * {@code callback} once done.
+   * @param restRequest the {@link RestRequest} to process.
+   * @param callback the callback to invoke once processing is finished.
+   */
+  void preProcessRequest(RestRequest restRequest, Callback<Void> callback);
+
+  /**
+   * Performs security validations (if any) on the {@link RestRequest} asynchronously and invokes the
    * {@link Callback} when the validation completes.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
    * @param callback The {@link Callback} which will be invoked on the completion of the request. Cannot be null.
@@ -39,7 +47,7 @@ public interface SecurityService extends Closeable {
   void processRequest(RestRequest restRequest, Callback<Void> callback);
 
   /**
-   * Perform security validations (if any) on the {@link RestRequest} when it has been fully parsed. That is, when the
+   * Performs security validations (if any) on the {@link RestRequest} when it has been fully parsed. That is, when the
    * {@link RestRequest} has been annotated with any additional arguments (like account and container).
    * Invokes the {@link Callback} when the validation is complete.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
@@ -48,7 +56,7 @@ public interface SecurityService extends Closeable {
   void postProcessRequest(RestRequest restRequest, Callback<Void> callback);
 
   /**
-   * Perform security validations (if any) on the response for {@link RestRequest} asynchronously, sets headers if need
+   * Performs security validations (if any) on the response for {@link RestRequest} asynchronously, sets headers if need
    * be and invokes the {@link Callback} when the validation completes. Similar to
    * {@link SecurityService#processRequest(RestRequest, Callback)}, validations could involve security checks and
    * setting some headers with the response.
@@ -61,10 +69,22 @@ public interface SecurityService extends Closeable {
       Callback<Void> callback);
 
   /**
+   * Similar to {@link #preProcessRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
+   * a callback.
+   * @param restRequest {@link RestRequest} upon which validations has to be performed
+   * @return a {@link Future} that is completed when the pre-processing is done.
+   */
+  default Future<Void> preProcessRequest(RestRequest restRequest) {
+    FutureResult<Void> futureResult = new FutureResult<>();
+    preProcessRequest(restRequest, futureResult::done);
+    return futureResult;
+  }
+
+  /**
    * Similar to {@link #processRequest(RestRequest, Callback)} but returns a {@link Future} instead of requiring
    * a callback.
    * @param restRequest {@link RestRequest} upon which validations has to be performed
-   * @return a {@link Future} that is completed when the post-processing is done.
+   * @return a {@link Future} that is completed when the processing is done.
    */
   default Future<Void> processRequest(RestRequest restRequest) {
     FutureResult<Void> futureResult = new FutureResult<>();
@@ -90,7 +110,7 @@ public interface SecurityService extends Closeable {
    * @param restRequest {@link RestRequest} whose response have to be validated
    * @param responseChannel the {@link RestResponseChannel} over which the response is sent
    * @param blobInfo the {@link BlobInfo} pertaining to the rest request made
-   * @return a {@link Future} that is completed when the post-processing is done.
+   * @return a {@link Future} that is completed when the processing is done.
    */
   default Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel,
       BlobInfo blobInfo) {

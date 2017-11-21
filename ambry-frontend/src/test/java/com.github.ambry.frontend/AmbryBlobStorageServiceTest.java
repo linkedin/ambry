@@ -2043,7 +2043,7 @@ class FrontendTestResponseHandler implements RestResponseHandler {
    * @return {@code true} if response was submitted within {@code timeout}. {@code false} otherwise.
    * @throws InterruptedException
    */
-  public boolean awaitResponseSubmission(long timeout, TimeUnit timeUnit) throws InterruptedException {
+  boolean awaitResponseSubmission(long timeout, TimeUnit timeUnit) throws InterruptedException {
     return responseSubmitted.await(timeout, timeUnit);
   }
 
@@ -2066,7 +2066,7 @@ class FrontendTestResponseHandler implements RestResponseHandler {
   /**
    * Resets state so that this instance can be reused.
    */
-  public void reset() {
+  void reset() {
     response = null;
     exception = null;
     responseSubmitted = new CountDownLatch(1);
@@ -2081,6 +2081,11 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
    * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
    */
   protected enum Mode {
+    /**
+     * Works in {@link SecurityService#preProcessRequest(RestRequest, Callback)}.
+     */
+    PreProcessRequest,
+
     /**
      * Works in {@link SecurityService#processRequest(RestRequest, Callback)}.
      */
@@ -2100,15 +2105,15 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
   /**
    * The exception to return via future/callback.
    */
-  public Exception exceptionToReturn = null;
+  Exception exceptionToReturn = null;
   /**
    * The exception to throw on function invocation.
    */
-  public RuntimeException exceptionToThrow = null;
+  RuntimeException exceptionToThrow = null;
   /**
    * Defines the API in which {@link #exceptionToThrow} and {@link #exceptionToReturn} will work.
    */
-  public Mode mode = Mode.ProcessRequest;
+  Mode mode = Mode.PreProcessRequest;
 
   @Override
   public SecurityService getSecurityService() {
@@ -2117,6 +2122,14 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
 
   private class TestSecurityService implements SecurityService {
     private boolean isOpen = true;
+
+    @Override
+    public void preProcessRequest(RestRequest restRequest, Callback<Void> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("SecurityService closed");
+      }
+      completeOperation(callback, mode == null || mode == Mode.PreProcessRequest);
+    }
 
     @Override
     public void processRequest(RestRequest restRequest, Callback<Void> callback) {
@@ -2166,9 +2179,9 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
  * Implementation of {@link IdConverterFactory} that returns exceptions.
  */
 class FrontendTestIdConverterFactory implements IdConverterFactory {
-  public Exception exceptionToReturn = null;
-  public RuntimeException exceptionToThrow = null;
-  public String translation = null;
+  Exception exceptionToReturn = null;
+  RuntimeException exceptionToThrow = null;
+  String translation = null;
 
   @Override
   public IdConverter getIdConverter() {
@@ -2306,10 +2319,10 @@ class FrontendTestRouter implements Router {
     DeleteBlob, GetBlob, PutBlob
   }
 
-  public OpType exceptionOpType = null;
-  public Exception exceptionToReturn = null;
-  public RuntimeException exceptionToThrow = null;
-  public String deleteServiceId = null;
+  OpType exceptionOpType = null;
+  Exception exceptionToReturn = null;
+  RuntimeException exceptionToThrow = null;
+  String deleteServiceId = null;
 
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {

@@ -57,6 +57,7 @@ class FrontendMetrics {
 
   // Rates
   // AmbrySecurityService
+  public final Meter securityServicePreProcessRequestRate;
   public final Meter securityServiceProcessRequestRate;
   public final Meter securityServicePostProcessRequestRate;
   public final Meter securityServiceProcessResponseRate;
@@ -117,7 +118,10 @@ class FrontendMetrics {
   // SecurityPostProcessRequestCallback
   public final Histogram getPeersSecurityPostProcessRequestTimeInMs;
   public final Histogram getSignedUrlSecurityPostProcessRequestTimeInMs;
+  // SecurityProcessResponseCallback
+  public final Histogram getSignedUrlSecurityResponseTimeInMs;
   // AmbrySecurityService
+  public final Histogram securityServicePreProcessRequestTimeInMs;
   public final Histogram securityServiceProcessRequestTimeInMs;
   public final Histogram securityServicePostProcessRequestTimeInMs;
   public final Histogram securityServiceProcessResponseTimeInMs;
@@ -204,6 +208,8 @@ class FrontendMetrics {
 
     // Rates
     // AmbrySecurityService
+    securityServicePreProcessRequestRate =
+        metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "PreProcessRequestRate"));
     securityServiceProcessRequestRate =
         metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "ProcessRequestRate"));
     securityServicePostProcessRequestRate =
@@ -307,7 +313,12 @@ class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "SecurityPostProcessRequestTimeInMs"));
     getSignedUrlSecurityPostProcessRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "SecurityPostProcessRequestTimeInMs"));
+    // SecurityPostProcessResponseCallback
+    getSignedUrlSecurityResponseTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetSignedUrlHandler.class, "SecurityResponseTimeInMs"));
     // AmbrySecurityService
+    securityServicePreProcessRequestTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestPreProcessingTimeInMs"));
     securityServiceProcessRequestTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbrySecurityService.class, "RequestProcessingTimeInMs"));
     securityServicePostProcessRequestTimeInMs =
