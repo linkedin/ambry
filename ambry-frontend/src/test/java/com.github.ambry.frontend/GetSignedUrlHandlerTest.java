@@ -121,12 +121,14 @@ public class GetSignedUrlHandlerTest {
     verifyFailureWithMsg(msg);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessResponse;
     verifyFailureWithMsg(msg);
+
     securityServiceFactory.exceptionToThrow = new IllegalStateException(msg);
     securityServiceFactory.exceptionToReturn = null;
+    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
     verifyFailureWithMsg(msg);
     securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.PostProcessRequest;
     verifyFailureWithMsg(msg);
-    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessRequest;
+    securityServiceFactory.mode = FrontendTestSecurityServiceFactory.Mode.ProcessResponse;
     verifyFailureWithMsg(msg);
   }
 

@@ -209,7 +209,7 @@ class GetSignedUrlHandler {
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
           final long processResponseStartTimeMs = SystemTime.getInstance().milliseconds();
           securityService.processResponse(restRequest, restResponseChannel, null,
-              (voidResult, processResponseException) -> {
+              (processResponseResult, processResponseException) -> {
                 metrics.getSignedUrlSecurityResponseTimeInMs.update(
                     SystemTime.getInstance().milliseconds() - processResponseStartTimeMs);
                 callback.onCompletion(null, processResponseException);
