@@ -55,9 +55,9 @@ class AmbrySecurityService implements SecurityService {
   }
 
   @Override
-  public void processRequest(RestRequest restRequest, Callback<Void> callback) {
+  public void preProcessRequest(RestRequest restRequest, Callback<Void> callback) {
     Exception exception = null;
-    frontendMetrics.securityServiceProcessRequestRate.mark();
+    frontendMetrics.securityServicePreProcessRequestRate.mark();
     long startTimeMs = System.currentTimeMillis();
     if (!isOpen) {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
@@ -69,6 +69,20 @@ class AmbrySecurityService implements SecurityService {
       } catch (RestServiceException e) {
         exception = e;
       }
+    }
+    frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+    callback.onCompletion(null, exception);
+  }
+
+  @Override
+  public void processRequest(RestRequest restRequest, Callback<Void> callback) {
+    Exception exception = null;
+    frontendMetrics.securityServiceProcessRequestRate.mark();
+    long startTimeMs = System.currentTimeMillis();
+    if (!isOpen) {
+      exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
+    } else if (restRequest == null) {
+      throw new IllegalArgumentException("RestRequest is null");
     }
     frontendMetrics.securityServiceProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
@@ -97,9 +111,19 @@ class AmbrySecurityService implements SecurityService {
     if (!isOpen) {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else {
-      if (restRequest == null || responseChannel == null || (!restRequest.getRestMethod().equals(RestMethod.OPTIONS)
-          && blobInfo == null)) {
+      if (restRequest == null || responseChannel == null) {
         throw new IllegalArgumentException("One of the required params is null");
+      }
+      String operationOrBlobId =
+          RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+              frontendConfig.frontendPathPrefixesToRemove);
+      if (operationOrBlobId.startsWith("/")) {
+        operationOrBlobId = operationOrBlobId.substring(1);
+      }
+      if (blobInfo == null && !restRequest.getRestMethod().equals(RestMethod.OPTIONS)) {
+        if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
+          throw new IllegalArgumentException("BlobInfo is null");
+        }
       }
       try {
         GetBlobOptions options;
@@ -114,28 +138,30 @@ class AmbrySecurityService implements SecurityService {
             setHeadResponseHeaders(blobInfo, options, restRequest, responseChannel);
             break;
           case GET:
-            responseChannel.setStatus(ResponseStatus.Ok);
-            RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
-            responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
-                new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
-            if (subResource == null) {
-              Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
-              if (ifModifiedSinceMs != null
-                  && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
-                  <= ifModifiedSinceMs) {
-                responseChannel.setStatus(ResponseStatus.NotModified);
-              } else {
-                options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
-                if (options.getRange() != null) {
-                  responseChannel.setStatus(ResponseStatus.PartialContent);
+            if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
+              responseChannel.setStatus(ResponseStatus.Ok);
+              RestUtils.SubResource subResource = RestUtils.getBlobSubResource(restRequest);
+              responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
+                  new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+              if (subResource == null) {
+                Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
+                if (ifModifiedSinceMs != null
+                    && RestUtils.toSecondsPrecisionInMs(blobInfo.getBlobProperties().getCreationTimeInMs())
+                    <= ifModifiedSinceMs) {
+                  responseChannel.setStatus(ResponseStatus.NotModified);
+                } else {
+                  options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
+                  if (options.getRange() != null) {
+                    responseChannel.setStatus(ResponseStatus.PartialContent);
+                  }
+                  setGetBlobResponseHeaders(blobInfo, options, responseChannel);
                 }
-                setGetBlobResponseHeaders(blobInfo, options, responseChannel);
-              }
-              setCacheHeaders(restRequest, responseChannel);
-            } else {
-              if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
-                setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
-                setAccountAndContainerHeaders(restRequest, responseChannel);
+                setCacheHeaders(restRequest, responseChannel);
+              } else {
+                if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
+                  setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
+                  setAccountAndContainerHeaders(restRequest, responseChannel);
+                }
               }
             }
             break;

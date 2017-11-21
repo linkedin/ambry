@@ -169,6 +169,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling GET request - {}", restRequest.getUri());
       checkAvailable();
+      // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
       RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
       String operationOrBlobId =
           RestUtils.getOperationOrBlobIdFromUri(restRequest, subresource, frontendConfig.frontendPathPrefixesToRemove);
@@ -212,7 +214,7 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
     } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, e);
+      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
     } finally {
       frontendMetrics.getPreProcessingTimeInMs.update(preProcessingTime);
     }
@@ -230,6 +232,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
+      // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
@@ -249,7 +253,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               routerCallback);
       securityService.processRequest(restRequest, securityCallback);
     } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, e);
+      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
     } finally {
       frontendMetrics.postPreProcessingTimeInMs.update(preProcessingTime);
     }
@@ -275,13 +279,15 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling DELETE request - {}", restRequest.getUri());
       checkAvailable();
+      // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
       DeleteCallback routerCallback = new DeleteCallback(restRequest, restResponseChannel);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
       securityService.processRequest(restRequest, securityCallback);
     } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, e);
+      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
     } finally {
       frontendMetrics.deletePreProcessingTimeInMs.update(preProcessingTime);
     }
@@ -298,13 +304,15 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       checkAvailable();
+      // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
       HeadCallback routerCallback = new HeadCallback(restRequest, restResponseChannel);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       SecurityProcessRequestCallback securityCallback =
           new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
       securityService.processRequest(restRequest, securityCallback);
     } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, e);
+      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
     } finally {
       frontendMetrics.headPreProcessingTimeInMs.update(preProcessingTime);
     }
@@ -321,6 +329,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     try {
       logger.trace("Handling OPTIONS request - {}", restRequest.getUri());
       checkAvailable();
+      // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
       long preProcessingEndTime = System.currentTimeMillis();
       frontendMetrics.optionsPreProcessingTimeInMs.update(preProcessingEndTime - processingStartTime);
 
@@ -338,10 +348,8 @@ class AmbryBlobStorageService implements BlobStorageService {
       long securityResponseProcessingEndTime = System.currentTimeMillis();
       frontendMetrics.optionsSecurityResponseTimeInMs.update(
           securityResponseProcessingEndTime - securityRequestProcessingEndTime);
-    } catch (ExecutionException e) {
-      exception = extractCause(e);
     } catch (Exception e) {
-      exception = e;
+      exception = extractExecutionExceptionCause(e);
     }
     submitResponse(restRequest, restResponseChannel, null, exception);
   }
@@ -415,12 +423,15 @@ class AmbryBlobStorageService implements BlobStorageService {
    * Extracts the cause of an {@link ExecutionException}. This is used to ensure that the correct
    * {@link RestServiceErrorCode} is set when using a {@link java.util.concurrent.Future} to wait for a task to
    * complete.
-   * @param e the {@link ExecutionException}
+   * @param e the {@link Exception}
    * @return if the cause is {@code null}, return {@code e} itself. If the cause is not an instance
-   *         of exception, return the {@link Throwable} wrapped in an exception. Otherwise, return the cause
-   *         {@link Exception}.
+   *         of exception, return the {@link Throwable} wrapped in an exception. If not {@link ExecutionException},
+   *         retun the exception itself. Otherwise, return the cause {@link Exception}.
    */
-  public static Exception extractCause(ExecutionException e) {
+  private static Exception extractExecutionExceptionCause(Exception e) {
+    if (!(e instanceof ExecutionException)) {
+      return e;
+    }
     Throwable cause = e.getCause();
     return cause == null ? e : (cause instanceof Exception ? (Exception) cause : new Exception(cause));
   }
@@ -517,10 +528,8 @@ class AmbryBlobStorageService implements BlobStorageService {
             default:
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
-        } catch (ExecutionException e) {
-          exception = extractCause(e);
         } catch (Exception e) {
-          exception = e;
+          exception = extractExecutionExceptionCause(e);
         }
       }
 
@@ -656,10 +665,8 @@ class AmbryBlobStorageService implements BlobStorageService {
             default:
               exception = new IllegalStateException("Unrecognized RestMethod: " + restMethod);
           }
-        } catch (ExecutionException e) {
-          exception = extractCause(e);
         } catch (Exception e) {
-          exception = e;
+          exception = extractExecutionExceptionCause(e);
         }
       }
 

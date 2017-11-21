@@ -207,12 +207,21 @@ class GetSignedUrlHandler {
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           restResponseChannel.setHeader(RestUtils.Headers.SIGNED_URL, signedUrl);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          final long processResponseStartTimeMs = SystemTime.getInstance().milliseconds();
+          securityService.processResponse(restRequest, restResponseChannel, null,
+              (processResponseResult, processResponseException) -> {
+                metrics.getSignedUrlSecurityResponseTimeInMs.update(
+                    SystemTime.getInstance().milliseconds() - processResponseStartTimeMs);
+                callback.onCompletion(null, processResponseException);
+              });
         }
       } catch (Exception e) {
         exception = e;
       } finally {
         metrics.getSignedUrlProcessingTimeInMs.update(SystemTime.getInstance().milliseconds() - processingStartTimeMs);
-        callback.onCompletion(null, exception);
+        if (exception != null) {
+          callback.onCompletion(null, exception);
+        }
       }
     }
   }

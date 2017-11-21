@@ -19,7 +19,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -136,14 +135,14 @@ class AccountAndContainerInjector {
    * @param blobProperties The {@link BlobProperties} that contains the service id and blob privacy setting.
    * @throws RestServiceException if no valid account or container cound be identified for re-injection.
    */
-  void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties) throws RestServiceException {
+  void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties)
+      throws RestServiceException {
     Account targetAccount = (Account) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
     Container targetContainer = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
     if (targetAccount == null || targetContainer == null) {
       throw new RestServiceException("Account and container were not injected by BlobStorageService",
           RestServiceErrorCode.InternalServerError);
-    } else if (targetAccount.equals(Account.UNKNOWN_ACCOUNT) && targetContainer.equals(
-        Container.UNKNOWN_CONTAINER)) {
+    } else if (targetAccount.equals(Account.UNKNOWN_ACCOUNT) && targetContainer.equals(Container.UNKNOWN_CONTAINER)) {
       // This should only occur for V1 blobs, where the blob ID does not contain the actual account and container IDs.
       String serviceId = blobProperties.getServiceId();
       boolean isPrivate = blobProperties.isPrivate();
