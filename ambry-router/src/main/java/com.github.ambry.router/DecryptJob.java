@@ -61,20 +61,24 @@ class DecryptJob implements CryptoJob {
    * 5. Invoke callback with the decryptedBlobContent
    */
   public void run() {
+    Exception exception = null;
+    ByteBuffer decryptedBlobContent = null;
+    ByteBuffer decryptedUserMetadata = null;
     try {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
       Object perBlobKey = cryptoService.decryptKey(encryptedKey, containerKey);
-      ByteBuffer decryptedBlobContent = null;
       if (encryptedBlobContent != null) {
         decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
       }
-      ByteBuffer decryptedUserMetadata = null;
       if (encryptedUserMetadata != null) {
         decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
       }
-      callback.onCompletion(new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata), null);
     } catch (Exception e) {
-      callback.onCompletion(new DecryptJobResult(blobId, null, null), e);
+      exception = e;
+    } finally {
+      callback.onCompletion(
+          exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,
+          exception);
     }
   }
 
@@ -83,7 +87,7 @@ class DecryptJob implements CryptoJob {
    * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callback for the job
    */
   public void closeJob(GeneralSecurityException gse) {
-    callback.onCompletion(new DecryptJobResult(blobId, null, null), gse);
+    callback.onCompletion(null, gse);
   }
 
   /**

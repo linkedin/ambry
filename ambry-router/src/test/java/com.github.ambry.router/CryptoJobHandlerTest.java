@@ -242,8 +242,8 @@ public class CryptoJobHandlerTest {
                 decryptJobs.add(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
                     encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(),
                     cryptoService, kms, (DecryptJob.DecryptJobResult decryptJobResult, Exception e) -> {
-                  assertEquals("BlobId mismatch ", testData.blobId, decryptJobResult.getBlobId());
                   if (e == null) {
+                    assertEquals("BlobId mismatch ", testData.blobId, decryptJobResult.getBlobId());
                     assertNull("Exception shouldn't have been thrown to decrypt contents for " + testData.blobId,
                         exception);
                     assertNotNull("Decrypted contents should not be null", decryptJobResult.getDecryptedBlobContent());
@@ -255,9 +255,7 @@ public class CryptoJobHandlerTest {
                     assertNotNull("Exception should have been thrown to decrypt contents for " + testData.blobId, e);
                     assertTrue("Exception cause should have been GeneralSecurityException",
                         e instanceof GeneralSecurityException);
-                    assertNull("Decrypted contents should have been null", decryptJobResult.getDecryptedBlobContent());
-                    assertNull("Decrypted userMetadata should have been null",
-                        decryptJobResult.getDecryptedUserMetadata());
+                    assertNull("Result should have been null", decryptJobResult);
                   }
                   decryptCallBackCount.countDown();
                 }));
@@ -391,9 +389,7 @@ public class CryptoJobHandlerTest {
                 assertNotNull("Exception should have been thrown to decrypt contents for " + testData.blobId, e);
                 assertTrue("Exception cause should have been GeneralSecurityException",
                     e instanceof GeneralSecurityException);
-                assertNull("Decrypted contents should have been null", result.getDecryptedBlobContent());
-                assertNull("Decrypted userMetadata should have been null", result.getDecryptedUserMetadata());
-                assertEquals("BlobId mismatch", testData.blobId, result.getBlobId());
+                assertNull("Result should have been null", result);
               }));
             }));
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
@@ -472,8 +468,8 @@ public class CryptoJobHandlerTest {
       if (countDownLatch != null) {
         countDownLatch.countDown();
       }
-      assertEquals("BlobId mismatch ", blobId, result.getBlobId());
       if (!expectException) {
+        assertEquals("BlobId mismatch ", blobId, result.getBlobId());
         assertNull("Exception shouldn't have been thrown to decrypt contents for " + blobId, exception);
         if (unencryptedContent != null) {
           assertNotNull("Decrypted contents should not be null", result.getDecryptedBlobContent());
@@ -489,8 +485,7 @@ public class CryptoJobHandlerTest {
         assertNotNull("Exception should have been thrown to decrypt contents for " + blobId, exception);
         assertTrue("Exception cause should have been GeneralSecurityException",
             exception instanceof GeneralSecurityException);
-        assertNull("Decrypted contents should have been null", result.getDecryptedBlobContent());
-        assertNull("Decrypted userMetadata should have been null", result.getDecryptedUserMetadata());
+        assertNull("Result should have been null", result);
       }
     }
   }

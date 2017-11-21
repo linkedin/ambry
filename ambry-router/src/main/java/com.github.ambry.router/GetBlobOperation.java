@@ -944,12 +944,7 @@ class GetBlobOperation extends GetOperation {
         if (blobType == BlobType.MetadataBlob) {
           if (decryptCallbackResultInfo.exception == null) {
             logger.trace("Processing stored decryption callback result for Metadata blob {}", blobId);
-            chunkIdIterator = keys.listIterator();
-            numChunksTotal = keys.size();
-            dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-            for (int i = 0; i < dataChunks.length; i++) {
-              dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
-            }
+            initializeDataChunks();
             blobInfo = new BlobInfo(blobInfo.getBlobProperties(),
                 decryptCallbackResultInfo.result.getDecryptedUserMetadata().array());
             progressTracker.setDecryptionSuccess();
@@ -1089,7 +1084,7 @@ class GetBlobOperation extends GetOperation {
         } else {
           // if blob is encrypted, then decryption is required only in case of GetBlobInfo and GetBlobAll (since user-metadata
           // is expected to be encrypted). Incase of GetBlob, Metadata blob does not need any decryption even if BlobProperties says so
-          if (getOperationFlag() != MessageFormatFlags.Blob && blobInfo.getBlobProperties().isEncrypted()) {
+          if (getOperationFlag() != MessageFormatFlags.Blob && encryptionKey != null) {
             decryptCallbackResultInfo = new DecryptCallBackResultInfo();
             progressTracker.startDecryptionTracker();
             logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
@@ -1104,14 +1099,21 @@ class GetBlobOperation extends GetOperation {
                   routerCallback.onPollReady();
                 }));
           } else {
-            chunkIdIterator = keys.listIterator();
-            numChunksTotal = keys.size();
-            dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
-            for (int i = 0; i < dataChunks.length; i++) {
-              dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
-            }
+            initializeDataChunks();
           }
         }
+      }
+    }
+
+    /**
+     * Initialize data chunks and few other cast for metadata chunk
+     */
+    private void initializeDataChunks() {
+      chunkIdIterator = keys.listIterator();
+      numChunksTotal = keys.size();
+      dataChunks = new GetChunk[Math.min(keys.size(), NonBlockingRouter.MAX_IN_MEM_CHUNKS)];
+      for (int i = 0; i < dataChunks.length; i++) {
+        dataChunks[i] = new GetChunk(chunkIdIterator.nextIndex(), (BlobId) chunkIdIterator.next());
       }
     }
 
