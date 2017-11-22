@@ -986,7 +986,7 @@ public class NonBlockingRouterTest {
      * @param futureResult {@link FutureResult} that needs to be tested for completion
      * @throws InterruptedException
      */
-    void awaitOpCompletionOrTimeOut(FutureResult futureResult) throws InterruptedException {
+    private void awaitOpCompletionOrTimeOut(FutureResult futureResult) throws InterruptedException {
       int timer = 0;
       List<RequestInfo> allRequests = new ArrayList<>();
       while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {

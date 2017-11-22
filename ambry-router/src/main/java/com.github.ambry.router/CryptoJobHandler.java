@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
  * and any new jobs submitted after close will be ignored.
  */
 class CryptoJobHandler implements Closeable {
-  private final int threadCount;
   private final AtomicBoolean enabled = new AtomicBoolean(false);
   private static final GeneralSecurityException CLOSED_EXCEPTION =
       new GeneralSecurityException("CryptoJobHandler closed");
@@ -42,7 +41,6 @@ class CryptoJobHandler implements Closeable {
    * Instantiates {@link CryptoJobHandler}
    */
   CryptoJobHandler(int threadCount) {
-    this.threadCount = threadCount;
     enabled.set(true);
     scheduler = Executors.newFixedThreadPool(threadCount);
   }

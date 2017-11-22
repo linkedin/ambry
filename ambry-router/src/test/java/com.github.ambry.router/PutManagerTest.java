@@ -75,7 +75,6 @@ public class PutManagerTest {
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
-  private final ExecutorService executorService = Executors.newSingleThreadExecutor();
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
@@ -132,7 +131,6 @@ public class PutManagerTest {
     if (router != null) {
       Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
     }
-    executorService.shutdown();
   }
 
   /**

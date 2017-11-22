@@ -103,34 +103,39 @@ class Verifier implements Runnable {
                 try {
                   BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
                   if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
-                    System.out.println(
+                    String exceptionMsg =
                         "blob size not matching " + " expected " + payload.blobProperties.getBlobSize() + " actual "
-                            + propertyOutput.getBlobSize());
-                    throw new IllegalStateException();
+                            + propertyOutput.getBlobSize();
+                    System.out.println(exceptionMsg);
+                    throw new IllegalStateException(exceptionMsg);
                   }
                   if (!propertyOutput.getServiceId().equals(payload.blobProperties.getServiceId())) {
-                    System.out.println(
+                    String exceptionMsg =
                         "service id not matching " + " expected " + payload.blobProperties.getServiceId() + " actual "
-                            + propertyOutput.getBlobSize());
-                    throw new IllegalStateException();
+                            + propertyOutput.getBlobSize();
+                    System.out.println(exceptionMsg);
+                    throw new IllegalStateException(exceptionMsg);
                   }
                   if (propertyOutput.getAccountId() != payload.blobProperties.getAccountId()) {
-                    System.out.println(
+                    String exceptionMsg =
                         "accountid not matching " + " expected " + payload.blobProperties.getAccountId() + " actual "
-                            + propertyOutput.getAccountId());
-                    throw new IllegalStateException();
+                            + propertyOutput.getAccountId();
+                    System.out.println(exceptionMsg);
+                    throw new IllegalStateException(exceptionMsg);
                   }
                   if (propertyOutput.getContainerId() != payload.blobProperties.getContainerId()) {
-                    System.out.println(
+                    String exceptionMsg =
                         "containerId not matching " + " expected " + payload.blobProperties.getContainerId()
-                            + " actual " + propertyOutput.getContainerId());
-                    throw new IllegalStateException();
+                            + " actual " + propertyOutput.getContainerId();
+                    System.out.println(exceptionMsg);
+                    throw new IllegalStateException(exceptionMsg);
                   }
                   if (propertyOutput.isEncrypted() != payload.blobProperties.isEncrypted()) {
-                    System.out.println(
+                    String exceptionMsg =
                         "IsEncrypted not matching " + " expected " + payload.blobProperties.isEncrypted() + " actual "
-                            + propertyOutput.isEncrypted());
-                    throw new IllegalStateException();
+                            + propertyOutput.isEncrypted();
+                    System.out.println(exceptionMsg);
+                    throw new IllegalStateException(exceptionMsg);
                   }
                 } catch (MessageFormatException e) {
                   e.printStackTrace();

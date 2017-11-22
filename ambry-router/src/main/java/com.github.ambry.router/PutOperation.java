@@ -369,8 +369,10 @@ class PutOperation {
             lastChunk.onFillComplete(true, true);
             updateChunkFillerWaitTimeMetrics();
           }
+          if(lastChunk.isReady()){
+            routerCallback.onPollReady();
+          }
         }
-        routerCallback.onPollReady();
       }
     } catch (Exception e) {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
