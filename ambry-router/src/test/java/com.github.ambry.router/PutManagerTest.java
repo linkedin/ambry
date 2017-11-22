@@ -811,85 +811,24 @@ public class PutManagerTest {
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
       Assert.assertEquals("Number of chunks is not as expected",
           RouterUtils.getNumChunksForBlobAndChunkSize(originalPutContent.length, chunkSize), dataBlobIds.size());
-      // verify user-metadata matches
+      // verify user-metadata
       if (properties.isEncrypted()) {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-        // reason to directly call run() instead of spinning up a thread and calling .start() is that, any exceptions or
+        // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
-            new Callback<DecryptJob.DecryptJobResult>() {
-              @Override
-              public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
-                Assert.assertNull("Exception should not be thrown", exception);
-                Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-                Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                    result.getDecryptedUserMetadata().array());
-              }
+            (result, exception) -> {
+              Assert.assertNull("Exception should not be thrown", exception);
+              Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+              Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                  result.getDecryptedUserMetadata().array());
             }).run();
       } else {
         Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata, request.getUsermetadata().array());
       }
-      StoreKey lastKey = dataBlobIds.get(dataBlobIds.size() - 1);
-      byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
-      if (!properties.isEncrypted()) {
-        int offset = 0;
-        for (StoreKey key : dataBlobIds) {
-          PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
-          int dataBlobLength = (int) dataBlobPutRequest.getBlobSize();
-          InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
-          Utils.readBytesFromStream(dataBlobStream, content, offset, dataBlobLength);
-          Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
-          if (key != lastKey) {
-            Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength);
-          } else {
-            // If we are here (composite blob), we know that the blob size is non-zero.
-            Assert.assertEquals(
-                "Last chunk should be of non-zero length and equal to the length of the remaining bytes",
-                (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength);
-          }
-          offset += dataBlobLength;
-          notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
-              dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
-        }
-        Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
-      } else {
-        // since offset is accessed from inner class (callback), have to make it final and hence AtomicInteger
-        final AtomicInteger offset = new AtomicInteger(0);
-        for (StoreKey key : dataBlobIds) {
-          PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
-          int dataBlobLength = (int) dataBlobPutRequest.getBlobSize();
-          InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
-          byte[] dataBlobContent = Utils.readBytesFromStream(dataBlobStream, dataBlobLength);
-          // reason to directly call run() instead of spinning up a thread and calling .start() is that, any exceptions or
-          // assertion failures in non main thread will not fail the test.
-          new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
-              ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
-              new Callback<DecryptJob.DecryptJobResult>() {
-                @Override
-                public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
-                  Assert.assertNull("Exception should not be thrown", exception);
-                  Assert.assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
-                  Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                      result.getDecryptedUserMetadata().array());
-                  int resultSize = result.getDecryptedBlobContent().remaining();
-                  result.getDecryptedBlobContent().get(content, offset.get(), resultSize);
-                  offset.addAndGet(resultSize);
-                  if (key != lastKey) {
-                    Assert.assertEquals("all chunks except last should be fully filled", chunkSize, resultSize);
-                  } else {
-                    Assert.assertEquals(
-                        "Last chunk should be of non-zero length and equal to the length of the remaining bytes",
-                        (originalPutContent.length - 1) % chunkSize + 1, resultSize);
-                  }
-                }
-              }).run();
-          Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
-          notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
-              dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
-        }
-        Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
-      }
+      verifyCompositeBlob(properties, originalPutContent, originalUserMetadata, dataBlobIds, request,
+          serializedRequests);
     } else {
       notificationBlobType = NotificationBlobType.Simple;
       byte[] content = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
@@ -897,12 +836,11 @@ public class PutManagerTest {
         Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
         Assert.assertArrayEquals("UserMetadata mismatch for simple blob", originalUserMetadata,
             request.getUsermetadata().array());
-        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(),
-            request.getUsermetadata().array());
+        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
       } else {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
-        // reason to directly call run() instead of spinning up a thread and calling .start() is that, any exceptions or
+        // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,
             cryptoService, kms, new Callback<DecryptJob.DecryptJobResult>() {
@@ -917,7 +855,60 @@ public class PutManagerTest {
         }).run();
       }
     }
-    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(), null);
+    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
+  }
+
+  /**
+   * Verify Composite blob for content, userMetadata and
+   * @param properties {@link BlobProperties} of the blob
+   * @param originalPutContent original out content
+   * @param originalUserMetadata original user-metadata
+   * @param dataBlobIds {@link List} of {@link StoreKey}s of the composite blob in context
+   * @param request {@link com.github.ambry.protocol.PutRequest.ReceivedPutRequest} to fetch info from
+   * @param serializedRequests the mapping from blob ids to their corresponding serialized {@link PutRequest}.
+   * @throws Exception
+   */
+  private void verifyCompositeBlob(BlobProperties properties, byte[] originalPutContent, byte[] originalUserMetadata,
+      List<StoreKey> dataBlobIds, PutRequest.ReceivedPutRequest request, HashMap<String, ByteBuffer> serializedRequests)
+      throws Exception {
+    StoreKey lastKey = dataBlobIds.get(dataBlobIds.size() - 1);
+    byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
+    AtomicInteger offset = new AtomicInteger(0);
+    for (StoreKey key : dataBlobIds) {
+      PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
+      AtomicInteger dataBlobLength = new AtomicInteger((int) dataBlobPutRequest.getBlobSize());
+      InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
+      if (!properties.isEncrypted()) {
+        Utils.readBytesFromStream(dataBlobStream, content, offset.get(), dataBlobLength.get());
+        Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+            dataBlobPutRequest.getUsermetadata().array());
+      } else {
+        byte[] dataBlobContent = Utils.readBytesFromStream(dataBlobStream, dataBlobLength.get());
+        // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
+        // assertion failures in non main thread will not fail the test.
+        new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
+            ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
+            (result, exception) -> {
+              Assert.assertNull("Exception should not be thrown", exception);
+              Assert.assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
+              Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                  result.getDecryptedUserMetadata().array());
+              dataBlobLength.set(result.getDecryptedBlobContent().remaining());
+              result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
+            }).run();
+      }
+      if (key != lastKey) {
+        Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());
+      } else {
+        Assert.assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
+            (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength.get());
+      }
+      offset.addAndGet(dataBlobLength.get());
+      Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
+      notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
+          dataBlobPutRequest.getBlobProperties());
+    }
+    Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
   }
 
   /**
@@ -1041,10 +1032,9 @@ public class PutManagerTest {
      * @param blobId The blob ID to look up a notification for.
      * @param expectedNotificationBlobType the expected {@link NotificationBlobType}.
      * @param expectedBlobProperties the expected {@link BlobProperties}.
-     * @param expectedUserMetadata the expected user metadata.
      */
     void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
-        BlobProperties expectedBlobProperties, byte[] expectedUserMetadata) {
+        BlobProperties expectedBlobProperties) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
       Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
       BlobCreatedEvent event = events.get(0);
@@ -1066,8 +1056,7 @@ public class PutManagerTest {
           if (blobIdsVisited.add(blobEntry.getKey())) {
             StoredBlob blob = blobEntry.getValue();
             System.out.println(blobEntry.getKey());
-            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties,
-                blob.userMetadata.array());
+            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties);
           }
         }
       }
