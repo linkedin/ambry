@@ -1114,7 +1114,7 @@ class PutOperation {
               // chunkException will be set within processServerError.
               logger.trace(
                   "Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
-                  chunkPutRequestInfo.replicaId.getDataNodeId(), putResponse.getError(), putResponse.getCorrelationId(),
+                  chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(),
                   blobId);
               processServerError(putResponse.getError());
               isSuccessful = false;
