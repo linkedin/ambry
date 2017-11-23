@@ -667,7 +667,7 @@ class GetBlobOperation extends GetOperation {
           cryptoJobHandler.submitJob(
               new DecryptJob(chunkBlobId, encryptionKey, blobData.getStream().getByteBuffer(), null, cryptoService, kms,
                   (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                    routerMetrics.contentDecryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                    routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
                     logger.trace("Handling decrypt job callback for data chunk {}", chunkBlobId);
                     decryptCallbackResultInfo.setResultAndException(result, exception);
                     routerCallback.onPollReady();
@@ -1091,7 +1091,7 @@ class GetBlobOperation extends GetOperation {
             cryptoJobHandler.submitJob(
                 new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
                     (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                      routerMetrics.contentDecryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                      routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
                       logger.trace(
                           "Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
                           blobId);
@@ -1132,14 +1132,6 @@ class GetBlobOperation extends GetOperation {
       } else {
         // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete
       }
-      /*try {
-        if (options != null && options.getBlobOptions.getRange() != null) {
-          resolvedByteRange = options.getBlobOptions.getRange().toResolvedByteRange(blobProperties.getBlobSize());
-        }
-      } catch (IllegalArgumentException e) {
-        onInvalidRange(e);
-        rangeResolutionFailure = true;
-      }*/
       if (!rangeResolutionFailure) {
         chunkIdIterator = null;
         dataChunks = null;
@@ -1156,7 +1148,7 @@ class GetBlobOperation extends GetOperation {
           cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptionKey, blobData.getStream().getByteBuffer(),
               userMetadata != null ? ByteBuffer.wrap(userMetadata) : null, cryptoService, kms,
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                routerMetrics.contentDecryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
                 logger.trace("Handling decrypt job call back for simple blob {} to set decrypt callback results",
                     blobId);
                 decryptCallbackResultInfo.setResultAndException(result, exception);

@@ -248,7 +248,6 @@ class PutManager {
   void onComplete(PutOperation op) {
     Exception e = op.getOperationException();
     String blobId = op.getBlobIdString();
-    op.maybeNotifyForBlobCreation();
     if (blobId == null && e == null) {
       e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationFailureWithUnsetExceptionCount.inc();
@@ -258,6 +257,7 @@ class PutManager {
       routerMetrics.onPutBlobError(e);
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
     } else {
+      op.maybeNotifyForBlobCreation();
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();

@@ -25,7 +25,7 @@ class DecryptJob implements CryptoJob {
   private final BlobId blobId;
   private final ByteBuffer encryptedBlobContent;
   private final ByteBuffer encryptedUserMetadata;
-  private final ByteBuffer encryptedKey;
+  private final ByteBuffer encryptedPerBlobKey;
   private final Callback<DecryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
@@ -34,19 +34,20 @@ class DecryptJob implements CryptoJob {
    * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
    * {@link Callback}
    * @param blobId the {@link BlobId} for which decryption is requested
-   * @param encryptedKey encrypted per blob key
+   * @param encryptedPerBlobKey encrypted per blob key
    * @param encryptedBlobContent encrypted blob content. Could be {@null}
    * @param encryptedUserMetadata encrypted user metadata. Could be {@null}
    * @param cryptoService the {@link CryptoService} instance to use
    * @param kms the {@link KeyManagementService} instance to use
    * @param callback {@link Callback} to be invoked on completion
    */
-  DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedBlobContent, ByteBuffer encryptedUserMetadata,
-      CryptoService cryptoService, KeyManagementService kms, Callback<DecryptJobResult> callback) {
+  DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuffer encryptedBlobContent,
+      ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
+      Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
     this.encryptedBlobContent = encryptedBlobContent;
     this.encryptedUserMetadata = encryptedUserMetadata;
-    this.encryptedKey = encryptedKey;
+    this.encryptedPerBlobKey = encryptedPerBlobKey;
     this.callback = callback;
     this.cryptoService = cryptoService;
     this.kms = kms;
@@ -55,7 +56,7 @@ class DecryptJob implements CryptoJob {
   /**
    * Steps to be performed on decryption
    * 1. Fetch ContainerKey from kms for the given blob
-   * 2. Decrypt encryptedKey using containerKey to obtain perBlobKey
+   * 2. Decrypt encryptedPerBlobKey using containerKey to obtain perBlobKey
    * 3. Decrypt encryptedContent using perBlobKey if not null
    * 4. Decrypt encryptedUserMeta using perBlobKey if not null
    * 5. Invoke callback with the decryptedBlobContent
@@ -66,7 +67,7 @@ class DecryptJob implements CryptoJob {
     ByteBuffer decryptedUserMetadata = null;
     try {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
-      Object perBlobKey = cryptoService.decryptKey(encryptedKey, containerKey);
+      Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
       if (encryptedBlobContent != null) {
         decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
       }

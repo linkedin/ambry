@@ -315,7 +315,7 @@ class GetBlobInfoOperation extends GetOperation {
 
   /**
    * Handle the body of the response: Deserialize and set the {@link BlobInfo} to return if no decryption is required.
-   * If decryption is required, submit a jon for decryption.
+   * If decryption is required, submit a job for decryption.
    * @param payload the body of the response.
    * @param messageMetadata the {@link MessageMetadata} associated with the message.
    * @throws IOException if there is an IOException while deserializing the body.
@@ -340,7 +340,7 @@ class GetBlobInfoOperation extends GetOperation {
           new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
                 logger.trace("Handling decrypt job callback results for {}", blobId);
-                routerMetrics.contentDecryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
                 if (exception == null) {
                   logger.trace("Successfully updating decrypt job callback results for {}", blobId);
                   operationResult = new GetBlobResultInternal(

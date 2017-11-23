@@ -49,7 +49,7 @@ class MockCryptoService extends GCMCryptoService {
   }
 
   void clearStates() {
-    exceptionOnEncryption = new AtomicReference<>();
-    exceptionOnDecryption = new AtomicReference<>();
+    exceptionOnEncryption.set(null);
+    exceptionOnDecryption.set(null);
   }
 }

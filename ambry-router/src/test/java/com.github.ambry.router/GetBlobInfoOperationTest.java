@@ -166,9 +166,6 @@ public class GetBlobInfoOperationTest {
 
   @After
   public void after() {
-    if (router != null) {
-      router.close();
-    }
     if (networkClient != null) {
       networkClient.close();
     }
