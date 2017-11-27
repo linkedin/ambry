@@ -23,6 +23,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
@@ -58,7 +59,9 @@ public class PublicAccessLogHandlerTest {
     try {
       PEER_CERT = new SelfSignedCertificate().cert();
       SelfSignedCertificate localCert = new SelfSignedCertificate();
-      SSL_CONTEXT = SslContextBuilder.forServer(localCert.certificate(), localCert.privateKey()).build();
+      SSL_CONTEXT = SslContextBuilder.forServer(localCert.certificate(), localCert.privateKey())
+          .clientAuth(ClientAuth.REQUIRE)
+          .build();
     } catch (CertificateException | SSLException e) {
       throw new IllegalStateException(e);
     }
