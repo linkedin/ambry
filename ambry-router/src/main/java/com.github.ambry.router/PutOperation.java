@@ -223,7 +223,7 @@ class PutOperation {
     if (isOperationComplete()) {
       boolean composite = !getSuccessfullyPutChunkIdsIfComposite().isEmpty();
       if (composite) {
-        metadataPutChunk.maybeNotifyForFirstChunkCreation();
+        metadataPutChunk.notifyForFirstChunkCreation();
       }
       if (blobId != null) {
         notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(),
@@ -343,7 +343,7 @@ class PutOperation {
             // channel has data, and there is a chunk that can be filled.
             maybeStopTrackingWaitForChunkTime();
             bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-            if (chunkToFill.isReady()) {
+            if (chunkToFill.isReady() && !chunkToFill.chunkBlobProperties.isEncrypted()) {
               routerCallback.onPollReady();
             }
             if (!channelReadBuffer.hasRemaining()) {
@@ -1114,8 +1114,7 @@ class PutOperation {
               // chunkException will be set within processServerError.
               logger.trace(
                   "Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
-                  chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(),
-                  blobId);
+                  chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(), blobId);
               processServerError(putResponse.getError());
               isSuccessful = false;
             }
@@ -1260,17 +1259,12 @@ class PutOperation {
 
     /**
      * Notify for the creation of the first chunk. To be called after the overall operation is completed if the overall
-     * blob is composite. If no first chunk was put successfully, this will do nothing.
+     * blob is composite. This will be called only if the operation succeeded.
      */
-    void maybeNotifyForFirstChunkCreation() {
-      if (indexToChunkIds.get(0) != null) {
-        // reason to check for not null: there are chances that 2nd chunk would completes before the first chunk and
-        // the first chunk failed later. In such cases, even though metadata chunk might return some successfully
-        // completed chunkIds, the first chunk may be null
-        String chunkId = firstChunkIdAndProperties.getFirst().getID();
-        BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
-        notificationSystem.onBlobCreated(chunkId, chunkProperties, NotificationBlobType.DataChunk);
-      }
+    void notifyForFirstChunkCreation() {
+      String chunkId = firstChunkIdAndProperties.getFirst().getID();
+      BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
+      notificationSystem.onBlobCreated(chunkId, chunkProperties, NotificationBlobType.DataChunk);
     }
 
     @Override

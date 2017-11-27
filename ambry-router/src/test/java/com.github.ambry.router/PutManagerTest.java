@@ -1029,11 +1029,12 @@ public class PutManagerTest {
      * @param expectedNotificationBlobType the expected {@link NotificationBlobType}.
      * @param expectedBlobProperties the expected {@link BlobProperties}.
      * @param failure {@code true} if failure case need to be tested. {@code true} otherwise
+     * @return {@code true} if notification events are found and verified. {@false} otherwise
      */
-    void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
+    private boolean verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
         BlobProperties expectedBlobProperties, boolean failure) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
-      if (!failure) {
+      if (events != null) {
         Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
         BlobCreatedEvent event = events.get(0);
         Assert.assertEquals("NotificationBlobType does not match data in notification event.",
@@ -1042,8 +1043,10 @@ public class PutManagerTest {
             RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
         Assert.assertEquals("Expected blob size does not match data in notification event.",
             expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
+        return true;
       } else {
-        Assert.assertTrue("Wrong number of events for blobId", events == null || events.size() == 0);
+        Assert.assertTrue("Notification events cannot be null for non failure cases", failure);
+        return false;
       }
     }
 
@@ -1054,14 +1057,17 @@ public class PutManagerTest {
       Set<String> blobIdsVisited = new HashSet<>();
       for (MockServer mockServer : mockServerLayout.getMockServers()) {
         for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
-          if (blobIdsVisited.add(blobEntry.getKey())) {
+          if (!blobIdsVisited.contains(blobEntry.getKey())) {
             StoredBlob blob = blobEntry.getValue();
             System.out.println(blobEntry.getKey());
-            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties, true);
+            if (verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties, true)) {
+              blobIdsVisited.add(blobEntry.getKey());
+            }
           }
         }
       }
-      Assert.assertEquals("Notifications created for unexpected blob IDs", 0, blobCreatedEvents.size());
+      Assert.assertEquals("Notifications created for unexpected blob IDs", blobIdsVisited.size(),
+          blobCreatedEvents.size());
     }
   }
 

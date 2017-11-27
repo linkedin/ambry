@@ -39,6 +39,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -81,7 +82,7 @@ public class GetBlobInfoOperationTest {
   private final ResponseHandler responseHandler;
   private final MockNetworkClientFactory networkClientFactory;
   private final NetworkClient networkClient;
-  private MockRouterCallback routerCallback;
+  private final MockRouterCallback routerCallback;
   private final MockTime time = new MockTime();
   private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
   private final NonBlockingRouter router;
@@ -95,6 +96,7 @@ public class GetBlobInfoOperationTest {
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final GetBlobOptionsInternal options;
+  private String kmsSingleKey;
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -141,10 +143,8 @@ public class GetBlobInfoOperationTest {
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
     if (testEncryption) {
-      kms = new MockKeyManagementService(new KMSConfig(vprops),
-          TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
-      cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
-      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+      kmsSingleKey = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
+      instantiateCryptoComponents(vprops);
     }
     router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
@@ -161,7 +161,11 @@ public class GetBlobInfoOperationTest {
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
     networkClient = networkClientFactory.getNetworkClient();
+    router.close();
     routerCallback = new MockRouterCallback(networkClient, Collections.EMPTY_LIST);
+    if (testEncryption) {
+      instantiateCryptoComponents(vprops);
+    }
   }
 
   @After
@@ -173,6 +177,17 @@ public class GetBlobInfoOperationTest {
     if (cryptoJobHandler != null) {
       cryptoJobHandler.close();
     }
+  }
+
+  /**
+   * Instantiates crypto components (kms, cryptoService and CryptoJobHandler)
+   * @param vprops {@link VerifiableProperties} instance to use
+   * @throws GeneralSecurityException
+   */
+  private void instantiateCryptoComponents(VerifiableProperties vprops) throws GeneralSecurityException {
+    kms = new MockKeyManagementService(new KMSConfig(vprops), kmsSingleKey);
+    cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
   }
 
   /**
