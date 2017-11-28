@@ -23,8 +23,10 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.ssl.SslHandler;
+import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
+import javax.net.ssl.SSLEngine;
 import javax.security.auth.x500.X500Principal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -202,11 +204,17 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         boolean sslUsed = sslHandler != null;
         sslLogMessage.append("[used=").append(sslUsed).append("]");
         if (sslUsed) {
-          X509Certificate certificate = (X509Certificate) sslHandler.engine().getSession().getPeerCertificates()[0];
-          X500Principal principal = certificate.getSubjectX500Principal();
-          Collection subjectAlternativeNames = certificate.getSubjectAlternativeNames();
-          sslLogMessage.append(", [principal=").append(principal).append("]");
-          sslLogMessage.append(", [san=").append(subjectAlternativeNames).append("]");
+          SSLEngine sslEngine = sslHandler.engine();
+          if (sslEngine.getNeedClientAuth()) {
+            for (Certificate certificate : sslEngine.getSession().getPeerCertificates()) {
+              if (certificate instanceof X509Certificate) {
+                X500Principal principal = ((X509Certificate) certificate).getSubjectX500Principal();
+                Collection subjectAlternativeNames = ((X509Certificate) certificate).getSubjectAlternativeNames();
+                sslLogMessage.append(", [principal=").append(principal).append("]");
+                sslLogMessage.append(", [san=").append(subjectAlternativeNames).append("]");
+              }
+            }
+          }
         }
       } catch (Exception e) {
         logger.error("Unexpected error while getting SSL connection info for public access logger", e);
