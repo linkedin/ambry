@@ -123,7 +123,6 @@ class AccountTestUtils {
             random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
         String containerDescription = UUID.randomUUID().toString();
         boolean containerCaching = random.nextBoolean();
-        // TODO make these randomly generated once V2 container writes are enabled
         boolean containerEncryption = random.nextBoolean();
         boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
         boolean mediaScanDisabled = random.nextBoolean();
