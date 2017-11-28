@@ -18,19 +18,27 @@ import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.HelixStoreOperator;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import org.json.JSONArray;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
@@ -42,6 +50,7 @@ import static org.junit.Assert.*;
  * Integration tests for {@link AccountUpdateTool}. The tests are running against a locally-deployed {@code ZooKeeper}.
  *
  */
+@RunWith(Parameterized.class)
 public class AccountUpdateToolTest {
   private static final int NUM_REF_ACCOUNT = 10 + (int) (Math.random() * 50);
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
@@ -50,6 +59,7 @@ public class AccountUpdateToolTest {
   private static final byte DC_ID = (byte) 1;
   private static final String ZK_SERVER_ADDRESS = "localhost:" + ZK_SERVER_PORT;
   private static final String HELIX_STORE_ROOT_PATH = "/ambry/defaultCluster/helixPropertyStore";
+  private static final int LATCH_TIMEOUT_MS = 1000;
   private static final Properties helixConfigProps = new Properties();
   private static final VerifiableProperties vHelixConfigProps;
   private static final HelixPropertyStoreConfig storeConfig;
@@ -59,7 +69,9 @@ public class AccountUpdateToolTest {
   private final Map<Short, Map<Short, Container>> idToRefContainerMap;
   private final HelixNotifier notifier;
   private final AccountService accountService;
+  private final TestAccountUpdateConsumer accountUpdateConsumer;
   private final HelixStoreOperator storeOperator;
+  private final short containerJsonVersion;
 
   /**
    * Initialization for all the tests.
@@ -79,10 +91,20 @@ public class AccountUpdateToolTest {
   }
 
   /**
+   * Run this test for all versions of the container schema.
+   * @return the constructor arguments to use.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{Container.JSON_VERSION_1}, {Container.JSON_VERSION_2}});
+  }
+
+  /**
    * Constructor that does initialization for every test.
    * @throws Exception Any unexpected exception.
    */
-  public AccountUpdateToolTest() throws Exception {
+  public AccountUpdateToolTest(short containerJsonVersion) throws Exception {
+    this.containerJsonVersion = containerJsonVersion;
     idToRefAccountMap = new HashMap<>();
     idToRefContainerMap = new HashMap<>();
     generateRefAccounts(idToRefAccountMap, idToRefContainerMap, new HashSet<>(), NUM_REF_ACCOUNT,
@@ -99,11 +121,14 @@ public class AccountUpdateToolTest {
     notifier = new HelixNotifier(storeConfig);
     accountService =
         new HelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier).getAccountService();
+    accountUpdateConsumer = new TestAccountUpdateConsumer();
+    accountService.addAccountUpdateConsumer(accountUpdateConsumer);
   }
 
   @After
   public void cleanUp() throws Exception {
     if (accountService != null) {
+      accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
       accountService.close();
     }
   }
@@ -160,12 +185,10 @@ public class AccountUpdateToolTest {
     // id conflict
     idConflictAccounts.add(new AccountBuilder((short) 1, "account1", Account.AccountStatus.INACTIVE, null).build());
     idConflictAccounts.add(new AccountBuilder((short) 1, "account2", Account.AccountStatus.INACTIVE, null).build());
-    try {
-      createOrUpdateAccountsAndWait(idConflictAccounts);
-      fail("Should have thrown.");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
+    TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(idConflictAccounts),
+        null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(idConflictAccounts),
+        null);
     Thread.sleep(100);
     assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
 
@@ -173,12 +196,10 @@ public class AccountUpdateToolTest {
     Collection<Account> nameConflictAccounts = new ArrayList<>();
     nameConflictAccounts.add(new AccountBuilder((short) 1, "account1", Account.AccountStatus.INACTIVE, null).build());
     nameConflictAccounts.add(new AccountBuilder((short) 2, "account1", Account.AccountStatus.INACTIVE, null).build());
-    try {
-      createOrUpdateAccountsAndWait(nameConflictAccounts);
-      fail("Should have thrown.");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
+    TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(nameConflictAccounts),
+        null);
+    TestUtils.assertException(IllegalArgumentException.class, () -> createOrUpdateAccountsAndWait(nameConflictAccounts),
+        null);
     Thread.sleep(100);
     assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
   }
@@ -192,13 +213,28 @@ public class AccountUpdateToolTest {
     String badJsonFile = tempDirPath + File.separator + "badJsonFile.json";
     writeStringToFile("Invalid json string", badJsonFile);
     try {
-      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000);
+      AccountUpdateTool.updateAccount(badJsonFile, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000,
+          Container.getCurrentJsonVersion());
       fail("Should have thrown.");
     } catch (Exception e) {
       // expected
     }
     Thread.sleep(100);
     assertEquals("Wrong number of accounts in accountService", 0, accountService.getAllAccounts().size());
+  }
+
+  /**
+   * Creates or updates a collection of {@link Account}s to {@code ZooKeeper} server.
+   * @param accounts The collection of {@link Account}s to create or update.
+   * @throws Exception Any unexpected exception.
+   */
+  private void createOrUpdateAccountsAndWait(Collection<Account> accounts) throws Exception {
+    String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
+    writeAccountsToFile(accounts, jsonFilePath);
+    accountUpdateConsumer.reset();
+    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000,
+        containerJsonVersion);
+    accountUpdateConsumer.awaitUpdate();
   }
 
   /**
@@ -217,17 +253,30 @@ public class AccountUpdateToolTest {
   }
 
   /**
-   * Creates or updates a collection of {@link Account}s to {@code ZooKeeper} server.
-   * @param accounts The collection of {@link Account}s to create or update.
-   * @throws Exception Any unexpected exception.
+   * An account update consumer for testing purposes. This includes facilities to wait for an update to occur.
    */
-  private static void createOrUpdateAccountsAndWait(Collection<Account> accounts) throws Exception {
-    String jsonFilePath = tempDirPath + File.separator + UUID.randomUUID().toString() + ".json";
-    writeAccountsToFile(accounts, jsonFilePath);
-    AccountUpdateTool.updateAccount(jsonFilePath, ZK_SERVER_ADDRESS, HELIX_STORE_ROOT_PATH, 2000, 2000);
-    // @todo for now it is hard to know when the accounts in an accountService gets updated, so we just blindly
-    // @todo sleep for some time until the update happens. There is a planned work to add support into AccountService,
-    // @todo so that callback can be registered for account updates.
-    Thread.sleep(100);
+  private static class TestAccountUpdateConsumer implements Consumer<Collection<Account>> {
+    private CountDownLatch latch = new CountDownLatch(1);
+
+    @Override
+    public void accept(Collection<Account> accounts) {
+      latch.countDown();
+    }
+
+    /**
+     * Wait for at least one account update since the last {@link #reset()}.
+     * @throws TimeoutException
+     * @throws InterruptedException
+     */
+    private void awaitUpdate() throws TimeoutException, InterruptedException {
+      TestUtils.awaitLatchOrTimeout(latch, LATCH_TIMEOUT_MS);
+    }
+
+    /**
+     * Reset the latch.
+     */
+    private void reset() {
+      latch = new CountDownLatch(1);
+    }
   }
 }
