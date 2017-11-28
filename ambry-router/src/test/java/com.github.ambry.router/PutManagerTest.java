@@ -832,7 +832,7 @@ public class PutManagerTest {
         Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
         Assert.assertArrayEquals("UserMetadata mismatch for simple blob", originalUserMetadata,
             request.getUsermetadata().array());
-        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(), false);
+        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
       } else {
         ByteBuffer userMetadata = request.getUsermetadata();
         BlobId origBlobId = new BlobId(blobId, mockClusterMap);
@@ -851,7 +851,7 @@ public class PutManagerTest {
         }).run();
       }
     }
-    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(), false);
+    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
   }
 
   /**
@@ -902,7 +902,7 @@ public class PutManagerTest {
       offset.addAndGet(dataBlobLength.get());
       Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
       notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
-          dataBlobPutRequest.getBlobProperties(), false);
+          dataBlobPutRequest.getBlobProperties());
     }
     Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
   }
@@ -1028,26 +1028,18 @@ public class PutManagerTest {
      * @param blobId The blob ID to look up a notification for.
      * @param expectedNotificationBlobType the expected {@link NotificationBlobType}.
      * @param expectedBlobProperties the expected {@link BlobProperties}.
-     * @param failure {@code true} if failure case need to be tested. {@code true} otherwise
-     * @return {@code true} if notification events are found and verified. {@false} otherwise
      */
-    private boolean verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
-        BlobProperties expectedBlobProperties, boolean failure) {
+    private void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
+        BlobProperties expectedBlobProperties) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
-      if (events != null) {
-        Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
-        BlobCreatedEvent event = events.get(0);
-        Assert.assertEquals("NotificationBlobType does not match data in notification event.",
-            expectedNotificationBlobType, event.notificationBlobType);
-        Assert.assertTrue("BlobProperties does not match data in notification event.",
-            RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
-        Assert.assertEquals("Expected blob size does not match data in notification event.",
-            expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
-        return true;
-      } else {
-        Assert.assertTrue("Notification events cannot be null for non failure cases", failure);
-        return false;
-      }
+      Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
+      BlobCreatedEvent event = events.get(0);
+      Assert.assertEquals("NotificationBlobType does not match data in notification event.",
+          expectedNotificationBlobType, event.notificationBlobType);
+      Assert.assertTrue("BlobProperties does not match data in notification event.",
+          RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
+      Assert.assertEquals("Expected blob size does not match data in notification event.",
+          expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
     }
 
     /**
@@ -1057,17 +1049,13 @@ public class PutManagerTest {
       Set<String> blobIdsVisited = new HashSet<>();
       for (MockServer mockServer : mockServerLayout.getMockServers()) {
         for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
-          if (!blobIdsVisited.contains(blobEntry.getKey())) {
+          if (blobIdsVisited.add(blobEntry.getKey())) {
             StoredBlob blob = blobEntry.getValue();
             System.out.println(blobEntry.getKey());
-            if (verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties, true)) {
-              blobIdsVisited.add(blobEntry.getKey());
-            }
+            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties);
           }
         }
       }
-      Assert.assertEquals("Notifications created for unexpected blob IDs", blobIdsVisited.size(),
-          blobCreatedEvents.size());
     }
   }
 
