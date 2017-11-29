@@ -99,7 +99,7 @@ import static org.junit.Assert.*;
 public class FrontendIntegrationTest {
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
-  private static final int MAX_MULTIPART_POST_SIZE_BYTES = 1048576;
+  private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
   private static final ClusterMap CLUSTER_MAP;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
   private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;

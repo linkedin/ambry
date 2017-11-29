@@ -370,6 +370,7 @@ public class NettyMultipartRequestTest {
               maxSizeAllowed);
       assertTrue("Request channel is not open", request.isOpen());
       long currentSizeAdded = 0;
+      boolean failedToAdd = false;
       while (!encoder.isEndOfInput()) {
         // Sending null for ctx because the encoder is OK with that.
         HttpContent httpContent = encoder.readChunk(PooledByteBufAllocator.DEFAULT);
@@ -384,12 +385,14 @@ public class NettyMultipartRequestTest {
             fail("Should have failed to add content of size [" + encodedSize
                 + "] because it is over the max size allowed: " + maxSizeAllowed);
           } catch (RestServiceException e) {
+            failedToAdd = true;
             assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestTooLarge, e.getErrorCode());
             break;
           }
         }
         currentSizeAdded += readableBytes;
       }
+      assertEquals("Success state not as expected", maxSizeAllowed < encodedSize, failedToAdd);
     }
   }
 
