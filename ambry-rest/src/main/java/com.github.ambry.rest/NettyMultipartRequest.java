@@ -33,6 +33,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +50,8 @@ import org.slf4j.LoggerFactory;
 class NettyMultipartRequest extends NettyRequest {
   private final Queue<HttpContent> rawRequestContents = new LinkedBlockingQueue<>();
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final AtomicLong bytesReceived = new AtomicLong(0);
+  private final long maxSizeAllowedInBytes;
 
   private boolean readyForRead = false;
   private boolean hasBlob = false;
@@ -59,13 +62,15 @@ class NettyMultipartRequest extends NettyRequest {
    * @param channel the {@link Channel} over which the {@code request} has been received.
    * @param nettyMetrics the {@link NettyMetrics} instance to use.
    * @param blacklistedQueryParams the set of query params that should not be exposed via {@link #getArgs()}.
+   * @param maxSizeAllowedInBytes the cap on the size of the request. If the size of the request goes beyond this size, then
+   *                        it will be discarded.
    * @throws IllegalArgumentException if {@code request} is null or if the HTTP method defined in {@code request} is
    *                                    anything other than POST.
    * @throws RestServiceException if the HTTP method defined in {@code request} is not recognized as a
    *                                {@link RestMethod}.
    */
   NettyMultipartRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics,
-      Set<String> blacklistedQueryParams) throws RestServiceException {
+      Set<String> blacklistedQueryParams, long maxSizeAllowedInBytes) throws RestServiceException {
     super(request, channel, nettyMetrics, blacklistedQueryParams);
     // reset auto read state.
     channel.config().setRecvByteBufAllocator(savedAllocator);
@@ -73,6 +78,7 @@ class NettyMultipartRequest extends NettyRequest {
     if (!getRestMethod().equals(RestMethod.POST) && !getRestMethod().equals(RestMethod.PUT)) {
       throw new IllegalArgumentException("NettyMultipartRequest cannot be created for " + getRestMethod());
     }
+    this.maxSizeAllowedInBytes = maxSizeAllowedInBytes;
   }
 
   @Override
@@ -133,6 +139,10 @@ class NettyMultipartRequest extends NettyRequest {
       throw new RestServiceException("The request has been closed and is not accepting content",
           RestServiceErrorCode.RequestChannelClosed);
     } else {
+      long bytesReceivedTillNow = bytesReceived.addAndGet(httpContent.content().readableBytes());
+      if (bytesReceivedTillNow > maxSizeAllowedInBytes) {
+        throw new RestServiceException("Request is larger than allowed size", RestServiceErrorCode.RequestTooLarge);
+      }
       rawRequestContents.add(ReferenceCountUtil.retain(httpContent));
     }
   }

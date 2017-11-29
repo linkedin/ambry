@@ -27,6 +27,7 @@ import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -98,6 +99,7 @@ import static org.junit.Assert.*;
 public class FrontendIntegrationTest {
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
+  private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
   private static final ClusterMap CLUSTER_MAP;
   private static final VerifiableProperties FRONTEND_VERIFIABLE_PROPS;
   private static final VerifiableProperties SSL_CLIENT_VERIFIABLE_PROPS;
@@ -230,6 +232,21 @@ public class FrontendIntegrationTest {
         refAccount.getName(), refContainer.getName(), true);
     doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, refAccount, refContainer,
         refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
+
+    // failure case
+    // size of content being POSTed is higher than what is allowed via multipart/form-data
+    long maxAllowedSizeBytes = new NettyConfig(FRONTEND_VERIFIABLE_PROPS).nettyMultipartPostMaxSizeBytes;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes((int) maxAllowedSizeBytes + 1));
+    HttpHeaders headers = new DefaultHttpHeaders();
+    setAmbryHeadersForPut(headers, 7200, !refContainer.isCacheable(), refAccount.getName(), "application/octet-stream",
+        null, refAccount.getName(), refContainer.getName());
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
+    HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, ByteBuffer.allocate(0));
+    Queue<HttpObject> responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
+    HttpResponse response = (HttpResponse) responseParts.poll();
+    assertEquals("Unexpected response status", HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE, response.status());
+    assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+    assertFalse("Channel should not be active", HttpUtil.isKeepAlive(response));
   }
 
   /*
@@ -464,6 +481,8 @@ public class FrontendIntegrationTest {
     properties.put("netty.server.enable.ssl", "true");
     // to test that backpressure does not impede correct operation.
     properties.put("netty.server.request.buffer.watermark", "1");
+    // to test that multipart requests over a certain size fail
+    properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
     properties.put("frontend.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
     // add key for singleKeyManagementService

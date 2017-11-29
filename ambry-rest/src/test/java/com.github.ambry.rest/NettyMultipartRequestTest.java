@@ -92,7 +92,7 @@ public class NettyMultipartRequestTest {
       MockChannel channel = new MockChannel();
       RecvByteBufAllocator expected = channel.config().getRecvByteBufAllocator();
       NettyMultipartRequest request =
-          new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS, Collections.emptySet());
+          new NettyMultipartRequest(httpRequest, channel, NETTY_METRICS, Collections.emptySet(), Long.MAX_VALUE);
       assertTrue("Auto-read should not have been changed", channel.config().isAutoRead());
       assertEquals("RecvByteBufAllocator should not have changed", expected,
           channel.config().getRecvByteBufAllocator());
@@ -104,7 +104,8 @@ public class NettyMultipartRequestTest {
     for (HttpMethod method : methods) {
       HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, method, "/");
       try {
-        new NettyMultipartRequest(httpRequest, new MockChannel(), NETTY_METRICS, Collections.emptySet());
+        new NettyMultipartRequest(httpRequest, new MockChannel(), NETTY_METRICS, Collections.emptySet(),
+            Long.MAX_VALUE);
         fail("Creation of NettyMultipartRequest should have failed for " + method);
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -251,7 +252,8 @@ public class NettyMultipartRequestTest {
     HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, null);
     NettyMultipartRequest request =
-        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet());
+        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet(),
+            Long.MAX_VALUE);
     assertTrue("Request channel is not open", request.isOpen());
     // insert random data
     HttpContent httpContent = new DefaultHttpContent(Unpooled.wrappedBuffer(TestUtils.getRandomBytes(10)));
@@ -320,7 +322,8 @@ public class NettyMultipartRequestTest {
     encoder = createEncoder(httpRequest, files);
     encoder.addBodyAttribute("dummyKey", "dummyValue");
     request =
-        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet());
+        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet(),
+            Long.MAX_VALUE);
     assertTrue("Request channel is not open", request.isOpen());
     while (!encoder.isEndOfInput()) {
       // Sending null for ctx because the encoder is OK with that.
@@ -347,6 +350,52 @@ public class NettyMultipartRequestTest {
     }
   }
 
+  /**
+   * Tests to make sure the max allowed size for multipart requests is enforced.
+   * @throws Exception
+   */
+  @Test
+  public void sizeLimitationTest() throws Exception {
+    int blobPartSize = 1024;
+    // encoding 1024 bytes of data results in 1209 readable bytes from the encoder.
+    int encodedSize = 1209;
+    long[] maxSizesAllowed = {encodedSize + 1, encodedSize, encodedSize - 1, 0};
+    for (long maxSizeAllowed : maxSizesAllowed) {
+      InMemoryFile[] files = {new InMemoryFile(RestUtils.MultipartPost.BLOB_PART,
+          ByteBuffer.wrap(TestUtils.getRandomBytes(blobPartSize)))};
+      HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+      HttpPostRequestEncoder encoder = createEncoder(httpRequest, files);
+      NettyMultipartRequest request =
+          new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet(),
+              maxSizeAllowed);
+      assertTrue("Request channel is not open", request.isOpen());
+      long currentSizeAdded = 0;
+      boolean failedToAdd = false;
+      while (!encoder.isEndOfInput()) {
+        // Sending null for ctx because the encoder is OK with that.
+        HttpContent httpContent = encoder.readChunk(PooledByteBufAllocator.DEFAULT);
+        int readableBytes = httpContent.content().readableBytes();
+        if (currentSizeAdded + readableBytes <= maxSizeAllowed) {
+          request.addContent(httpContent);
+        } else {
+          assertTrue("Max size [" + maxSizeAllowed + "] must be lesser than content size: " + encodedSize,
+              maxSizeAllowed < encodedSize);
+          try {
+            request.addContent(httpContent);
+            fail("Should have failed to add content of size [" + encodedSize
+                + "] because it is over the max size allowed: " + maxSizeAllowed);
+          } catch (RestServiceException e) {
+            failedToAdd = true;
+            assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.RequestTooLarge, e.getErrorCode());
+            break;
+          }
+        }
+        currentSizeAdded += readableBytes;
+      }
+      assertEquals("Success state not as expected", maxSizeAllowed < encodedSize, failedToAdd);
+    }
+  }
+
   // helpers
   // general
 
@@ -364,7 +413,8 @@ public class NettyMultipartRequestTest {
     }
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, parts);
     NettyMultipartRequest request =
-        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet());
+        new NettyMultipartRequest(encoder.finalizeRequest(), new MockChannel(), NETTY_METRICS, Collections.emptySet(),
+            Long.MAX_VALUE);
     assertTrue("Request channel is not open", request.isOpen());
     while (!encoder.isEndOfInput()) {
       // Sending null for ctx because the encoder is OK with that.
@@ -470,7 +520,7 @@ public class NettyMultipartRequestTest {
     public final String name;
     public final ByteBuffer content;
 
-    public InMemoryFile(String name, ByteBuffer content) {
+    InMemoryFile(String name, ByteBuffer content) {
       this.name = name;
       this.content = content;
     }

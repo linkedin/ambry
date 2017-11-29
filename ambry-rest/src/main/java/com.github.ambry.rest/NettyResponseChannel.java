@@ -470,6 +470,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.rangeNotSatisfiableCount.inc();
         status = HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE;
         break;
+      case RequestTooLarge:
+        nettyMetrics.requestTooLargeCount.inc();
+        status = HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE;
+        break;
       case InternalServerError:
         nettyMetrics.internalServerErrorCount.inc();
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
