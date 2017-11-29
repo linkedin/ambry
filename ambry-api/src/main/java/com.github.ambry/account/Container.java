@@ -67,8 +67,8 @@ public class Container {
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
   static final boolean MEDIA_SCAN_DISABLED_DEFAULT_VALUE = false;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
-  static final short JSON_VERSION_1 = 1;
-  static final short JSON_VERSION_2 = 2;
+  public static final short JSON_VERSION_1 = 1;
+  public static final short JSON_VERSION_2 = 2;
 
   /**
    * The current version to serialize in. This can be set through the {@link #setCurrentJsonVersion(short)} method.
@@ -171,12 +171,14 @@ public class Container {
   /**
    * The previously encrypted flag for {@link #DEFAULT_PUBLIC_CONTAINER}.
    */
-  public static final boolean DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+  public static final boolean DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING =
+      PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
 
   /**
    * The previously encrypted flag for {@link #DEFAULT_PRIVATE_CONTAINER}.
    */
-  public static final boolean DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+  public static final boolean DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING =
+      PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
 
   /**
    * The cache setting of {@link #UNKNOWN_CONTAINER}.

@@ -85,6 +85,9 @@ public class NettyPerfClient {
   private final long totalSize;
   private final byte[] chunk;
   private final SSLFactory sslFactory;
+  private final String serviceId;
+  private final String targetAccountName;
+  private final String targetContainerName;
   private final Bootstrap b = new Bootstrap();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -109,6 +112,9 @@ public class NettyPerfClient {
     final Long postBlobTotalSize;
     final Integer postBlobChunkSize;
     final String sslPropsFilePath;
+    final String targetAccountName;
+    final String targetContainerName;
+    final String serviceId;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /**
@@ -153,6 +159,21 @@ public class NettyPerfClient {
               .withOptionalArg()
               .describedAs("postBlobChunkSize")
               .ofType(Integer.class);
+      ArgumentAcceptingOptionSpec<String> targetAccountName =
+          parser.accepts("targetAccountName", "Target account name for POSTs")
+              .withOptionalArg()
+              .describedAs("targetAccountName")
+              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> targetContainerName =
+          parser.accepts("targetContainerName", "Target container name for POSTs")
+              .withOptionalArg()
+              .describedAs("targetContainerName")
+              .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> serviceId = parser.accepts("serviceId", "serviceId representing the caller")
+          .withOptionalArg()
+          .describedAs("serviceId")
+          .ofType(String.class)
+          .defaultsTo("NettyPerfClient");
       ArgumentAcceptingOptionSpec<String> sslPropsFilePath =
           parser.accepts("sslPropsFilePath", "The path to the properties file with SSL settings")
               .withOptionalArg()
@@ -168,6 +189,9 @@ public class NettyPerfClient {
       this.postBlobTotalSize = options.valueOf(postBlobTotalSize);
       this.postBlobChunkSize = options.valueOf(postBlobChunkSize);
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
+      this.targetAccountName = options.valueOf(targetAccountName);
+      this.targetContainerName = options.valueOf(targetContainerName);
+      this.serviceId = options.valueOf(serviceId);
       validateArgs();
 
       logger.info("Host: {}", this.host);
@@ -186,10 +210,18 @@ public class NettyPerfClient {
     private void validateArgs() {
       if (!SUPPORTED_REQUEST_TYPES.contains(requestType)) {
         throw new IllegalArgumentException("Unsupported request type: " + requestType);
-      } else if (requestType.equals(POST) && (postBlobTotalSize == null || postBlobTotalSize <= 0
-          || postBlobChunkSize == null || postBlobChunkSize <= 0)) {
-        throw new IllegalArgumentException(
-            "Total size to be posted and size of each chunk need to be specified with POST and have to be > 0");
+      } else if (requestType.equals(POST)) {
+        if (postBlobTotalSize == null || postBlobTotalSize <= 0 || postBlobChunkSize == null
+            || postBlobChunkSize <= 0) {
+          throw new IllegalArgumentException(
+              "Total size to be posted and size of each chunk need to be specified with POST and have to be > 0");
+        } else if (targetAccountName == null || targetAccountName.isEmpty() || targetContainerName == null
+            || targetContainerName.isEmpty()) {
+          throw new IllegalArgumentException("TargetAccountName and TargetContainerName cannot be empty with POST");
+        }
+      }
+      if (serviceId == null || serviceId.isEmpty()) {
+        throw new IllegalArgumentException("serviceId cannot be empty");
       }
     }
   }
@@ -203,7 +235,8 @@ public class NettyPerfClient {
       ClientArgs clientArgs = new ClientArgs(args);
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
-              clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath);
+              clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
+              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
@@ -227,11 +260,15 @@ public class NettyPerfClient {
    * @param totalSize the total size in bytes of a blob to be POSTed ({@code null} if non-POST).
    * @param chunkSize size in bytes of each chunk to be POSTed ({@code null} if non-POST).
    * @param sslPropsFilePath the path to the SSL properties, or {@code null} to disable SSL.
+   * @param serviceId serviceId of the caller to represent the identity
+   * @param targetAccountName target account name for POST
+   * @param targetContainerName target container name for POST
    * @throws IOException
    * @throws GeneralSecurityException
    */
   private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
-      String sslPropsFilePath) throws IOException, GeneralSecurityException {
+      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName)
+      throws IOException, GeneralSecurityException {
     this.host = host;
     this.port = port;
     this.uri = "http://" + host + ":" + port + path;
@@ -246,6 +283,9 @@ public class NettyPerfClient {
     }
     sslFactory = sslPropsFilePath != null ? new SSLFactory(
         new SSLConfig(new VerifiableProperties(Utils.loadProps(sslPropsFilePath)))) : null;
+    this.serviceId = serviceId;
+    this.targetAccountName = targetAccountName;
+    this.targetContainerName = targetContainerName;
     logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, uri {} with concurrency {}",
         this.host, this.port, uri, this.concurrency);
   }
@@ -431,8 +471,10 @@ public class NettyPerfClient {
         request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, uri);
         HttpUtil.setContentLength(request, totalSize);
         request.headers().add(RestUtils.Headers.BLOB_SIZE, totalSize);
-        request.headers().add(RestUtils.Headers.SERVICE_ID, "PerfNettyClient");
+        request.headers().add(RestUtils.Headers.SERVICE_ID, serviceId);
         request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+        request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
+        request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
       } else {
         request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
       }
