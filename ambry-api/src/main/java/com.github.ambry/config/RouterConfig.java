@@ -154,6 +154,27 @@ public class RouterConfig {
   public final short routerBlobidCurrentVersion;
 
   /**
+   * The KeyManagementServiceFactory that will be used to fetch {@link com.github.ambry.router.KeyManagementService}
+   */
+  @Config("router.key.management.service.factory")
+  @Default("com.github.ambry.router.SingleKeyManagementServiceFactory")
+  public final String routerKeyManagementServiceFactory;
+
+  /**
+   * The CryptoServiceFactory that will be used to fetch {@link com.github.ambry.router.CryptoService}
+   */
+  @Config("router.crypto.service.factory")
+  @Default("com.github.ambry.router.GCMCryptoServiceFactory")
+  public final String routerCryptoServiceFactory;
+
+  /**
+   * Number of crypto jobs worker count
+   */
+  @Config("router.crypto.jobs.worker.count")
+  @Default("1")
+  public final int routerCryptoJobsWorkerCount;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -190,5 +211,11 @@ public class RouterConfig {
     routerBlobidCurrentVersion =
         verifiableProperties.getShortFromAllowedValues("router.blobid.current.version", (short) 2,
             new Short[]{1, 2, 3});
+    routerKeyManagementServiceFactory = verifiableProperties.getString("router.key.management.service.factory",
+        "com.github.ambry.router.SingleKeyManagementServiceFactory");
+    routerCryptoServiceFactory = verifiableProperties.getString("router.crypto.service.factory",
+        "com.github.ambry.router.GCMCryptoServiceFactory");
+    routerCryptoJobsWorkerCount =
+        verifiableProperties.getIntInRange("router.crypto.jobs.worker.count", 1, 1, Integer.MAX_VALUE);
   }
 }

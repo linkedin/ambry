@@ -15,10 +15,13 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.CryptoServiceConfig;
+import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -37,6 +40,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -49,17 +53,23 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 /**
  * A class to test the Put implementation of the {@link NonBlockingRouter}.
  */
+@RunWith(Parameterized.class)
 public class PutManagerTest {
+  static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
   private static final long MAX_WAIT_MS = 2000;
+  private final boolean testEncryption;
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
@@ -67,6 +77,10 @@ public class PutManagerTest {
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
+  private MockKeyManagementService kms;
+  private MockCryptoService cryptoService;
+  private CryptoJobHandler cryptoJobHandler;
+  private boolean instantiateEncryptionCast = true;
 
   private final ArrayList<RequestAndResult> requestAndResultsList = new ArrayList<RequestAndResult>();
   private int chunkSize;
@@ -80,9 +94,20 @@ public class PutManagerTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
 
   /**
-   * Pre-initialization common to all tests.
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
    */
-  public PutManagerTest() throws Exception {
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
+   * Pre-initialization common to all tests.
+   * @param {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   */
+  public PutManagerTest(boolean testEncryption) throws Exception {
+    this.testEncryption = testEncryption;
     // random chunkSize in the range [1, 1 MB]
     chunkSize = random.nextInt(1024 * 1024) + 1;
     requestParallelism = 3;
@@ -101,7 +126,9 @@ public class PutManagerTest {
    */
   @After
   public void postCheck() {
-    Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
+    if (router != null) {
+      Assert.assertFalse("Router should be closed at the end of each test", router.isOpen());
+    }
   }
 
   /**
@@ -240,6 +267,68 @@ public class PutManagerTest {
     Assert.assertEquals("No RequestResponseHandler threads should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
+   * Tests a failure scenario where connects to server nodes throw exceptions.
+   */
+  @Test
+  public void testFailureOnKMS() throws Exception {
+    if (testEncryption) {
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      kms.exceptionToThrow.set(GSE);
+      // simple blob
+      requestAndResultsList.clear();
+      requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
+      Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
+      submitPutsAndAssertFailure(expectedException, false, true, true);
+      // this should not close the router.
+      Assert.assertTrue("Router should not be closed", router.isOpen());
+      assertCloseCleanup();
+
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      kms.exceptionToThrow.set(GSE);
+      // composite blob
+      requestAndResultsList.clear();
+      requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
+      submitPutsAndAssertFailure(expectedException, false, true, true);
+      // this should not close the router.
+      Assert.assertTrue("Router should not be closed", router.isOpen());
+      assertCloseCleanup();
+    }
+  }
+
+  /**
+   * Tests a failure scenario where connects to server nodes throw exceptions.
+   */
+  @Test
+  public void testFailureOnCryptoService() throws Exception {
+    if (testEncryption) {
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      cryptoService.exceptionOnEncryption.set(GSE);
+      // simple blob
+      requestAndResultsList.clear();
+      requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
+      Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
+      submitPutsAndAssertFailure(expectedException, false, true, true);
+      // this should not close the router.
+      Assert.assertTrue("Router should not be closed", router.isOpen());
+      assertCloseCleanup();
+
+      setupEncryptionCast(new VerifiableProperties(new Properties()));
+      instantiateEncryptionCast = false;
+      cryptoService.exceptionOnEncryption.set(GSE);
+      // composite blob
+      requestAndResultsList.clear();
+      requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
+      submitPutsAndAssertFailure(expectedException, false, true, true);
+      // this should not close the router.
+      Assert.assertTrue("Router should not be closed", router.isOpen());
+      assertCloseCleanup();
+    }
   }
 
   /**
@@ -560,7 +649,7 @@ public class PutManagerTest {
   /**
    * @return Return a {@link NonBlockingRouter} created with default {@link VerifiableProperties}
    */
-  private NonBlockingRouter getNonBlockingRouter() throws IOException {
+  private NonBlockingRouter getNonBlockingRouter() throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", "DC1");
@@ -568,10 +657,26 @@ public class PutManagerTest {
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
     VerifiableProperties vProps = new VerifiableProperties(properties);
+    if (testEncryption && instantiateEncryptionCast) {
+      setupEncryptionCast(vProps);
+    }
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
+        cryptoJobHandler, mockTime);
     return router;
+  }
+
+  /**
+   * Instantiates KMS, Crypto service and CryptoJobHandler to assist in encryption
+   * @param vProps {@link VerifiableProperties} instance to use for instantiation
+   * @throws GeneralSecurityException
+   */
+  private void setupEncryptionCast(VerifiableProperties vProps) throws GeneralSecurityException {
+    kms = new MockKeyManagementService(new KMSConfig(vProps),
+        TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
+    cryptoService = new MockCryptoService(new CryptoServiceConfig(vProps));
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
   }
 
   /**
@@ -673,7 +778,8 @@ public class PutManagerTest {
       Exception exception = requestAndResult.result.error();
       Assert.assertNotNull("blobId should not be null", blobId);
       Assert.assertNull("exception should be null", exception);
-      verifyBlob(blobId, requestAndResult.putContent, allChunks);
+      verifyBlob(blobId, requestAndResult.putBlobProperties, requestAndResult.putContent,
+          requestAndResult.putUserMetadata, allChunks);
     }
   }
 
@@ -681,11 +787,13 @@ public class PutManagerTest {
    * Verifies that the blob associated with the blob id returned by a successful put operation has exactly the same
    * data as the original object that was put.
    * @param blobId the blobId of the blob that is to be verified.
+   * @param properties the {@link BlobProperties} of the blob that is to be verified
+   * @param originalPutContent original content of the blob
+   * @param originalUserMetadata original user-metadata of the blob
    * @param serializedRequests the mapping from blob ids to their corresponding serialized {@link PutRequest}.
    */
-
-  private void verifyBlob(String blobId, byte[] originalPutContent, HashMap<String, ByteBuffer> serializedRequests)
-      throws Exception {
+  private void verifyBlob(String blobId, BlobProperties properties, byte[] originalPutContent,
+      byte[] originalUserMetadata, HashMap<String, ByteBuffer> serializedRequests) throws Exception {
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
     PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
     NotificationBlobType notificationBlobType;
@@ -699,34 +807,104 @@ public class PutManagerTest {
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
       Assert.assertEquals("Number of chunks is not as expected",
           RouterUtils.getNumChunksForBlobAndChunkSize(originalPutContent.length, chunkSize), dataBlobIds.size());
-      StoreKey lastKey = dataBlobIds.get(dataBlobIds.size() - 1);
-      byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
-      int offset = 0;
-      for (StoreKey key : dataBlobIds) {
-        PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
-        int dataBlobLength = (int) dataBlobPutRequest.getBlobSize();
-        InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
-        Utils.readBytesFromStream(dataBlobStream, content, offset, dataBlobLength);
-        Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
-        if (key != lastKey) {
-          Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength);
-        } else {
-          // If we are here (composite blob), we know that the blob size is non-zero.
-          Assert.assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
-              (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength);
-        }
-        offset += dataBlobLength;
-        notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
-            dataBlobPutRequest.getBlobProperties(), dataBlobPutRequest.getUsermetadata().array());
+      // verify user-metadata
+      if (properties.isEncrypted()) {
+        ByteBuffer userMetadata = request.getUsermetadata();
+        BlobId origBlobId = new BlobId(blobId, mockClusterMap);
+        // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
+        // assertion failures in non main thread will not fail the test.
+        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
+            (result, exception) -> {
+              Assert.assertNull("Exception should not be thrown", exception);
+              Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+              Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                  result.getDecryptedUserMetadata().array());
+            }).run();
+      } else {
+        Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata, request.getUsermetadata().array());
       }
-      Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
+      verifyCompositeBlob(properties, originalPutContent, originalUserMetadata, dataBlobIds, request,
+          serializedRequests);
     } else {
       notificationBlobType = NotificationBlobType.Simple;
       byte[] content = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
-      Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
+      if (!properties.isEncrypted()) {
+        Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
+        Assert.assertArrayEquals("UserMetadata mismatch for simple blob", originalUserMetadata,
+            request.getUsermetadata().array());
+        notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
+      } else {
+        ByteBuffer userMetadata = request.getUsermetadata();
+        BlobId origBlobId = new BlobId(blobId, mockClusterMap);
+        // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
+        // assertion failures in non main thread will not fail the test.
+        new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,
+            cryptoService, kms, new Callback<DecryptJob.DecryptJobResult>() {
+          @Override
+          public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
+            Assert.assertNull("Exception should not be thrown", exception);
+            Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+            Assert.assertArrayEquals("Content mismatch", originalPutContent, result.getDecryptedBlobContent().array());
+            Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                result.getDecryptedUserMetadata().array());
+          }
+        }).run();
+      }
     }
-    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties(),
-        request.getUsermetadata().array());
+    notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
+  }
+
+  /**
+   * Verify Composite blob for content, userMetadata and
+   * @param properties {@link BlobProperties} of the blob
+   * @param originalPutContent original out content
+   * @param originalUserMetadata original user-metadata
+   * @param dataBlobIds {@link List} of {@link StoreKey}s of the composite blob in context
+   * @param request {@link com.github.ambry.protocol.PutRequest.ReceivedPutRequest} to fetch info from
+   * @param serializedRequests the mapping from blob ids to their corresponding serialized {@link PutRequest}.
+   * @throws Exception
+   */
+  private void verifyCompositeBlob(BlobProperties properties, byte[] originalPutContent, byte[] originalUserMetadata,
+      List<StoreKey> dataBlobIds, PutRequest.ReceivedPutRequest request, HashMap<String, ByteBuffer> serializedRequests)
+      throws Exception {
+    StoreKey lastKey = dataBlobIds.get(dataBlobIds.size() - 1);
+    byte[] content = new byte[(int) request.getBlobProperties().getBlobSize()];
+    AtomicInteger offset = new AtomicInteger(0);
+    for (StoreKey key : dataBlobIds) {
+      PutRequest.ReceivedPutRequest dataBlobPutRequest = deserializePutRequest(serializedRequests.get(key.getID()));
+      AtomicInteger dataBlobLength = new AtomicInteger((int) dataBlobPutRequest.getBlobSize());
+      InputStream dataBlobStream = dataBlobPutRequest.getBlobStream();
+      if (!properties.isEncrypted()) {
+        Utils.readBytesFromStream(dataBlobStream, content, offset.get(), dataBlobLength.get());
+        Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+            dataBlobPutRequest.getUsermetadata().array());
+      } else {
+        byte[] dataBlobContent = Utils.readBytesFromStream(dataBlobStream, dataBlobLength.get());
+        // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
+        // assertion failures in non main thread will not fail the test.
+        new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
+            ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
+            (result, exception) -> {
+              Assert.assertNull("Exception should not be thrown", exception);
+              Assert.assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
+              Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                  result.getDecryptedUserMetadata().array());
+              dataBlobLength.set(result.getDecryptedBlobContent().remaining());
+              result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
+            }).run();
+      }
+      if (key != lastKey) {
+        Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());
+      } else {
+        Assert.assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
+            (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength.get());
+      }
+      offset.addAndGet(dataBlobLength.get());
+      Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
+      notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
+          dataBlobPutRequest.getBlobProperties());
+    }
+    Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
   }
 
   /**
@@ -820,7 +998,7 @@ public class PutManagerTest {
 
     RequestAndResult(int blobSize) {
       putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];
@@ -836,14 +1014,13 @@ public class PutManagerTest {
     Map<String, List<BlobCreatedEvent>> blobCreatedEvents = new HashMap<>();
 
     @Override
-    public void onBlobCreated(String blobId, BlobProperties blobProperties, byte[] userMetadata,
-        NotificationBlobType notificationBlobType) {
+    public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
       if (events == null) {
         events = new ArrayList<>();
         blobCreatedEvents.put(blobId, events);
       }
-      events.add(new BlobCreatedEvent(blobProperties, userMetadata, notificationBlobType));
+      events.add(new BlobCreatedEvent(blobProperties, notificationBlobType));
     }
 
     /**
@@ -851,10 +1028,9 @@ public class PutManagerTest {
      * @param blobId The blob ID to look up a notification for.
      * @param expectedNotificationBlobType the expected {@link NotificationBlobType}.
      * @param expectedBlobProperties the expected {@link BlobProperties}.
-     * @param expectedUserMetadata the expected user metadata.
      */
-    void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
-        BlobProperties expectedBlobProperties, byte[] expectedUserMetadata) {
+    private void verifyNotification(String blobId, NotificationBlobType expectedNotificationBlobType,
+        BlobProperties expectedBlobProperties) {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
       Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
       BlobCreatedEvent event = events.get(0);
@@ -864,8 +1040,6 @@ public class PutManagerTest {
           RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
       Assert.assertEquals("Expected blob size does not match data in notification event.",
           expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
-      Assert.assertArrayEquals("User metadata does not match data in notification event.", expectedUserMetadata,
-          event.userMetadata);
     }
 
     /**
@@ -878,24 +1052,19 @@ public class PutManagerTest {
           if (blobIdsVisited.add(blobEntry.getKey())) {
             StoredBlob blob = blobEntry.getValue();
             System.out.println(blobEntry.getKey());
-            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties,
-                blob.userMetadata.array());
+            verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties);
           }
         }
       }
-      Assert.assertEquals("Notifications created for unexpected blob IDs", blobIdsVisited.size(),
-          blobCreatedEvents.size());
     }
   }
 
   private static class BlobCreatedEvent {
     BlobProperties blobProperties;
-    byte[] userMetadata;
     NotificationBlobType notificationBlobType;
 
-    BlobCreatedEvent(BlobProperties blobProperties, byte[] userMetadata, NotificationBlobType notificationBlobType) {
+    BlobCreatedEvent(BlobProperties blobProperties, NotificationBlobType notificationBlobType) {
       this.blobProperties = blobProperties;
-      this.userMetadata = userMetadata;
       this.notificationBlobType = notificationBlobType;
     }
   }

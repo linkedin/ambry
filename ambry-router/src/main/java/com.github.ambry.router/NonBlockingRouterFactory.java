@@ -25,8 +25,8 @@ import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.security.GeneralSecurityException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +46,9 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final NotificationSystem notificationSystem;
   private final Time time;
   private final NetworkClientFactory networkClientFactory;
+  private final KeyManagementService kms;
+  private final CryptoService cryptoService;
+  private final CryptoJobHandler cryptoJobHandler;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -56,10 +59,10 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
    * @param sslFactory the {@link SSLFactory} to support SSL transmissions. Required if SSL is enabled for any
    *                   datacenters.
-   * @throws IllegalArgumentException if any of the arguments are null.
+   * @throws Exception if any of the arguments are null or if instantiation of KMS or CryptoService fails
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory) throws GeneralSecurityException {
+      NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null argument passed in");
     }
@@ -81,21 +84,28 @@ public class NonBlockingRouterFactory implements RouterFactory {
     networkClientFactory = new NetworkClientFactory(networkMetrics, networkConfig, sslFactory,
         routerConfig.routerScalingUnitMaxConnectionsPerPortPlainText,
         routerConfig.routerScalingUnitMaxConnectionsPerPortSsl, routerConfig.routerConnectionCheckoutTimeoutMs, time);
+    KeyManagementServiceFactory kmsFactory =
+        Utils.getObj(routerConfig.routerKeyManagementServiceFactory, verifiableProperties,
+            new ClusterMapConfig(verifiableProperties).clusterMapClusterName, registry);
+    kms = kmsFactory.getKeyManagementService();
+    CryptoServiceFactory cryptoServiceFactory =
+        Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, registry);
+    cryptoService = cryptoServiceFactory.getCryptoService();
+    cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
   /**
    * Construct and return a {@link NonBlockingRouter}
    * @return a {@link NonBlockingRouter}
-   * @throws InstantiationException
    */
   @Override
-  public Router getRouter() throws InstantiationException {
+  public Router getRouter() {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          time);
+          kms, cryptoService, cryptoJobHandler, time);
     } catch (IOException e) {
-      throw new InstantiationException("Error instantiating NonBlocking Router" + e.getMessage());
+      throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }
   }
 }

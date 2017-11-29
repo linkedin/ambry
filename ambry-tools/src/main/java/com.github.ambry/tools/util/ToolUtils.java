@@ -82,9 +82,15 @@ public final class ToolUtils {
    * @param properties the {@link Properties} that need to be updated
    */
   public static void addClusterMapProperties(Properties properties) {
-    properties.setProperty("clustermap.cluster.name", "dev");
-    properties.setProperty("clustermap.datacenter.name", "DataCenter");
-    properties.setProperty("clustermap.host.name", "localhost");
+    if(properties.getProperty("clustermap.cluster.name") == null) {
+      properties.setProperty("clustermap.cluster.name", "dev");
+    }
+    if(properties.getProperty("clustermap.datacenter.name") == null) {
+      properties.setProperty("clustermap.datacenter.name", "DataCenter");
+    }
+    if(properties.getProperty("clustermap.host.name") == null) {
+      properties.setProperty("clustermap.host.name", "localhost");
+    }
   }
 
   /**

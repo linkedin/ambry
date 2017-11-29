@@ -20,6 +20,7 @@ import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -32,16 +33,36 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.server.RouterServerTestFramework.*;
 
 
+@RunWith(Parameterized.class)
 public class RouterServerPlaintextTest {
   private static MockCluster plaintextCluster;
   private static RouterServerTestFramework testFramework;
   private static MetricRegistry routerMetricRegistry;
   private static long plainTextSendBytesCountBeforeTest;
   private static long plainTextReceiveBytesCountBeforeTest;
+
+  /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
+   * Instantiates {@link RouterServerPlaintextTest}
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   */
+  public RouterServerPlaintextTest(boolean testEncryption) {
+    testFramework.setTestEncryption(testEncryption);
+  }
 
   @BeforeClass
   public static void initializeTests() throws Exception {

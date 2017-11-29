@@ -23,6 +23,7 @@ import com.github.ambry.utils.SystemTime;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -35,16 +36,36 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.server.RouterServerTestFramework.*;
 
 
+@RunWith(Parameterized.class)
 public class RouterServerSSLTest {
   private static MockCluster sslCluster;
   private static RouterServerTestFramework testFramework;
   private static MetricRegistry routerMetricRegistry;
   private static long sslSendBytesCountBeforeTest;
   private static long sslReceiveBytesCountBeforeTest;
+
+  /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
+   * Instantiates {@link RouterServerSSLTest}
+   * @param testEncryption {@code true} if blobs need to be tested w/ encryption. {@code false} otherwise
+   */
+  public RouterServerSSLTest(boolean testEncryption) {
+    testFramework.setTestEncryption(testEncryption);
+  }
 
   @BeforeClass
   public static void initializeTests() throws Exception {

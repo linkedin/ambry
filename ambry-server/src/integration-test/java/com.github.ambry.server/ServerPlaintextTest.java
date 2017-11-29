@@ -17,32 +17,49 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
+@RunWith(Parameterized.class)
 public class ServerPlaintextTest {
   private static Properties routerProps;
   private static MockNotificationSystem notificationSystem;
   private static MockCluster plaintextCluster;
+  private final boolean testEncryption;
 
   @BeforeClass
   public static void initializeTests() throws Exception {
     routerProps = new Properties();
+    routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
   }
 
-  public ServerPlaintextTest() throws Exception {
+  /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{true}});
+  }
+
+  public ServerPlaintextTest(boolean testEncryption) throws Exception {
+    this.testEncryption = testEncryption;
   }
 
   @AfterClass
@@ -66,7 +83,7 @@ public class ServerPlaintextTest {
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
-        null, routerProps);
+        null, routerProps, testEncryption);
   }
 
   @Test
@@ -79,12 +96,16 @@ public class ServerPlaintextTest {
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, null, null, null, null,
-        notificationSystem);
+        notificationSystem, testEncryption);
   }
 
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
-    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT,
-        plaintextCluster, notificationSystem, routerProps);
+    // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
+    // which to compare the GetResponse. Hence skipping encryption flow for this test
+    if (!testEncryption) {
+      ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "", PortType.PLAINTEXT,
+          plaintextCluster, notificationSystem, routerProps);
+    }
   }
 }

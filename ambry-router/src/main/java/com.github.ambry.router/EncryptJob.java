@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.commons.BlobId;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 
@@ -22,24 +21,30 @@ import java.security.GeneralSecurityException;
  * Class representing an Encrypt Job
  */
 public class EncryptJob implements CryptoJob {
-  private final BlobId blobId;
-  private final ByteBuffer toEncrypt;
+  private final short accountId;
+  private final short containerId;
+  private final ByteBuffer blobContentToEncrypt;
+  private final ByteBuffer userMetadataToEncrypt;
   private final Object perBlobKey;
   private final Callback<EncryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
 
   /**
-   * Instantiates {@link EncryptJob} with {@link BlobId}, content to encrypt, perBlobKey and the {@link Callback}
-   * @param blobId the {@link BlobId} for which encryption is requested
-   * @param toEncrypt {@link ByteBuffer} to be encrypted
+   * Instantiates {@link EncryptJob} for an upload.
+   * @param accountId the accountId of the blob that needs to be encrypted
+   * @param containerId the containerId of the blob that needs to be encrypted
+   * @param blobContentToEncrypt {@link ByteBuffer} to be encrypted. Could be {@code null} for a metadata chunk.
+   * @param userMetadataToEncrypt user metadata to be encrypted. Could be {@code null} for data chunks.
    * @param perBlobKey per blob key to use to encrypt the blob content
    * @param callback {@link Callback} to be invoked on completion
    */
-  EncryptJob(BlobId blobId, ByteBuffer toEncrypt, Object perBlobKey, CryptoService cryptoService,
-      KeyManagementService kms, Callback<EncryptJobResult> callback) {
-    this.blobId = blobId;
-    this.toEncrypt = toEncrypt;
+  EncryptJob(short accountId, short containerId, ByteBuffer blobContentToEncrypt, ByteBuffer userMetadataToEncrypt,
+      Object perBlobKey, CryptoService cryptoService, KeyManagementService kms, Callback<EncryptJobResult> callback) {
+    this.accountId = accountId;
+    this.containerId = containerId;
+    this.blobContentToEncrypt = blobContentToEncrypt;
+    this.userMetadataToEncrypt = userMetadataToEncrypt;
     this.perBlobKey = perBlobKey;
     this.callback = callback;
     this.cryptoService = cryptoService;
@@ -48,20 +53,33 @@ public class EncryptJob implements CryptoJob {
 
   /**
    * Steps to be performed on encryption
-   * 1. Encrypt blob content using perBlobKey
+   * 1. Encrypt blob content using perBlobKey if not null
+   * 2. Encrypt user-metadata using perBlobKey if not null
    * 2. Fetch ContainerKey from kms for the given blob
    * 3. Encrypt perBlobKey using containerKey
-   * 4. Invoke callback with the encryptedKey and encryptedContent
+   * 4. Invoke callback with the encryptedKey and encryptedBlobContent
    */
   @Override
   public void run() {
+    ByteBuffer encryptedBlobContent = null;
+    ByteBuffer encryptedUserMetadata = null;
+    ByteBuffer encryptedKey = null;
+    Exception exception = null;
     try {
-      ByteBuffer encryptedContent = cryptoService.encrypt(toEncrypt, perBlobKey);
-      Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
-      ByteBuffer encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
-      callback.onCompletion(new EncryptJobResult(blobId, encryptedKey, encryptedContent), null);
+      if (blobContentToEncrypt != null) {
+        encryptedBlobContent = cryptoService.encrypt(blobContentToEncrypt, perBlobKey);
+      }
+      if (userMetadataToEncrypt != null) {
+        encryptedUserMetadata = cryptoService.encrypt(userMetadataToEncrypt, perBlobKey);
+      }
+      Object containerKey = kms.getKey(accountId, containerId);
+      encryptedKey = cryptoService.encryptKey(perBlobKey, containerKey);
     } catch (Exception e) {
-      callback.onCompletion(new EncryptJobResult(blobId, null, null), e);
+      exception = e;
+    } finally {
+      callback.onCompletion(
+          exception == null ? new EncryptJobResult(encryptedKey, encryptedBlobContent, encryptedUserMetadata) : null,
+          exception);
     }
   }
 
@@ -70,33 +88,33 @@ public class EncryptJob implements CryptoJob {
    * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callback for the job
    */
   public void closeJob(GeneralSecurityException gse) {
-    callback.onCompletion(new EncryptJobResult(blobId, null, null), gse);
+    callback.onCompletion(null, gse);
   }
 
   /**
    * Class representing encrypt job result
    */
   class EncryptJobResult {
-    private final BlobId blobId;
     private final ByteBuffer encryptedKey;
-    private final ByteBuffer encryptedContent;
+    private final ByteBuffer encryptedBlobContent;
+    private final ByteBuffer encryptedUserMetadata;
 
-    EncryptJobResult(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent) {
-      this.blobId = blobId;
+    EncryptJobResult(ByteBuffer encryptedKey, ByteBuffer encryptedBlobContent, ByteBuffer encryptedUserMetadata) {
       this.encryptedKey = encryptedKey;
-      this.encryptedContent = encryptedContent;
-    }
-
-    BlobId getBlobId() {
-      return blobId;
+      this.encryptedBlobContent = encryptedBlobContent;
+      this.encryptedUserMetadata = encryptedUserMetadata;
     }
 
     ByteBuffer getEncryptedKey() {
       return encryptedKey;
     }
 
-    ByteBuffer getEncryptedContent() {
-      return encryptedContent;
+    ByteBuffer getEncryptedBlobContent() {
+      return encryptedBlobContent;
+    }
+
+    ByteBuffer getEncryptedUserMetadata() {
+      return encryptedUserMetadata;
     }
   }
 }

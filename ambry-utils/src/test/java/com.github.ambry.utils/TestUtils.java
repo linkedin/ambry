@@ -153,15 +153,17 @@ public class TestUtils {
   }
 
   /**
-   * Similar to {@link Runnable}, but able to throw checked exceptions.
+   * Generates and returns a random Hex String of the specified size
+   * @param size expected key hex string size
+   * @return the hex string thus generated
    */
-  public interface ThrowingRunnable {
-
-    /**
-     * Run the action.
-     * @throws Exception
-     */
-    void run() throws Exception;
+  public static String getRandomKey(int size) {
+    StringBuilder sb = new StringBuilder();
+    while (sb.length() < size) {
+      sb.append(Integer.toHexString(TestUtils.RANDOM.nextInt()));
+    }
+    sb.setLength(size);
+    return sb.toString();
   }
 
   /**
@@ -222,6 +224,17 @@ public class TestUtils {
         zkServer.shutdown();
       }
     }
+  }
+
+  /**
+   * Similar to {@link Runnable}, but able to throw checked exceptions.
+   */
+  public interface ThrowingRunnable {
+    /**
+     * Run the action.
+     * @throws Exception
+     */
+    void run() throws Exception;
   }
 
   /**

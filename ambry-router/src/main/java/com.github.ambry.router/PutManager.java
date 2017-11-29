@@ -50,6 +50,9 @@ class PutManager {
 
   private final Set<PutOperation> putOperations;
   private final NotificationSystem notificationSystem;
+  private final KeyManagementService kms;
+  private final CryptoService cryptoService;
+  private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
   private final Thread chunkFillerThread;
   private final Object chunkFillerSynchronizer = new Object();
@@ -94,11 +97,14 @@ class PutManager {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
    * @param suffix the suffix to associate with the names of the threads created by this PutManager
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, String suffix,
-      Time time) {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -118,6 +124,9 @@ class PutManager {
         }
       }
     };
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     putOperations = Collections.newSetFromMap(new ConcurrentHashMap<PutOperation, Boolean>());
     correlationIdToPutOperation = new HashMap<Integer, PutOperation>();
@@ -139,7 +148,8 @@ class PutManager {
     try {
       PutOperation putOperation =
           new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, userMetaData,
-              channel, futureResult, callback, routerCallback, chunkArrivalListener, time, blobProperties);
+              channel, futureResult, callback, routerCallback, chunkArrivalListener, kms, cryptoService,
+              cryptoJobHandler, time, blobProperties);
       putOperations.add(putOperation);
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {

@@ -47,6 +47,9 @@ abstract class GetOperation {
   protected final Callback<GetBlobResultInternal> getOperationCallback;
   protected final BlobId blobId;
   protected final GetBlobOptionsInternal options;
+  protected final KeyManagementService kms;
+  protected final CryptoService cryptoService;
+  protected final CryptoJobHandler cryptoJobHandler;
   protected final Time time;
   private final Histogram localColoTracker;
   private final Histogram crossColoTracker;
@@ -70,13 +73,17 @@ abstract class GetOperation {
    * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
    * @param crossColoTracker the {@link Histogram} that tracks inter datacenter latencies for this class of requests.
    * @param pastDueCounter the {@link Counter} that tracks the number of times a request is past due.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the {@link Time} instance to use.
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> getOperationCallback, Histogram localColoTracker, Histogram crossColoTracker,
-      Counter pastDueCounter, Time time) throws RouterException {
+      Counter pastDueCounter, KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
+      Time time) throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
@@ -86,6 +93,9 @@ abstract class GetOperation {
     this.localColoTracker = localColoTracker;
     this.crossColoTracker = crossColoTracker;
     this.pastDueCounter = pastDueCounter;
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     submissionTimeMs = time.milliseconds();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);

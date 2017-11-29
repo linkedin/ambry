@@ -17,7 +17,7 @@ import java.security.GeneralSecurityException;
 
 
 /**
- * CryptoJob representing the job that needs processing by {@link CryptoJobExecutorService}
+ * CryptoJob representing the job that needs processing by {@link CryptoJobHandler}
  */
 public interface CryptoJob extends Runnable {
   /**

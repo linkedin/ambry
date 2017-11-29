@@ -33,7 +33,7 @@ public class GCMCryptoServiceFactory implements CryptoServiceFactory<SecretKeySp
    * @param verifiableProperties {@link VerifiableProperties} to load configs from
    * @param registry {@link MetricRegistry} to use
    */
-  GCMCryptoServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry registry) {
+  public GCMCryptoServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry registry) {
     cryptoServiceConfig = new CryptoServiceConfig(verifiableProperties);
   }
 

@@ -104,8 +104,8 @@ public class PutOperationTest {
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             userMetadata, channel, future, null,
-            new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, time,
-            blobProperties);
+            new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
+            time, blobProperties);
     op.startReadingFromChannel();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;

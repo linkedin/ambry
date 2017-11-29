@@ -23,8 +23,9 @@ import java.security.GeneralSecurityException;
  */
 class DecryptJob implements CryptoJob {
   private final BlobId blobId;
-  private final ByteBuffer enryptedContent;
-  private final ByteBuffer encryptedKey;
+  private final ByteBuffer encryptedBlobContent;
+  private final ByteBuffer encryptedUserMetadata;
+  private final ByteBuffer encryptedPerBlobKey;
   private final Callback<DecryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
@@ -33,15 +34,20 @@ class DecryptJob implements CryptoJob {
    * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
    * {@link Callback}
    * @param blobId the {@link BlobId} for which decryption is requested
-   * @param encryptedKey encrypted per blob key
-   * @param encryptedContent encrypted blob content
+   * @param encryptedPerBlobKey encrypted per blob key
+   * @param encryptedBlobContent encrypted blob content. Could be {@null}
+   * @param encryptedUserMetadata encrypted user metadata. Could be {@null}
+   * @param cryptoService the {@link CryptoService} instance to use
+   * @param kms the {@link KeyManagementService} instance to use
    * @param callback {@link Callback} to be invoked on completion
    */
-  DecryptJob(BlobId blobId, ByteBuffer encryptedKey, ByteBuffer encryptedContent, CryptoService cryptoService,
-      KeyManagementService kms, Callback<DecryptJobResult> callback) {
+  DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuffer encryptedBlobContent,
+      ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
+      Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
-    this.enryptedContent = encryptedContent;
-    this.encryptedKey = encryptedKey;
+    this.encryptedBlobContent = encryptedBlobContent;
+    this.encryptedUserMetadata = encryptedUserMetadata;
+    this.encryptedPerBlobKey = encryptedPerBlobKey;
     this.callback = callback;
     this.cryptoService = cryptoService;
     this.kms = kms;
@@ -50,18 +56,30 @@ class DecryptJob implements CryptoJob {
   /**
    * Steps to be performed on decryption
    * 1. Fetch ContainerKey from kms for the given blob
-   * 2. Decrypt encryptedKey using containerKey to obtain perBlobKey
-   * 3. Decrypt encryptedContent using perBlobKey
-   * 4. Invoke callback with the decryptedContent
+   * 2. Decrypt encryptedPerBlobKey using containerKey to obtain perBlobKey
+   * 3. Decrypt encryptedContent using perBlobKey if not null
+   * 4. Decrypt encryptedUserMeta using perBlobKey if not null
+   * 5. Invoke callback with the decryptedBlobContent
    */
   public void run() {
+    Exception exception = null;
+    ByteBuffer decryptedBlobContent = null;
+    ByteBuffer decryptedUserMetadata = null;
     try {
       Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
-      Object perBlobKey = cryptoService.decryptKey(encryptedKey, containerKey);
-      ByteBuffer decryptedContent = cryptoService.decrypt(enryptedContent, perBlobKey);
-      callback.onCompletion(new DecryptJobResult(blobId, decryptedContent), null);
+      Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
+      if (encryptedBlobContent != null) {
+        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
+      }
+      if (encryptedUserMetadata != null) {
+        decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
+      }
     } catch (Exception e) {
-      callback.onCompletion(new DecryptJobResult(blobId, null), e);
+      exception = e;
+    } finally {
+      callback.onCompletion(
+          exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,
+          exception);
     }
   }
 
@@ -70,7 +88,7 @@ class DecryptJob implements CryptoJob {
    * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callback for the job
    */
   public void closeJob(GeneralSecurityException gse) {
-    callback.onCompletion(new DecryptJobResult(blobId, null), gse);
+    callback.onCompletion(null, gse);
   }
 
   /**
@@ -78,19 +96,25 @@ class DecryptJob implements CryptoJob {
    */
   class DecryptJobResult {
     private final BlobId blobId;
-    private final ByteBuffer decryptedContent;
+    private final ByteBuffer decryptedBlobContent;
+    private final ByteBuffer decryptedUserMetadata;
 
-    DecryptJobResult(BlobId blobId, ByteBuffer decryptedContent) {
+    DecryptJobResult(BlobId blobId, ByteBuffer decryptedBlobContent, ByteBuffer decryptedUserMetadata) {
       this.blobId = blobId;
-      this.decryptedContent = decryptedContent;
+      this.decryptedBlobContent = decryptedBlobContent;
+      this.decryptedUserMetadata = decryptedUserMetadata;
     }
 
     BlobId getBlobId() {
       return blobId;
     }
 
-    ByteBuffer getDecryptedContent() {
-      return decryptedContent;
+    ByteBuffer getDecryptedBlobContent() {
+      return decryptedBlobContent;
+    }
+
+    ByteBuffer getDecryptedUserMetadata() {
+      return decryptedUserMetadata;
     }
   }
 }

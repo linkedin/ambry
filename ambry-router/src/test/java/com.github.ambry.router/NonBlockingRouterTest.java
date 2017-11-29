@@ -20,6 +20,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.CryptoServiceConfig;
+import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -36,6 +38,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -53,11 +56,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
 /**
  * Class to test the {@link NonBlockingRouter}
  */
+@RunWith(Parameterized.class)
 public class NonBlockingRouterTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -80,7 +86,12 @@ public class NonBlockingRouterTest {
   private DeleteManager deleteManager;
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private final MockTime mockTime;
+  private final KeyManagementService kms;
+  private final String singleKeyForKMS;
+  private final CryptoService cryptoService;
   private final MockClusterMap mockClusterMap;
+  private final boolean testEncryption;
+  private CryptoJobHandler cryptoJobHandler;
 
   // Request params;
   BlobProperties putBlobProperties;
@@ -89,13 +100,29 @@ public class NonBlockingRouterTest {
   ReadableStreamChannel putChannel;
 
   /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  /**
    * Initialize parameters common to all tests.
+   * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
    * @throws Exception
    */
-  public NonBlockingRouterTest() throws Exception {
+  public NonBlockingRouterTest(boolean testEncryption) throws Exception {
+    this.testEncryption = testEncryption;
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap();
     NonBlockingRouter.currentOperationsCount.set(0);
+    VerifiableProperties vProps = new VerifiableProperties(new Properties());
+    singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
+    kms = new SingleKeyManagementService(new KMSConfig(vProps), singleKeyForKMS);
+    cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
   }
 
   @After
@@ -124,6 +151,7 @@ public class NonBlockingRouterTest {
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "dc1");
     properties.setProperty("clustermap.host.name", "localhost");
+    properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(128));
     return properties;
   }
 
@@ -145,13 +173,13 @@ public class NonBlockingRouterTest {
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap,
-        mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
+        cryptoService, cryptoJobHandler, mockTime);
   }
 
   private void setOperationParams() {
     putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
     putContent = new byte[PUT_CONTENT_SIZE];
@@ -314,7 +342,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, mockTime);
+        mockClusterMap, kms, cryptoService, cryptoJobHandler, mockTime);
 
     assertExpectedThreadCounts(2, 1);
 
@@ -388,8 +416,8 @@ public class NonBlockingRouterTest {
     };
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
-        mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
+        cryptoService, cryptoJobHandler, mockTime);
 
     setOperationParams();
 
@@ -458,8 +486,8 @@ public class NonBlockingRouterTest {
     };
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
-        mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
+        cryptoService, cryptoJobHandler, mockTime);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     String deleteServiceId = "delete-service";
@@ -546,8 +574,8 @@ public class NonBlockingRouterTest {
     };
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap,
-        mockTime);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
+        cryptoService, cryptoJobHandler, mockTime);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.deleteBlob(blobId, deleteServiceId, null).get();
@@ -631,10 +659,12 @@ public class NonBlockingRouterTest {
     NetworkClient networkClient =
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
-
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", mockTime);
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", localKMS, cryptoService,
+        cryptoJobHandler, mockTime);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -650,7 +680,8 @@ public class NonBlockingRouterTest {
     opHelper = new OperationHelper(OperationType.GET);
     getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
         new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), mockTime);
+        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
+        cryptoJobHandler, mockTime);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
         invalidResponse, -1);
     // Test that if a failed response comes before the operation is completed, failure detector is notified.
@@ -737,7 +768,11 @@ public class NonBlockingRouterTest {
     }
     // Poll once again so that the operation gets a chance to complete.
     allRequests.clear();
-    opHelper.pollOpManager(allRequests);
+    if (testEncryption) {
+      opHelper.awaitOpCompletionOrTimeOut(futureResult);
+    } else {
+      opHelper.pollOpManager(allRequests);
+    }
     futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     if (indexToFail == -1) {
       Assert.assertEquals("Successful notification should have arrived for replicas that were up",
@@ -821,7 +856,11 @@ public class NonBlockingRouterTest {
       opHelper.handleResponse(responseInfo);
     }
     allRequests.clear();
-    opHelper.pollOpManager(allRequests);
+    if (testEncryption) {
+      opHelper.awaitOpCompletionOrTimeOut(futureResult);
+    } else {
+      opHelper.pollOpManager(allRequests);
+    }
     try {
       futureResult.get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     } catch (ExecutionException e) {
@@ -939,6 +978,22 @@ public class NonBlockingRouterTest {
         case DELETE:
           deleteManager.poll(requestInfos);
           break;
+      }
+    }
+
+    /**
+     * Polls all managers at regular intervals until the operation is complete or timeout is reached
+     * @param futureResult {@link FutureResult} that needs to be tested for completion
+     * @throws InterruptedException
+     */
+    private void awaitOpCompletionOrTimeOut(FutureResult futureResult) throws InterruptedException {
+      int timer = 0;
+      List<RequestInfo> allRequests = new ArrayList<>();
+      while (timer < AWAIT_TIMEOUT_MS / 2 && !futureResult.completed()) {
+        pollOpManager(allRequests);
+        Thread.sleep(50);
+        timer += 50;
+        allRequests.clear();
       }
     }
 

@@ -36,7 +36,7 @@ import static com.github.ambry.router.CryptoTestUtils.*;
  */
 public class SingleKeyManagementServiceTest {
 
-  private static final int DEFAULT_KEY_SIZE_CHARS = 64;
+  static final int DEFAULT_KEY_SIZE_CHARS = 64;
   private static final int DEFAULT_RANDOM_KEY_SIZE_BITS = 256;
   private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
   private static final MetricRegistry REGISTRY = new MetricRegistry();
@@ -48,7 +48,7 @@ public class SingleKeyManagementServiceTest {
   public void testSingleKMS() throws Exception {
     int[] keySizes = {16, 32, 64, 128};
     for (int keySize : keySizes) {
-      String key = getRandomKey(keySize);
+      String key = TestUtils.getRandomKey(keySize);
       Properties props = getKMSProperties(key, DEFAULT_RANDOM_KEY_SIZE_BITS);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       KMSConfig config = new KMSConfig(verifiableProperties);
@@ -68,7 +68,7 @@ public class SingleKeyManagementServiceTest {
   public void testRandomKey() throws Exception {
     int[] keySizes = {128, 192, 256};
     for (int keySize : keySizes) {
-      String key = getRandomKey(keySize);
+      String key = TestUtils.getRandomKey(keySize);
       Properties props = getKMSProperties(key, keySize);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       KeyManagementService<SecretKeySpec> kms =
@@ -84,7 +84,7 @@ public class SingleKeyManagementServiceTest {
    */
   @Test
   public void testSingleKMSClose() throws Exception {
-    String key = getRandomKey(DEFAULT_KEY_SIZE_CHARS);
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_CHARS);
     Properties props = getKMSProperties(key, DEFAULT_RANDOM_KEY_SIZE_BITS);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> kms =
@@ -111,7 +111,7 @@ public class SingleKeyManagementServiceTest {
     }
 
     // happy path
-    String key = getRandomKey(DEFAULT_KEY_SIZE_CHARS);
+    String key = TestUtils.getRandomKey(DEFAULT_KEY_SIZE_CHARS);
     props = getKMSProperties(key, DEFAULT_RANDOM_KEY_SIZE_BITS);
     verifiableProperties = new VerifiableProperties((props));
     KeyManagementService<SecretKeySpec> kms =

@@ -36,6 +36,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -84,6 +85,9 @@ class PutOperation {
   private final FutureResult<String> futureResult;
   private final Callback<String> callback;
   private final RouterCallback routerCallback;
+  private final KeyManagementService kms;
+  private final CryptoService cryptoService;
+  private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
   private BlobProperties finalBlobProperties;
 
@@ -148,6 +152,9 @@ class PutOperation {
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
@@ -156,7 +163,8 @@ class PutOperation {
       ResponseHandler responseHandler, NotificationSystem notificationSystem, byte[] userMetadata,
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
-      Time time, BlobProperties blobProperties) throws RouterException {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      BlobProperties blobProperties) throws RouterException {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -169,6 +177,9 @@ class PutOperation {
     this.futureResult = futureResult;
     this.callback = callback;
     this.routerCallback = routerCallback;
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
@@ -212,10 +223,10 @@ class PutOperation {
     if (isOperationComplete()) {
       boolean composite = !getSuccessfullyPutChunkIdsIfComposite().isEmpty();
       if (composite) {
-        metadataPutChunk.notifyForFirstChunkCreation();
+        metadataPutChunk.maybeNotifyForFirstChunkCreation();
       }
       if (blobId != null) {
-        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), getUserMetadata(),
+        notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(),
             composite ? NotificationBlobType.Composite : NotificationBlobType.Simple);
       }
     }
@@ -282,7 +293,7 @@ class PutOperation {
       operationCompleted = true;
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
-      logger.trace("Successfully put chunk with blob id: {} ", chunk.getChunkBlobId());
+      logger.trace("Successfully put data chunk with blob id : {}", chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
     } else {
@@ -332,9 +343,8 @@ class PutOperation {
             // channel has data, and there is a chunk that can be filled.
             maybeStopTrackingWaitForChunkTime();
             bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
-            if (chunkToFill.isReady()) {
+            if (chunkToFill.isReady() && !chunkToFill.chunkBlobProperties.isEncrypted()) {
               routerCallback.onPollReady();
-              updateChunkFillerWaitTimeMetrics();
             }
             if (!channelReadBuffer.hasRemaining()) {
               chunkFillerChannel.resolveOldestChunk(null);
@@ -359,8 +369,10 @@ class PutOperation {
             lastChunk.onFillComplete(true);
             updateChunkFillerWaitTimeMetrics();
           }
+          if (lastChunk.isReady()) {
+            routerCallback.onPollReady();
+          }
         }
-        routerCallback.onPollReady();
       }
     } catch (Exception e) {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
@@ -607,11 +619,17 @@ class PutOperation {
     private int chunkIndex;
     // the blobId of the current chunk.
     protected BlobId chunkBlobId;
+    // the size of raw chunk (prior encryption if applicable)
+    protected long chunkBlobSize;
     // the BlobProperties to associate with this chunk.
     private BlobProperties chunkBlobProperties;
+    // the userMetadata associated with the blob
+    protected byte[] chunkUserMetadata;
     // the most recent time at which this chunk became Free.
     private long chunkFreeAtMs;
-    // the most recent time time at which this chunk became ready.
+    // the most recent time at which this chunk became ready to be encrypted.
+    private long chunkEncryptReadyAtMs;
+    // the most recent time at which this chunk became ready.
     private long chunkReadyAtMs;
     // The exception encountered while putting the current chunk. Not all errors are irrecoverable. An error may or
     // may not get overridden by a subsequent error, and this variable is meant to store the most relevant error.
@@ -620,6 +638,8 @@ class PutOperation {
     protected volatile ChunkState state;
     // the ByteBuffer that has the data for the current chunk.
     protected ByteBuffer buf;
+    // the ByteBuffer that has the encryptedPerBlobKey (encrypted using containerKey). Could be null if encryption is not required.
+    protected ByteBuffer encryptedPerBlobKey;
     // the OperationTracker used to track the status of requests for the current chunk.
     protected OperationTracker operationTracker;
     // the number of times a put was attempted for the current chunk.
@@ -647,6 +667,7 @@ class PutOperation {
      */
     void clear() {
       chunkIndex = -1;
+      chunkBlobSize = -1;
       chunkBlobId = null;
       chunkException = null;
       failedAttempts = 0;
@@ -654,10 +675,12 @@ class PutOperation {
       attemptedPartitionIds.clear();
       maybeUpdateDefunctBufferInfos();
       correlationIdToChunkPutRequestInfo.clear();
+      chunkUserMetadata = userMetadata;
+      encryptedPerBlobKey = null;
+      chunkFreeAtMs = time.milliseconds();
       // this assignment should be the last statement as this immediately makes this chunk available to the
       // ChunkFiller thread for filling.
       state = ChunkState.Free;
-      chunkFreeAtMs = time.milliseconds();
     }
 
     /**
@@ -703,6 +726,14 @@ class PutOperation {
           iter.remove();
         }
       }
+    }
+
+    /**
+     * @return {@code true} if chunk is a MetadataChunk. {@code false} otherwise. Since this is a regular chunk,
+     * false is returned
+     */
+    boolean isMetadataChunk() {
+      return false;
     }
 
     /**
@@ -790,7 +821,7 @@ class PutOperation {
         chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), partitionId);
-        chunkBlobProperties = new BlobProperties(buf.remaining(), passedInBlobProperties.getServiceId(),
+        chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
@@ -808,15 +839,66 @@ class PutOperation {
     }
 
     /**
+     * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
+     */
+    private void encryptChunk() {
+      try {
+        logger.trace("Chunk at index {} moves to {} state", chunkIndex, ChunkState.Encrypting);
+        state = ChunkState.Encrypting;
+        chunkEncryptReadyAtMs = time.milliseconds();
+        logger.trace("Submitting encrypt job for chunk at index {}", chunkIndex);
+        cryptoJobHandler.submitJob(
+            new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
+                isMetadataChunk() ? null : buf, ByteBuffer.wrap(chunkUserMetadata), kms.getRandomKey(), cryptoService,
+                kms, (EncryptJob.EncryptJobResult result, Exception exception) -> {
+              logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
+              if (exception == null && !isOperationComplete()) {
+                if (!isMetadataChunk()) {
+                  buf = result.getEncryptedBlobContent();
+                }
+                encryptedPerBlobKey = result.getEncryptedKey();
+                chunkUserMetadata = result.getEncryptedUserMetadata().array();
+                logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
+                prepareForSending();
+                chunkReadyAtMs = time.milliseconds();
+              } else {
+                if (!isOperationComplete()) {
+                  logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
+                  setOperationExceptionAndComplete(
+                      new RouterException("Exception thrown on encrypting the content for chunk at index " + chunkIndex,
+                          exception, RouterErrorCode.UnexpectedInternalError));
+                } else {
+                  logger.trace(
+                      "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
+                      chunkIndex, getOperationException(), exception);
+                }
+              }
+              routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+              routerCallback.onPollReady();
+            }));
+      } catch (GeneralSecurityException e) {
+        logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);
+        setOperationExceptionAndComplete(new RouterException(
+            "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
+            RouterErrorCode.UnexpectedInternalError));
+      }
+    }
+
+    /**
      * Do the actions required when the chunk has been completely built.
      * @param updateMetric whether chunk fill completion metrics should be updated.
      */
     void onFillComplete(boolean updateMetric) {
       buf.flip();
-      prepareForSending();
-      chunkReadyAtMs = time.milliseconds();
+      chunkBlobSize = buf.remaining();
       if (updateMetric) {
-        routerMetrics.chunkFillTimeMs.update(chunkReadyAtMs - chunkFreeAtMs);
+        routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
+      }
+      if (!passedInBlobProperties.isEncrypted()) {
+        prepareForSending();
+        chunkReadyAtMs = time.milliseconds();
+      } else {
+        encryptChunk();
       }
     }
 
@@ -838,6 +920,7 @@ class PutOperation {
       }
       if (!buf.hasRemaining()) {
         onFillComplete(true);
+        updateChunkFillerWaitTimeMetrics();
       }
       return toWrite;
     }
@@ -857,6 +940,7 @@ class PutOperation {
             prepareForSending();
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
+            logger.error("Slipped puts failed for {}", getChunkBlobId());
             chunkBlobId = null;
             setOperationExceptionAndComplete(chunkException);
             done = true;
@@ -950,8 +1034,8 @@ class PutOperation {
      */
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
-          BlobType.DataBlob, null);
+          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.duplicate(), buf.remaining(),
+          BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
 
     /**
@@ -1028,9 +1112,9 @@ class PutOperation {
               isSuccessful = true;
             } else {
               // chunkException will be set within processServerError.
-              logger.trace("Replica {} returned an error {} for a PutRequest with response correlationId : {} ",
-                  chunkPutRequestInfo.replicaId.getDataNodeId(), putResponse.getError(),
-                  putResponse.getCorrelationId());
+              logger.trace(
+                  "Replica {} returned an error {} for a PutRequest with response correlationId : {} and blobId {}",
+                  chunkPutRequestInfo.replicaId, putResponse.getError(), putResponse.getCorrelationId(), blobId);
               processServerError(putResponse.getError());
               isSuccessful = false;
             }
@@ -1144,6 +1228,11 @@ class PutOperation {
       state = ChunkState.Building;
     }
 
+    @Override
+    boolean isMetadataChunk() {
+      return true;
+    }
+
     /**
      * Add the given blobId of a successfully put data chunk to the metadata at its position in the overall blob.
      * @param chunkBlobId the blobId of the associated data chunk
@@ -1154,7 +1243,7 @@ class PutOperation {
     }
 
     /**
-     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, byte[], NotificationBlobType)} for this
+     * Call {@link NotificationSystem#onBlobCreated(String, BlobProperties, NotificationBlobType)} for this
      * chunk, unless it is the first chunk, in which case it might be an entire simple blob. In that case, save
      * the {@link BlobProperties} from the first chunk.
      * @param chunk the {@link PutChunk} created.
@@ -1163,7 +1252,7 @@ class PutOperation {
       if (chunk.chunkIndex == 0) {
         firstChunkIdAndProperties = new Pair<>(chunk.chunkBlobId, chunk.chunkBlobProperties);
       } else {
-        notificationSystem.onBlobCreated(chunk.chunkBlobId.getID(), chunk.chunkBlobProperties, userMetadata,
+        notificationSystem.onBlobCreated(chunk.chunkBlobId.getID(), chunk.chunkBlobProperties,
             NotificationBlobType.DataChunk);
       }
     }
@@ -1172,10 +1261,15 @@ class PutOperation {
      * Notify for the creation of the first chunk. To be called after the overall operation is completed if the overall
      * blob is composite. If no first chunk was put successfully, this will do nothing.
      */
-    void notifyForFirstChunkCreation() {
-      String chunkId = firstChunkIdAndProperties.getFirst().getID();
-      BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
-      notificationSystem.onBlobCreated(chunkId, chunkProperties, userMetadata, NotificationBlobType.DataChunk);
+    void maybeNotifyForFirstChunkCreation() {
+      if (indexToChunkIds.get(0) != null) {
+        // reason to check for not null: there are chances that 2nd chunk would completes before the first chunk and
+        // the first chunk failed later. In such cases, even though metadata chunk might return some successfully
+        // completed chunkIds, the first chunk may be null
+        String chunkId = firstChunkIdAndProperties.getFirst().getID();
+        BlobProperties chunkProperties = firstChunkIdAndProperties.getSecond();
+        notificationSystem.onBlobCreated(chunkId, chunkProperties, NotificationBlobType.DataChunk);
+      }
     }
 
     @Override
@@ -1206,6 +1300,7 @@ class PutOperation {
             orderedChunkIdList);
         onFillComplete(false);
       } else {
+        // if there is only one chunk
         blobId = (BlobId) indexToChunkIds.get(0);
         state = ChunkState.Complete;
         operationCompleted = true;
@@ -1228,8 +1323,8 @@ class PutOperation {
     @Override
     protected PutRequest createPutRequest() {
       return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(userMetadata), buf.duplicate(), buf.remaining(),
-          BlobType.MetadataBlob, null);
+          chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.duplicate(), buf.remaining(),
+          BlobType.MetadataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
     }
   }
 
@@ -1246,6 +1341,9 @@ class PutOperation {
     Building, /**
      * The Chunk is ready to be sent out.
      */
+    Encrypting, /**
+     * The Chunk is being encrypted
+     * */
     Ready, /**
      * The Chunk is complete.
      */

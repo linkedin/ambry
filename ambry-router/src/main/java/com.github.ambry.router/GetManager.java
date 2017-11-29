@@ -47,6 +47,9 @@ class GetManager {
   private static final Logger logger = LoggerFactory.getLogger(GetManager.class);
 
   private final Set<GetOperation> getOperations;
+  private final KeyManagementService kms;
+  private final CryptoService cryptoService;
+  private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
   // This helps the GetManager quickly find the appropriate GetOperation to hand over the response to.
   // Requests are added before they are sent out and get cleaned up as and when responses come in.
@@ -84,16 +87,23 @@ class GetManager {
    * @param routerConfig  The {@link RouterConfig} containing the configs for the PutManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time The {@link Time} instance to use.
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
-      NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, Time time) {
+      NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.routerCallback = routerCallback;
+    this.kms = kms;
+    this.cryptoService = cryptoService;
+    this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     getOperations = Collections.newSetFromMap(new ConcurrentHashMap<GetOperation, Boolean>());
   }
@@ -110,11 +120,11 @@ class GetManager {
       if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
         getOperation =
             new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                callback, time);
+                callback, routerCallback, kms, cryptoService, cryptoJobHandler, time);
       } else {
         getOperation =
             new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-                routerCallback, blobIdFactory, time);
+                routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {

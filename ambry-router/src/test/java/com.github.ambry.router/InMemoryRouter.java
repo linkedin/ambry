@@ -364,8 +364,7 @@ class InMemoryBlobPoster implements Runnable {
           new InMemoryRouter.InMemoryBlob(postData.getBlobProperties(), postData.getUsermetadata(), blobData);
       blobs.put(blobId, blob);
       if (notificationSystem != null) {
-        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), postData.getUsermetadata(),
-            NotificationBlobType.Simple);
+        notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), NotificationBlobType.Simple);
       }
       operationResult = blobId;
     } catch (RouterException e) {

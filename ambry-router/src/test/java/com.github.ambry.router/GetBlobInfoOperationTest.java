@@ -20,6 +20,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.CryptoServiceConfig;
+import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
@@ -32,10 +34,12 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,12 +48,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+
+import static com.github.ambry.router.PutManagerTest.*;
 
 
 /**
@@ -74,6 +82,7 @@ public class GetBlobInfoOperationTest {
   private final ResponseHandler responseHandler;
   private final MockNetworkClientFactory networkClientFactory;
   private final NetworkClient networkClient;
+  private final MockRouterCallback routerCallback;
   private final MockTime time = new MockTime();
   private final Map<Integer, GetOperation> correlationIdToGetOperation = new HashMap<>();
   private final NonBlockingRouter router;
@@ -82,10 +91,15 @@ public class GetBlobInfoOperationTest {
   private final BlobProperties blobProperties;
   private final byte[] userMetadata;
   private final byte[] putContent;
+  private final boolean testEncryption;
   private final String operationTrackerType;
   private final GetTestRequestRegistrationCallbackImpl requestRegistrationCallback =
       new GetTestRequestRegistrationCallbackImpl();
   private final GetBlobOptionsInternal options;
+  private String kmsSingleKey;
+  private MockKeyManagementService kms = null;
+  private MockCryptoService cryptoService = null;
+  private CryptoJobHandler cryptoJobHandler = null;
 
   private class GetTestRequestRegistrationCallbackImpl implements RequestRegistrationCallback<GetOperation> {
     private List<RequestInfo> requestListToFill;
@@ -98,21 +112,24 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
-   * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
-   * @return an array with both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}
+   * Running for both {@link SimpleOperationTracker} and {@link AdaptiveOperationTracker}, with and without encryption
+   * @return an array of Pairs of {{@link SimpleOperationTracker}, Non-Encrypted}, {{@link SimpleOperationTracker}, Encrypted}
+   * and {{@link AdaptiveOperationTracker}, Non-Encrypted}
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{SimpleOperationTracker.class.getSimpleName()}, {AdaptiveOperationTracker.class.getSimpleName()}});
+        new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false}, {SimpleOperationTracker.class.getSimpleName(), true}, {AdaptiveOperationTracker.class.getSimpleName(), false}});
   }
 
   /**
    * @param operationTrackerType @param operationTrackerType the type of {@link OperationTracker} to use.
+   * @param testEncryption {@code true} if blob needs to be encrypted. {@code false} otherwise
    * @throws Exception
    */
-  public GetBlobInfoOperationTest(String operationTrackerType) throws Exception {
+  public GetBlobInfoOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
     this.operationTrackerType = operationTrackerType;
+    this.testEncryption = testEncryption;
     VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties());
     routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
@@ -125,21 +142,30 @@ public class GetBlobInfoOperationTest {
     responseHandler = new ResponseHandler(mockClusterMap);
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
+    if (testEncryption) {
+      kmsSingleKey = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
+      instantiateCryptoComponents(vprops);
+    }
     router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
-        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, time);
+        networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
+        time);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, accountId,
-            containerId, false);
+            containerId, testEncryption);
     userMetadata = new byte[BLOB_USER_METADATA_SIZE];
     random.nextBytes(userMetadata);
     putContent = new byte[BLOB_SIZE];
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
-    router.close();
     networkClient = networkClientFactory.getNetworkClient();
+    router.close();
+    routerCallback = new MockRouterCallback(networkClient, Collections.EMPTY_LIST);
+    if (testEncryption) {
+      instantiateCryptoComponents(vprops);
+    }
   }
 
   @After
@@ -148,6 +174,20 @@ public class GetBlobInfoOperationTest {
       networkClient.close();
     }
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    if (cryptoJobHandler != null) {
+      cryptoJobHandler.close();
+    }
+  }
+
+  /**
+   * Instantiates crypto components (kms, cryptoService and CryptoJobHandler)
+   * @param vprops {@link VerifiableProperties} instance to use
+   * @throws GeneralSecurityException
+   */
+  private void instantiateCryptoComponents(VerifiableProperties vprops) throws GeneralSecurityException {
+    kms = new MockKeyManagementService(new KMSConfig(vprops), kmsSingleKey);
+    cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
+    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
   }
 
   /**
@@ -166,7 +206,7 @@ public class GetBlobInfoOperationTest {
     // test a bad case
     try {
       new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", options,
-          getOperationCallback, time);
+          getOperationCallback, routerCallback, kms, cryptoService, cryptoJobHandler, time);
       Assert.fail("Instantiation of GetBlobInfo operation with an invalid blob id must fail");
     } catch (RouterException e) {
       Assert.assertEquals("Unexpected exception received on creating GetBlobInfoOperation",
@@ -176,7 +216,7 @@ public class GetBlobInfoOperationTest {
     // test a good case
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
-            getOperationCallback, time);
+            getOperationCallback, routerCallback, kms, cryptoService, cryptoJobHandler, time);
 
     Assert.assertEquals("Callback must match", getOperationCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
@@ -187,7 +227,7 @@ public class GetBlobInfoOperationTest {
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
       new GetBlobInfoOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options,
-          getOperationCallback, time);
+          getOperationCallback, routerCallback, kms, cryptoService, cryptoJobHandler, time);
       Assert.fail("Instantiation of GetBlobInfoOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -203,13 +243,17 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            time);
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
     op.poll(requestRegistrationCallback);
     Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
         correlationIdToGetOperation.size());
 
+    CountDownLatch onPollLatch = new CountDownLatch(1);
+    if (testEncryption) {
+      routerCallback.setOnPollLatch(onPollLatch);
+    }
     List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
     for (ResponseInfo responseInfo : responses) {
       GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
@@ -218,6 +262,10 @@ public class GetBlobInfoOperationTest {
       if (op.isOperationComplete()) {
         break;
       }
+    }
+    if (testEncryption) {
+      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
+      op.poll(requestRegistrationCallback);
     }
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     assertSuccess(op);
@@ -232,7 +280,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            time);
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     op.poll(requestRegistrationCallback);
     while (!op.isOperationComplete()) {
@@ -257,7 +305,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            time);
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -292,7 +340,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            time);
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -344,6 +392,30 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
+   * Test failure with KMS
+   * @throws Exception
+   */
+  @Test
+  public void testKMSFailure() throws Exception {
+    if (testEncryption) {
+      kms.exceptionToThrow.set(GSE);
+      assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
+    }
+  }
+
+  /**
+   * Test failure with CryptoService
+   * @throws Exception
+   */
+  @Test
+  public void testCryptoServiceFailure() throws Exception {
+    if (testEncryption) {
+      cryptoService.exceptionOnDecryption.set(GSE);
+      assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
+    }
+  }
+
+  /**
    * Help test error precedence.
    * @param serverErrorCodesInOrder the list of error codes to set the mock servers with.
    * @param expectedErrorCode the expected router error code for the operation.
@@ -354,7 +426,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            time);
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -411,7 +483,7 @@ public class GetBlobInfoOperationTest {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
         new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
-            time);
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
     ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestListToFill;
 
@@ -451,6 +523,45 @@ public class GetBlobInfoOperationTest {
 
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     assertSuccess(op);
+  }
+
+  /**
+   * Assert that operation fails with the expected error code
+   * @param errorCode expected error code on failure
+   * @throws RouterException
+   */
+  private void assertOperationFailure(RouterErrorCode errorCode)
+      throws RouterException, IOException, InterruptedException {
+    NonBlockingRouter.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time);
+    ArrayList<RequestInfo> requestListToFill = new ArrayList<>();
+    requestRegistrationCallback.requestListToFill = requestListToFill;
+    op.poll(requestRegistrationCallback);
+    Assert.assertEquals("There should only be as many requests at this point as requestParallelism", requestParallelism,
+        correlationIdToGetOperation.size());
+
+    CountDownLatch onPollLatch = new CountDownLatch(1);
+    routerCallback.setOnPollLatch(onPollLatch);
+
+    List<ResponseInfo> responses = sendAndWaitForResponses(requestListToFill);
+    for (ResponseInfo responseInfo : responses) {
+      GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+          new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
+      op.handleResponse(responseInfo, getResponse);
+      if (op.isOperationComplete()) {
+        break;
+      }
+    }
+
+    if (!op.isOperationComplete()) {
+      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
+      op.poll(requestRegistrationCallback);
+    }
+    Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(errorCode, routerException.getErrorCode());
   }
 
   /**
@@ -502,6 +613,34 @@ public class GetBlobInfoOperationTest {
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
     return properties;
+  }
+}
+
+/**
+ * Mocks {@link RouterCallback}
+ */
+class MockRouterCallback extends RouterCallback {
+
+  private CountDownLatch onPollLatch;
+
+  MockRouterCallback(NetworkClient networkClient, List<BackgroundDeleteRequest> backgroundDeleteRequests) {
+    super(networkClient, backgroundDeleteRequests);
+  }
+
+  @Override
+  public void onPollReady() {
+    super.onPollReady();
+    if (onPollLatch != null) {
+      onPollLatch.countDown();
+    }
+  }
+
+  /**
+   * Sets {@link CountDownLatch} to be counted down on {@link #onPollReady()}
+   * @param onPollLatch {@link CountDownLatch} that needs to be set
+   */
+  void setOnPollLatch(CountDownLatch onPollLatch) {
+    this.onPollLatch = onPollLatch;
   }
 }
 

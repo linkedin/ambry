@@ -42,11 +42,12 @@ class DirectSender implements Runnable {
   List<BlobId> blobIds;
   byte[] data;
   byte[] usermetadata;
+  byte[] encryptionKey;
   BlobProperties blobProperties;
   CountDownLatch endLatch;
 
   public DirectSender(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
-      byte[] usermetadata, BlobProperties blobProperties, CountDownLatch endLatch) {
+      byte[] usermetadata, BlobProperties blobProperties, byte[] encryptionKey, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
     this.channel = channel;
     blobIds = new ArrayList<>(totalBlobsToPut);
@@ -61,6 +62,7 @@ class DirectSender implements Runnable {
     this.data = data;
     this.usermetadata = usermetadata;
     this.blobProperties = blobProperties;
+    this.encryptionKey = encryptionKey;
     this.endLatch = endLatch;
   }
 
@@ -70,7 +72,8 @@ class DirectSender implements Runnable {
       for (int i = 0; i < blobIds.size(); i++) {
         PutRequest putRequest =
             new PutRequest(1, "client1", blobIds.get(i), blobProperties, ByteBuffer.wrap(usermetadata),
-                ByteBuffer.wrap(data), blobProperties.getBlobSize(), BlobType.DataBlob, null);
+                ByteBuffer.wrap(data), blobProperties.getBlobSize(), BlobType.DataBlob,
+                encryptionKey != null ? ByteBuffer.wrap(encryptionKey) : null);
 
         channel.send(putRequest);
         InputStream putResponseStream = channel.receive().getInputStream();

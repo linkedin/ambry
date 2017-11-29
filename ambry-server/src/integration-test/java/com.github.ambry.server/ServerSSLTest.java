@@ -33,8 +33,11 @@ import javax.net.ssl.SSLSocketFactory;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 
+@RunWith(Parameterized.class)
 public class ServerSSLTest {
   private static SSLFactory sslFactory;
   private static SSLConfig clientSSLConfig1;
@@ -48,6 +51,7 @@ public class ServerSSLTest {
   private static Properties routerProps;
   private static MockNotificationSystem notificationSystem;
   private static MockCluster sslCluster;
+  private final boolean testEncryption;
 
   @BeforeClass
   public static void initializeTests() throws Exception {
@@ -77,7 +81,17 @@ public class ServerSSLTest {
     clientSSLSocketFactory3 = sslContext.getSocketFactory();
   }
 
-  public ServerSSLTest() throws Exception {
+  /**
+   * Running for both regular and encrypted blobs
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
+
+  public ServerSSLTest(boolean testEncryption) throws Exception {
+    this.testEncryption = testEncryption;
   }
 
   @AfterClass
@@ -101,7 +115,7 @@ public class ServerSSLTest {
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
-        clientSSLConfig1, clientSSLSocketFactory1, routerProps);
+        clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
   }
 
   @Test
@@ -113,13 +127,17 @@ public class ServerSSLTest {
     ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionTest(dataNode.getPort(),
         new Port(dataNodes.get(0).getSSLPort(), PortType.SSL), new Port(dataNodes.get(1).getSSLPort(), PortType.SSL),
         new Port(dataNodes.get(2).getSSLPort(), PortType.SSL), sslCluster, clientSSLConfig1, clientSSLConfig2,
-        clientSSLConfig3, clientSSLSocketFactory1, clientSSLSocketFactory2, clientSSLSocketFactory3,
-        notificationSystem);
+        clientSSLConfig3, clientSSLSocketFactory1, clientSSLSocketFactory2, clientSSLSocketFactory3, notificationSystem,
+        testEncryption);
   }
 
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionMultiDCTest() throws Exception {
-    ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
-        sslCluster, notificationSystem, routerProps);
+    // this test uses router to Put and direct GetRequest to verify Gets. So, no way to get access to encryptionKey against
+    // which to compare the GetResponse. Hence skipping encryption flow for this test
+    if (!testEncryption) {
+      ServerTestUtil.endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest("DC1", "DC1,DC2,DC3", PortType.SSL,
+          sslCluster, notificationSystem, routerProps);
+    }
   }
 }

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.utils.TestUtils;
 import java.util.Properties;
 
 
@@ -37,19 +36,5 @@ class CryptoTestUtils {
     properties.setProperty("clustermap.datacenter.name", "DC1");
     properties.setProperty("clustermap.host.name", "localhost");
     return properties;
-  }
-
-  /**
-   * Generates and returns a random Hex String of the specified size
-   * @param size expected key hex string size
-   * @return the hex string thus generated
-   */
-  static String getRandomKey(int size) {
-    StringBuilder sb = new StringBuilder();
-    while (sb.length() < size) {
-      sb.append(Integer.toHexString(TestUtils.RANDOM.nextInt()));
-    }
-    sb.setLength(size);
-    return sb.toString();
   }
 }
