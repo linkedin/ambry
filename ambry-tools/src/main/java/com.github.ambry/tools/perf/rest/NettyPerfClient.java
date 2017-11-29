@@ -112,7 +112,7 @@ public class NettyPerfClient {
     final Long postBlobTotalSize;
     final Integer postBlobChunkSize;
     final String sslPropsFilePath;
-    final String targerAccountName;
+    final String targetAccountName;
     final String targetContainerName;
     final String serviceId;
     private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -163,19 +163,17 @@ public class NettyPerfClient {
           parser.accepts("targetAccountName", "Target account name for POSTs")
               .withOptionalArg()
               .describedAs("targetAccountName")
-              .ofType(String.class)
-              .defaultsTo("ambry-frontend-test");
+              .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> targetContainerName =
           parser.accepts("targetContainerName", "Target container name for POSTs")
               .withOptionalArg()
               .describedAs("targetContainerName")
-              .ofType(String.class)
-              .defaultsTo("default-public-container");
+              .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> serviceId = parser.accepts("serviceId", "serviceId representing the caller")
           .withOptionalArg()
           .describedAs("serviceId")
           .ofType(String.class)
-          .defaultsTo("PerfNettyClient");
+          .defaultsTo("NettyPerfClient");
       ArgumentAcceptingOptionSpec<String> sslPropsFilePath =
           parser.accepts("sslPropsFilePath", "The path to the properties file with SSL settings")
               .withOptionalArg()
@@ -191,7 +189,7 @@ public class NettyPerfClient {
       this.postBlobTotalSize = options.valueOf(postBlobTotalSize);
       this.postBlobChunkSize = options.valueOf(postBlobChunkSize);
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
-      this.targerAccountName = options.valueOf(targetAccountName);
+      this.targetAccountName = options.valueOf(targetAccountName);
       this.targetContainerName = options.valueOf(targetContainerName);
       this.serviceId = options.valueOf(serviceId);
       validateArgs();
@@ -217,10 +215,13 @@ public class NettyPerfClient {
             || postBlobChunkSize <= 0) {
           throw new IllegalArgumentException(
               "Total size to be posted and size of each chunk need to be specified with POST and have to be > 0");
-        } else if (targerAccountName == null || targetContainerName == null) {
-          throw new IllegalArgumentException(
-              "TargetAccountName and TargetContainerName need to be specified with POST");
+        } else if (targetAccountName == null || targetAccountName.isEmpty() || targetContainerName == null
+            || targetContainerName.isEmpty()) {
+          throw new IllegalArgumentException("TargetAccountName and TargetContainerName cannot be empty with POST");
         }
+      }
+      if (serviceId == null || serviceId.isEmpty()) {
+        throw new IllegalArgumentException("serviceId cannot be empty");
       }
     }
   }
@@ -235,7 +236,7 @@ public class NettyPerfClient {
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
               clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
-              clientArgs.serviceId, clientArgs.targerAccountName, clientArgs.targetContainerName);
+              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {

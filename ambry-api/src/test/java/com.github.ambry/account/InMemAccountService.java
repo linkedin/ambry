@@ -114,10 +114,9 @@ public class InMemAccountService implements AccountService {
    * Creates and adds an {@link Account} to this {@link AccountService}. The account will contain one container
    * with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and
    * one other random {@link Container}.
-   * @param enableEncryption {@code true} if encryption needs to be enabled. {@code false} otherwise
    * @return the {@link Account} that was created and added.
    */
-  public synchronized Account createAndAddRandomAccount(boolean enableEncryption) {
+  public synchronized Account createAndAddRandomAccount() {
     short refAccountId;
     String refAccountName;
     do {
@@ -127,28 +126,13 @@ public class InMemAccountService implements AccountService {
     Account.AccountStatus refAccountStatus = Account.AccountStatus.ACTIVE;
     Container randomContainer = getRandomContainer(refAccountId);
     Container publicContainer =
-        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId)
-            .setEncrypted(enableEncryption)
-            .build();
+        new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId).build();
     Container privateContainer =
-        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId)
-            .setEncrypted(enableEncryption)
-            .build();
+        new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId).build();
     Account account = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
         Arrays.asList(publicContainer, privateContainer, randomContainer)).build();
     updateAccounts(Collections.singletonList(account));
     return account;
-  }
-
-  /**
-   * Creates and adds an {@link Account} to this {@link AccountService}. The account will contain one container
-   * with {@link Container#DEFAULT_PUBLIC_CONTAINER_ID}, one with {@link Container#DEFAULT_PRIVATE_CONTAINER_ID} and
-   * one other random {@link Container}. Encryption will be disabled for these containers. Use {@link #createAndAddRandomAccount(boolean)}
-   * to enable encryption
-   * @return the {@link Account} that was created and added.
-   */
-  public synchronized Account createAndAddRandomAccount() {
-    return createAndAddRandomAccount(false);
   }
 
   /**
