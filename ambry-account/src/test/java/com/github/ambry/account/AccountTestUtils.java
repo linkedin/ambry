@@ -123,10 +123,9 @@ class AccountTestUtils {
             random.nextBoolean() ? Container.ContainerStatus.ACTIVE : Container.ContainerStatus.INACTIVE;
         String containerDescription = UUID.randomUUID().toString();
         boolean containerCaching = random.nextBoolean();
-        // TODO make these randomly generated once V2 container writes are enabled
-        boolean containerEncryption = Container.ENCRYPTED_DEFAULT_VALUE;
-        boolean containerPreviousEncryption = Container.PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
-        boolean mediaScanDisabled = Container.MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+        boolean containerEncryption = random.nextBoolean();
+        boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
+        boolean mediaScanDisabled = random.nextBoolean();
         Container container =
             new ContainerBuilder(containerId, containerName, containerStatus, containerDescription, containerEncryption,
                 containerPreviousEncryption, containerCaching, mediaScanDisabled, accountId).build();

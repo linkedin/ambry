@@ -152,6 +152,13 @@ public class AccountUpdateTool {
         .ofType(Integer.class)
         .defaultsTo(ZK_CLIENT_SESSION_TIMEOUT_MS);
 
+    ArgumentAcceptingOptionSpec<Short> containerJsonVersionOpt = parser.accepts("containerSchemaVersion",
+        "Optional override for the container JSON version to write in when doing an account update.")
+        .withRequiredArg()
+        .describedAs("container_json_version")
+        .ofType(Short.class)
+        .defaultsTo(Container.getCurrentJsonVersion());
+
     parser.accepts("help", "print this help message.");
 
     parser.accepts("h", "print this help message.");
@@ -166,12 +173,14 @@ public class AccountUpdateTool {
     String zkServer = options.valueOf(zkServerOpt);
     Integer zkConnectionTimeoutMs = options.valueOf(zkConnectionTimeoutMsOpt);
     Integer zkSessionTimeoutMs = options.valueOf(zkSessionTimeoutMsOpt);
+    Short containerJsonVersion = options.valueOf(containerJsonVersionOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(accountJsonFilePathOpt);
     listOpt.add(zkServerOpt);
     ToolUtils.ensureOrExit(listOpt, options, parser);
     try {
-      updateAccount(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
+      updateAccount(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs,
+          containerJsonVersion);
     } catch (Exception e) {
       System.err.println("Updating accounts failed with exception: " + e);
       e.printStackTrace();
@@ -185,10 +194,12 @@ public class AccountUpdateTool {
    * @param storePath The root path on the {@code ZooKeeper} for account data.
    * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
    * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param containerJsonVersion The {@link Container} JSON version to write in.
    * @throws Exception
    */
   static void updateAccount(String accountJsonFilePath, String zkServer, String storePath, int zkConnectionTimeoutMs,
-      int zkSessionTimeoutMs) throws Exception {
+      int zkSessionTimeoutMs, short containerJsonVersion) throws Exception {
+    Container.setCurrentJsonVersion(containerJsonVersion);
     long startTime = System.currentTimeMillis();
     Collection<Account> accountsToUpdate = getAccountsFromJson(accountJsonFilePath);
     if (!hasDuplicateAccountIdOrName(accountsToUpdate)) {
