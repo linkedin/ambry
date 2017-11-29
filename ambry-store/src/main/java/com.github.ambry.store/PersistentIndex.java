@@ -1496,11 +1496,10 @@ class PersistentIndex {
       final Timer.Context context = metrics.indexFlushTime.time();
       try {
         ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-        int indexSegmentsSize = indexSegments.size();
-        if (indexSegmentsSize > 0) {
-          // before iterating the map, get the current file end pointer
-          Map.Entry<Offset, IndexSegment> lastEntry = indexSegments.lastEntry();
+        Map.Entry<Offset, IndexSegment> lastEntry = indexSegments.lastEntry();
+        if (lastEntry != null) {
           IndexSegment currentInfo = lastEntry.getValue();
+          // before iterating the map, get the current file end pointer
           Offset indexEndOffsetBeforeFlush = currentInfo.getEndOffset();
           Offset logEndOffsetBeforeFlush = log.getEndOffset();
           if (logEndOffsetBeforeFlush.compareTo(indexEndOffsetBeforeFlush) < 0) {
@@ -1519,8 +1518,8 @@ class PersistentIndex {
             hardDeleter.postLogFlush();
           }
 
-          IndexSegment prevInfo =
-              indexSegmentsSize > 1 ? indexSegments.lowerEntry(lastEntry.getKey()).getValue() : null;
+          Map.Entry<Offset, IndexSegment> prevEntry = indexSegments.lowerEntry(lastEntry.getKey());
+          IndexSegment prevInfo = prevEntry != null ? prevEntry.getValue() : null;
           List<IndexSegment> prevInfosToWrite = new ArrayList<>();
           Offset currentLogEndPointer = log.getEndOffset();
           while (prevInfo != null && !prevInfo.isMapped()) {

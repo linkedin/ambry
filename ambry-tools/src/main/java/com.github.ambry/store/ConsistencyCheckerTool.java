@@ -169,9 +169,11 @@ public class ConsistencyCheckerTool {
   }
 
   /**
-   * Executes the operation with the help of properties passed during initialization of {@link DumpDataTool}
+   * Checks for consistency b/w {@code replicas} by comparing their index processing results and determining replication
+   * status.
    * @param replicas the replicas b/w which consistency has to be checked
-   * @return {@code true} if no real inconsistent blobs. {@code false}
+   * @return a pair whose first element is a {@link Boolean} indicating consistency ({@code true} if consistent,
+   * {@code false} otherwise) and the second element is a map from replica to the index processing results.
    * @throws Exception
    */
   public Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> checkConsistency(File[] replicas)

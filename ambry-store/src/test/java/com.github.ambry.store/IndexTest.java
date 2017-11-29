@@ -1120,8 +1120,15 @@ public class IndexTest {
     // make sure persistor is persisting all segments
     int numIndexSegments = state.index.getIndexSegments().size();
     state.index.persistIndex();
-    int numIndexFiles = tempDir.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER).length;
-    assertEquals("Not as many files written as there were index segments", numIndexSegments, numIndexFiles);
+    List<File> indexFiles = Arrays.asList(tempDir.listFiles(PersistentIndex.INDEX_SEGMENT_FILE_FILTER));
+    indexFiles.sort(PersistentIndex.INDEX_SEGMENT_FILE_COMPARATOR);
+    assertEquals("Not as many files written as there were index segments", numIndexSegments, indexFiles.size());
+    long prevFilePersistTimeMs = Long.MIN_VALUE;
+    for (File indexFile : indexFiles) {
+      long thisFilePersistTimeMs = indexFile.lastModified();
+      assertTrue("A later index segment was persisted earlier", prevFilePersistTimeMs <= thisFilePersistTimeMs);
+      prevFilePersistTimeMs = thisFilePersistTimeMs;
+    }
 
     // add new entries which may not be persisted
     // call persist and reload the index (index.close() is never called)
