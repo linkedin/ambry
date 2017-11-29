@@ -345,7 +345,7 @@ public class Container {
   /**
    * @return the JSON version to serialize in.
    */
-  static short getCurrentJsonVersion() {
+  public static short getCurrentJsonVersion() {
     return currentJsonVersion;
   }
 
@@ -354,7 +354,7 @@ public class Container {
    * serialization.
    * @param currentJsonVersion the JSON version to serialize in.
    */
-  static void setCurrentJsonVersion(short currentJsonVersion) {
+  public static void setCurrentJsonVersion(short currentJsonVersion) {
     Container.currentJsonVersion = currentJsonVersion;
   }
 
