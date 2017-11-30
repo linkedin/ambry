@@ -135,6 +135,13 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setStatus(options.getRange() == null ? ResponseStatus.Ok : ResponseStatus.PartialContent);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+            // inject encryption metrics if applicable
+            if (blobInfo.getBlobProperties().isEncrypted()) {
+              restRequest.getMetricsTracker()
+                  .injectMetrics(
+                      frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
+                          true));
+            }
             setHeadResponseHeaders(blobInfo, options, restRequest, responseChannel);
             break;
           case GET:
@@ -162,6 +169,12 @@ class AmbrySecurityService implements SecurityService {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                 }
+              }
+              // inject encryption metrics if applicable
+              if (blobInfo.getBlobProperties().isEncrypted()) {
+                restRequest.getMetricsTracker()
+                    .injectMetrics(AmbryBlobStorageService.getRestRequestMetricsForGET(frontendMetrics, subResource,
+                        restRequest.getSSLSession() != null, true));
               }
             }
             break;

@@ -189,13 +189,16 @@ class GetBlobOperation extends GetOperation {
           // notified during the channel read.
           long timeElapsed = time.milliseconds() - submissionTimeMs;
           routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
+          if (blobInfo != null && blobInfo.getBlobProperties().isEncrypted()) {
+            routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
+          }
           if (e == null) {
             blobDataChannel = new BlobDataReadableStreamChannel();
             operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel), null);
           } else {
             blobDataChannel = null;
             operationResult = null;
-            routerMetrics.onGetBlobError(e, options);
+            routerMetrics.onGetBlobError(e, options, blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
           }
         }
         NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
@@ -399,10 +402,13 @@ class GetBlobOperation extends GetOperation {
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
-          routerMetrics.onGetBlobError(e, options);
+          routerMetrics.onGetBlobError(e, options, blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
         routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
+        if (blobInfo != null && blobInfo.getBlobProperties().isEncrypted()) {
+          routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
+        }
       }
       operationCompleted = true;
     }

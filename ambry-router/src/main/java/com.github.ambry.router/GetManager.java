@@ -128,7 +128,7 @@ class GetManager {
       }
       getOperations.add(getOperation);
     } catch (RouterException e) {
-      routerMetrics.onGetBlobError(e, options);
+      routerMetrics.onGetBlobError(e, options, false);
       routerMetrics.operationDequeuingRate.mark();
       NonBlockingRouter.completeOperation(null, callback, null, e);
     }
@@ -252,7 +252,11 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      routerMetrics.onGetBlobError(abortCause, op.getOptions());
+      // best effort to update encryption metrics
+      routerMetrics.onGetBlobError(abortCause, op.getOptions(),
+          op.getOperationResult() != null && op.getOperationResult().getBlobResult != null
+              && op.getOperationResult().getBlobResult.getBlobInfo() != null
+              && op.getOperationResult().getBlobResult.getBlobInfo().getBlobProperties().isEncrypted());
     }
   }
 }

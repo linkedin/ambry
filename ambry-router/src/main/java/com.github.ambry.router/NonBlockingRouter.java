@@ -160,6 +160,19 @@ class NonBlockingRouter implements Router {
         @Override
         public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
           GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+          // best effort to update encryption metrics
+          if (getBlobResult != null && getBlobResult.getBlobInfo() != null && getBlobResult.getBlobInfo()
+              .getBlobProperties()
+              .isEncrypted()) {
+            if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+              routerMetrics.getEncryptedBlobInfoOperationRate.mark();
+            } else {
+              routerMetrics.getEncryptedBlobOperationRate.mark();
+            }
+            if (options.getRange() != null) {
+              routerMetrics.getEncryptedBlobWithRangeOperationRate.mark();
+            }
+          }
           futureResult.done(getBlobResult, exception);
           if (callback != null) {
             callback.onCompletion(getBlobResult, exception);
@@ -170,7 +183,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onGetBlobError(routerException, internalOptions);
+      routerMetrics.onGetBlobError(routerException, internalOptions, false);
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -210,6 +223,9 @@ class NonBlockingRouter implements Router {
     }
     currentOperationsCount.incrementAndGet();
     routerMetrics.putBlobOperationRate.mark();
+    if (blobProperties.isEncrypted()) {
+      routerMetrics.putEncryptedBlobOperationRate.mark();
+    }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<String>();
     if (isOpen.get()) {
@@ -218,7 +234,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(routerException);
+      routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -484,7 +500,7 @@ class NonBlockingRouter implements Router {
         RouterException routerException =
             new RouterException(" because Router is closed", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        routerMetrics.onPutBlobError(routerException);
+        routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
         completeOperation(futureResult, callback, null, routerException);
         // Close so that any existing operations are also disposed off.
         close();
@@ -648,7 +664,7 @@ class NonBlockingRouter implements Router {
           new RouterException("Illegal attempt to put blob through backgroundDeleteOperationController",
               RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(routerException);
+      routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
       completeOperation(futureResult, callback, null, routerException);
     }
 

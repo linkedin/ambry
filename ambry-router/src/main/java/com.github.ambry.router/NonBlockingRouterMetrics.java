@@ -41,6 +41,10 @@ public class NonBlockingRouterMetrics {
   public final Meter getBlobOperationRate;
   public final Meter getBlobWithRangeOperationRate;
   public final Meter deleteBlobOperationRate;
+  public final Meter putEncryptedBlobOperationRate;
+  public final Meter getEncryptedBlobInfoOperationRate;
+  public final Meter getEncryptedBlobOperationRate;
+  public final Meter getEncryptedBlobWithRangeOperationRate;
   public final Meter operationQueuingRate;
   public final Meter operationDequeuingRate;
 
@@ -50,6 +54,11 @@ public class NonBlockingRouterMetrics {
   public final Histogram getBlobInfoOperationLatencyMs;
   public final Histogram getBlobOperationLatencyMs;
   public final Histogram getBlobOperationTotalTimeMs;
+  public final Histogram putEncryptedBlobOperationLatencyMs;
+  public final Histogram putEncryptedChunkOperationLatencyMs;
+  public final Histogram getEncryptedBlobInfoOperationLatencyMs;
+  public final Histogram getEncryptedBlobOperationLatencyMs;
+  public final Histogram getEncryptedBlobOperationTotalTimeMs;
   public final Histogram deleteBlobOperationLatencyMs;
   public final Histogram routerRequestLatencyMs;
 
@@ -58,6 +67,10 @@ public class NonBlockingRouterMetrics {
   public final Counter getBlobInfoErrorCount;
   public final Counter getBlobErrorCount;
   public final Counter getBlobWithRangeErrorCount;
+  public final Counter putEncryptedBlobErrorCount;
+  public final Counter getEncryptedBlobInfoErrorCount;
+  public final Counter getEncryptedBlobErrorCount;
+  public final Counter getEncryptedBlobWithRangeErrorCount;
   public final Counter deleteBlobErrorCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
@@ -106,6 +119,7 @@ public class NonBlockingRouterMetrics {
 
   // Misc metrics.
   public final Meter operationErrorRate;
+  public final Meter encryptedBlobOperationErrorRate;
   public final Counter slippedPutAttemptCount;
   public final Counter slippedPutSuccessCount;
   public final Counter ignoredResponseCount;
@@ -152,6 +166,14 @@ public class NonBlockingRouterMetrics {
     getBlobOperationRate = metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationRate"));
     getBlobWithRangeOperationRate =
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeOperationRate"));
+    putEncryptedBlobOperationRate =
+        metricRegistry.meter(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobOperationRate"));
+    getEncryptedBlobInfoOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobInfoOperation.class, "GetEncryptedBlobInfoOperationRate"));
+    getEncryptedBlobOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobOperationRate"));
+    getEncryptedBlobWithRangeOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithRangeOperationRate"));
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
@@ -169,6 +191,16 @@ public class NonBlockingRouterMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationLatencyMs"));
     getBlobOperationTotalTimeMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetBlobOperationTotalTimeMs"));
+    putEncryptedBlobOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobOperationLatencyMs"));
+    putEncryptedChunkOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(PutOperation.class, "PutEncryptedChunkOperationLatencyMs"));
+    getEncryptedBlobInfoOperationLatencyMs = metricRegistry.histogram(
+        MetricRegistry.name(GetBlobInfoOperation.class, "GetEncryptedBlobInfoOperationLatencyMs"));
+    getEncryptedBlobOperationLatencyMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobOperationLatencyMs"));
+    getEncryptedBlobOperationTotalTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobOperationTotalTimeMs"));
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
     routerRequestLatencyMs =
@@ -181,6 +213,14 @@ public class NonBlockingRouterMetrics {
     getBlobErrorCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobErrorCount"));
     getBlobWithRangeErrorCount =
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobWithRangeErrorCount"));
+    putEncryptedBlobErrorCount =
+        metricRegistry.counter(MetricRegistry.name(PutOperation.class, "PutEncryptedBlobErrorCount"));
+    getEncryptedBlobInfoErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobInfoOperation.class, "GetEncryptedBlobInfoErrorCount"));
+    getEncryptedBlobErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobErrorCount"));
+    getEncryptedBlobWithRangeErrorCount =
+        metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetEncryptedBlobWithRangeErrorCount"));
     deleteBlobErrorCount = metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobErrorCount"));
     operationAbortCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationAbortCount"));
     routerRequestErrorCount =
@@ -253,6 +293,8 @@ public class NonBlockingRouterMetrics {
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));
+    encryptedBlobOperationErrorRate =
+        metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "EncryptedBlobOperationErrorRate"));
     ignoredResponseCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "IgnoredRequestCount"));
     slippedPutAttemptCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutAttemptCount"));
     slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
@@ -420,12 +462,19 @@ public class NonBlockingRouterMetrics {
   /**
    * Update appropriate metrics on a putBlob operation related error.
    * @param e the {@link Exception} associated with the error.
+   * @param encryptionEnabled {@code true} if encrpytion was enabled for this operation. {@code false} otherwise
    */
-  void onPutBlobError(Exception e) {
+  void onPutBlobError(Exception e, boolean encryptionEnabled) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       putBlobErrorCount.inc();
+      if (encryptionEnabled) {
+        putEncryptedBlobErrorCount.inc();
+      }
       operationErrorRate.mark();
+      if (encryptionEnabled) {
+        encryptedBlobOperationErrorRate.mark();
+      }
     }
   }
 
@@ -433,24 +482,32 @@ public class NonBlockingRouterMetrics {
    * Update appropriate metrics on a getBlob operation related error.
    * @param e the {@link Exception} associated with the error.
    * @param options the {@link GetBlobOptionsInternal} associated with the request.
+   * @param encrypted {@code true} if blob is encrypted, {@code false} otherwise
    */
-  void onGetBlobError(Exception e, GetBlobOptionsInternal options) {
+  void onGetBlobError(Exception e, GetBlobOptionsInternal options, boolean encrypted) {
     if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-      onGetBlobInfoError(e);
+      onGetBlobInfoError(e, encrypted);
     } else {
-      onGetBlobDataError(e, options);
+      onGetBlobDataError(e, options, encrypted);
     }
   }
 
   /**
    * Update appropriate metrics on a getBlobInfo operation related error.
    * @param e the {@link Exception} associated with the error.
+   * @param encrypted {@code true} if blob is encrypted, {@code false} otherwise
    */
-  private void onGetBlobInfoError(Exception e) {
+  private void onGetBlobInfoError(Exception e, boolean encrypted) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobInfoErrorCount.inc();
+      if (encrypted) {
+        getEncryptedBlobInfoErrorCount.inc();
+      }
       operationErrorRate.mark();
+      if (encrypted) {
+        encryptedBlobOperationErrorRate.mark();
+      }
     }
   }
 
@@ -458,15 +515,25 @@ public class NonBlockingRouterMetrics {
    * Update appropriate metrics on a getBlob (Data or All) operation related error.
    * @param e the {@link Exception} associated with the error.
    * @param options the {@link GetBlobOptionsInternal} associated with the request.
+   * @param encrypted {@code true} if blob is encrypted, {@code false} otherwise
    */
-  private void onGetBlobDataError(Exception e, GetBlobOptionsInternal options) {
+  private void onGetBlobDataError(Exception e, GetBlobOptionsInternal options, boolean encrypted) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
       getBlobErrorCount.inc();
+      if (encrypted) {
+        getEncryptedBlobErrorCount.inc();
+      }
       if (options != null && options.getBlobOptions.getRange() != null) {
         getBlobWithRangeErrorCount.inc();
+        if (encrypted) {
+          getEncryptedBlobWithRangeErrorCount.inc();
+        }
       }
       operationErrorRate.mark();
+      if (encrypted) {
+        encryptedBlobOperationErrorRate.mark();
+      }
     }
   }
 

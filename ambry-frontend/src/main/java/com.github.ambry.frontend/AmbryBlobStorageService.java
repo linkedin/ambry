@@ -189,27 +189,15 @@ class AmbryBlobStorageService implements BlobStorageService {
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
-        RestRequestMetrics requestMetrics =
-            restRequest.getSSLSession() != null ? frontendMetrics.getBlobSSLMetrics : frontendMetrics.getBlobMetrics;
+        boolean isSsl = restRequest.getSSLSession() != null;
         if (subresource != null) {
           logger.trace("Sub-resource requested: {}", subresource);
-          switch (subresource) {
-            case BlobInfo:
-              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoSSLMetrics
-                  : frontendMetrics.getBlobInfoMetrics;
-              break;
-            case UserMetadata:
-              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getUserMetadataSSLMetrics
-                  : frontendMetrics.getUserMetadataMetrics;
-              break;
-            case Replicas:
-              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getReplicasSSLMetrics
-                  : frontendMetrics.getReplicasMetrics;
-              securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
-              break;
+          if (subresource == SubResource.Replicas) {
+            securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
           }
         }
-        restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+        restRequest.getMetricsTracker()
+            .injectMetrics(getRestRequestMetricsForGET(frontendMetrics, subresource, isSsl, false));
         securityService.processRequest(restRequest, securityCallback);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
@@ -225,10 +213,12 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobMetrics);
-    RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? frontendMetrics.postBlobSSLMetrics : frontendMetrics.postBlobMetrics;
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    boolean isSsl = restRequest.getSSLSession() != null;
+    if (isSsl) {
+      restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobSSLMetrics);
+    } else {
+      restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobMetrics);
+    }
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
@@ -241,6 +231,14 @@ class AmbryBlobStorageService implements BlobStorageService {
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
         logger.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
+      }
+      // inject encryption metrics if applicable
+      if (blobProperties.isEncrypted()) {
+        if (isSsl) {
+          restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postEncryptedBlobSSLMetrics);
+        } else {
+          restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postEncryptedBlobMetrics);
+        }
       }
       byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
@@ -389,6 +387,35 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
     }
+  }
+
+  /**
+   * Fetch {@link RestRequestMetrics} for GetRequest based on the {@link SubResource} and {@link RestRequest} params
+   * @param frontendMetrics instance of {@link FrontendMetrics} to use
+   * @param subResource {@link SubResource} corresponding to the GetRequest
+   * @param isSsl {@code true} if request is sent over ssl, {@code false} otherwise
+   * @param encrypted {@code true} if request is for an encrypted blob. {@code false} otherwise
+   * @return the appropriate {@link RestRequestMetrics} based on the given params
+   */
+  static RestRequestMetrics getRestRequestMetricsForGET(FrontendMetrics frontendMetrics, SubResource subResource,
+      boolean isSsl, boolean encrypted) {
+    RestRequestMetrics requestMetrics = null;
+    if (subResource == null) {
+      requestMetrics = frontendMetrics.getBlobRequestMetricsGroup.getRestRequestMetrics(isSsl, encrypted);
+    } else {
+      switch (subResource) {
+        case BlobInfo:
+          requestMetrics = frontendMetrics.getBlobInfoRequestMetricsGroup.getRestRequestMetrics(isSsl, encrypted);
+          break;
+        case UserMetadata:
+          requestMetrics = frontendMetrics.getUserMetadataRequestMetricsGroup.getRestRequestMetrics(isSsl, encrypted);
+          break;
+        case Replicas:
+          requestMetrics = isSsl ? frontendMetrics.getReplicasSSLMetrics : frontendMetrics.getReplicasMetrics;
+          break;
+      }
+    }
+    return requestMetrics;
   }
 
   /**

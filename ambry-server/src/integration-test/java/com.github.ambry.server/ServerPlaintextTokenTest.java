@@ -17,6 +17,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -63,6 +64,7 @@ public class ServerPlaintextTokenTest {
   @Before
   public void initializeTests() throws Exception {
     routerProps = new Properties();
+    routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     notificationSystem = new MockNotificationSystem(9);
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();

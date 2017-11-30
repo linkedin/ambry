@@ -320,7 +320,7 @@ public final class ServerTestUtil {
       // encryptionKey in this test doesn't have any relation to the content. Both are random bytes for test purposes.
       if (!testEncryption) {
         // Use router to get the blob
-        Properties routerProperties = getRouterProps(routerDatacenter);
+        Properties routerProperties = getRouterProps(routerDatacenter, true);
         routerProperties.putAll(routerProps);
         VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProperties);
         Router router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, new MockNotificationSystem(9),
@@ -1295,7 +1295,7 @@ public final class ServerTestUtil {
       if (!testEncryption) {
         // get blob data
         // Use router to get the blob
-        Properties routerProperties = getRouterProps(routerDatacenter);
+        Properties routerProperties = getRouterProps(routerDatacenter, true);
         routerProperties.putAll(routerProps);
         VerifiableProperties routerVerifiableProperties = new VerifiableProperties(routerProperties);
         Router router = new NonBlockingRouterFactory(routerVerifiableProperties, clusterMap, notificationSystem,
@@ -1692,14 +1692,19 @@ public final class ServerTestUtil {
     }
   }
 
-  private static Properties getRouterProps(String routerDatacenter) {
+  /**
+   *
+   * @param routerDatacenter
+   * @return
+   */
+  private static Properties getRouterProps(String routerDatacenter, boolean enableCrossDC) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
+    properties.setProperty("router.get.cross.dc.enabled", Boolean.toString(enableCrossDC));
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", routerDatacenter);
     properties.setProperty("clustermap.host.name", "localhost");
-    properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     return properties;
   }
 

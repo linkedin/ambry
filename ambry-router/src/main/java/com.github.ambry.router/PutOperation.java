@@ -90,6 +90,7 @@ class PutOperation {
   private final CryptoJobHandler cryptoJobHandler;
   private final Time time;
   private BlobProperties finalBlobProperties;
+  private boolean isEncryptionEnabled;
 
   // Parameters associated with the state.
 
@@ -186,6 +187,14 @@ class PutOperation {
     putChunks = new ConcurrentLinkedQueue<>();
     metadataPutChunk = new MetadataPutChunk();
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
+    isEncryptionEnabled = passedInBlobProperties.isEncrypted();
+  }
+
+  /**
+   * @return {@code true} if blob needs to be encrypted. {@code false} otherwise
+   */
+  boolean isEncryptionEnabled() {
+    return isEncryptionEnabled;
   }
 
   /**
@@ -306,7 +315,12 @@ class PutOperation {
       }
       operationCompleted = true;
     }
-    routerMetrics.putChunkOperationLatencyMs.update(time.milliseconds() - chunk.chunkReadyAtMs);
+    long operationLatencyMs =
+        time.milliseconds() - chunk.chunkFillCompleteAtMs;
+    routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs);
+    if (chunk.chunkBlobProperties.isEncrypted()) {
+      routerMetrics.putEncryptedChunkOperationLatencyMs.update(operationLatencyMs);
+    }
     chunk.clear();
   }
 
@@ -627,6 +641,8 @@ class PutOperation {
     protected byte[] chunkUserMetadata;
     // the most recent time at which this chunk became Free.
     private long chunkFreeAtMs;
+    // the time at which the chunk filling was complete
+    private long chunkFillCompleteAtMs;
     // the most recent time at which this chunk became ready to be encrypted.
     private long chunkEncryptReadyAtMs;
     // the most recent time at which this chunk became ready.
@@ -891,6 +907,7 @@ class PutOperation {
     void onFillComplete(boolean updateMetric) {
       buf.flip();
       chunkBlobSize = buf.remaining();
+      chunkFillCompleteAtMs = time.milliseconds();
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
       }

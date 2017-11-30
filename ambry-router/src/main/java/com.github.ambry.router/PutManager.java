@@ -154,7 +154,7 @@ class PutManager {
       putOperation.startReadingFromChannel();
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(e);
+      routerMetrics.onPutBlobError(e, blobProperties != null && blobProperties.isEncrypted());
       NonBlockingRouter.completeOperation(futureResult, callback, null, e);
     }
   }
@@ -255,13 +255,17 @@ class PutManager {
     }
     if (e != null) {
       blobId = null;
-      routerMetrics.onPutBlobError(e);
+      routerMetrics.onPutBlobError(e, op.isEncryptionEnabled());
       routerCallback.scheduleDeletes(op.getSuccessfullyPutChunkIdsIfComposite(), op.getServiceId());
     } else {
       updateChunkingAndSizeMetricsOnSuccessfulPut(op);
     }
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.putBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
+    long operationLatencyMs = time.milliseconds() - op.getSubmissionTimeMs();
+    routerMetrics.putBlobOperationLatencyMs.update(operationLatencyMs);
+    if (op.isEncryptionEnabled()) {
+      routerMetrics.putEncryptedBlobOperationLatencyMs.update(operationLatencyMs);
+    }
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
@@ -323,7 +327,7 @@ class PutManager {
         Exception e = new RouterException("Aborted operation because Router is closed.", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
-        routerMetrics.onPutBlobError(e);
+        routerMetrics.onPutBlobError(e, op.isEncryptionEnabled());
         NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }
