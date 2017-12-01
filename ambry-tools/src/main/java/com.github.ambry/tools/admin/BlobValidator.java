@@ -416,16 +416,16 @@ public class BlobValidator implements Closeable {
         byte[] blobBytes = new byte[buffer.remaining()];
         buffer.get(blobBytes);
         serverResponse = new ServerResponse(errorCode, blobAll.getStoreKey(), blobAll.getBlobInfo().getBlobProperties(),
-            blobAll.getBlobInfo().getUserMetadata(), blobBytes);
+            blobAll.getBlobInfo().getUserMetadata(), blobBytes, blobAll.getBlobEncryptionKey());
       } else {
-        serverResponse = new ServerResponse(errorCode, null, null, null, null);
+        serverResponse = new ServerResponse(errorCode, null, null, null, null, null);
       }
     } catch (MessageFormatException e) {
       LOGGER.error("Error while deserializing record for {} from {}", blobId, dataNodeId, e);
-      serverResponse = new ServerResponse(ServerErrorCode.Data_Corrupt, null, null, null, null);
+      serverResponse = new ServerResponse(ServerErrorCode.Data_Corrupt, null, null, null, null, null);
     } catch (Exception e) {
       LOGGER.error("Error while getting record for {} from {}", blobId, dataNodeId, e);
-      serverResponse = new ServerResponse(ServerErrorCode.Unknown_Error, null, null, null, null);
+      serverResponse = new ServerResponse(ServerErrorCode.Unknown_Error, null, null, null, null, null);
     } finally {
       throttler.maybeThrottle(1);
     }
@@ -467,14 +467,16 @@ public class BlobValidator implements Closeable {
     final BlobProperties blobProperties;
     final byte[] userMetadata;
     final byte[] blobData;
+    final byte[] encryptionKey;
 
     ServerResponse(ServerErrorCode serverErrorCode, StoreKey storeKey, BlobProperties blobProperties,
-        byte[] userMetadata, byte[] blobData) {
+        byte[] userMetadata, byte[] blobData, ByteBuffer encryptionKeyBuffer) {
       this.serverErrorCode = serverErrorCode;
       this.storeKey = storeKey;
       this.blobProperties = blobProperties;
       this.userMetadata = userMetadata;
       this.blobData = blobData;
+      this.encryptionKey = encryptionKeyBuffer != null ? encryptionKeyBuffer.array() : null;
     }
 
     /**
@@ -494,6 +496,10 @@ public class BlobValidator implements Closeable {
           if (mismatchDetails == null) {
             if (!Arrays.equals(userMetadata, that.userMetadata)) {
               mismatchDetails = "UserMetadata does not match";
+            } else if ((encryptionKey != null && that.encryptionKey == null) || (encryptionKey == null
+                && that.encryptionKey != null) || (encryptionKey != null && !Arrays.equals(encryptionKey,
+                that.encryptionKey))) {
+              mismatchDetails = "EncryptionKey does not match";
             } else if (!Arrays.equals(blobData, that.blobData)) {
               mismatchDetails = "Blob data does not match";
             }
