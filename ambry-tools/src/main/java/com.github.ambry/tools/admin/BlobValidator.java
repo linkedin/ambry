@@ -49,6 +49,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -467,7 +468,7 @@ public class BlobValidator implements Closeable {
     final BlobProperties blobProperties;
     final byte[] userMetadata;
     final byte[] blobData;
-    final byte[] encryptionKey;
+    final ByteBuffer encryptionKey;
 
     ServerResponse(ServerErrorCode serverErrorCode, StoreKey storeKey, BlobProperties blobProperties,
         byte[] userMetadata, byte[] blobData, ByteBuffer encryptionKeyBuffer) {
@@ -476,7 +477,7 @@ public class BlobValidator implements Closeable {
       this.blobProperties = blobProperties;
       this.userMetadata = userMetadata;
       this.blobData = blobData;
-      this.encryptionKey = encryptionKeyBuffer != null ? encryptionKeyBuffer.array() : null;
+      this.encryptionKey = encryptionKeyBuffer;
     }
 
     /**
@@ -496,9 +497,7 @@ public class BlobValidator implements Closeable {
           if (mismatchDetails == null) {
             if (!Arrays.equals(userMetadata, that.userMetadata)) {
               mismatchDetails = "UserMetadata does not match";
-            } else if ((encryptionKey != null && that.encryptionKey == null) || (encryptionKey == null
-                && that.encryptionKey != null) || (encryptionKey != null && !Arrays.equals(encryptionKey,
-                that.encryptionKey))) {
+            } else if (!Objects.equals(encryptionKey, that.encryptionKey)) {
               mismatchDetails = "EncryptionKey does not match";
             } else if (!Arrays.equals(blobData, that.blobData)) {
               mismatchDetails = "Blob data does not match";
