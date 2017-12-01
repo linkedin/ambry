@@ -315,8 +315,7 @@ class PutOperation {
       }
       operationCompleted = true;
     }
-    long operationLatencyMs =
-        time.milliseconds() - chunk.chunkFillCompleteAtMs;
+    long operationLatencyMs = time.milliseconds() - chunk.chunkFillCompleteAtMs;
     routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs);
     if (chunk.chunkBlobProperties.isEncrypted()) {
       routerMetrics.putEncryptedChunkOperationLatencyMs.update(operationLatencyMs);

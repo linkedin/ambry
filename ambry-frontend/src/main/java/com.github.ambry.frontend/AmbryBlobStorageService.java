@@ -197,7 +197,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           }
         }
         restRequest.getMetricsTracker()
-            .injectMetrics(getRestRequestMetricsForGET(frontendMetrics, subresource, isSsl, false));
+            .injectMetrics(getRestRequestMetricsForGet(frontendMetrics, subresource, isSsl, false));
         securityService.processRequest(restRequest, securityCallback);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
@@ -214,11 +214,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
     boolean isSsl = restRequest.getSSLSession() != null;
-    if (isSsl) {
-      restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobSSLMetrics);
-    } else {
-      restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobMetrics);
-    }
+    RestRequestMetrics metrics = isSsl ? frontendMetrics.postBlobSSLMetrics : frontendMetrics.postBlobMetrics;
+    restRequest.getMetricsTracker().injectMetrics(metrics);
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
@@ -234,11 +231,8 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       // inject encryption metrics if applicable
       if (blobProperties.isEncrypted()) {
-        if (isSsl) {
-          restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postEncryptedBlobSSLMetrics);
-        } else {
-          restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postEncryptedBlobMetrics);
-        }
+        metrics = isSsl ? frontendMetrics.postEncryptedBlobSSLMetrics : frontendMetrics.postEncryptedBlobMetrics;
+        restRequest.getMetricsTracker().injectMetrics(metrics);
       }
       byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
@@ -397,7 +391,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param encrypted {@code true} if request is for an encrypted blob. {@code false} otherwise
    * @return the appropriate {@link RestRequestMetrics} based on the given params
    */
-  static RestRequestMetrics getRestRequestMetricsForGET(FrontendMetrics frontendMetrics, SubResource subResource,
+  private RestRequestMetrics getRestRequestMetricsForGet(FrontendMetrics frontendMetrics, SubResource subResource,
       boolean isSsl, boolean encrypted) {
     RestRequestMetrics requestMetrics = null;
     if (subResource == null) {
@@ -814,6 +808,13 @@ class AmbryBlobStorageService implements BlobStorageService {
           accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
               routerResult.getBlobInfo().getBlobProperties());
           securityCallbackTracker.markOperationStart();
+          // inject encryption metrics if applicable
+          if (routerResult.getBlobInfo().getBlobProperties().isEncrypted()) {
+            restRequest.getMetricsTracker()
+                .injectMetrics(
+                    getRestRequestMetricsForGet(frontendMetrics, subResource, restRequest.getSSLSession() != null,
+                        true));
+          }
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {
                 securityCallbackTracker.markOperationEnd();
