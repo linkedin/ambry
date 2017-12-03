@@ -607,7 +607,6 @@ class HelixAccountService implements AccountService {
         JSONObject backupContent = getBackupContent(succeeded);
         try (BufferedWriter writer = getWriter(timestamp)) {
           backupContent.write(writer);
-          writer.flush();
         }
       } catch (JSONException | IOException e) {
         logger.error("Could not write backup file", e);
