@@ -139,6 +139,10 @@ public class NonBlockingRouterMetrics {
   public final AgeAtAccessMetrics ageAtGet;
   public final AgeAtAccessMetrics ageAtDelete;
 
+  // Crypto job metrics
+  public final CryptoJobMetrics encryptJobMetrics;
+  public final CryptoJobMetrics decryptJobMetrics;
+
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
 
@@ -299,6 +303,10 @@ public class NonBlockingRouterMetrics {
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
     ageAtDelete = new AgeAtAccessMetrics(metricRegistry, "OnDelete");
+
+    // Encrypt/Decrypt job metrics
+    encryptJobMetrics = new CryptoJobMetrics(PutOperation.class, "Encrypt", metricRegistry);
+    decryptJobMetrics = new CryptoJobMetrics(GetOperation.class, "Decrypt", metricRegistry);
   }
 
   /**
@@ -622,3 +630,126 @@ public class NonBlockingRouterMetrics {
     }
   }
 }
+
+/**
+ * A metrics object that is provided as input to {@link CryptoJob}.
+ * </p>
+ * It is expected that each type of crypto job will have it's own instance of CryptoJobMetrics and the same instance is
+ * used to track all jobs of that type.
+ */
+class CryptoJobMetrics {
+  private static final String REQUEST_QUEUING_TIME_SUFFIX = "RequestQueuingTimeInMs";
+  private static final String REQUEST_PROCESSING_TIME_SUFFIX = "RequestProcessingTimeInMs";
+  private static final String RESPONSE_PROCESSING_WAIT_TIME_SUFFIX = "ResponseProcessingWaitTimeInMs";
+  private static final String RESPONSE_PROCESSING_TIME_SUFFIX = "ResponseProcessingTimeInMs";
+  private static final String ROUND_TRIP_TIME_SUFFIX = "RoundTripTimeInMs";
+
+  private static final String OPERATION_RATE_SUFFIX = "Rate";
+  private static final String OPERATION_ERROR_SUFFIX = "Error";
+
+  final Histogram requestQueuingTimeInMs;
+  final Histogram requestProcessingTimeInMs;
+  final Histogram responseProcessingWaitTimeInMs;
+  final Histogram responseProcessingTimeInMs;
+  final Histogram roundTripTimeInMs;
+
+  final Meter operationRate;
+  final Meter operationErrorRate;
+
+  /**
+   * Instantiates {@link CryptoJobMetrics} for {@code requestType} and attaches all the metrics related to the
+   * cryptoJob to the given {@code ownerClass}. The metrics are also registered in the provided {@code metricRegistry}.
+   * @param ownerClass the {@link Class} that is supposed to own the metrics created by this tracker.
+   * @param requestType the type of request for which a tracker is being created.
+   * @param metricRegistry the {@link MetricRegistry} to use to register the created metrics.
+   */
+  CryptoJobMetrics(Class ownerClass, String requestType, MetricRegistry metricRegistry) {
+    requestQueuingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + REQUEST_QUEUING_TIME_SUFFIX));
+    requestProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + REQUEST_PROCESSING_TIME_SUFFIX));
+    responseProcessingWaitTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + RESPONSE_PROCESSING_WAIT_TIME_SUFFIX));
+    responseProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + RESPONSE_PROCESSING_TIME_SUFFIX));
+    roundTripTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + ROUND_TRIP_TIME_SUFFIX));
+
+    operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
+    operationErrorRate = metricRegistry.meter(
+        MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX + OPERATION_RATE_SUFFIX));
+  }
+}
+
+/**
+ * Construct to support end-to-end metrics tracking for crypto jobs. Usually accompanies a single
+ * {@link CryptoJob} i.e. there is a one-to-one mapping b/w a {@link CryptoJob} and a CryptoJobMetricsTracker
+ * instance.
+ * <p/>
+ * A brief description of how the tracker works :-
+ * - When an object of type {@link CryptoJob} is instantiated, it is also expected to be associated with a
+ *    unique instance of CryptoJobMetricsTracker (tracker). The Tracker will be instantiated either with
+ *    EncryptJobMetrics or DecryptJobMetrics
+ * - As the cryptoJob passed through various phases, metrics associated with these are updated via methods exposed
+ *    by this tracker.
+ */
+class CryptoJobMetricsTracker {
+  private final CryptoJobMetrics cryptoJobMetrics;
+  private long trackerStartTimeMs;
+  private long lastSeenTimeMs;
+
+  CryptoJobMetricsTracker(CryptoJobMetrics cryptoJobMetrics) {
+    this.cryptoJobMetrics = cryptoJobMetrics;
+  }
+
+  /**
+   * Starts the operation tracker for the corresponding CryptoJob
+   */
+  void startTracker() {
+    trackerStartTimeMs = System.currentTimeMillis();
+    lastSeenTimeMs = trackerStartTimeMs;
+  }
+
+  /**
+   * Notifies that the request processing has started for the corresponding CryptoJob
+   */
+  void startRequestProcessing() {
+    cryptoJobMetrics.operationRate.mark();
+    lastSeenTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.requestQueuingTimeInMs.update(lastSeenTimeMs - trackerStartTimeMs);
+  }
+
+  /**
+   * Notifies that the request processing has completed for the corresponding CryptoJob
+   */
+  void completeRequestProcessing() {
+    long curTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.requestProcessingTimeInMs.update(curTimeMs - lastSeenTimeMs);
+    lastSeenTimeMs = curTimeMs;
+  }
+
+  /**
+   * Notifies that the response processing has started for the corresponding CryptoJob
+   */
+  void startResponseProcessing() {
+    long curTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.responseProcessingWaitTimeInMs.update(curTimeMs - lastSeenTimeMs);
+    lastSeenTimeMs = curTimeMs;
+  }
+
+  /**
+   * Notifies that the response processing has completed for the corresponding CryptoJob
+   */
+  void completeResponseProcessing() {
+    long curTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.responseProcessingTimeInMs.update(lastSeenTimeMs - curTimeMs);
+    cryptoJobMetrics.roundTripTimeInMs.update(curTimeMs - trackerStartTimeMs);
+  }
+
+  /**
+   * Notifies an error for the corresponding CryptoJob
+   */
+  void incrementOperationError() {
+    cryptoJobMetrics.operationErrorRate.mark();
+  }
+}
+
