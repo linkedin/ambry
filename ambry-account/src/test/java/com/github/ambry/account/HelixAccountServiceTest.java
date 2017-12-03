@@ -21,6 +21,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +29,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -40,9 +42,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 import org.junit.After;
 import org.junit.Test;
 
@@ -499,6 +504,27 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Test updating an account with a conflicting expected snapshot version.
+   */
+  @Test
+  public void testConflictingSnapshotVersionUpdate() throws Exception {
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    // write two accounts (1, "a") and (2, "b")
+    writeAccountsForConflictTest();
+    Account expectedAccount = accountService.getAccountById((short) 1);
+    for (int snapshotVersion : new int[]{-1, 0, 2}) {
+      Collection<Account> conflictAccounts = Collections.singleton(
+          new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).snapshotVersion(snapshotVersion).build());
+      assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
+      assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
+      assertEquals("Account should not have been updated", expectedAccount, accountService.getAccountById((short) 1));
+    }
+    Collection<Account> validAccounts =
+        Collections.singleton(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).snapshotVersion(1).build());
+    updateAccountsAndAssertAccountExistence(validAccounts, 2, true);
+  }
+
+  /**
    * Tests reading conflicting {@link Account} metadata from {@link HelixPropertyStore}. Two {@link Account}s have
    * different accountIds but the same accountNames. This is a BAD record that should impact fetching or updating
    * {@link Account}s.
@@ -702,6 +728,7 @@ public class HelixAccountServiceTest {
    */
   private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
       boolean shouldUpdateSucceed) throws Exception {
+    Collection<Account> expectedPreviousState = accountService.getAllAccounts();
     boolean hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
     assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
@@ -709,6 +736,43 @@ public class HelixAccountServiceTest {
     } else {
       assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
           accountService.getAllAccounts().size());
+    }
+    Path mostRecentBackup = Files.list(accountBackupDir).max(Comparator.naturalOrder()).get();
+    try (BufferedReader reader = Files.newBufferedReader(mostRecentBackup)) {
+      JSONObject backupJson = new JSONObject(new JSONTokener(reader));
+      assertEquals("succeeded value incorrect in the backup", shouldUpdateSucceed,
+          backupJson.getBoolean(HelixAccountService.SUCCEEDED_KEY));
+      JSONArray updateArray;
+      if (shouldUpdateSucceed) {
+        assertNull("failedUpdate should not be present in the backup",
+            backupJson.opt(HelixAccountService.FAILED_UPDATE_KEY));
+        updateArray = backupJson.getJSONArray(HelixAccountService.COMMITED_UPDATE_KEY);
+      } else {
+        assertNull("committedUpdate should not be present in the backup",
+            backupJson.opt(HelixAccountService.COMMITED_UPDATE_KEY));
+        updateArray = backupJson.getJSONArray(HelixAccountService.FAILED_UPDATE_KEY);
+      }
+      JSONArray previousStateArray = backupJson.getJSONArray(HelixAccountService.PREVIOUS_STATE_KEY);
+      checkAccountsInJsonArray(expectedPreviousState, previousStateArray);
+      checkAccountsInJsonArray(adjustSnapsotVersions(accounts, 1), updateArray);
+    }
+  }
+
+  /**
+   * Check that the provided {@link JSONArray} of accounts matches the expected {@link Account}s.
+   * @param expectedAccounts the expected {@link Account}s.
+   * @param accountArray the {@link JSONArray} to test.
+   * @throws JSONException
+   */
+  private void checkAccountsInJsonArray(Collection<Account> expectedAccounts, JSONArray accountArray)
+      throws JSONException {
+    int arrayLength = accountArray.length();
+    assertEquals("unexpected array size", expectedAccounts.size(), arrayLength);
+    Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
+    for (int i = 0; i < arrayLength; i++) {
+      JSONObject accountJson = accountArray.getJSONObject(i);
+      Account account = Account.fromJson(accountJson);
+      assertTrue("unexpected account in array: " + accountJson.toString(), expectedAccountSet.contains(account));
     }
   }
 

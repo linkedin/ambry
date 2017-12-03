@@ -245,6 +245,7 @@ public class AccountUpdateToolTest {
   private static void writeAccountsToFile(Collection<Account> accounts, String filePath) throws Exception {
     JSONArray accountArray = new JSONArray();
     for (Account account : accounts) {
+      // AccountUpdateTool will re-serialize, so we do not want the snapshot version to be incremented twice.
       accountArray.put(account.toJson(false));
     }
     writeJsonArrayToFile(accountArray, filePath);

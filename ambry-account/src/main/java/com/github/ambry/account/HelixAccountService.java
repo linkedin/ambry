@@ -17,9 +17,11 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
@@ -39,6 +41,7 @@ import org.I0Itec.zkclient.DataUpdater;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -89,10 +92,11 @@ class HelixAccountService implements AccountService {
   static final String FULL_ACCOUNT_METADATA_PATH = "/account_metadata/full_data";
   private static final String ZN_RECORD_ID = "full_account_metadata";
   // backup constants
-  static final String BACKUP_EXT = ".bak";
-  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyymmdd'T'hhmmss'-'");
+  static final String BACKUP_EXT = "bak";
+  static final String SEP = ".";
+  static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
   static final String SUCCEEDED_KEY = "succeeded";
-  static final String OLD_STATE_KEY = "oldState";
+  static final String PREVIOUS_STATE_KEY = "previousState";
   static final String COMMITED_UPDATE_KEY = "committedUpdate";
   static final String FAILED_UPDATE_KEY = "failedUpdate";
 
@@ -593,31 +597,62 @@ class HelixAccountService implements AccountService {
     /**
      * Save the state from zookeeper from before the update and after the update to disk.
      * This will write the backup content string to the disk with the following file name format:
-     * {@code {yyyymmdd}T{hhmmss}-{unique long}.bak}.
+     * {@code {yyyyMMdd}T{HHmmss}-{unique long}.bak}.
      * If there are multiple files with the same timestamp, the unique long will prevent the file names from clashing.
+     * @param succeeded {@code true} iff the update succeeded.
      */
     void persistBackup(boolean succeeded) {
-      String prefix = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
       try {
-        JSONObject backupContent = new JSONObject();
-        backupContent.put(SUCCEEDED_KEY, succeeded);
-        if (remoteAccountInfoMap != null) {
-          for (Account account : remoteAccountInfoMap.getAccounts()) {
-            backupContent.accumulate(OLD_STATE_KEY, account.toJson());
-          }
-        }
-        String updatedAccountsKey = succeeded ? COMMITED_UPDATE_KEY : FAILED_UPDATE_KEY;
-        for (Account account : updatedAccounts) {
-          backupContent.accumulate(updatedAccountsKey, account.toJson());
-        }
-
-        Path filepath = Files.createTempFile(backupDirPath, prefix, BACKUP_EXT);
-        try (BufferedWriter writer = Files.newBufferedWriter(filepath)) {
+        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
+        JSONObject backupContent = getBackupContent(succeeded);
+        try (BufferedWriter writer = getWriter(timestamp)) {
           backupContent.write(writer);
+          writer.flush();
         }
       } catch (JSONException | IOException e) {
-        logger.error("Could not write backup file with prefix {}", prefix, e);
+        logger.error("Could not write backup file", e);
       }
+    }
+
+    /**
+     * @param timestamp the timestamp for the backup file
+     * @return a {@link BufferedWriter} for the backup file.
+     * @throws IOException if the file could not be created.
+     */
+    private BufferedWriter getWriter(String timestamp) throws IOException {
+      for (long n = 0; n < Long.MAX_VALUE; n++) {
+        Path filepath = backupDirPath.resolve(timestamp + SEP + n + SEP + BACKUP_EXT);
+        try {
+          return Files.newBufferedWriter(filepath, StandardOpenOption.CREATE_NEW);
+        } catch (FileAlreadyExistsException e) {
+          // retry with a new suffix.
+        }
+      }
+      throw new IOException("Could not create a unique file with timestamp " + timestamp);
+    }
+
+    /**
+     * @param succeeded {@code true} iff the update succeeded.
+     * @return a {@link JSONObject} containing the content for the local backup.
+     * @throws JSONException
+     */
+    private JSONObject getBackupContent(boolean succeeded) throws JSONException {
+      JSONObject backupContent = new JSONObject();
+      backupContent.put(SUCCEEDED_KEY, succeeded);
+      JSONArray previousStateArray = new JSONArray();
+      if (remoteAccountInfoMap != null) {
+        for (Account account : remoteAccountInfoMap.getAccounts()) {
+          // We want to include the snapshot version read from zookeeper, not snapshot version + 1
+          previousStateArray.put(account.toJson(false));
+        }
+      }
+      backupContent.put(PREVIOUS_STATE_KEY, previousStateArray);
+      JSONArray updatedAccountsArray = new JSONArray();
+      for (Account account : updatedAccounts) {
+        updatedAccountsArray.put(account.toJson());
+      }
+      backupContent.put(succeeded ? COMMITED_UPDATE_KEY : FAILED_UPDATE_KEY, updatedAccountsArray);
+      return backupContent;
     }
   }
 }

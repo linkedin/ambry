@@ -146,9 +146,19 @@ class AccountTestUtils {
    * Increment or decrement the snapshot version of the provided {@link Account}.
    * @param account the {@link Account} to modify.
    * @param offset the offset to adjust the snapshot version by.
-   * @return
+   * @return the modified {@link Account}.
    */
   static Account adjustSnapshotVersion(Account account, int offset) {
     return new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() + offset).build();
+  }
+
+  /**
+   * Increment or decrement the snapshot version of the provided {@link Account}s.
+   * @param accounts a {@link Collection} of {@link Account}s to modify.
+   * @param offset the offset to adjust the snapshot version by.
+   * @return a {@link Collection} of modified {@link Account}.
+   */
+  static Collection<Account> adjustSnapsotVersions(Collection<Account> accounts, int offset) {
+    return accounts.stream().map(account -> adjustSnapshotVersion(account, offset)).collect(Collectors.toList());
   }
 }
