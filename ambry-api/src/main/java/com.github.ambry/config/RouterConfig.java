@@ -175,6 +175,13 @@ public class RouterConfig {
   public final int routerCryptoJobsWorkerCount;
 
   /**
+   * Timeout for crypto jobs
+   */
+  @Config("router.crypto.job.timeout.ms")
+  @Default("1000")
+  public final int routerCryptoJobTimeoutMs;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -217,5 +224,6 @@ public class RouterConfig {
         "com.github.ambry.router.GCMCryptoServiceFactory");
     routerCryptoJobsWorkerCount =
         verifiableProperties.getIntInRange("router.crypto.jobs.worker.count", 1, 1, Integer.MAX_VALUE);
+    routerCryptoJobTimeoutMs = verifiableProperties.getIntInRange("router.crypto.job.timeout.ms", 1000, 1, 10000);
   }
 }

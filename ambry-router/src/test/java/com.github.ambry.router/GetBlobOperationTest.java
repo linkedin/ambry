@@ -501,6 +501,30 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test crypto job timeout
+   * @throws Exception
+   */
+  @Test
+  public void testCryptoJobTimeout() throws Exception {
+    if (testEncryption) {
+      // simple Blob
+      blobSize = random.nextInt(maxChunkSize) + 1;
+      doPut();
+      kms.timeToSleep = routerConfig.routerCryptoJobTimeoutMs * 2;
+      GetBlobOperation op = createOperationAndComplete(null, routerConfig.routerCryptoJobTimeoutMs + 1);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
+
+      // composite blob
+      kms.timeToSleep = 0;
+      blobSize = maxChunkSize * random.nextInt(10);
+      doPut();
+      kms.timeToSleep = routerConfig.routerCryptoJobTimeoutMs * 2;
+      op = createOperationAndComplete(null, routerConfig.routerCryptoJobTimeoutMs + 1);
+      assertFailureAndCheckErrorCode(op, RouterErrorCode.OperationTimedOut);
+    }
+  }
+
+  /**
    * Helper method to simulate errors from the servers. Only one node in the datacenter where the put happened will
    * return success. No matter what order the servers are contacted, as long as one of them returns success, the whole
    * operation should succeed.
@@ -952,6 +976,18 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   private GetBlobOperation createOperationAndComplete(Callback<GetBlobResultInternal> callback) throws Exception {
+    return createOperationAndComplete(callback, 0);
+  }
+
+  /**
+   * Create a getBlob operation with the specified callback and poll until completion.
+   * @param callback the callback to run after completion of the operation, or {@code null} if no callback.
+   * @param timeToIncrement time to increment the {@link MockTime} for every poll()
+   * @return the operation
+   * @throws Exception
+   */
+  private GetBlobOperation createOperationAndComplete(Callback<GetBlobResultInternal> callback, long timeToIncrement)
+      throws Exception {
     GetBlobOperation op = createOperation(callback);
     while (!op.isOperationComplete()) {
       op.poll(requestRegistrationCallback);
@@ -961,6 +997,7 @@ public class GetBlobOperationTest {
             new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), mockClusterMap) : null;
         op.handleResponse(responseInfo, getResponse);
       }
+      time.sleep(timeToIncrement);
     }
     return op;
   }

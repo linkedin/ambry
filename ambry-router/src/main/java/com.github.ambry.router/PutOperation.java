@@ -249,14 +249,17 @@ class PutOperation {
       }
     } else if (!metadataPutChunk.isReady()) {
       for (PutChunk chunk : putChunks) {
+        if (chunk.isEncrypting()) {
+          chunk.maybeCleanUpExpiredEncryptJobAndComplete();
+        }
         if (chunk.isReady()) {
           chunk.poll(requestRegistrationCallback);
-          if (chunk.isComplete()) {
-            onChunkOperationComplete(chunk);
-            // After each chunk is processed, check whether the operation itself has completed
-            if (operationCompleted) {
-              return;
-            }
+        }
+        if (chunk.isComplete()) {
+          onChunkOperationComplete(chunk);
+          // After each chunk is processed, check whether the operation itself has completed
+          if (operationCompleted) {
+            return;
           }
         }
       }
@@ -729,6 +732,16 @@ class PutOperation {
     }
 
     /**
+     * If the chunk is undergoing encryption, expire the job if need be and complete the operation
+     */
+    void maybeCleanUpExpiredEncryptJobAndComplete() {
+      if (state == ChunkState.Encrypting && (time.milliseconds() - chunkEncryptReadyAtMs
+          > routerConfig.routerCryptoJobTimeoutMs)) {
+        handleEncryptJobTimeOut();
+      }
+    }
+
+    /**
      * @return {@code true} if chunk is a MetadataChunk. {@code false} otherwise. Since this is a regular chunk,
      * false is returned
      */
@@ -783,6 +796,13 @@ class PutOperation {
      */
     boolean isReady() {
       return state == ChunkState.Ready;
+    }
+
+    /**
+     * @return true if this PutChunk is going through encryption
+     */
+    boolean isEncrypting() {
+      return state == ChunkState.Encrypting;
     }
 
     /**
@@ -852,35 +872,59 @@ class PutOperation {
                 isMetadataChunk() ? null : buf, ByteBuffer.wrap(chunkUserMetadata), kms.getRandomKey(), cryptoService,
                 kms, (EncryptJob.EncryptJobResult result, Exception exception) -> {
               logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
-              if (exception == null && !isOperationComplete()) {
-                if (!isMetadataChunk()) {
-                  buf = result.getEncryptedBlobContent();
-                }
-                encryptedPerBlobKey = result.getEncryptedKey();
-                chunkUserMetadata = result.getEncryptedUserMetadata().array();
-                logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
-                prepareForSending();
-                chunkReadyAtMs = time.milliseconds();
-              } else {
-                if (!isOperationComplete()) {
-                  logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
-                  setOperationExceptionAndComplete(
-                      new RouterException("Exception thrown on encrypting the content for chunk at index " + chunkIndex,
-                          exception, RouterErrorCode.UnexpectedInternalError));
-                } else {
-                  logger.trace(
-                      "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
-                      chunkIndex, getOperationException(), exception);
-                }
-              }
-              routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
-              routerCallback.onPollReady();
+              processEncryptJobCallback(result, exception);
             }));
       } catch (GeneralSecurityException e) {
         logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);
         setOperationExceptionAndComplete(new RouterException(
             "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
             RouterErrorCode.UnexpectedInternalError));
+      }
+    }
+
+    /**
+     * Processes encrypt job callback
+     * @param result {@link com.github.ambry.router.EncryptJob.EncryptJobResult} to be processed. Could be null.
+     * @param exception {@link Exception} from the encrypt job. Could be null.
+     */
+    private synchronized void processEncryptJobCallback(EncryptJob.EncryptJobResult result, Exception exception) {
+      if (!isOperationComplete()) {
+        if (exception == null && !isOperationComplete()) {
+          if (!isMetadataChunk()) {
+            buf = result.getEncryptedBlobContent();
+          }
+          encryptedPerBlobKey = result.getEncryptedKey();
+          chunkUserMetadata = result.getEncryptedUserMetadata().array();
+          logger.trace("Completing encrypt job result for chunk at index {}", chunkIndex);
+          prepareForSending();
+          chunkReadyAtMs = time.milliseconds();
+        } else {
+          if (!isOperationComplete()) {
+            logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
+            setOperationExceptionAndComplete(
+                new RouterException("Exception thrown on encrypting the content for chunk at index " + chunkIndex,
+                    exception, RouterErrorCode.UnexpectedInternalError));
+          } else {
+            logger.trace(
+                "Ignoring exception from encrypt job for chunk at index {} as operation exception {} is set already",
+                chunkIndex, getOperationException(), exception);
+          }
+        }
+        routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+        routerCallback.onPollReady();
+      }
+    }
+
+    /**
+     * Handles encrypt job timeout.
+     */
+    private synchronized void handleEncryptJobTimeOut() {
+      if (!isOperationComplete()) {
+        logger.trace("Timing out encrypt job for chunk at index {} ", chunkIndex);
+        setOperationExceptionAndComplete(new RouterException("Timing out encrypt job for chunk at index " + chunkIndex,
+            RouterErrorCode.OperationTimedOut));
+        state = ChunkState.Complete;
+        operationCompleted = true;
       }
     }
 
@@ -1276,6 +1320,9 @@ class PutOperation {
     void poll(RequestRegistrationCallback<PutOperation> requestRegistrationCallback) {
       if (isBuilding() && chunkFillingCompletedSuccessfully && indexToChunkIds.size() == getNumDataChunks()) {
         finalizeMetadataChunk();
+      }
+      if (isEncrypting()) {
+        maybeCleanUpExpiredEncryptJobAndComplete();
       }
       if (isReady()) {
         super.poll(requestRegistrationCallback);
