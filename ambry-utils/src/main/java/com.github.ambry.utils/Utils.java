@@ -73,6 +73,7 @@ public class Utils {
    */
   public static final int MAX_PORT_NUM = 65535;
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
+  private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
   private static final Logger logger = LoggerFactory.getLogger(Utils.class);
 
   // The read*String methods assume that the underlying stream is blocking
@@ -833,7 +834,8 @@ public class Utils {
    * @return {@code true} this cause indicates a possible early termination from the client. {@code false} otherwise.
    */
   public static boolean isPossibleClientTermination(Throwable cause) {
-    return cause instanceof IOException && CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage());
+    return cause instanceof IOException && (CLIENT_RESET_EXCEPTION_MSG.equals(cause.getMessage())
+        || CLIENT_BROKEN_PIPE_EXCEPTION_MSG.equals(cause.getMessage()));
   }
 
   /**
