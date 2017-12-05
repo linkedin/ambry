@@ -429,6 +429,9 @@ public class UtilsTest {
     Exception exception = new IOException("Connection reset by peer");
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
 
+    exception = new IOException("Broken pipe");
+    assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
+
     exception = new IOException("Connection not reset by peer");
     assertFalse("Should not be declared as a client termination", Utils.isPossibleClientTermination(exception));
     exception = Utils.convertToClientTerminationException(exception);
