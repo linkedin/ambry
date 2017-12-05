@@ -129,7 +129,7 @@ class HelixAccountService implements AccountService {
    * @param scheduler A {@link ScheduledExecutorService} that will run thread to update accounts in background.
    *                  {@code null} to disable background updating.
    * @param config The configs for {@code HelixAccountService}.
-   * @throws IOException
+   * @throws IOException if backup directory creation was needed but failed.
    */
   HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
       Notifier<String> notifier, ScheduledExecutorService scheduler, HelixAccountServiceConfig config)
@@ -296,9 +296,9 @@ class HelixAccountService implements AccountService {
    * Reads the full set of {@link Account} metadata from {@link HelixPropertyStore}, and update the local cache.
    *
    * @param pathToFullAccountMetadata The path to read the full set of {@link Account} metadata.
-   * @param calledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
+   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
    */
-  private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata, boolean calledFromListener)
+  private void readFullAccountAndUpdateCache(String pathToFullAccountMetadata, boolean isCalledFromListener)
       throws JSONException {
     lock.lock();
     try {
@@ -318,7 +318,7 @@ class HelixAccountService implements AccountService {
           logger.trace("Start parsing remote account data.");
           AccountInfoMap newAccountInfoMap = new AccountInfoMap(remoteAccountMap);
           AccountInfoMap oldAccountInfoMap = accountInfoMapRef.getAndSet(newAccountInfoMap);
-          notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, calledFromListener);
+          notifyAccountUpdateConsumers(newAccountInfoMap, oldAccountInfoMap, isCalledFromListener);
         }
       }
     } finally {
@@ -330,10 +330,10 @@ class HelixAccountService implements AccountService {
    * Logs and notifies account update {@link Consumer}s about any new account changes/creations.
    * @param newAccountInfoMap the new {@link AccountInfoMap} that has been set.
    * @param oldAccountInfoMap the {@link AccountInfoMap} that was cached before this change.
-   * @param calledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
+   * @param isCalledFromListener {@code true} if the caller is the account update listener, {@@code false} otherwise.
    */
   private void notifyAccountUpdateConsumers(AccountInfoMap newAccountInfoMap, AccountInfoMap oldAccountInfoMap,
-      boolean calledFromListener) {
+      boolean isCalledFromListener) {
     Map<Short, Account> oldIdToAccountMap = oldAccountInfoMap.idToAccountMap;
     Map<Short, Account> idToUpdatedAccounts = new HashMap<>();
     for (Account newAccount : newAccountInfoMap.getAccounts()) {
@@ -343,9 +343,9 @@ class HelixAccountService implements AccountService {
     }
     if (idToUpdatedAccounts.size() > 0) {
       logger.info("Received updates for {} accounts. Received from listener={}. Account IDs={}",
-          idToUpdatedAccounts.size(), calledFromListener, idToUpdatedAccounts.keySet());
+          idToUpdatedAccounts.size(), isCalledFromListener, idToUpdatedAccounts.keySet());
       // @todo In long run, this metric is not necessary.
-      if (calledFromListener) {
+      if (isCalledFromListener) {
         accountServiceMetrics.accountUpdatesCapturedByScheduledUpdaterCount.inc();
       }
       Collection<Account> updatedAccounts = Collections.unmodifiableCollection(idToUpdatedAccounts.values());
