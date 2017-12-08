@@ -102,6 +102,14 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
+  public String getDatacenterName(byte id) {
+    if (id == ClusterMapUtils.UNKNOWN_DATACENTER_ID) {
+      return null;
+    }
+    return hardwareLayout.getDatacenterById(id).getName();
+  }
+
+  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     return hardwareLayout.findDataNode(hostname, port);
   }

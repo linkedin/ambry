@@ -86,7 +86,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;
-    operationTracker = getOperationTracker(blobId.getPartition());
+    operationTracker = getOperationTracker(blobId.getPartition(), blobId.getDatacenterId());
     progressTracker = new ProgressTracker(operationTracker);
   }
 
@@ -149,6 +149,8 @@ class GetBlobInfoOperation extends GetOperation {
    */
   private void fetchRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
+    logger.trace("fetchRequests");
+    new Exception().printStackTrace();
     while (replicaIterator.hasNext()) {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();

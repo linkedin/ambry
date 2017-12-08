@@ -193,6 +193,11 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public String getDatacenterName(byte id) {
+    return null;
+  }
+
+  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     for (DataNodeId dataNodeId : dataNodes) {
       if (dataNodeId.getHostname().compareTo(hostname) == 0 && dataNodeId.getPort() == port) {

@@ -56,6 +56,7 @@ class HelixClusterManager implements ClusterMap {
   private final MetricRegistry metricRegistry;
   private final ClusterMapConfig clusterMapConfig;
   private final ConcurrentHashMap<String, DcInfo> dcToDcZkInfo = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Byte, String> dcIdToDcName = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryPartition> partitionNameToAmbryPartition = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryPartition, Set<AmbryReplica>> ambryPartitionToAmbryReplicas =
@@ -107,6 +108,7 @@ class HelixClusterManager implements ClusterMap {
               logger.info("Established connection to Helix manager at {}", zkConnectStr);
               DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
               dcToDcZkInfo.put(dcName, dcInfo);
+              dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
 
               // The initial instance config change notification is required to populate the static cluster
               // information, and only after that is complete do we want the live instance change notification to
@@ -172,6 +174,11 @@ class HelixClusterManager implements ClusterMap {
   @Override
   public byte getLocalDatacenterId() {
     return localDatacenterId;
+  }
+
+  @Override
+  public String getDatacenterName(byte id) {
+    return dcIdToDcName.get(id);
   }
 
   @Override

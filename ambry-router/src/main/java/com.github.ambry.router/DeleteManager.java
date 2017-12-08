@@ -104,7 +104,7 @@ class DeleteManager {
   void submitDeleteBlobOperation(BlobId blobId, String serviceId, FutureResult<Void> futureResult,
       Callback<Void> callback) {
     DeleteOperation deleteOperation =
-        new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
+        new DeleteOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
             futureResult);
     deleteOperations.add(deleteOperation);
   }

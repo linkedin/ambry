@@ -75,11 +75,12 @@ class SimpleOperationTracker implements OperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
    *                                otherwise.
+   * @param crossColoPreferredDc The original DC where blob was put.
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
-  SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
+  SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, String crossColoPreferredDc, int successTarget,
       int parallelism, boolean shuffleReplicas) {
     if (parallelism < 1) {
       throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
@@ -89,6 +90,7 @@ class SimpleOperationTracker implements OperationTracker {
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
+    LinkedList<ReplicaId> crossColoReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
@@ -99,7 +101,11 @@ class SimpleOperationTracker implements OperationTracker {
         if (replicaDcName.equals(datacenterName)) {
           replicaPool.addFirst(replicaId);
         } else if (crossColoEnabled) {
-          replicaPool.addLast(replicaId);
+          if (replicaDcName.equals(crossColoPreferredDc)) {
+            crossColoReplicas.addFirst(replicaId);
+          } else {
+            crossColoReplicas.addLast(replicaId);
+          }
         }
       } else {
         if (replicaDcName.equals(datacenterName)) {
@@ -109,6 +115,7 @@ class SimpleOperationTracker implements OperationTracker {
         }
       }
     }
+    replicaPool.addAll(crossColoReplicas);
     replicaPool.addAll(downReplicas);
     totalReplicaCount = replicaPool.size();
     if (totalReplicaCount < successTarget) {
@@ -125,12 +132,13 @@ class SimpleOperationTracker implements OperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
    *                                otherwise.
+   * @param crossColoPreferredDc The original DC where blob was put. null if DC unknown.
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
    */
-  SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
+  SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, String crossColoPreferredDc,  int successTarget,
       int parallelism) {
-    this(datacenterName, partitionId, crossColoEnabled, successTarget, parallelism, true);
+    this(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, successTarget, parallelism, true);
   }
 
   @Override

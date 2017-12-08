@@ -18,6 +18,7 @@ import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -248,16 +249,17 @@ abstract class GetOperation {
    * @param partitionId the {@link PartitionId} for which a tracker is required.
    * @return an {@link OperationTracker} based on the config and {@code partitionId}.
    */
-  protected OperationTracker getOperationTracker(PartitionId partitionId) {
+  protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
+    String preferredDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
       operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
+          routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetSuccessTarget,
           routerConfig.routerGetRequestParallelism);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
+          routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetSuccessTarget,
           routerConfig.routerGetRequestParallelism, time, localColoTracker, crossColoTracker, pastDueCounter,
           routerConfig.routerLatencyToleranceQuantile);
     } else {

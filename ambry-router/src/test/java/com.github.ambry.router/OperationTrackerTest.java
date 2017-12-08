@@ -390,11 +390,11 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, successTarget, parallelism);
+        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, null, successTarget, parallelism);
         break;
       case ADAPTIVE_OP_TRACKER:
         tracker =
-            new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, successTarget, parallelism, time,
+            new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, null, successTarget, parallelism, time,
                 localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
         break;
       default:

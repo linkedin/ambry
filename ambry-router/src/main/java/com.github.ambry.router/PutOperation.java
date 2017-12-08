@@ -889,7 +889,7 @@ class PutOperation {
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted());
-        operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
+        operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false, null,
             routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
