@@ -263,7 +263,7 @@ public class HelixAccountServiceTest {
   @Test
   public void testReadBadZNRecordCase3() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
-    mapValue.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
+    mapValue.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
     ZNRecord zNRecord = makeZNRecordWithMapField(null, "key", mapValue);
     updateAndWriteZNRecord(zNRecord, true);
   }
@@ -278,7 +278,7 @@ public class HelixAccountServiceTest {
   @Test
   public void testReadBadZNRecordCase4() throws Exception {
     Map<String, String> mapValue = new HashMap<>();
-    mapValue.put("-1", refAccount.toJson().toString());
+    mapValue.put("-1", refAccount.toJson(true).toString());
     ZNRecord zNRecord = makeZNRecordWithMapField(null, ACCOUNT_METADATA_MAP_KEY, mapValue);
     updateAndWriteZNRecord(zNRecord, false);
   }
@@ -307,7 +307,7 @@ public class HelixAccountServiceTest {
   public void testReadBadZNRecordCase6() throws Exception {
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
     Map<String, String> accountMap = new HashMap<>();
-    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson().toString());
+    accountMap.put(String.valueOf(refAccount.getId()), refAccount.toJson(true).toString());
     accountMap.put(String.valueOf(refAccount.getId() + 1), BAD_ACCOUNT_METADATA_STRING);
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
     updateAndWriteZNRecord(zNRecord, false);
@@ -709,7 +709,7 @@ public class HelixAccountServiceTest {
 
   /**
    * PrePopulates a collection of self-conflicting {@link Account}s, which will impact {@link HelixAccountService}
-   * startup and udpate.
+   * startup and update.
    * @param accounts The self-conflicting {@link Account}s.
    */
   private void readAndUpdateBadRecord(Collection<Account> accounts) throws Exception {
@@ -788,7 +788,7 @@ public class HelixAccountServiceTest {
     ZNRecord zNRecord = new ZNRecord(String.valueOf(System.currentTimeMillis()));
     Map<String, String> accountMap = new HashMap<>();
     for (Account account : accounts) {
-      accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
+      accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
     }
     zNRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
     // Write account metadata into HelixPropertyStore.

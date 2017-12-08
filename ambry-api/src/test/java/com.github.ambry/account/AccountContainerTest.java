@@ -631,9 +631,9 @@ public class AccountContainerTest {
   /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.
-   * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson()}, and also
-   *                                    serialize then deserialize to get an identical account. {@code false} to skip
-   *                                    these tests.
+   * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson(boolean)}, and
+   *                                    also serialize then deserialize to get an identical account. {@code false} to
+   *                                    skip these tests.
    * @param compareContainer {@code true} to compare each individual {@link Container}. {@code false} to skip this test.
    * @throws JSONException
    */
@@ -644,24 +644,9 @@ public class AccountContainerTest {
     assertEquals(refAccountStatus, account.getStatus());
     assertEquals("Snapshot versions do not match", refAccountSnapshotVersion, account.getSnapshotVersion());
     if (compareMetadata) {
-      assertEquals("Failed to compare account to a reference account", Account.fromJson(refAccountJson), account);
-
-      // when an account is serialized the snapshot version is incremented by one.
-      JSONObject expectedAccountJson =
-          deepCopy(refAccountJson).put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion + 1);
-      JSONObject accountJson = account.toJson();
-      // extra check for snapshot version since the lengths would likely not differ even if the snapshot version wasn't
-      // incremented correctly
-      assertEquals("Snapshot versions in JSON do not match", expectedAccountJson.get(SNAPSHOT_VERSION_KEY),
-          account.toJson().get(SNAPSHOT_VERSION_KEY));
-      // The order of containers in json string may be different, so we cannot compare the exact string.
-      assertEquals("Wrong metadata JsonObject from toJson()", expectedAccountJson.toString().length(),
-          accountJson.toString().length());
-      Account expectedAccount = new AccountBuilder(account).snapshotVersion(refAccountSnapshotVersion + 1).build();
-      assertEquals("Wrong behavior in serialize and then deserialize", expectedAccount,
-          Account.fromJson(account.toJson()));
-    }
-    if (compareContainer) {
+      assertAccountJsonSerDe(false, account);
+      assertAccountJsonSerDe(true, account);
+    } if (compareContainer) {
       Collection<Container> containersFromAccount = account.getAllContainers();
       assertEquals("Wrong number of containers.", CONTAINER_COUNT, containersFromAccount.size());
       assertEquals(CONTAINER_COUNT, containersFromAccount.size());
@@ -670,6 +655,35 @@ public class AccountContainerTest {
         assertContainer(account.getContainerByName(refContainerNames.get(i)), i);
       }
     }
+  }
+
+  /**
+   * Assert that JSON ser/de is working correctly by comparing against the reference account JSON
+   * @param incrementSnapshotVersion {@code true} to increment the snapshot version when serializing.
+   * @param account the {@link Account} to test.
+   * @throws JSONException
+   */
+  private void assertAccountJsonSerDe(boolean incrementSnapshotVersion, Account account) throws JSONException {
+    assertEquals("Failed to compare account to a reference account", Account.fromJson(refAccountJson), account);
+    JSONObject expectedAccountJson = deepCopy(refAccountJson);
+    if (incrementSnapshotVersion) {
+      expectedAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion + 1);
+    }
+    JSONObject accountJson = account.toJson(incrementSnapshotVersion);
+    // extra check for snapshot version since the lengths would likely not differ even if the snapshot version was not
+    // correct
+    assertEquals("Snapshot versions in JSON do not match", expectedAccountJson.get(SNAPSHOT_VERSION_KEY),
+        accountJson.get(SNAPSHOT_VERSION_KEY));
+    // The order of containers in json string may be different, so we cannot compare the exact string.
+    assertEquals("Wrong metadata JsonObject from toJson()", expectedAccountJson.toString().length(),
+        accountJson.toString().length());
+
+    AccountBuilder expectedAccountBuilder = new AccountBuilder(account);
+    if (incrementSnapshotVersion) {
+      expectedAccountBuilder.snapshotVersion(refAccountSnapshotVersion + 1);
+    }
+    assertEquals("Wrong behavior in serialize and then deserialize", expectedAccountBuilder.build(),
+        Account.fromJson(account.toJson(incrementSnapshotVersion)));
   }
 
   /**

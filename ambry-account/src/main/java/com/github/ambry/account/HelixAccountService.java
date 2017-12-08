@@ -164,7 +164,6 @@ class HelixAccountService implements AccountService {
           "Background account updater will fetch accounts from remote starting {} ms from now and repeat with interval={} ms",
           initialDelay, config.updaterPollingIntervalMs);
     }
-    open.set(true);
   }
 
   @Override
@@ -580,7 +579,7 @@ class HelixAccountService implements AccountService {
       } else {
         for (Account account : updatedAccounts) {
           try {
-            accountMap.put(String.valueOf(account.getId()), account.toJson().toString());
+            accountMap.put(String.valueOf(account.getId()), account.toJson(true).toString());
           } catch (Exception e) {
             String message = "Updating accounts failed because unexpected exception occurred when updating accountId="
                 + account.getId() + " accountName=" + account.getName();
@@ -648,7 +647,7 @@ class HelixAccountService implements AccountService {
       backupContent.put(PREVIOUS_STATE_KEY, previousStateArray);
       JSONArray updatedAccountsArray = new JSONArray();
       for (Account account : updatedAccounts) {
-        updatedAccountsArray.put(account.toJson());
+        updatedAccountsArray.put(account.toJson(true));
       }
       backupContent.put(succeeded ? COMMITED_UPDATE_KEY : FAILED_UPDATE_KEY, updatedAccountsArray);
       return backupContent;

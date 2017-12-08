@@ -97,7 +97,7 @@ public class Account {
   /**
    * An account defined specifically for the blobs put without specifying target account and container. In the
    * pre-containerization world, a put-blob request does not carry any information which account/container to store
-   * the blob. Thee blobs are put under this account if their service ID does not match a valid account, because the
+   * the blob. These blobs are assigned to this account if their service ID does not match a valid account, because the
    * target account information is unknown.
    */
   public static final Account UNKNOWN_ACCOUNT =
@@ -171,16 +171,8 @@ public class Account {
   }
 
   /**
-   * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one.
-   * @return The metadata of the account in {@link JSONObject}.
-   * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
-   */
-  JSONObject toJson() throws JSONException {
-    return toJson(true);
-  }
-
-  /**
-   * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one.
+   * Gets the metadata of the account in {@link JSONObject}. This will increment the snapshot version by one if
+   * {@code incrementSnapshotVersion} is {@code true}.
    * @param incrementSnapshotVersion {@code true} to increment the snapshot version by one.
    * @return The metadata of the account in {@link JSONObject}.
    * @throws JSONException If fails to compose the metadata in {@link JSONObject}.
@@ -300,13 +292,7 @@ public class Account {
     if (status != account.status) {
       return false;
     }
-    if (snapshotVersion != account.snapshotVersion) {
-      return false;
-    }
-    if (!containerIdToContainerMap.equals(account.containerIdToContainerMap)) {
-      return false;
-    }
-    return containerNameToContainerMap.equals(account.containerNameToContainerMap);
+    return containerIdToContainerMap.equals(account.containerIdToContainerMap);
   }
 
   @Override
