@@ -149,8 +149,6 @@ class GetBlobInfoOperation extends GetOperation {
    */
   private void fetchRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
-    logger.trace("fetchRequests");
-    new Exception().printStackTrace();
     while (replicaIterator.hasNext()) {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();

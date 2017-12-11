@@ -65,6 +65,7 @@ public class OperationTrackerTest {
   private List<MockDataNodeId> datanodes;
   private MockPartitionId mockPartition;
   private String localDcName;
+  private String preferredDcName;
   private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
 
@@ -324,6 +325,49 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test to ensure that replicas in preffered DC are first priority when preffered DC is local DC.
+   */
+  @Test
+  public void replicasOrderingTestPrefferedIsLocal() {
+    initialize();
+    preferredDcName = localDcName;
+    OperationTracker ot = getOperationTracker(true, 3, 3);
+    sendRequests(ot, 3, false);
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, true);
+      assertEquals(preferredDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test to ensure that replicas in preffered DC are right after local DC replicas.
+   */
+  @Test
+  public void replicasOrderingTestPrefferedNotLocal() {
+    initialize();
+    preferredDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
+    OperationTracker ot = getOperationTracker(true, 3, 6);
+    sendRequests(ot, 6, false);
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, false); // fail first 3 requests to local
+      assertEquals(localDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, true);
+      assertEquals(preferredDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
    * Tests the case when the success target > number of replicas.
    */
   @Test
@@ -390,11 +434,11 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, null, successTarget, parallelism);
+        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, successTarget, parallelism);
         break;
       case ADAPTIVE_OP_TRACKER:
         tracker =
-            new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, null, successTarget, parallelism, time,
+            new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, successTarget, parallelism, time,
                 localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
         break;
       default:
