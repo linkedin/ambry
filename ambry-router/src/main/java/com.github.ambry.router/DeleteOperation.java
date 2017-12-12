@@ -83,8 +83,9 @@ class DeleteOperation {
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    */
-  DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ResponseHandler responsehandler,
-      BlobId blobId, String serviceId, Callback<Void> callback, Time time, FutureResult<Void> futureResult) {
+  DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
+      FutureResult<Void> futureResult) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -97,9 +98,11 @@ class DeleteOperation {
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
     byte blobDcId = blobId.getDatacenterId();
-    String preferredDcName = (blobDcId == ClusterMapUtils.UNKNOWN_DATACENTER_ID ? null : clusterMap.getDatacenterName(blobDcId));
-    this.operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
-        preferredDcName, routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
+    String preferredDcName =
+        (blobDcId == ClusterMapUtils.UNKNOWN_DATACENTER_ID ? null : clusterMap.getDatacenterName(blobDcId));
+    this.operationTracker =
+        new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, preferredDcName,
+            routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
   }
 
   /**

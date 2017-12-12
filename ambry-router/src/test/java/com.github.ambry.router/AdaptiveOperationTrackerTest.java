@@ -241,8 +241,8 @@ public class AdaptiveOperationTrackerTest {
    * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
    */
   private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism) {
-    return new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, null, successTarget, parallelism, time,
-        localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
+    return new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, null, successTarget, parallelism,
+        time, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
   }
 
   /**

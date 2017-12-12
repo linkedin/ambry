@@ -124,12 +124,11 @@ class CompositeClusterManager implements ClusterMap {
   @Override
   public String getDatacenterName(byte id) {
     String dcName = staticClusterManager.getDatacenterName(id);
-      if (!dcName.equals(helixClusterManager.getDatacenterName(id))) {
-        helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
-      }
+    if (!dcName.equals(helixClusterManager.getDatacenterName(id))) {
+      helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
+    }
     return dcName;
   }
-
 
   /**
    * Return the {@link DataNodeId} associated with the given hostname and port in the underlying
