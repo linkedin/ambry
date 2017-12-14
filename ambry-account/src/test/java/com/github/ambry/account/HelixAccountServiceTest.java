@@ -751,17 +751,6 @@ public class HelixAccountServiceTest {
   }
 
   /**
-   * @return the serialized account metadata for each account present in zookeeper.
-   */
-  private Collection<String> getSerializedAccountsFromZk() {
-    HelixPropertyStore<ZNRecord> helixStore = mockHelixAccountServiceFactory.getHelixStore(storeConfig);
-    return Optional.ofNullable(helixStore.get(FULL_ACCOUNT_METADATA_PATH, null, AccessOption.PERSISTENT))
-        .flatMap(znRecord -> Optional.ofNullable(znRecord.getMapField(ACCOUNT_METADATA_MAP_KEY)))
-        .map(Map::values)
-        .orElse(Collections.emptyList());
-  }
-
-  /**
    * Check that the provided backup file matches the data in the corresponding serialized accounts.
    * @param expectedAccounts the expected {@link Account}s.
    * @param backupPath the {@link Path} to the backup file.
