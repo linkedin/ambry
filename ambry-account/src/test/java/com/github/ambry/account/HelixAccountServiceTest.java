@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -42,6 +43,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONArray;
@@ -728,51 +730,55 @@ public class HelixAccountServiceTest {
    */
   private void updateAccountsAndAssertAccountExistence(Collection<Account> accounts, int expectedAccountCount,
       boolean shouldUpdateSucceed) throws Exception {
-    Collection<Account> expectedPreviousState = accountService.getAllAccounts();
+    Collection<Account> expectedOldState = accountService.getAllAccounts();
     boolean hasUpdateAccountSucceed = accountService.updateAccounts(accounts);
     assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
+
+      Path oldStateBackup = Files.list(accountBackupDir)
+          .filter(path -> path.getFileName().toString().endsWith(OLD_STATE_SUFFIX))
+          .max(Comparator.naturalOrder())
+          .get();
+      checkBackupFile(expectedOldState, oldStateBackup);
+      String newStateFilename = oldStateBackup.getFileName().toString().replace(OLD_STATE_SUFFIX, NEW_STATE_SUFFIX);
+      Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
+      checkBackupFile(accountService.getAllAccounts(), newStateBackup);
     } else {
       assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
           accountService.getAllAccounts().size());
     }
-    Path mostRecentBackup = Files.list(accountBackupDir).max(Comparator.naturalOrder()).get();
-    try (BufferedReader reader = Files.newBufferedReader(mostRecentBackup)) {
-      JSONObject backupJson = new JSONObject(new JSONTokener(reader));
-      assertEquals("succeeded value incorrect in the backup", shouldUpdateSucceed,
-          backupJson.getBoolean(HelixAccountService.SUCCEEDED_KEY));
-      JSONArray updateArray;
-      if (shouldUpdateSucceed) {
-        assertNull("failedUpdate should not be present in the backup",
-            backupJson.opt(HelixAccountService.FAILED_UPDATE_KEY));
-        updateArray = backupJson.getJSONArray(HelixAccountService.COMMITED_UPDATE_KEY);
-      } else {
-        assertNull("committedUpdate should not be present in the backup",
-            backupJson.opt(HelixAccountService.COMMITED_UPDATE_KEY));
-        updateArray = backupJson.getJSONArray(HelixAccountService.FAILED_UPDATE_KEY);
-      }
-      JSONArray previousStateArray = backupJson.getJSONArray(HelixAccountService.PREVIOUS_STATE_KEY);
-      checkAccountsInJsonArray(expectedPreviousState, previousStateArray);
-      checkAccountsInJsonArray(adjustSnapsotVersions(accounts, 1), updateArray);
-    }
   }
 
   /**
-   * Check that the provided {@link JSONArray} of accounts matches the expected {@link Account}s.
+   * @return the serialized account metadata for each account present in zookeeper.
+   */
+  private Collection<String> getSerializedAccountsFromZk() {
+    HelixPropertyStore<ZNRecord> helixStore = mockHelixAccountServiceFactory.getHelixStore(storeConfig);
+    return Optional.ofNullable(helixStore.get(FULL_ACCOUNT_METADATA_PATH, null, AccessOption.PERSISTENT))
+        .flatMap(znRecord -> Optional.ofNullable(znRecord.getMapField(ACCOUNT_METADATA_MAP_KEY)))
+        .map(Map::values)
+        .orElse(Collections.emptyList());
+  }
+
+  /**
+   * Check that the provided backup file matches the data in the corresponding serialized accounts.
    * @param expectedAccounts the expected {@link Account}s.
-   * @param accountArray the {@link JSONArray} to test.
+   * @param backupPath the {@link Path} to the backup file.
    * @throws JSONException
    */
-  private void checkAccountsInJsonArray(Collection<Account> expectedAccounts, JSONArray accountArray)
-      throws JSONException {
-    int arrayLength = accountArray.length();
-    assertEquals("unexpected array size", expectedAccounts.size(), arrayLength);
-    Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
-    for (int i = 0; i < arrayLength; i++) {
-      JSONObject accountJson = accountArray.getJSONObject(i);
-      Account account = Account.fromJson(accountJson);
-      assertTrue("unexpected account in array: " + accountJson.toString(), expectedAccountSet.contains(account));
+  private void checkBackupFile(Collection<Account> expectedAccounts, Path backupPath)
+      throws JSONException, IOException {
+    try (BufferedReader reader = Files.newBufferedReader(backupPath)) {
+      JSONArray accountArray = new JSONArray(new JSONTokener(reader));
+      int arrayLength = accountArray.length();
+      assertEquals("unexpected array size", expectedAccounts.size(), arrayLength);
+      Set<Account> expectedAccountSet = new HashSet<>(expectedAccounts);
+      for (int i = 0; i < arrayLength; i++) {
+        JSONObject accountJson = accountArray.getJSONObject(i);
+        Account account = Account.fromJson(accountJson);
+        assertTrue("unexpected account in array: " + accountJson.toString(), expectedAccountSet.contains(account));
+      }
     }
   }
 

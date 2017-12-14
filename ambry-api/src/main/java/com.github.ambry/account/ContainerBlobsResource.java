@@ -19,7 +19,7 @@ package com.github.ambry.account;
  *
  */
 public class ContainerBlobsResource implements AclService.Resource {
-  private static final String RESOURCE_TYPE = "ContainerBlobs";
+  public static final String RESOURCE_TYPE = "ContainerBlobs";
   private static final String SEPARATOR = "_";
 
   private final String resourceId;
