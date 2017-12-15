@@ -201,9 +201,9 @@ public class BlobIdTest {
   @Test
   public void testCrafting() {
     BlobId inputs[];
-    if (version == BLOB_ID_V3) {
-      inputs = new BlobId[]{new BlobId(BLOB_ID_V3, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId), new BlobId(BLOB_ID_V3, BlobIdType.CRAFTED, referenceDatacenterId,
+    if (version >= BLOB_ID_V3) {
+      inputs = new BlobId[]{new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
+          referenceContainerId, referencePartitionId), new BlobId(version, BlobIdType.CRAFTED, referenceDatacenterId,
           referenceAccountId, referenceContainerId, referencePartitionId)};
     } else {
       inputs = new BlobId[]{new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId,
@@ -214,11 +214,22 @@ public class BlobIdTest {
 
     BlobId crafted = null;
     for (BlobId id : inputs) {
-      crafted = BlobId.craft(id, newAccountId, newContainerId);
+      try {
+        BlobId.craft(id, BLOB_ID_V1, newAccountId, newContainerId);
+        fail("Crafting should fail for target version " + BLOB_ID_V1);
+      } catch (IllegalArgumentException e) {
+      }
+      try {
+        BlobId.craft(id, BLOB_ID_V2, newAccountId, newContainerId);
+        fail("Crafting should fail for target version " + BLOB_ID_V2);
+      } catch (IllegalArgumentException e) {
+      }
+      crafted = BlobId.craft(id, CommonTestUtils.getCurrentBlobIdVersion(), newAccountId, newContainerId);
       verifyCrafting(id, crafted);
     }
 
-    BlobId craftedAgain = BlobId.craft(crafted, crafted.getAccountId(), crafted.getContainerId());
+    BlobId craftedAgain = BlobId.craft(crafted, CommonTestUtils.getCurrentBlobIdVersion(), crafted.getAccountId(),
+        crafted.getContainerId());
     verifyCrafting(crafted, craftedAgain);
     Assert.assertEquals("Accounts should match", crafted.getAccountId(), craftedAgain.getAccountId());
     Assert.assertEquals("Containers should match", crafted.getContainerId(), craftedAgain.getContainerId());
@@ -238,7 +249,8 @@ public class BlobIdTest {
     Assert.assertEquals("Partition of input id should match that of the crafted id", input.getPartition(),
         crafted.getPartition());
     Assert.assertEquals("UUID of input id should match that of the crafted id", input.getUuid(), crafted.getUuid());
-    Assert.assertEquals("Crafted id should be a V3 id", BLOB_ID_V3, crafted.getVersion());
+    Assert.assertEquals("Crafted id should have the latest version", CommonTestUtils.getCurrentBlobIdVersion(),
+        crafted.getVersion());
     Assert.assertEquals("Crafted id should have the Crafted type", BlobIdType.CRAFTED, crafted.getType());
   }
 

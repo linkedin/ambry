@@ -440,18 +440,26 @@ public class BlobId extends StoreKey {
 
   /**
    * Create a {@link BlobIdType#CRAFTED} BlobId for the given input BlobId.
-   * The method is "idempotent" in the sense that if the input is a crafted V3 id with the same account and container
-   * associated with it as the account and container in the params, then the returned id will be exactly the same as
-   * the input.
+   *
+   * This method is useful in retrofitting account and container information to older blob ids, those that were created
+   * before the concept of accounts and containers were introduced.
+   *
+   * The method is "idempotent" in the sense that if the input is a crafted id in the same version as the target version
+   * for crafting with the same account and container associated with it as the account and container in the params,
+   * then the returned id will be exactly the same as the input.
    * @param inputId The input BlobId for which a new BlobId is to be crafted. The input id can be of any version
-   *                (including a V3 version) and of any type.
+   *                and of any type.
+   * @param targetVersion the version in which the new blob id should be crafted.
    * @param accountId The id of the {@link Account} to be embedded in the converted id.
    * @param containerId The id of the {@link Container} to be embedded in the converted id.
-   * @return The output BlobId will be a V3 BlobId of type {@link BlobIdType#CRAFTED} with the given account id and
-   *         container id association.
+   * @return The output BlobId will be a BlobId in the target version of type {@link BlobIdType#CRAFTED} with the given
+   *         account id and container id association.
    */
-  public static BlobId craft(BlobId inputId, short accountId, short containerId) {
-    return new BlobId(BLOB_ID_V3, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
+  public static BlobId craft(BlobId inputId, short targetVersion, short accountId, short containerId) {
+    if (targetVersion < BLOB_ID_V3) {
+      throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
+    }
+    return new BlobId(targetVersion, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
         inputId.partitionId, inputId.uuid);
   }
 
