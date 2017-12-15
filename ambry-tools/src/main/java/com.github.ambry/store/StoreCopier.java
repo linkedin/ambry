@@ -24,6 +24,7 @@ import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferChannel;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -224,7 +225,7 @@ public class StoreCopier implements Closeable {
       return;
     }
     try {
-      shutDownExecutorService(scheduler, 1, TimeUnit.SECONDS);
+      shutDownExecutorService(scheduler, 5, TimeUnit.MINUTES);
       src.shutdown();
       tgt.shutdown();
       isOpen = false;
@@ -235,14 +236,17 @@ public class StoreCopier implements Closeable {
 
   /**
    * Copies data starting from {@code startToken} until all the data is copied.
-   * @param startToken the {@link FindToken} to start copying from. Does not perform any duplication checks at
-   *                   destination.
-   * @return the {@link FindToken} until which data has been copied.
+   * @param startToken the {@link FindToken} to start copying from. It is expected that start token does not cause
+   *                   the copier to attempt to copy blobs that have already been copied. If that happens, the boolean
+   *                   in the return value will be {@code true}.
+   * @return a {@link Pair} of the {@link FindToken} until which data has been copied and a {@link Boolean} indicating
+   * whether the source had problems that were skipped over - like duplicates ({@code true} indicates that there were).
    * @throws IOException if there is any I/O error while copying.
    * @throws StoreException if there is any exception dealing with the stores.
    */
-  public FindToken copy(FindToken startToken) throws IOException, StoreException {
-    FindToken lastToken = null;
+  public Pair<FindToken, Boolean> copy(FindToken startToken) throws IOException, StoreException {
+    boolean sourceHasProblems = false;
+    FindToken lastToken;
     FindToken token = startToken;
     do {
       lastToken = token;
@@ -255,27 +259,32 @@ public class StoreCopier implements Closeable {
           if (messageInfo.getSize() > Integer.MAX_VALUE) {
             throw new IllegalStateException("Cannot copy blobs whose size > Integer.MAX_VALUE");
           }
-          int size = (int) messageInfo.getSize();
-          StoreInfo storeInfo =
-              src.get(Collections.singletonList(messageInfo.getStoreKey()), EnumSet.noneOf(StoreGetOptions.class));
-          MessageReadSet readSet = storeInfo.getMessageReadSet();
-          byte[] buf = new byte[size];
-          readSet.writeTo(0, new ByteBufferChannel(ByteBuffer.wrap(buf)), 0, size);
-          Message message = new Message(messageInfo, new ByteArrayInputStream(buf));
-          for (Transformer transformer : transformers) {
-            message = transformer.transform(message);
+          if (tgt.findMissingKeys(Collections.singletonList(messageInfo.getStoreKey())).size() == 1) {
+            int size = (int) messageInfo.getSize();
+            StoreInfo storeInfo =
+                src.get(Collections.singletonList(messageInfo.getStoreKey()), EnumSet.noneOf(StoreGetOptions.class));
+            MessageReadSet readSet = storeInfo.getMessageReadSet();
+            byte[] buf = new byte[size];
+            readSet.writeTo(0, new ByteBufferChannel(ByteBuffer.wrap(buf)), 0, size);
+            Message message = new Message(messageInfo, new ByteArrayInputStream(buf));
+            for (Transformer transformer : transformers) {
+              message = transformer.transform(message);
+            }
+            MessageFormatWriteSet writeSet =
+                new MessageFormatWriteSet(message.getStream(), Collections.singletonList(message.getMessageInfo()),
+                    false);
+            tgt.put(writeSet);
+            logger.trace("Copied {} as {}", messageInfo.getStoreKey(), message.getMessageInfo().getStoreKey());
+          } else {
+            logger.warn("Found a duplicate entry for {} while copying data", messageInfo.getStoreKey());
+            sourceHasProblems = true;
           }
-          MessageFormatWriteSet writeSet =
-              new MessageFormatWriteSet(message.getStream(), Collections.singletonList(message.getMessageInfo()),
-                  false);
-          tgt.put(writeSet);
-          logger.trace("Copied {} as {}", messageInfo.getStoreKey(), message.getMessageInfo().getStoreKey());
         }
       }
       token = findInfo.getFindToken();
       logger.info("[{}] [{}] {}% copied", Thread.currentThread().getName(), storeId,
           df.format(token.getBytesRead() * 100.0 / src.getSizeInBytes()));
     } while (!token.equals(lastToken));
-    return token;
+    return new Pair<>(token, sourceHasProblems);
   }
 }
