@@ -108,6 +108,23 @@ public class BlobId extends StoreKey {
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
       PartitionId partitionId) {
+    this(version, type, datacenterId, accountId, containerId, partitionId, UUID.randomUUID().toString());
+  }
+
+  /**
+   * Internal private method to construct a BlobId by taking arguments for the required fields.
+   * Not all the fields in the constructor may be used in constructing it. The current active version determines what
+   * fields will be used.
+   * @param version the version in which this blob should be created.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
+   * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
+   * @param uuid The uuid that is to be used to construct this id.
+   */
+  private BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
+      PartitionId partitionId, String uuid) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -135,7 +152,7 @@ public class BlobId extends StoreKey {
     }
     this.version = version;
     this.partitionId = partitionId;
-    uuid = UUID.randomUUID().toString();
+    this.uuid = uuid;
   }
 
   /**
@@ -226,6 +243,13 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * @return the version of this BlobId.
+   */
+  protected short getVersion() {
+    return version;
+  }
+
+  /**
    * Gets the {@link PartitionId} this blob belongs to.
    * @return The {@link PartitionId}.
    */
@@ -267,6 +291,13 @@ public class BlobId extends StoreKey {
    */
   public BlobIdType getType() {
     return type;
+  }
+
+  /**
+   * @return the uuid string associated with this BlobId
+   */
+  protected String getUuid() {
+    return uuid;
   }
 
   @Override
@@ -405,6 +436,23 @@ public class BlobId extends StoreKey {
    */
   public static Short[] getAllValidVersions() {
     return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3};
+  }
+
+  /**
+   * Create a {@link BlobIdType#CRAFTED} BlobId for the given input BlobId.
+   * The method is "idempotent" in the sense that if the input is a crafted V3 id with the same account and container
+   * associated with it as the account and container in the params, then the returned id will be exactly the same as
+   * the input.
+   * @param inputId The input BlobId for which a new BlobId is to be crafted. The input id can be of any version
+   *                (including a V3 version) and of any type.
+   * @param accountId The id of the {@link Account} to be embedded in the converted id.
+   * @param containerId The id of the {@link Container} to be embedded in the converted id.
+   * @return The output BlobId will be a V3 BlobId of type {@link BlobIdType#CRAFTED} with the given account id and
+   *         container id association.
+   */
+  public static BlobId craft(BlobId inputId, short accountId, short containerId) {
+    return new BlobId(BLOB_ID_V3, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
+        inputId.partitionId, inputId.uuid);
   }
 
   /**

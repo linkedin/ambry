@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
@@ -188,6 +189,57 @@ public class BlobIdTest {
         assertFalse("Two randomly generated V3 blob ids should be unequal", blobIdV3.equals(blobIdV3Alt));
       }
     }
+  }
+
+  /**
+   * Test crafting of BlobIds.
+   * Ensure that, except for the version, type, account and container, crafted id has the same constituents as the
+   * input id.
+   * Ensure that crafted id is the same as the input id if the input is a crafted V3 id with the same account and
+   * container as the account and container in the call to craft.
+   */
+  @Test
+  public void testCrafting() {
+    BlobId inputs[];
+    if (version == BLOB_ID_V3) {
+      inputs = new BlobId[]{new BlobId(BLOB_ID_V3, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
+          referenceContainerId, referencePartitionId), new BlobId(BLOB_ID_V3, BlobIdType.CRAFTED, referenceDatacenterId,
+          referenceAccountId, referenceContainerId, referencePartitionId)};
+    } else {
+      inputs = new BlobId[]{new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId,
+          referenceContainerId, referencePartitionId)};
+    }
+    short newAccountId = (short) (referenceAccountId + 1 + TestUtils.RANDOM.nextInt(100));
+    short newContainerId = (short) (referenceContainerId + 1 + TestUtils.RANDOM.nextInt(100));
+
+    BlobId crafted = null;
+    for (BlobId id : inputs) {
+      crafted = BlobId.craft(id, newAccountId, newContainerId);
+      verifyCrafting(id, crafted);
+    }
+
+    BlobId craftedAgain = BlobId.craft(crafted, crafted.getAccountId(), crafted.getContainerId());
+    verifyCrafting(crafted, craftedAgain);
+    Assert.assertEquals("Accounts should match", crafted.getAccountId(), craftedAgain.getAccountId());
+    Assert.assertEquals("Containers should match", crafted.getContainerId(), craftedAgain.getContainerId());
+    Assert.assertEquals("The id string should match", crafted.getID(), craftedAgain.getID());
+  }
+
+  /**
+   * Assert that the given crafted ids constituent fields except for version, type, account, container, match those of
+   * the given input id.
+   * Also assert the version and type of the crafted id.
+   * @param input the input BlobId with the expected fields for comparison.
+   * @param crafted the crafted BlobId whose fields must match the arguments of the other BlobId.
+   */
+  private void verifyCrafting(BlobId input, BlobId crafted) {
+    Assert.assertEquals("Datacenter id of input id should match that of the crafted id", input.getDatacenterId(),
+        crafted.getDatacenterId());
+    Assert.assertEquals("Partition of input id should match that of the crafted id", input.getPartition(),
+        crafted.getPartition());
+    Assert.assertEquals("UUID of input id should match that of the crafted id", input.getUuid(), crafted.getUuid());
+    Assert.assertEquals("Crafted id should be a V3 id", BLOB_ID_V3, crafted.getVersion());
+    Assert.assertEquals("Crafted id should have the Crafted type", BlobIdType.CRAFTED, crafted.getType());
   }
 
   /**
