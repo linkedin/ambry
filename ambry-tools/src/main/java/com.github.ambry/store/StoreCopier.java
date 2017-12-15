@@ -236,8 +236,9 @@ public class StoreCopier implements Closeable {
 
   /**
    * Copies data starting from {@code startToken} until all the data is copied.
-   * @param startToken the {@link FindToken} to start copying from. Does not perform any duplication checks at
-   *                   destination.
+   * @param startToken the {@link FindToken} to start copying from. It is expected that start token does not cause
+   *                   the copier to attempt to copy blobs that have already been copied. If that happens, the boolean
+   *                   in the return value will be {@code true}.
    * @return a {@link Pair} of the {@link FindToken} until which data has been copied and a {@link Boolean} indicating
    * whether the source had problems that were skipped over - like duplicates ({@code true} indicates that there were).
    * @throws IOException if there is any I/O error while copying.
