@@ -107,8 +107,10 @@ public class GetBlobOptions {
      * Return just the blob data in the response.
      */
     Data, /**
-     * Return just the blob info in the response. and blobchunkids
+     * Return just the blob info in the response.
      */
-    BlobInfo
+    BlobInfo,
+
+    BlobChunkIds
   }
 }

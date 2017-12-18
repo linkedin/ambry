@@ -181,6 +181,7 @@ class GetBlobOperation extends GetOperation {
           operationCompleted = true;
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
           // blobInfo.setStoreKeys(chunkIds); // this is not good. storeKeys don't belong blobInfo but getCallback only accept blobInfo
+          // operationResult = new GetBlobResultInternal(null, chunkIds);
           operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel, chunkIds), chunkIds); // add blob info here
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
@@ -199,7 +200,7 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options);
           }
         }
-        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e); // in NBR.getBlob
       }
     }
     chunk.postCompletionCleanup();
