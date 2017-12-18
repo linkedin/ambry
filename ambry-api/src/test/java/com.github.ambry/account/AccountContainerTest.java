@@ -646,7 +646,8 @@ public class AccountContainerTest {
     if (compareMetadata) {
       assertAccountJsonSerDe(false, account);
       assertAccountJsonSerDe(true, account);
-    } if (compareContainer) {
+    }
+    if (compareContainer) {
       Collection<Container> containersFromAccount = account.getAllContainers();
       assertEquals("Wrong number of containers.", CONTAINER_COUNT, containersFromAccount.size());
       assertEquals(CONTAINER_COUNT, containersFromAccount.size());

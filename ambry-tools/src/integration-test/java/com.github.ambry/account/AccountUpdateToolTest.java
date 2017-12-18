@@ -146,8 +146,7 @@ public class AccountUpdateToolTest {
   public void testCreateAccount() throws Exception {
     assertEquals("Wrong number of accounts", 0, accountService.getAllAccounts().size());
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT,
-        accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
   }
 
   /**
@@ -158,8 +157,7 @@ public class AccountUpdateToolTest {
   public void testUpdateAccount() throws Exception {
     // first, create NUM_REF_ACCOUNT accounts through the tool
     createOrUpdateAccountsAndWait(idToRefAccountMap.values());
-    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT,
-        accountService);
+    assertAccountsInAccountService(idToRefAccountMap.values(), NUM_REF_ACCOUNT, accountService);
 
     // then, update the name of all the accounts again through the tool
     String accountNameAppendix = "-accountNameAppendix";

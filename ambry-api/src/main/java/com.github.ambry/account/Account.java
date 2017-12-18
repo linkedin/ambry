@@ -192,7 +192,6 @@ public class Account {
     return metadata;
   }
 
-
   /**
    * Deserializes a {@link JSONObject} to an account object.
    * @param json The {@link JSONObject} to deserialize.

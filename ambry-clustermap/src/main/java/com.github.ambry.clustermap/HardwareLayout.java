@@ -204,8 +204,8 @@ class HardwareLayout {
    * @return DataNode or null if not found.
    */
   public DataNode findDataNode(String hostname, int port) {
-    String canonicalHostname = clusterMapConfig.clusterMapResolveHostnames ? 
-            ClusterMapUtils.getFullyQualifiedDomainName(hostname) : hostname;
+    String canonicalHostname =
+        clusterMapConfig.clusterMapResolveHostnames ? ClusterMapUtils.getFullyQualifiedDomainName(hostname) : hostname;
     logger.trace("host to find host {} port {}", canonicalHostname, port);
     for (Datacenter datacenter : datacenters) {
       logger.trace("datacenter {}", datacenter.getName());

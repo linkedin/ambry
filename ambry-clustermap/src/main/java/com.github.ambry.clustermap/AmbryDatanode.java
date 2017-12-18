@@ -74,7 +74,7 @@ class AmbryDataNode extends DataNodeId implements Resource {
       String fqdn = getFullyQualifiedDomainName(hostName);
       if (!fqdn.equals(hostName)) {
         throw new IllegalStateException(
-                "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
+            "Hostname for AmbryDataNode (" + hostName + ") does not match its fully qualified domain name: " + fqdn);
       }
     }
 
