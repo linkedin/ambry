@@ -36,6 +36,7 @@ public class AccountServiceMetrics {
   public final Counter updateAccountErrorCount;
   public final Counter fetchRemoteAccountErrorCount;
   public final Counter remoteDataCorruptionErrorCount;
+  public final Counter backupErrorCount;
   public final Counter nullNotifierCount;
   public final Counter accountUpdatesCapturedByScheduledUpdaterCount;
 
@@ -60,6 +61,7 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "FetchRemoteAccountErrorCount"));
     remoteDataCorruptionErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "RemoteDataCorruptionErrorCount"));
+    backupErrorCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "BackupErrorCount"));
     nullNotifierCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, "NullNotifierCount"));
     accountUpdatesCapturedByScheduledUpdaterCount = metricRegistry.counter(
         MetricRegistry.name(HelixAccountService.class, "AccountUpdatesCapturedByScheduledUpdaterCount"));

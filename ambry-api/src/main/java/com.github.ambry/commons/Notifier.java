@@ -33,7 +33,7 @@ public interface Notifier<T> {
   public boolean publish(String topic, T message);
 
   /**
-   * Let a {@link TopicListener} subscribe a topic. After subscription, it will receive the messages
+   * Let a {@link TopicListener} subscribe to a topic. After subscription, it will receive the messages
    * published for the topic.
    * @param topic The topic to subscribe.
    * @param listener The {@link TopicListener} who subscribes the topic.
@@ -41,7 +41,7 @@ public interface Notifier<T> {
   public void subscribe(String topic, TopicListener<T> listener);
 
   /**
-   * Let a {@link TopicListener} unsubscribe a topic, so it will no longer receive the messages for
+   * Let a {@link TopicListener} unsubscribe from a topic, so it will no longer receive the messages for
    * the topic.
    * @param topic The topic to unsubscribe.
    * @param listener The {@link TopicListener} who unsubscribes the topic.

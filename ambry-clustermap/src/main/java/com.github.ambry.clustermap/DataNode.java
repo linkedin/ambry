@@ -60,8 +60,9 @@ class DataNode extends DataNodeId {
     this.clusterMapConfig = clusterMapConfig;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
 
-    this.hostname = clusterMapConfig.clusterMapResolveHostnames ? 
-            getFullyQualifiedDomainName(jsonObject.getString("hostname")) : jsonObject.getString("hostname"); 
+    this.hostname =
+        clusterMapConfig.clusterMapResolveHostnames ? getFullyQualifiedDomainName(jsonObject.getString("hostname"))
+            : jsonObject.getString("hostname");
     this.portNum = jsonObject.getInt("port");
     try {
       ResourceStatePolicyFactory resourceStatePolicyFactory =
@@ -209,7 +210,7 @@ class DataNode extends DataNodeId {
       String fqdn = getFullyQualifiedDomainName(hostname);
       if (!fqdn.equals(hostname)) {
         throw new IllegalStateException(
-                "Hostname for DataNode (" + hostname + ") does not match its fully qualified domain name: " + fqdn + ".");
+            "Hostname for DataNode (" + hostname + ") does not match its fully qualified domain name: " + fqdn + ".");
       }
     }
   }

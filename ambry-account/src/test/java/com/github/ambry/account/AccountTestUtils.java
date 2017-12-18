@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import org.json.JSONException;
 
 import static org.junit.Assert.*;
 
@@ -58,10 +57,10 @@ class AccountTestUtils {
   static void assertAccountInAccountService(Account account, AccountService accountService) {
     Account accountFoundById = accountService.getAccountById(account.getId());
     Account accountFoundByName = accountService.getAccountByName(account.getName());
-    assertEquals("Account got by id from accountService does not match account got by name.", accountFoundById,
+    assertEquals("Account got by name from accountService does not match account to assert.", account,
         accountFoundByName);
-    assertEquals("Account got by id from accountService does not match the account to assert", accountFoundById,
-        account);
+    assertEquals("Account got by id from accountService does not match the account to assert", account,
+        accountFoundById);
     assertEquals("The number of containers in the account is wrong.", accountFoundById.getAllContainers().size(),
         account.getAllContainers().size());
     for (Container container : account.getAllContainers()) {
@@ -132,7 +131,7 @@ class AccountTestUtils {
         containers.add(container);
         idToContainers.put(containerId, container);
       }
-      Account account = new AccountBuilder(accountId, accountName, accountStatus, containers).build();
+      Account account = new AccountBuilder(accountId, accountName, accountStatus).containers(containers).build();
       assertEquals("Wrong number of generated containers for the account", containerCountPerAccount,
           account.getAllContainers().size());
       idToRefAccountMap.put(accountId, account);

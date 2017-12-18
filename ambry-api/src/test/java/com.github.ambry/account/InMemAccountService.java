@@ -18,7 +18,6 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -129,8 +128,11 @@ public class InMemAccountService implements AccountService {
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(refAccountId).build();
     Container privateContainer =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(refAccountId).build();
-    Account account = new AccountBuilder(refAccountId, refAccountName, refAccountStatus,
-        Arrays.asList(publicContainer, privateContainer, randomContainer)).build();
+    Account account =
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(publicContainer)
+            .addOrUpdateContainer(privateContainer)
+            .addOrUpdateContainer(randomContainer)
+            .build();
     updateAccounts(Collections.singletonList(account));
     return account;
   }

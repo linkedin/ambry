@@ -62,9 +62,9 @@ public class ContainerBuilder {
    * @param description The description of the {@link Container}.
    * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
    * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
-*                            subset of blobs in it could still be encrypted.
+   *                            subset of blobs in it could still be encrypted.
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
-*                  this container.
+   *                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
    * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
    */
@@ -82,8 +82,8 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets the id of the {@link Container} to build.
-   * @param id The id to set.
+   * Sets the ID of the {@link Container} to build.
+   * @param id The ID to set.
    * @return This builder.
    */
   public ContainerBuilder setId(short id) {
@@ -152,8 +152,8 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets the id of the parent {@link Account} of the {@link Container} to build.
-   * @param parentAccountId The parent {@link Account} id to set.
+   * Sets the ID of the parent {@link Account} of the {@link Container} to build.
+   * @param parentAccountId The parent {@link Account} ID to set.
    * @return This builder.
    */
   public ContainerBuilder setParentAccountId(short parentAccountId) {

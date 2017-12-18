@@ -51,27 +51,6 @@ public class HelixPropertyStoreConfig {
   @Default("/ambry/defaultCluster/helixPropertyStore")
   public final String rootPath;
 
-  /**
-   * The time interval in second between two consecutive account pulling for the background account updater of
-   * {@code HelixAccountService}. Setting to 0 to disable it.
-   */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "account.service.polling.interval.ms")
-  @Default("60 * 60 * 1000")
-  // @todo This config by its nature should not appear in HelixPropertyStoreConfig. An ultimate fix would require
-  // @todo separation between HelixAccount-related and Notifier-related configs, and this config should go to the
-  // @todo HelixAccountServiceConfig.
-  public final int accountUpdaterPollingIntervalMs;
-
-  /**
-   * The timeout in ms to shut down the account updater of {@code HelixAccountService}.
-   */
-  @Config(HELIX_PROPERTY_STORE_PREFIX + "account.service.shut.down.timeout.ms")
-  @Default("60 * 1000")
-  // @todo This config by its nature should not appear in HelixPropertyStoreConfig. An ultimate fix would require
-  // @todo separation between HelixAccount-related and Notifier-related configs, and this config should go to the
-  // @todo HelixAccountServiceConfig.
-  public final int accountUpdaterShutDownTimeoutMs;
-
   public HelixPropertyStoreConfig(VerifiableProperties verifiableProperties) {
     zkClientConnectionTimeoutMs =
         verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "zk.client.connection.timeout.ms", 20 * 1000,
@@ -83,11 +62,5 @@ public class HelixPropertyStoreConfig {
         INVALID_ZK_CLIENT_CONNECT_STRING);
     rootPath = verifiableProperties.getString(HELIX_PROPERTY_STORE_PREFIX + "root.path",
         "/ambry/defaultCluster/helixPropertyStore");
-    accountUpdaterPollingIntervalMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.updater.polling.interval.ms",
-            60 * 60 * 1000, 0, Integer.MAX_VALUE);
-    accountUpdaterShutDownTimeoutMs =
-        verifiableProperties.getIntInRange(HELIX_PROPERTY_STORE_PREFIX + "account.updater.shut.down.timeout.ms",
-            60 * 1000, 1, Integer.MAX_VALUE);
   }
 }

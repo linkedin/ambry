@@ -87,9 +87,9 @@ public class ServiceIdAccountGenTool {
           new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER).setParentAccountId(curAccountId).build();
       Container defaultPrivateContainer =
           new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER).setParentAccountId(curAccountId).build();
-      Account account = new AccountBuilder(curAccountId, serviceId, Account.AccountStatus.ACTIVE,
+      Account account = new AccountBuilder(curAccountId, serviceId, Account.AccountStatus.ACTIVE).containers(
           Arrays.asList(defaultPublicContainer, defaultPrivateContainer)).build();
-      accounts.put(account.toJson());
+      accounts.put(account.toJson(true));
       curAccountId++;
     }
     Utils.writeJsonArrayToFile(accounts, outputFile);

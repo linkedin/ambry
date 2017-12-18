@@ -47,6 +47,7 @@ public class AccountContainerTest {
   private short refAccountId;
   private String refAccountName;
   private AccountStatus refAccountStatus;
+  private int refAccountSnapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private JSONObject refAccountJson;
 
   // Reference Container fields
@@ -80,12 +81,14 @@ public class AccountContainerTest {
     refAccountId = Utils.getRandomShort(random);
     refAccountName = UUID.randomUUID().toString();
     refAccountStatus = random.nextBoolean() ? AccountStatus.ACTIVE : AccountStatus.INACTIVE;
+    refAccountSnapshotVersion = random.nextInt();
     initializeRefContainers();
     refAccountJson = new JSONObject();
     refAccountJson.put(Account.JSON_VERSION_KEY, Account.JSON_VERSION_1);
     refAccountJson.put(ACCOUNT_ID_KEY, refAccountId);
     refAccountJson.put(ACCOUNT_NAME_KEY, refAccountName);
-    refAccountJson.put(Account.STATUS_KEY, refAccountStatus.name());
+    refAccountJson.put(Account.STATUS_KEY, refAccountStatus);
+    refAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion);
     refAccountJson.put(CONTAINERS_KEY, containerJsonList);
   }
 
@@ -104,7 +107,7 @@ public class AccountContainerTest {
   @Test
   public void testConstructAccountAndContainerFromArguments() throws JSONException {
     Account accountFromArguments =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, refContainers).build();
+        new Account(refAccountId, refAccountName, refAccountStatus, refAccountSnapshotVersion, refContainers);
     assertAccountAgainstReference(accountFromArguments, true, true);
   }
 
@@ -244,7 +247,7 @@ public class AccountContainerTest {
   @Test
   public void testToString() throws JSONException {
     Account account = Account.fromJson(refAccountJson);
-    assertEquals("Account[" + account.getId() + "]", account.toString());
+    assertEquals("Account[" + account.getId() + "," + account.getSnapshotVersion() + "]", account.toString());
     for (int i = 0; i < CONTAINER_COUNT; i++) {
       Container container = Container.fromJson(containerJsonList.get(i), refAccountId);
       assertEquals("Container[" + account.getId() + ":" + container.getId() + "]", container.toString());
@@ -260,7 +263,8 @@ public class AccountContainerTest {
   @Test
   public void testAccountBuilder() throws JSONException {
     // build an account with arguments supplied
-    AccountBuilder accountBuilder = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null);
+    AccountBuilder accountBuilder =
+        new AccountBuilder(refAccountId, refAccountName, refAccountStatus).snapshotVersion(refAccountSnapshotVersion);
     Account accountByBuilder = accountBuilder.build();
     assertAccountAgainstReference(accountByBuilder, false, false);
 
@@ -278,6 +282,12 @@ public class AccountContainerTest {
     accountBuilder = new AccountBuilder(accountByBuilder);
     Account account2ByBuilder = accountBuilder.build();
     assertAccountAgainstReference(account2ByBuilder, true, true);
+
+    // clear containers
+    Account account3ByBuilder = new AccountBuilder(account2ByBuilder).containers(null).build();
+    assertAccountAgainstReference(account3ByBuilder, false, false);
+    assertTrue("Container list should be empty.", account3ByBuilder.getAllContainers().isEmpty());
+
   }
 
   /**
@@ -352,9 +362,9 @@ public class AccountContainerTest {
     short updatedAccountId = (short) (refAccountId + 1);
     String updatedAccountName = refAccountName + "-updated";
     Account.AccountStatus updatedAccountStatus = Account.AccountStatus.INACTIVE;
-    accountBuilder.setId(updatedAccountId);
-    accountBuilder.setName(updatedAccountName);
-    accountBuilder.setStatus(updatedAccountStatus);
+    accountBuilder.id(updatedAccountId);
+    accountBuilder.name(updatedAccountName);
+    accountBuilder.status(updatedAccountStatus);
 
     try {
       accountBuilder.build();
@@ -378,7 +388,7 @@ public class AccountContainerTest {
     for (Container container : origin.getAllContainers()) {
       accountBuilder.addOrUpdateContainer(container);
     }
-    accountBuilder.setId(refAccountId);
+    accountBuilder.id(refAccountId);
     updatedAccount = accountBuilder.build();
     assertEquals(origin.getAllContainers().toString(), updatedAccount.getAllContainers().toString());
   }
@@ -582,7 +592,7 @@ public class AccountContainerTest {
     // UNKNOWN_ACCOUNT
     assertEquals("Wrong id for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_ID, unknownAccount.getId());
     assertEquals("Wrong name for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_NAME, unknownAccount.getName());
-    assertEquals("Wrong status for UNKNOWN_ACCOUNT", Account.UNKNOWN_ACCOUNT_STATUS, unknownAccount.getStatus());
+    assertEquals("Wrong status for UNKNOWN_ACCOUNT", AccountStatus.ACTIVE, unknownAccount.getStatus());
     assertEquals("Wrong number of containers for UNKNOWN_ACCOUNT", 3, unknownAccount.getAllContainers().size());
     assertEquals("Wrong unknown container get from UNKNOWN_ACCOUNT", Container.UNKNOWN_CONTAINER,
         unknownAccount.getContainerById(Container.UNKNOWN_CONTAINER_ID));
@@ -599,9 +609,8 @@ public class AccountContainerTest {
   @Test
   public void testAccountEqual() throws Exception {
     // Check two accounts with same fields but no containers.
-    Account accountNoContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
-    Account accountNoContainerDuplicate =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, null).build();
+    Account accountNoContainer = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
+    Account accountNoContainerDuplicate = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     assertTrue("Two accounts should be equal.", accountNoContainer.equals(accountNoContainerDuplicate));
 
     // Check two accounts with same fields and containers.
@@ -621,17 +630,16 @@ public class AccountContainerTest {
             refContainerMediaScanDisabledValues.get(0), refAccountId).build();
     refContainers.remove(0);
     refContainers.add(updatedContainer);
-    Account accountWithModifiedContainers =
-        new AccountBuilder(refAccountId, refAccountName, refAccountStatus, refContainers).build();
+    Account accountWithModifiedContainers = new AccountBuilder(refAccountId, refAccountName, refAccountStatus).build();
     assertFalse("Two accounts should not be equal.", accountWithContainers.equals(accountWithModifiedContainers));
   }
 
   /**
    * Asserts an {@link Account} against the reference account.
    * @param account The {@link Account} to assert.
-   * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson()}, and also
-   *                                    serialize then deserialize to get an identical account. {@code false} to skip
-   *                                    these tests.
+   * @param compareMetadata {@code true} to compare account metadata generated from {@link Account#toJson(boolean)}, and
+   *                                    also serialize then deserialize to get an identical account. {@code false} to
+   *                                    skip these tests.
    * @param compareContainer {@code true} to compare each individual {@link Container}. {@code false} to skip this test.
    * @throws JSONException
    */
@@ -640,12 +648,10 @@ public class AccountContainerTest {
     assertEquals(refAccountId, account.getId());
     assertEquals(refAccountName, account.getName());
     assertEquals(refAccountStatus, account.getStatus());
+    assertEquals("Snapshot versions do not match", refAccountSnapshotVersion, account.getSnapshotVersion());
     if (compareMetadata) {
-      // The order of containers in json string may be different, so we cannot compare the exact string.
-      assertEquals("Wrong metadata JsonObject from toJson()", refAccountJson.toString().length(),
-          account.toJson().toString().length());
-      assertEquals("Failed to compare account to a reference account", Account.fromJson(refAccountJson), account);
-      assertEquals("Wrong behavior in serialize and then deserialize", account, Account.fromJson(account.toJson()));
+      assertAccountJsonSerDe(false, account);
+      assertAccountJsonSerDe(true, account);
     }
     if (compareContainer) {
       Collection<Container> containersFromAccount = account.getAllContainers();
@@ -656,6 +662,35 @@ public class AccountContainerTest {
         assertContainer(account.getContainerByName(refContainerNames.get(i)), i);
       }
     }
+  }
+
+  /**
+   * Assert that JSON ser/de is working correctly by comparing against the reference account JSON
+   * @param incrementSnapshotVersion {@code true} to increment the snapshot version when serializing.
+   * @param account the {@link Account} to test.
+   * @throws JSONException
+   */
+  private void assertAccountJsonSerDe(boolean incrementSnapshotVersion, Account account) throws JSONException {
+    assertEquals("Failed to compare account to a reference account", Account.fromJson(refAccountJson), account);
+    JSONObject expectedAccountJson = deepCopy(refAccountJson);
+    if (incrementSnapshotVersion) {
+      expectedAccountJson.put(SNAPSHOT_VERSION_KEY, refAccountSnapshotVersion + 1);
+    }
+    JSONObject accountJson = account.toJson(incrementSnapshotVersion);
+    // extra check for snapshot version since the lengths would likely not differ even if the snapshot version was not
+    // correct
+    assertEquals("Snapshot versions in JSON do not match", expectedAccountJson.get(SNAPSHOT_VERSION_KEY),
+        accountJson.get(SNAPSHOT_VERSION_KEY));
+    // The order of containers in json string may be different, so we cannot compare the exact string.
+    assertEquals("Wrong metadata JsonObject from toJson()", expectedAccountJson.toString().length(),
+        accountJson.toString().length());
+
+    AccountBuilder expectedAccountBuilder = new AccountBuilder(account);
+    if (incrementSnapshotVersion) {
+      expectedAccountBuilder.snapshotVersion(refAccountSnapshotVersion + 1);
+    }
+    assertEquals("Wrong behavior in serialize and then deserialize", expectedAccountBuilder.build(),
+        Account.fromJson(account.toJson(incrementSnapshotVersion)));
   }
 
   /**
@@ -727,7 +762,8 @@ public class AccountContainerTest {
   private void createAccountWithBadContainersAndFail(List<Container> containers,
       Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass,
-        () -> new Account(refAccountId, refAccountName, refAccountStatus, containers), null);
+        () -> new Account(refAccountId, refAccountName, refAccountStatus, SNAPSHOT_VERSION_DEFAULT_VALUE, containers),
+        null);
   }
 
   /**
@@ -738,7 +774,7 @@ public class AccountContainerTest {
    */
   private void buildAccountWithMissingFieldsAndFail(String name, AccountStatus status,
       Class<? extends Exception> exceptionClass) throws Exception {
-    AccountBuilder accountBuilder = new AccountBuilder(refAccountId, name, status, null);
+    AccountBuilder accountBuilder = new AccountBuilder(refAccountId, name, status);
     TestUtils.assertException(exceptionClass, accountBuilder::build, null);
   }
 

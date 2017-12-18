@@ -54,7 +54,7 @@ public class InMemoryUnknownAccountServiceTest {
         accountService.getAccountByName(UtilsTest.getRandomString(10)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     // updating the InMemoryUnknownAccountService should fail.
-    Account account = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE, null).build();
+    Account account = new AccountBuilder((short) 1, "a", Account.AccountStatus.INACTIVE).build();
     assertFalse("Wrong return value from an unsuccessful update operation",
         accountService.updateAccounts(Collections.singletonList(account)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
@@ -97,11 +97,11 @@ public class InMemoryUnknownAccountServiceTest {
       updatedAccountsReceivedByConsumers.add(updatedAccounts);
     };
     accountService.addAccountUpdateConsumer(accountUpdateConsumer);
-    Account updatedAccount = new AccountBuilder(Account.UNKNOWN_ACCOUNT).setName("newName").build();
+    Account updatedAccount = new AccountBuilder(Account.UNKNOWN_ACCOUNT).name("newName").build();
     accountService.updateAccounts(Collections.singletonList(updatedAccount));
     assertEquals("Wrong number of updated accounts received by consumer.", 0,
         updatedAccountsReceivedByConsumers.size());
-    Account newAccount = new AccountBuilder((short) 1, "newAccount", Account.AccountStatus.ACTIVE, null).build();
+    Account newAccount = new AccountBuilder((short) 1, "newAccount", Account.AccountStatus.ACTIVE).build();
     accountService.updateAccounts(Collections.singletonList(newAccount));
     assertEquals("Wrong number of updated accounts received by consumer.", 0,
         updatedAccountsReceivedByConsumers.size());
