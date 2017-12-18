@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -43,7 +42,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONArray;
@@ -514,15 +512,20 @@ public class HelixAccountServiceTest {
     // write two accounts (1, "a") and (2, "b")
     writeAccountsForConflictTest();
     Account expectedAccount = accountService.getAccountById((short) 1);
-    for (int snapshotVersion : new int[]{-1, 0, 2}) {
+    int currentSnapshotVersion = expectedAccount.getSnapshotVersion();
+    for (int snapshotVersionOffset : new int[]{-2, -1, 1}) {
+      int snapshotVersionToUse = currentSnapshotVersion + snapshotVersionOffset;
       Collection<Account> conflictAccounts = Collections.singleton(
-          new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).snapshotVersion(snapshotVersion).build());
+          new AccountBuilder((short) 1, "c", AccountStatus.INACTIVE).snapshotVersion(snapshotVersionToUse).build());
       assertFalse("Wrong return value from update operation.", accountService.updateAccounts(conflictAccounts));
       assertEquals("Wrong account number in HelixAccountService", 2, accountService.getAllAccounts().size());
-      assertEquals("Account should not have been updated", expectedAccount, accountService.getAccountById((short) 1));
+      Account account = accountService.getAccountById((short) 1);
+      assertEquals("Account should not have been updated", expectedAccount, account);
+      assertEquals("Snapshot version should not have been updated", currentSnapshotVersion,
+          account.getSnapshotVersion());
     }
-    Collection<Account> validAccounts =
-        Collections.singleton(new AccountBuilder((short) 1, "a", AccountStatus.INACTIVE).snapshotVersion(1).build());
+    Collection<Account> validAccounts = Collections.singleton(
+        new AccountBuilder((short) 1, "c", AccountStatus.INACTIVE).snapshotVersion(currentSnapshotVersion).build());
     updateAccountsAndAssertAccountExistence(validAccounts, 2, true);
   }
 
@@ -690,8 +693,7 @@ public class HelixAccountServiceTest {
     for (Collection<Account> accounts : accountsInConsumers) {
       assertEquals("Wrong number of updated accounts received by consumers", expectedAccounts.size(), accounts.size());
       for (Account account : accounts) {
-        assertTrue("Account should be received by the consumers but not.",
-            expectedAccounts.contains(adjustSnapshotVersion(account, -1)));
+        assertTrue("Account update not received by consumers", expectedAccounts.contains(account));
       }
       TestUtils.assertException(UnsupportedOperationException.class, () -> accounts.add(Account.UNKNOWN_ACCOUNT), null);
     }

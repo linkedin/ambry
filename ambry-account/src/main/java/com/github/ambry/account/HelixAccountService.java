@@ -44,7 +44,6 @@ import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -386,7 +385,6 @@ class HelixAccountService implements AccountService {
    *                      {@link Account}s in {@link AccountInfoMap}, {@code false} otherwise.
    */
   private boolean hasConflictingAccount(Collection<Account> accountsToSet, AccountInfoMap accountInfoMap) {
-    boolean res = false;
     for (Account account : accountsToSet) {
       // if the account already exists, check that the snapshot version matches the expected value.
       Account accountInMap = accountInfoMap.getAccountById(account.getId());
@@ -394,7 +392,7 @@ class HelixAccountService implements AccountService {
         logger.error(
             "Account to update (accountId={} accountName={}) has an unexpected snapshot version in zk (expected={}, encountered={})",
             account.getId(), account.getName(), account.getSnapshotVersion(), accountInMap.getSnapshotVersion());
-        res = true;
+        return true;
       }
       // check that there are no other accounts that conflict with the name of the account to update
       // (case D and E from the javadoc)
@@ -403,10 +401,10 @@ class HelixAccountService implements AccountService {
         logger.error(
             "Account to update (accountId={} accountName={}) conflicts with an existing record (accountId={} accountName={})",
             account.getId(), account.getName(), potentialConflict.getId(), potentialConflict.getName());
-        res = true;
+        return true;
       }
     }
-    return res;
+    return false;
   }
 
   /**
@@ -536,27 +534,37 @@ class HelixAccountService implements AccountService {
   private class ZkUpdater implements DataUpdater<ZNRecord> {
     private final Collection<Account> accountsToUpdate;
     private Map<String, String> potentialNewState;
-    private Pair<String, Path> backupPrefixAndPath;
+    private final Pair<String, Path> backupPrefixAndPath;
 
     /**
      * @param accountsToUpdate The {@link Account}s to update.
      */
     ZkUpdater(Collection<Account> accountsToUpdate) {
       this.accountsToUpdate = accountsToUpdate;
+
+      Pair<String, Path> backupPrefixAndPath = null;
+      if (backupDirPath != null) {
+        try {
+          backupPrefixAndPath = reserveBackupFile();
+        } catch (IOException e) {
+          logger.error("Error reserving backup file", e);
+        }
+      }
+      this.backupPrefixAndPath = backupPrefixAndPath;
     }
 
     @Override
-    public ZNRecord update(ZNRecord currentData) {
-      ZNRecord newRecord;
-      if (currentData == null) {
+    public ZNRecord update(ZNRecord recordFromZk) {
+      ZNRecord recordToUpdate;
+      if (recordFromZk == null) {
         logger.debug(
             "ZNRecord does not exist on path={} in HelixPropertyStore when updating accounts. Creating a new ZNRecord.",
             FULL_ACCOUNT_METADATA_PATH);
-        newRecord = new ZNRecord(ZN_RECORD_ID);
+        recordToUpdate = new ZNRecord(ZN_RECORD_ID);
       } else {
-        newRecord = currentData;
+        recordToUpdate = recordFromZk;
       }
-      Map<String, String> accountMap = newRecord.getMapField(ACCOUNT_METADATA_MAP_KEY);
+      Map<String, String> accountMap = recordToUpdate.getMapField(ACCOUNT_METADATA_MAP_KEY);
       if (accountMap == null) {
         logger.debug("AccountMap does not exist in ZNRecord when updating accounts. Creating a new accountMap");
         accountMap = new HashMap<>();
@@ -591,9 +599,9 @@ class HelixAccountService implements AccountService {
             throw new IllegalStateException(message, e);
           }
         }
-        newRecord.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
+        recordToUpdate.setMapField(ACCOUNT_METADATA_MAP_KEY, accountMap);
         potentialNewState = accountMap;
-        return newRecord;
+        return recordToUpdate;
       }
     }
 
@@ -621,11 +629,8 @@ class HelixAccountService implements AccountService {
      * If there are multiple files with the same timestamp, the unique long will prevent the file names from clashing.
      */
     private void maybePersistOldState(Map<String, String> oldState) {
-      if (backupDirPath != null) {
+      if (backupPrefixAndPath != null) {
         try {
-          if (backupPrefixAndPath == null) {
-            backupPrefixAndPath = reserveBackupFile();
-          }
           writeBackup(backupPrefixAndPath.getSecond(), oldState);
         } catch (Exception e) {
           logger.error("Could not write previous state backup file", e);

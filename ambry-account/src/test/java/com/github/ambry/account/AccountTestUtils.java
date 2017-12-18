@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static org.junit.Assert.*;
 
@@ -56,7 +55,6 @@ class AccountTestUtils {
    * @param accountService The {@link AccountService} to assert {@link Account} existence.
    */
   static void assertAccountInAccountService(Account account, AccountService accountService) {
-    account = adjustSnapshotVersion(account, 1);
     Account accountFoundById = accountService.getAccountById(account.getId());
     Account accountFoundByName = accountService.getAccountByName(account.getName());
     assertEquals("Account got by name from accountService does not match account to assert.", account,
@@ -140,25 +138,5 @@ class AccountTestUtils {
       idToRefContainerMap.put(accountId, idToContainers);
     }
     assertEquals("Wrong number of generated accounts", accountCount, idToRefAccountMap.size());
-  }
-
-  /**
-   * Increment or decrement the snapshot version of the provided {@link Account}.
-   * @param account the {@link Account} to modify.
-   * @param offset the offset to adjust the snapshot version by.
-   * @return the modified {@link Account}.
-   */
-  static Account adjustSnapshotVersion(Account account, int offset) {
-    return new AccountBuilder(account).snapshotVersion(account.getSnapshotVersion() + offset).build();
-  }
-
-  /**
-   * Increment or decrement the snapshot version of the provided {@link Account}s.
-   * @param accounts a {@link Collection} of {@link Account}s to modify.
-   * @param offset the offset to adjust the snapshot version by.
-   * @return a {@link Collection} of modified {@link Account}.
-   */
-  static Collection<Account> adjustSnapsotVersions(Collection<Account> accounts, int offset) {
-    return accounts.stream().map(account -> adjustSnapshotVersion(account, offset)).collect(Collectors.toList());
   }
 }
