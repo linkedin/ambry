@@ -24,6 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
@@ -146,6 +147,8 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       routerMetrics.getBlobInfoOperationRate.mark();
+    //} else if (options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds){
+    //  routerMetrics.getBlobOperationRate.mark();
     } else {
       routerMetrics.getBlobOperationRate.mark();
     }
@@ -154,6 +157,7 @@ class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
+    // boolean getChunkIdsOnly = options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds;
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     if (isOpen.get()) {
       getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
