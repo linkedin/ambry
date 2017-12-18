@@ -180,7 +180,9 @@ class GetBlobOperation extends GetOperation {
           // GetManager remove this operation.
           operationCompleted = true;
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
-          operationResult = new GetBlobResultInternal(null, chunkIds);
+          // blobInfo.setStoreKeys(chunkIds); // this is not good. storeKeys don't belong blobInfo but getCallback only accept blobInfo
+          // operationResult = new GetBlobResultInternal(null, chunkIds);
+          operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel, chunkIds), chunkIds); // add blob info here
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
           // channel if there is no exception. The operation will not be marked as complete internally as subsequent
@@ -198,7 +200,7 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.onGetBlobError(e, options);
           }
         }
-        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+        NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e); // in NBR.getBlob
       }
     }
     chunk.postCompletionCleanup();
@@ -1077,6 +1079,7 @@ class GetBlobOperation extends GetOperation {
       }
       if (!rangeResolutionFailure) {
         if (options.getChunkIdsOnly) {
+          // here is the options
           chunkIdIterator = null;
           numChunksTotal = 0;
           dataChunks = null;

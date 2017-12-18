@@ -158,6 +158,7 @@ class AmbrySecurityService implements SecurityService {
                 }
                 setCacheHeaders(restRequest, responseChannel);
               } else {
+                // josn here? change
                 if (subResource.equals(RestUtils.SubResource.BlobInfo)) {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);

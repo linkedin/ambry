@@ -39,6 +39,7 @@ import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.store.StoreKey;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -83,6 +84,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final GetReplicasHandler getReplicasHandler;
+  private final GetBlobChunkIdsHandler getBlobChunkIdsHandler;
   private final UrlSigningService urlSigningService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
@@ -120,6 +122,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
+    getBlobChunkIdsHandler = new GetBlobChunkIdsHandler(frontendMetrics, clusterMap);
     accountAndContainerInjector =
         new AccountAndContainerInjector(accountService, clusterMap, frontendMetrics, frontendConfig);
     logger.trace("Instantiated AmbryBlobStorageService");
@@ -184,6 +187,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
+        // here is the place setup getCallback option, operation type is set by subresouce
         GetBlobOptions options =
             RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource, RestUtils.getGetOption(restRequest));
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
@@ -206,6 +210,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getReplicasSSLMetrics
                   : frontendMetrics.getReplicasMetrics;
               securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
+              break;
+            case BlobChunkIds:
               break;
           }
         }
@@ -500,11 +506,12 @@ class AmbryBlobStorageService implements BlobStorageService {
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
               if (subresource == null) {
                 getCallback.markStartTime();
-                router.getBlob(result, getCallback.options, getCallback);
+                router.getBlob(result, getCallback.options, getCallback); // NonBlockingRouter.getBlob()
               } else {
                 switch (subresource) {
                   case BlobInfo:
                   case UserMetadata:
+                  case BlobChunkIds:
                     getCallback.markStartTime();
                     router.getBlob(result, getCallback.options, getCallback);
                     break;
@@ -798,9 +805,12 @@ class AmbryBlobStorageService implements BlobStorageService {
                       BlobInfo blobInfo = routerResult.getBlobInfo();
                       Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
                       if (userMetadata == null) {
+                        // in which case we run here?????
                         restResponseChannel.setHeader(Headers.CONTENT_TYPE, "application/octet-stream");
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
                         response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
+                      } else if (this.subResource == SubResource.BlobChunkIds) {
+                        response = getBlobChunkIdsHandler.getBlobChunkIds(securityCallbackTracker.blobId, routerResult.getBlobChunkIds(), restResponseChannel);
                       } else {
                         setUserMetadataHeaders(userMetadata, restResponseChannel);
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
