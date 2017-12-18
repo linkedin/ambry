@@ -681,6 +681,24 @@ public class HelixAccountServiceTest {
   }
 
   /**
+   * Tests disabling the background thread. By setting the polling interval to 0ms, the accounts should not be fetched.
+   * Therefore, after the {@link HelixAccountService} starts, there should be a single get call to the
+   * {@link HelixPropertyStore}.
+   * @throws Exception
+   */
+  @Test
+  public void testDisabledBackups() throws Exception {
+    helixConfigProps.remove(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY);
+    vHelixConfigProps = new VerifiableProperties(helixConfigProps);
+    storeConfig = new HelixPropertyStoreConfig(vHelixConfigProps);
+    String updaterThreadPrefix = UUID.randomUUID().toString();
+    MockHelixAccountServiceFactory mockHelixAccountServiceFactory =
+        new MockHelixAccountServiceFactory(vHelixConfigProps, new MetricRegistry(), notifier, updaterThreadPrefix);
+    accountService = mockHelixAccountServiceFactory.getAccountService();
+    updateAccountsAndAssertAccountExistence(Collections.singleton(refAccount), 1, true);
+  }
+
+  /**
    * Asserts the {@link Account}s received by the {@link Consumer} are as expected.
    * @param expectedAccounts The expected collection of {@link Account}s that should be received by the {@link Consumer}s.
    * @param expectedNumberOfConsumers The expected number of {@link Consumer}s.
@@ -737,15 +755,18 @@ public class HelixAccountServiceTest {
     assertEquals("Wrong update return status", shouldUpdateSucceed, hasUpdateAccountSucceed);
     if (shouldUpdateSucceed) {
       assertAccountsInAccountService(accounts, expectedAccountCount, accountService);
-
-      Path oldStateBackup = Files.list(accountBackupDir)
-          .filter(path -> path.getFileName().toString().endsWith(OLD_STATE_SUFFIX))
-          .max(Comparator.naturalOrder())
-          .get();
-      checkBackupFile(expectedOldState, oldStateBackup);
-      String newStateFilename = oldStateBackup.getFileName().toString().replace(OLD_STATE_SUFFIX, NEW_STATE_SUFFIX);
-      Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
-      checkBackupFile(accountService.getAllAccounts(), newStateBackup);
+      if (helixConfigProps.containsKey(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY)) {
+        Path oldStateBackup = Files.list(accountBackupDir)
+            .filter(path -> path.getFileName().toString().endsWith(OLD_STATE_SUFFIX))
+            .max(Comparator.naturalOrder())
+            .get();
+        checkBackupFile(expectedOldState, oldStateBackup);
+        String newStateFilename = oldStateBackup.getFileName().toString().replace(OLD_STATE_SUFFIX, NEW_STATE_SUFFIX);
+        Path newStateBackup = oldStateBackup.getParent().resolve(newStateFilename);
+        checkBackupFile(accountService.getAllAccounts(), newStateBackup);
+      } else {
+        assertEquals("No backup files should exist.", 0, Files.list(accountBackupDir).count());
+      }
     } else {
       assertEquals("Wrong number of accounts in accountService", expectedAccountCount,
           accountService.getAllAccounts().size());
