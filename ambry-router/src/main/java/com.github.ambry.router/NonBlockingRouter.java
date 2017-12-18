@@ -24,6 +24,7 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.store.StoreKey;
@@ -146,6 +147,8 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       routerMetrics.getBlobInfoOperationRate.mark();
+    } else if (options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds){
+
     } else {
       routerMetrics.getBlobOperationRate.mark();
     }
@@ -154,7 +157,8 @@ class NonBlockingRouter implements Router {
     }
     routerMetrics.operationQueuingRate.mark();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    boolean getChunkIdsOnly = options.getOperationType() == GetBlobOptions.OperationType.BlobChunkIds;
+    GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, getChunkIdsOnly, routerMetrics.ageAtGet);
     if (isOpen.get()) {
       getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
         @Override
@@ -295,8 +299,9 @@ class NonBlockingRouter implements Router {
         // blob could have been garbage collected and not found at all and so on.
         logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
             blobId, exception);
-      } else if (result.getBlobResult != null) {
-        logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
+      //} else if (result.getBlobResult != null) {
+        // here is the place cause ut failure
+      //  logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
       } else if (result.storeKeys != null) {
         List<BackgroundDeleteRequest> deleteRequests = new ArrayList<>(result.storeKeys.size());
         for (StoreKey storeKey : result.storeKeys) {
