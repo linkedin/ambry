@@ -106,8 +106,8 @@ class DeleteManager {
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdString, clusterMap);
       DeleteOperation deleteOperation =
-          new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
-              futureResult);
+          new DeleteOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback,
+              time, futureResult);
       deleteOperations.add(deleteOperation);
     } catch (RouterException e) {
       routerMetrics.operationDequeuingRate.mark();
