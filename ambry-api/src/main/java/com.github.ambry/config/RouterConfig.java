@@ -132,6 +132,14 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
+   * Indicates whether get operations to remote data centers are limited to original DC or not.
+   */
+  @Config("router.get.original.cross.dc.only")
+  @Default("true")
+  public final boolean routerGetOriginalCrossDcOnly;
+
+
+  /**
    * The OperationTracker to use for GET operations.
    */
   @Config("router.get.operation.tracker.type")
@@ -204,6 +212,7 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.get.request.parallelism", 2, 1, Integer.MAX_VALUE);
     routerGetSuccessTarget = verifiableProperties.getIntInRange("router.get.success.target", 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
+    routerGetOriginalCrossDcOnly = verifiableProperties.getBoolean("router.get.original.cross.dc.only", true);
     routerGetOperationTrackerType =
         verifiableProperties.getString("router.get.operation.tracker.type", "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
