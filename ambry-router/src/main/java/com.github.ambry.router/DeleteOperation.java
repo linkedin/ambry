@@ -102,7 +102,7 @@ class DeleteOperation {
         (blobDcId == ClusterMapUtils.UNKNOWN_DATACENTER_ID ? null : clusterMap.getDatacenterName(blobDcId));
     this.operationTracker =
         new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, preferredDcName,
-            routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
+            routerConfig.routerGetOriginalCrossDcOnly, routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
   }
 
   /**

@@ -434,15 +434,13 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker =
-            new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, successTarget,
-                parallelism);
+        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, false,
+            successTarget, parallelism);
         break;
       case ADAPTIVE_OP_TRACKER:
-        tracker =
-            new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, successTarget,
-                parallelism, time, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter,
-                QUANTILE);
+        tracker = new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, false,
+            successTarget, parallelism, time, localColoTracker, crossColoEnabled ? crossColoTracker : null,
+            pastDueCounter, QUANTILE);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

@@ -81,7 +81,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String crossColoPreferredDc, int successTarget, int parallelism, boolean shuffleReplicas) {
+      String crossColoPreferredDc, boolean originalCrossDcOnly, int successTarget, int parallelism, boolean shuffleReplicas) {
     if (parallelism < 1) {
       throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
     }
@@ -101,9 +101,12 @@ class SimpleOperationTracker implements OperationTracker {
         if (replicaDcName.equals(datacenterName)) {
           replicaPool.addFirst(replicaId);
         } else if (crossColoEnabled) {
-          if (replicaDcName.equals(crossColoPreferredDc)) {
+          if (crossColoPreferredDc == null) {
+            // add also replicas as candidate if we don't know crossColoPreferredDc.
+            crossColoReplicas.addLast(replicaId);
+          } else if (replicaDcName.equals(crossColoPreferredDc)) {
             crossColoReplicas.addFirst(replicaId);
-          } else {
+          } else if (originalCrossDcOnly == false){
             crossColoReplicas.addLast(replicaId);
           }
         }
@@ -137,8 +140,8 @@ class SimpleOperationTracker implements OperationTracker {
    * @param parallelism The maximum number of inflight requests at any point of time.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String crossColoPreferredDc, int successTarget, int parallelism) {
-    this(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, successTarget, parallelism, true);
+      String crossColoPreferredDc, boolean originalCrossDcOnly, int successTarget, int parallelism) {
+    this(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, originalCrossDcOnly,successTarget, parallelism, true);
   }
 
   @Override

@@ -216,11 +216,11 @@ abstract class GetOperation {
     String preferredDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
       operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetSuccessTarget,
+          routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetOriginalCrossDcOnly, routerConfig.routerGetSuccessTarget,
           routerConfig.routerGetRequestParallelism);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetSuccessTarget,
+          routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetOriginalCrossDcOnly, routerConfig.routerGetSuccessTarget,
           routerConfig.routerGetRequestParallelism, time, localColoTracker, crossColoTracker, pastDueCounter,
           routerConfig.routerLatencyToleranceQuantile);
     } else {

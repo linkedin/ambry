@@ -69,9 +69,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param quantile the quantile cutoff to use for when evaluating requests against the trackers.
    */
   AdaptiveOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String crossColoPreferredDc, int successTarget, int parallelism, Time time, Histogram localColoTracker,
+      String crossColoPreferredDc, boolean originalCrossDcOnly, int successTarget, int parallelism, Time time, Histogram localColoTracker,
       Histogram crossColoTracker, Counter pastDueCounter, double quantile) {
-    super(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, successTarget, parallelism, true);
+    super(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, originalCrossDcOnly, successTarget, parallelism, true);
     this.datacenterName = datacenterName;
     this.time = time;
     this.localColoTracker = localColoTracker;
