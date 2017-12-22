@@ -517,7 +517,7 @@ class GetBlobOperation extends GetOperation {
     void initialize(int index, BlobId id) {
       chunkIndex = index;
       chunkBlobId = id;
-      chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition());
+      chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition(), chunkBlobId.getDatacenterId());
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
     }

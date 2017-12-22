@@ -200,7 +200,7 @@ public class AdaptiveOperationTrackerTest {
     double localColoCutoff = localColoTracker.getSnapshot().getValue(1);
 
     OperationTracker ot =
-        new AdaptiveOperationTracker(localDcName, mockPartition, false, 1, 1, time, localColoTracker, null,
+        new AdaptiveOperationTracker(localDcName, mockPartition, false, null, false, 1, 1, time, localColoTracker, null,
             pastDueCounter, 1);
     // 3-0-0-0
     sendRequests(ot, 1);
@@ -241,8 +241,8 @@ public class AdaptiveOperationTrackerTest {
    * @return an instance of {@link AdaptiveOperationTracker} with the given parameters.
    */
   private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism) {
-    return new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, successTarget, parallelism, time,
-        localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
+    return new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, null, false, successTarget,
+        parallelism, time, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
   }
 
   /**

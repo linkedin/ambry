@@ -33,6 +33,7 @@ class HardwareLayout {
   private final String clusterName;
   private final long version;
   private final ArrayList<Datacenter> datacenters;
+  private final Map<Byte, Datacenter> datacenterById;
   private final long rawCapacityInBytes;
   private final long dataNodeCount;
   private final long diskCount;
@@ -51,9 +52,12 @@ class HardwareLayout {
     this.clusterMapConfig = clusterMapConfig;
 
     this.datacenters = new ArrayList<Datacenter>(jsonObject.getJSONArray("datacenters").length());
+    this.datacenterById = new HashMap<>();
     for (int i = 0; i < jsonObject.getJSONArray("datacenters").length(); ++i) {
-      this.datacenters.add(i,
-          new Datacenter(this, jsonObject.getJSONArray("datacenters").getJSONObject(i), clusterMapConfig));
+      Datacenter datacenter =
+          new Datacenter(this, jsonObject.getJSONArray("datacenters").getJSONObject(i), clusterMapConfig);
+      this.datacenters.add(datacenter);
+      datacenterById.put(datacenter.getId(), datacenter);
     }
 
     this.rawCapacityInBytes = calculateRawCapacityInBytes();
@@ -75,6 +79,10 @@ class HardwareLayout {
 
   public List<Datacenter> getDatacenters() {
     return datacenters;
+  }
+
+  public Datacenter getDatacenterById(byte id) {
+    return datacenterById.get(id);
   }
 
   public long getRawCapacityInBytes() {
