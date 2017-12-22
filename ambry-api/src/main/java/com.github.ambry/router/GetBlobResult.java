@@ -30,6 +30,17 @@ public class GetBlobResult {
   /**
    * Construct a {@link GetBlobResult}.
    * @param blobInfo the {@link BlobInfo} for the blob, or {@code null}.
+   */
+
+  public GetBlobResult(BlobInfo blobInfo) {
+    this.blobInfo = blobInfo;
+    this.blobDataChannel = null;
+    this.blobChunkIds = null;
+  }
+
+  /**
+   * Construct a {@link GetBlobResult}.
+   * @param blobInfo the {@link BlobInfo} for the blob, or {@code null}.
    * @param blobDataChannel the {@link ReadableStreamChannel} containing the blob data, or {@code null}.
    */
   public GetBlobResult(BlobInfo blobInfo, ReadableStreamChannel blobDataChannel) {
@@ -38,9 +49,14 @@ public class GetBlobResult {
     this.blobChunkIds = null;
   }
 
-  public GetBlobResult(BlobInfo blobInfo, ReadableStreamChannel blobDataChannel, List<StoreKey> blobChunkIds) {
+  /**
+   * Construct a {@link GetBlobResult}.
+   * @param blobInfo the {@link BlobInfo} for the blob, or {@code null}.
+   * @param blobChunkIds Chunk ids of a composite blob, or {@code null}.
+   */
+  public GetBlobResult(BlobInfo blobInfo, List<StoreKey> blobChunkIds) {
     this.blobInfo = blobInfo;
-    this.blobDataChannel = blobDataChannel;
+    this.blobDataChannel = null;
     this.blobChunkIds = blobChunkIds;
   }
 

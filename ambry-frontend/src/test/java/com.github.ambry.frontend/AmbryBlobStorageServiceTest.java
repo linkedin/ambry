@@ -2336,7 +2336,7 @@ class FrontendTestRouter implements Router {
       case BlobInfo:
         result = new GetBlobResult(new BlobInfo(
             new BlobProperties(0, "FrontendTestRouter", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-                false), new byte[0]), null);
+                false), new byte[0]));
         break;
       case Data:
         result = new GetBlobResult(null, new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0)));

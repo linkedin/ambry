@@ -219,6 +219,9 @@ public class RestUtils {
      */
     Replicas,
 
+    /**
+     * All Chunk IDs of a composite blob ID returned as content (Admin only).
+     */
     BlobChunkIds
   }
 
@@ -424,7 +427,7 @@ public class RestUtils {
     if (subResource == null) {
       operationType = GetBlobOptions.OperationType.All;
     } else if (subResource == SubResource.BlobChunkIds) {
-      // maybe operationtype data is good
+      // maybe operationtype.Data is better?
       operationType = GetBlobOptions.OperationType.BlobChunkIds;
     } else {
       operationType = GetBlobOptions.OperationType.BlobInfo;

@@ -182,7 +182,7 @@ class GetBlobOperation extends GetOperation {
           List<StoreKey> chunkIds = e == null && compositeBlobInfo != null ? compositeBlobInfo.getKeys() : null;
           // blobInfo.setStoreKeys(chunkIds); // this is not good. storeKeys don't belong blobInfo but getCallback only accept blobInfo
           // operationResult = new GetBlobResultInternal(null, chunkIds);
-          operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, blobDataChannel, chunkIds), chunkIds); // add blob info here
+          operationResult = new GetBlobResultInternal(new GetBlobResult(blobInfo, chunkIds), chunkIds); // add blob info here
         } else {
           // Complete the operation from the caller's perspective, so that the caller can start reading from the
           // channel if there is no exception. The operation will not be marked as complete internally as subsequent

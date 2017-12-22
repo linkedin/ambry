@@ -329,8 +329,7 @@ class GetBlobInfoOperation extends GetOperation {
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
       operationResult =
-          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array()), null),
-              null);
+          new GetBlobResultInternal(new GetBlobResult(new BlobInfo(serverBlobProperties, userMetadata.array())), null);
     } else {
       // submit decrypt job
       progressTracker.initializeDecryptionTracker();
@@ -344,8 +343,8 @@ class GetBlobInfoOperation extends GetOperation {
                 if (exception == null) {
                   logger.trace("Successfully updating decrypt job callback results for {}", blobId);
                   operationResult = new GetBlobResultInternal(
-                      new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
-                          null), null);
+                      new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array())),
+                      null);
                   progressTracker.setDecryptionSuccess();
                 } else {
                   logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
