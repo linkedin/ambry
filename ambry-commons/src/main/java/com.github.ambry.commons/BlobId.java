@@ -493,11 +493,11 @@ public class BlobId extends StoreKey {
    * The preamble can be parsed off a blob id string without a {@link ClusterMap}.
    */
   private static class BlobIdPreamble {
-    short version;
-    BlobIdType type;
-    byte datacenterId;
-    short accountId;
-    short containerId;
+    final short version;
+    final BlobIdType type;
+    final byte datacenterId;
+    final short accountId;
+    final short containerId;
 
     /**
      * Construct a BlobIdPreamble object by reading all the fields from a BlobId up to and not including the
