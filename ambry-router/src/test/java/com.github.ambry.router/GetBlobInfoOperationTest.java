@@ -255,7 +255,7 @@ public class GetBlobInfoOperationTest {
       }
     }
     if (testEncryption) {
-      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(5000, TimeUnit.MILLISECONDS));
+      Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
       op.poll(requestRegistrationCallback);
     }
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
