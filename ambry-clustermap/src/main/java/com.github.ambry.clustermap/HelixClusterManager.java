@@ -177,7 +177,7 @@ class HelixClusterManager implements ClusterMap {
   }
 
   @Override
-  public String getDatacenterName(byte id) {
+  public String findDatacenterName(byte id) {
     return dcIdToDcName.get(id);
   }
 

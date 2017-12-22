@@ -325,10 +325,10 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test to ensure that replicas in preffered DC are first priority when preffered DC is local DC.
+   * Test to ensure that replicas in preferred DC are first priority when preffered DC is local DC.
    */
   @Test
-  public void replicasOrderingTestPrefferedIsLocal() {
+  public void replicasOrderingTestPreferredIsLocal() {
     initialize();
     preferredDcName = localDcName;
     OperationTracker ot = getOperationTracker(true, 3, 3);
@@ -336,17 +336,17 @@ public class OperationTrackerTest {
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, true);
-      assertEquals(preferredDcName, replica.getDataNodeId().getDatacenterName());
+      assertEquals("Should be preferred DC", preferredDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
-   * Test to ensure that replicas in preffered DC are right after local DC replicas.
+   * Test to ensure that replicas in preferred DC are right after local DC replicas.
    */
   @Test
-  public void replicasOrderingTestPrefferedNotLocal() {
+  public void replicasOrderingTestPreferredNotLocal() {
     initialize();
     preferredDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
     OperationTracker ot = getOperationTracker(true, 3, 6);
@@ -354,14 +354,14 @@ public class OperationTrackerTest {
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, false); // fail first 3 requests to local
-      assertEquals(localDcName, replica.getDataNodeId().getDatacenterName());
+      assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertFalse("Operation should have not succeeded", ot.hasSucceeded());
 
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, true);
-      assertEquals(preferredDcName, replica.getDataNodeId().getDatacenterName());
+      assertEquals("Should be preferred DC", preferredDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());

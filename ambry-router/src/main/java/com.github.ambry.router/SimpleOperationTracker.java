@@ -90,7 +90,7 @@ class SimpleOperationTracker implements OperationTracker {
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
-    LinkedList<ReplicaId> crossColoReplicas = new LinkedList<>();
+    LinkedList<ReplicaId> localReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
@@ -99,12 +99,12 @@ class SimpleOperationTracker implements OperationTracker {
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
       if (!replicaId.isDown()) {
         if (replicaDcName.equals(datacenterName)) {
-          replicaPool.addFirst(replicaId);
+          localReplicas.addFirst(replicaId);
         } else if (crossColoEnabled) {
           if (replicaDcName.equals(crossColoPreferredDc)) {
-            crossColoReplicas.addFirst(replicaId);
+            replicaPool.addFirst(replicaId);
           } else {
-            crossColoReplicas.addLast(replicaId);
+            replicaPool.addLast(replicaId);
           }
         }
       } else {
@@ -115,7 +115,9 @@ class SimpleOperationTracker implements OperationTracker {
         }
       }
     }
-    replicaPool.addAll(crossColoReplicas);
+    for (ReplicaId replicaId : localReplicas) {
+      replicaPool.addFirst(replicaId);
+    }
     replicaPool.addAll(downReplicas);
     totalReplicaCount = replicaPool.size();
     if (totalReplicaCount < successTarget) {

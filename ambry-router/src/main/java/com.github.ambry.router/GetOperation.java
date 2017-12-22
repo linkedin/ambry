@@ -252,7 +252,7 @@ abstract class GetOperation {
   protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
-    String preferredDcName = clusterMap.getDatacenterName(datacenterId);
+    String preferredDcName = clusterMap.findDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
       operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
           routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetSuccessTarget,

@@ -81,10 +81,6 @@ class HardwareLayout {
     return datacenters;
   }
 
-  public Datacenter getDatacenterById(byte id) {
-    return datacenterById.get(id);
-  }
-
   public long getRawCapacityInBytes() {
     return rawCapacityInBytes;
   }
@@ -202,6 +198,16 @@ class HardwareLayout {
       }
     }
     return null;
+  }
+
+  /**
+   * Finds Datacenter by id
+   *
+   * @param id id of datacenter to find
+   * @return Datacenter or null if not found.
+   */
+  public Datacenter findDatacenter(byte id) {
+    return datacenterById.get(id);
   }
 
   /**

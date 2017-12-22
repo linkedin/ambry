@@ -60,9 +60,9 @@ public interface ClusterMap extends AutoCloseable {
    * Gets the name of the datacenter from the ID.
    *
    * @param id the ID of the datacenter
-   * @return name of the datacenter from the ID.
+   * @return name of the datacenter from the ID or null if not found.
    */
-  String getDatacenterName(byte id);
+  String findDatacenterName(byte id);
 
   /**
    * Gets a specific DataNodeId by its hostname and port.

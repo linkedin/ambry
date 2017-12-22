@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import javax.xml.crypto.Data;
 import org.json.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,11 +103,16 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
-  public String getDatacenterName(byte id) {
+  public String findDatacenterName(byte id) {
     if (id == ClusterMapUtils.UNKNOWN_DATACENTER_ID) {
       return null;
     }
-    return hardwareLayout.getDatacenterById(id).getName();
+    Datacenter datacenter = hardwareLayout.findDatacenter(id);
+    if (datacenter == null) {
+      return null;
+    } else {
+      return datacenter.getName();
+    }
   }
 
   @Override
