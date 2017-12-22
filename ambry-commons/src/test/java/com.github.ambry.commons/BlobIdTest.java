@@ -20,9 +20,11 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,7 +33,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 import org.apache.commons.codec.binary.Base64;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -106,11 +107,11 @@ public class BlobIdTest {
     BlobId blobIdSerDed =
         new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
     // Ensure that deserialized blob is exactly the same as the original in comparisons.
-    Assert.assertTrue(blobId.equals(blobIdSerDed));
-    Assert.assertTrue(blobIdSerDed.equals(blobId));
-    Assert.assertEquals(blobId.hashCode(), blobIdSerDed.hashCode());
-    Assert.assertEquals(0, blobId.compareTo(blobIdSerDed));
-    Assert.assertEquals(0, blobIdSerDed.compareTo(blobId));
+    assertTrue(blobId.equals(blobIdSerDed));
+    assertTrue(blobIdSerDed.equals(blobId));
+    assertEquals(blobId.hashCode(), blobIdSerDed.hashCode());
+    assertEquals(0, blobId.compareTo(blobIdSerDed));
+    assertEquals(0, blobIdSerDed.compareTo(blobId));
   }
 
   /**
@@ -199,15 +200,18 @@ public class BlobIdTest {
    * container as the account and container in the call to craft.
    */
   @Test
-  public void testCrafting() {
+  public void testCrafting() throws Exception {
     BlobId inputs[];
     if (version >= BLOB_ID_V3) {
       inputs = new BlobId[]{new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
           referenceContainerId, referencePartitionId), new BlobId(version, BlobIdType.CRAFTED, referenceDatacenterId,
           referenceAccountId, referenceContainerId, referencePartitionId)};
+      assertFalse("isCrafted() should be false for native id", BlobId.isCrafted(inputs[0].getID()));
+      assertTrue("isCrafted() should be true for crafted id", BlobId.isCrafted(inputs[1].getID()));
     } else {
       inputs = new BlobId[]{new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId,
           referenceContainerId, referencePartitionId)};
+      assertFalse("isCrafted() should be false for ids below BLOB_ID_V3", BlobId.isCrafted(inputs[0].getID()));
     }
     short newAccountId = (short) (referenceAccountId + 1 + TestUtils.RANDOM.nextInt(100));
     short newContainerId = (short) (referenceContainerId + 1 + TestUtils.RANDOM.nextInt(100));
@@ -231,9 +235,23 @@ public class BlobIdTest {
     BlobId craftedAgain = BlobId.craft(crafted, CommonTestUtils.getCurrentBlobIdVersion(), crafted.getAccountId(),
         crafted.getContainerId());
     verifyCrafting(crafted, craftedAgain);
-    Assert.assertEquals("Accounts should match", crafted.getAccountId(), craftedAgain.getAccountId());
-    Assert.assertEquals("Containers should match", crafted.getContainerId(), craftedAgain.getContainerId());
-    Assert.assertEquals("The id string should match", crafted.getID(), craftedAgain.getID());
+    assertEquals("Accounts should match", crafted.getAccountId(), craftedAgain.getAccountId());
+    assertEquals("Containers should match", crafted.getContainerId(), craftedAgain.getContainerId());
+    assertEquals("The id string should match", crafted.getID(), craftedAgain.getID());
+
+    if (version == BLOB_ID_V3) {
+      // version check to avoid testing this repetitively.
+      try {
+        BlobId.isCrafted("");
+        fail("Empty blob id should not get parsed");
+      } catch (IOException e) {
+      }
+      try {
+        BlobId.isCrafted("ZZZZZ");
+        fail("Invalid version should get caught");
+      } catch (IllegalArgumentException e) {
+      }
+    }
   }
 
   /**
@@ -243,15 +261,16 @@ public class BlobIdTest {
    * @param input the input BlobId with the expected fields for comparison.
    * @param crafted the crafted BlobId whose fields must match the arguments of the other BlobId.
    */
-  private void verifyCrafting(BlobId input, BlobId crafted) {
-    Assert.assertEquals("Datacenter id of input id should match that of the crafted id", input.getDatacenterId(),
+  private void verifyCrafting(BlobId input, BlobId crafted) throws IOException {
+    assertEquals("Datacenter id of input id should match that of the crafted id", input.getDatacenterId(),
         crafted.getDatacenterId());
-    Assert.assertEquals("Partition of input id should match that of the crafted id", input.getPartition(),
+    assertEquals("Partition of input id should match that of the crafted id", input.getPartition(),
         crafted.getPartition());
-    Assert.assertEquals("UUID of input id should match that of the crafted id", input.getUuid(), crafted.getUuid());
-    Assert.assertEquals("Crafted id should have the latest version", CommonTestUtils.getCurrentBlobIdVersion(),
+    assertEquals("UUID of input id should match that of the crafted id", input.getUuid(), crafted.getUuid());
+    assertEquals("Crafted id should have the latest version", CommonTestUtils.getCurrentBlobIdVersion(),
         crafted.getVersion());
-    Assert.assertEquals("Crafted id should have the Crafted type", BlobIdType.CRAFTED, crafted.getType());
+    assertEquals("Crafted id should have the Crafted type", BlobIdType.CRAFTED, crafted.getType());
+    assertTrue("isCrafted() should be true for crafted ids", BlobId.isCrafted(crafted.getID()));
   }
 
   /**
@@ -428,6 +447,11 @@ public class BlobIdTest {
       default:
         fail("Unrecognized version");
     }
+    Pair<Short, Short> accountAndContainer = BlobId.getAccountAndContainerIds(blobId.getID());
+    assertEquals("Account id from the id string should be the same as the associated account id", blobId.getAccountId(),
+        (short) accountAndContainer.getFirst());
+    assertEquals("Container id from the id string should be the same as the associated container id",
+        blobId.getContainerId(), (short) accountAndContainer.getSecond());
   }
 
   /**

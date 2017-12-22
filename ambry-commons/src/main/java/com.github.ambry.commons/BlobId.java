@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -166,30 +167,12 @@ public class BlobId extends StoreKey {
    * @throws IOException
    */
   private BlobId(DataInputStream stream, ClusterMap clusterMap, boolean ensureFullyRead) throws IOException {
-    version = stream.readShort();
-    switch (version) {
-      case BLOB_ID_V1:
-        type = BlobIdType.NATIVE;
-        datacenterId = UNKNOWN_DATACENTER_ID;
-        accountId = UNKNOWN_ACCOUNT_ID;
-        containerId = UNKNOWN_CONTAINER_ID;
-        break;
-      case BLOB_ID_V2:
-        stream.readByte();
-        type = BlobIdType.NATIVE;
-        datacenterId = stream.readByte();
-        accountId = stream.readShort();
-        containerId = stream.readShort();
-        break;
-      case BLOB_ID_V3:
-        type = BlobIdType.values()[stream.readByte() & 0x3];
-        datacenterId = stream.readByte();
-        accountId = stream.readShort();
-        containerId = stream.readShort();
-        break;
-      default:
-        throw new IllegalArgumentException("blobId version " + version + " not supported.");
-    }
+    BlobIdPreamble preamble = new BlobIdPreamble(stream);
+    version = preamble.version;
+    type = preamble.type;
+    datacenterId = preamble.datacenterId;
+    accountId = preamble.accountId;
+    containerId = preamble.containerId;
     partitionId = clusterMap.getPartitionIdFromStream(stream);
     if (partitionId == null) {
       throw new IllegalArgumentException("Partition ID cannot be null");
@@ -464,6 +447,32 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * Returns whether a given Blob id is a crafted id.
+   * @param idStr the blobId in string form.
+   * @return true if the id is a crafted id; false otherwise.
+   * @throws IOException if the input is not a valid Blob id.
+   */
+  public static boolean isCrafted(String idStr) throws IOException {
+    BlobIdPreamble blobIdPreamble =
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+    return blobIdPreamble.type == BlobIdType.CRAFTED;
+  }
+
+  /**
+   * Returns the account id and container id associated with the given blob. Note that the blob id may not have a valid
+   * account and container id associated with it, in which case this will return {@link Account#UNKNOWN_ACCOUNT_ID} and
+   * {@link Container#UNKNOWN_CONTAINER_ID} respectively.
+   * @param idStr the id of the blob for which the account and container ids are to be fetched.
+   * @return a {@link Pair} whose first value is the account id and the second value is the container id of this blob.
+   * @throws IOException if the input is not a valid Blob id.
+   */
+  public static Pair<Short, Short> getAccountAndContainerIds(String idStr) throws IOException {
+    BlobIdPreamble blobIdPreamble =
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+    return new Pair<>(blobIdPreamble.accountId, blobIdPreamble.containerId);
+  }
+
+  /**
    * Indicates the context in which a {@link BlobId} gets created.
    */
   public enum BlobIdType {
@@ -477,6 +486,51 @@ public class BlobId extends StoreKey {
      * context of a PUT operation.
      */
     CRAFTED
+  }
+
+  /**
+   * A class that can hold all the information embedded in a BlobId up to and not including the {@link PartitionId}
+   * The preamble can be parsed off a blob id string without a {@link ClusterMap}.
+   */
+  private static class BlobIdPreamble {
+    final short version;
+    final BlobIdType type;
+    final byte datacenterId;
+    final short accountId;
+    final short containerId;
+
+    /**
+     * Construct a BlobIdPreamble object by reading all the fields from a BlobId up to and not including the
+     * {@link PartitionId}.
+     * @param stream the {@link DataInputStream} from which to read.
+     * @throws IOException if there is an error reading from the stream.
+     */
+    BlobIdPreamble(DataInputStream stream) throws IOException {
+      version = stream.readShort();
+      switch (version) {
+        case BLOB_ID_V1:
+          type = BlobIdType.NATIVE;
+          datacenterId = UNKNOWN_DATACENTER_ID;
+          accountId = UNKNOWN_ACCOUNT_ID;
+          containerId = UNKNOWN_CONTAINER_ID;
+          break;
+        case BLOB_ID_V2:
+          stream.readByte();
+          type = BlobIdType.NATIVE;
+          datacenterId = stream.readByte();
+          accountId = stream.readShort();
+          containerId = stream.readShort();
+          break;
+        case BLOB_ID_V3:
+          type = BlobIdType.values()[stream.readByte() & 0x3];
+          datacenterId = stream.readByte();
+          accountId = stream.readShort();
+          containerId = stream.readShort();
+          break;
+        default:
+          throw new IllegalArgumentException("blobId version " + version + " is not supported.");
+      }
+    }
   }
 }
 
