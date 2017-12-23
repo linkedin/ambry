@@ -65,7 +65,7 @@ public class OperationTrackerTest {
   private List<MockDataNodeId> datanodes;
   private MockPartitionId mockPartition;
   private String localDcName;
-  private String preferredDcName;
+  private String originatingDcName;
   private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
 
@@ -325,30 +325,30 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test to ensure that replicas in preferred DC are first priority when preffered DC is local DC.
+   * Test to ensure that replicas in originating DC are first priority when preffered DC is local DC.
    */
   @Test
-  public void replicasOrderingTestPreferredIsLocal() {
+  public void replicasOrderingTestOriginatingIsLocal() {
     initialize();
-    preferredDcName = localDcName;
+    originatingDcName = localDcName;
     OperationTracker ot = getOperationTracker(true, 3, 3);
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, true);
-      assertEquals("Should be preferred DC", preferredDcName, replica.getDataNodeId().getDatacenterName());
+      assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
-   * Test to ensure that replicas in preferred DC are right after local DC replicas.
+   * Test to ensure that replicas in originating DC are right after local DC replicas.
    */
   @Test
-  public void replicasOrderingTestPreferredNotLocal() {
+  public void replicasOrderingTestOriginatingNotLocal() {
     initialize();
-    preferredDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
+    originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
     OperationTracker ot = getOperationTracker(true, 3, 6);
     sendRequests(ot, 6, false);
     for (int i = 0; i < 3; i++) {
@@ -361,7 +361,34 @@ public class OperationTrackerTest {
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, true);
-      assertEquals("Should be preferred DC", preferredDcName, replica.getDataNodeId().getDatacenterName());
+      assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
+   * Test to ensure that replicas are exactly 6 when includeNonOriginatingDcReplicas.
+   * 3 local replicas in the beginning and 3 originating replicas afterwards.
+   */
+  @Test
+  public void replicasOrderTestOriginatingDcOnly() {
+    initialize();
+    originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
+    OperationTracker ot = getOperationTracker(true, 3, 6, false, 6);
+    sendRequests(ot, 6, false);
+    assertEquals("Should have 6 replicas", 6, inflightReplicas.size());
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, false); // fail first 3 requests to local replicas
+      assertEquals("Should be local DC", localDcName, replica.getDataNodeId().getDatacenterName());
+    }
+    assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, true);
+      assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
@@ -434,15 +461,39 @@ public class OperationTrackerTest {
     OperationTracker tracker;
     switch (operationTrackerType) {
       case SIMPLE_OP_TRACKER:
-        tracker =
-            new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, successTarget,
-                parallelism);
+        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName, true,
+            Integer.MAX_VALUE, successTarget, parallelism);
         break;
       case ADAPTIVE_OP_TRACKER:
-        tracker =
-            new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, preferredDcName, successTarget,
-                parallelism, time, localColoTracker, crossColoEnabled ? crossColoTracker : null, pastDueCounter,
-                QUANTILE);
+        tracker = new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName, true,
+            Integer.MAX_VALUE, successTarget, parallelism, time, localColoTracker,
+            crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
+        break;
+      default:
+        throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);
+    }
+    return tracker;
+  }
+
+  /**
+   * Returns the right {@link OperationTracker} based on {@link #operationTrackerType}.
+   * @param crossColoEnabled {@code true} if cross colo needs to be enabled. {@code false} otherwise.
+   * @param successTarget the number of successful responses required for the operation to succeed.
+   * @param parallelism the number of parallel requests that can be in flight.
+   * @return the right {@link OperationTracker} based on {@link #operationTrackerType}.
+   */
+  private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism,
+      boolean includeNonOriginatingDcReplicas, int replicasRequired) {
+    OperationTracker tracker;
+    switch (operationTrackerType) {
+      case SIMPLE_OP_TRACKER:
+        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName,
+            includeNonOriginatingDcReplicas, replicasRequired, successTarget, parallelism);
+        break;
+      case ADAPTIVE_OP_TRACKER:
+        tracker = new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName,
+            includeNonOriginatingDcReplicas, replicasRequired, successTarget, parallelism, time, localColoTracker,
+            crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
         break;
       default:
         throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);

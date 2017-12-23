@@ -226,7 +226,7 @@ public class DeleteManagerTest {
   public void testBlobNotFoundWithLastResponseNotBlobNotFound() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[8] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.IO_Error;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
         deleteErrorCodeChecker);
   }

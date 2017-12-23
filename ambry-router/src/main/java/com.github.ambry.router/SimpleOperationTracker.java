@@ -75,13 +75,16 @@ class SimpleOperationTracker implements OperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
    *                                otherwise.
-   * @param crossColoPreferredDc The original DC where blob was put.
+   * @param originatingDcName The original DC where blob was put.
+   * @param includeNonOriginatingDcReplicas if take the option to include remote non originating DC replicas.
+   * @param replicasRequired The number of replicas required for the operation.
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String crossColoPreferredDc, int successTarget, int parallelism, boolean shuffleReplicas) {
+      String originatingDcName, boolean includeNonOriginatingDcReplicas, int replicasRequired, int successTarget,
+      int parallelism, boolean shuffleReplicas) {
     if (parallelism < 1) {
       throw new IllegalArgumentException("Parallelism has to be > 0. Configured to be " + parallelism);
     }
@@ -90,35 +93,50 @@ class SimpleOperationTracker implements OperationTracker {
     // Order the replicas so that local healthy replicas are ordered and returned first,
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
-    LinkedList<ReplicaId> localReplicas = new LinkedList<>();
-    LinkedList<ReplicaId> downReplicas = new LinkedList<>();
+    LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
+    LinkedList<ReplicaId> downLocalReplicas = new LinkedList<>();
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
     }
+    // The priority here is local dc replicas, originating dc replicas, other dc replicas, down replicas.
+    // To improve read-after-write performance across DC, we prefer to take local and originating replicas only,
+    // which can be done by setting includeNonOriginatingDcReplicas False.
     for (ReplicaId replicaId : replicas) {
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
       if (!replicaId.isDown()) {
         if (replicaDcName.equals(datacenterName)) {
-          localReplicas.addFirst(replicaId);
+          replicaPool.addFirst(replicaId);
+        } else if (crossColoEnabled && replicaDcName.equals(originatingDcName)) {
+          replicaPool.addLast(replicaId);
         } else if (crossColoEnabled) {
-          if (replicaDcName.equals(crossColoPreferredDc)) {
-            replicaPool.addFirst(replicaId);
-          } else {
-            replicaPool.addLast(replicaId);
-          }
+          backupReplicas.addFirst(replicaId);
         }
       } else {
         if (replicaDcName.equals(datacenterName)) {
-          downReplicas.addFirst(replicaId);
+          downLocalReplicas.addFirst(replicaId);
         } else if (crossColoEnabled) {
-          downReplicas.addLast(replicaId);
+          backupReplicas.addLast(replicaId);
         }
       }
     }
-    for (ReplicaId replicaId : localReplicas) {
-      replicaPool.addFirst(replicaId);
+    if (includeNonOriginatingDcReplicas) {
+      replicaPool.addAll(backupReplicas);
+      replicaPool.addAll(downLocalReplicas);
+    } else {
+      // This is for get request only.
+      if (datacenterName.equals(originatingDcName)) {
+        // In the case of local DC is originating DC, we try to arrange three health replicas and followed by
+        // local down replicas.
+        while (replicaPool.size() < 3 && backupReplicas.size() > 0) {
+          replicaPool.add(backupReplicas.pollFirst());
+        }
+        replicaPool.addAll(downLocalReplicas);
+      }
+      // Take at least replicasRequired copy of replicas to do the request
+      while (replicaPool.size() < replicasRequired && backupReplicas.size() > 0) {
+        replicaPool.add(backupReplicas.pollFirst());
+      }
     }
-    replicaPool.addAll(downReplicas);
     totalReplicaCount = replicaPool.size();
     if (totalReplicaCount < successTarget) {
       throw new IllegalArgumentException(
@@ -132,15 +150,18 @@ class SimpleOperationTracker implements OperationTracker {
    *
    * @param datacenterName The datacenter where the router is located.
    * @param partitionId The partition on which the operation is performed.
-   * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
-   *                                otherwise.
-   * @param crossColoPreferredDc The original DC where blob was put. null if DC unknown.
+   * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false} otherwise.
+   * @param originatingDcName The original DC where blob was put. null if DC unknown.
+   * @param includeNonOriginatingDcReplicas if take the option to include remote non originating DC replicas.
+   * @param replicasRequired The number of replicas required for the operation.
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String crossColoPreferredDc, int successTarget, int parallelism) {
-    this(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, successTarget, parallelism, true);
+      String originatingDcName, boolean includeNonOriginatingDcReplicas, int replicasRequired, int successTarget,
+      int parallelism) {
+    this(datacenterName, partitionId, crossColoEnabled, originatingDcName, includeNonOriginatingDcReplicas,
+        replicasRequired, successTarget, parallelism, true);
   }
 
   @Override

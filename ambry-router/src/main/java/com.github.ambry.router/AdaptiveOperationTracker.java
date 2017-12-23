@@ -59,7 +59,9 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param partitionId The partition on which the operation is performed.
    * @param crossColoEnabled {@code true} if requests can be sent to remote replicas, {@code false}
    *                                otherwise.
-   * @param crossColoPreferredDc name of the cross colo DC whose replicas should be tried first.
+   * @param originatingDcName name of the cross colo DC whose replicas should be tried first.
+   * @param includeNonOriginatingDcReplicas if take the option to include remote non originating DC replicas.
+   * @param replicasRequired The number of replicas required for the operation.
    * @param successTarget The number of successful responses required to succeed the operation.
    * @param parallelism The maximum number of inflight requests at any point of time.
    * @param time the {@link Time} instance to use.
@@ -69,9 +71,11 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
    * @param quantile the quantile cutoff to use for when evaluating requests against the trackers.
    */
   AdaptiveOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled,
-      String crossColoPreferredDc, int successTarget, int parallelism, Time time, Histogram localColoTracker,
-      Histogram crossColoTracker, Counter pastDueCounter, double quantile) {
-    super(datacenterName, partitionId, crossColoEnabled, crossColoPreferredDc, successTarget, parallelism, true);
+      String originatingDcName, boolean includeNonOriginatingDcReplicas, int replicasRequired, int successTarget,
+      int parallelism, Time time, Histogram localColoTracker, Histogram crossColoTracker, Counter pastDueCounter,
+      double quantile) {
+    super(datacenterName, partitionId, crossColoEnabled, originatingDcName, includeNonOriginatingDcReplicas,
+        replicasRequired, successTarget, parallelism, true);
     this.datacenterName = datacenterName;
     this.time = time;
     this.localColoTracker = localColoTracker;

@@ -97,10 +97,11 @@ class DeleteOperation {
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
     byte blobDcId = blobId.getDatacenterId();
-    String preferredDcName = clusterMap.getDatacenterName(blobDcId);
+    String originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
-        new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, preferredDcName,
-            routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
+        new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, originatingDcName,
+            true, Integer.MAX_VALUE, routerConfig.routerDeleteSuccessTarget,
+            routerConfig.routerDeleteRequestParallelism, false);
   }
 
   /**
