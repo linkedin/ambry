@@ -122,9 +122,9 @@ class CompositeClusterManager implements ClusterMap {
   }
 
   @Override
-  public String findDatacenterName(byte id) {
-    String dcName = staticClusterManager.findDatacenterName(id);
-    if (!dcName.equals(helixClusterManager.findDatacenterName(id))) {
+  public String getDatacenterName(byte id) {
+    String dcName = staticClusterManager.getDatacenterName(id);
+    if (!dcName.equals(helixClusterManager.getDatacenterName(id))) {
       helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
     }
     return dcName;

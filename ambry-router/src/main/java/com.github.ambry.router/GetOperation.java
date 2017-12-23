@@ -18,7 +18,6 @@ import com.codahale.metrics.Histogram;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -252,7 +251,7 @@ abstract class GetOperation {
   protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
-    String preferredDcName = clusterMap.findDatacenterName(datacenterId);
+    String preferredDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
       operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
           routerConfig.routerGetCrossDcEnabled, preferredDcName, routerConfig.routerGetSuccessTarget,

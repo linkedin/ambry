@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -98,7 +97,7 @@ class DeleteOperation {
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
     byte blobDcId = blobId.getDatacenterId();
-    String preferredDcName = clusterMap.findDatacenterName(blobDcId);
+    String preferredDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, preferredDcName,
             routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
