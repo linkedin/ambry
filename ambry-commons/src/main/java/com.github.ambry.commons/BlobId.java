@@ -75,6 +75,13 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
  * | (short) | (byte)| (byte)       | (short)   | (short)     | (n bytes)   | (int)    | (n bytes)|
  * +---------+----------------------+-----------+-------------+-------------+----------+----------+
+ *
+ * Flag format: 1 Byte
+ * +--------------+-------------+---------------+
+ * |  1 to 5 bits |    6th bit  | 7 and 8th bit |
+ * |  un-assigned | IsEncrypted |  BlobIdType   |
+ * +--------------+-------------+---------------+
+ *
  * </pre>
  */
 
@@ -88,6 +95,8 @@ public class BlobId extends StoreKey {
   private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
   private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
+  private static final int BLOBID_TYPE_MASK = 0x3;
+  private static final int IS_ENCRYPTED_MASK = 0x4;
 
   private final short version;
   private final BlobIdType type;
@@ -301,7 +310,7 @@ public class BlobId extends StoreKey {
   }
 
   /**
-   * @return {@code true} if the blob that this id presents is encrypted. {@code false} otherwise
+   * @return {@code true} if the blob that this id represents is encrypted. {@code false} otherwise
    */
   public boolean isEncrypted() {
     return isEncrypted;
@@ -323,8 +332,8 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
-        byte flag = (byte) (type.ordinal() & 0x3);
-        flag = isEncrypted ? (byte) (flag | 0x4) : flag;
+        byte flag = (byte) (type.ordinal() & BLOBID_TYPE_MASK);
+        flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
