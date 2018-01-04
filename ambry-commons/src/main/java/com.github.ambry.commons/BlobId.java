@@ -568,8 +568,8 @@ public class BlobId extends StoreKey {
           break;
         case BLOB_ID_V3:
           byte blobIdFlag = stream.readByte();
-          type = BlobIdType.values()[blobIdFlag & 0x3];
-          isEncrypted = (blobIdFlag & 0x4) != 0;
+          type = BlobIdType.values()[blobIdFlag & BLOBID_TYPE_MASK];
+          isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
           datacenterId = stream.readByte();
           accountId = stream.readShort();
           containerId = stream.readShort();

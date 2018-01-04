@@ -131,7 +131,7 @@ public class BlobIdTest {
           BlobId blobIdSerDed =
               new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
           assertEquals("The type should match the original's type", type, blobIdSerDed.getType());
-          assertEquals("The isEcnrypted should match the original", isEncrypted, blobIdSerDed.isEncrypted());
+          assertEquals("The isEncrypted should match the original", isEncrypted, blobIdSerDed.isEncrypted());
         }
       }
     }
@@ -438,14 +438,14 @@ public class BlobIdTest {
         assertEquals("Wrong account id in blobId: " + blobId, Account.UNKNOWN_ACCOUNT_ID, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, Container.UNKNOWN_CONTAINER_ID,
             blobId.getContainerId());
-        assertEquals("Wrong isEncrypted value in blobId: " + blobId, false, blobId.isEncrypted());
+        assertFalse("Wrong isEncrypted value in blobId: " + blobId, blobId.isEncrypted());
         break;
       case BLOB_ID_V2:
         assertEquals("Wrong type in blobId: " + blobId, BlobIdType.NATIVE, blobId.getType());
         assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
         assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
-        assertEquals("Wrong isEncrypted value id in blobId: " + blobId, false, blobId.isEncrypted());
+        assertFalse("Wrong isEncrypted value id in blobId: " + blobId, blobId.isEncrypted());
         break;
       case BLOB_ID_V3:
         assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
