@@ -95,7 +95,7 @@ public class BlobId extends StoreKey {
   private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
   private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
-  private static final int BLOBID_TYPE_MASK = 0x3;
+  private static final int BLOB_ID_TYPE_MASK = 0x3;
   private static final int IS_ENCRYPTED_MASK = 0x4;
 
   private final short version;
@@ -332,7 +332,7 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
-        byte flag = (byte) (type.ordinal() & BLOBID_TYPE_MASK);
+        byte flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         idBuf.put(flag);
         idBuf.put(datacenterId);
@@ -568,7 +568,7 @@ public class BlobId extends StoreKey {
           break;
         case BLOB_ID_V3:
           byte blobIdFlag = stream.readByte();
-          type = BlobIdType.values()[blobIdFlag & BLOBID_TYPE_MASK];
+          type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
           isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
           datacenterId = stream.readByte();
           accountId = stream.readShort();

@@ -122,10 +122,10 @@ public class BlobIdTest {
    */
   @Test
   public void testBlobIdFlag() throws Exception {
-    boolean[] isEncrytpedValues = {true, false};
+    boolean[] isEncryptedValues = {true, false};
     if (version >= BLOB_ID_V3) {
       for (BlobIdType type : BlobIdType.values()) {
-        for (boolean isEncrypted : isEncrytpedValues) {
+        for (boolean isEncrypted : isEncryptedValues) {
           BlobId blobId = new BlobId(BLOB_ID_V3, type, referenceDatacenterId, referenceAccountId, referenceContainerId,
               referencePartitionId, isEncrypted);
           BlobId blobIdSerDed =
