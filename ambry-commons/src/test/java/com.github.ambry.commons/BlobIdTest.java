@@ -210,13 +210,13 @@ public class BlobIdTest {
     BlobId inputs[];
     if (version >= BLOB_ID_V3) {
       inputs = new BlobId[]{new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId), new BlobId(version, BlobIdType.CRAFTED, referenceDatacenterId,
-          referenceAccountId, referenceContainerId, referencePartitionId)};
+          referenceContainerId, referencePartitionId, false), new BlobId(version, BlobIdType.CRAFTED,
+          referenceDatacenterId, referenceAccountId, referenceContainerId, referencePartitionId, false)};
       assertFalse("isCrafted() should be false for native id", BlobId.isCrafted(inputs[0].getID()));
       assertTrue("isCrafted() should be true for crafted id", BlobId.isCrafted(inputs[1].getID()));
     } else {
       inputs = new BlobId[]{new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId)};
+          referenceContainerId, referencePartitionId, false)};
       assertFalse("isCrafted() should be false for ids below BLOB_ID_V3", BlobId.isCrafted(inputs[0].getID()));
     }
     short newAccountId = (short) (referenceAccountId + 1 + TestUtils.RANDOM.nextInt(100));

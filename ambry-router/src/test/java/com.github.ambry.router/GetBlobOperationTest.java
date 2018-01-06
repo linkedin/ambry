@@ -243,7 +243,7 @@ public class GetBlobOperationTest {
 
     blobIdStr = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), mockClusterMap.getWritablePartitionIds().get(0)).getID();
+        Utils.getRandomShort(TestUtils.RANDOM), mockClusterMap.getWritablePartitionIds().get(0), false).getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,

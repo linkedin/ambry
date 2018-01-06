@@ -350,7 +350,7 @@ public class ServerWritePerformance {
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                props.getAccountId(), props.getContainerId(), partitionId);
+                props.getAccountId(), props.getContainerId(), partitionId, false);
             PutRequest putRequest =
                 new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
                     props.getBlobSize(), BlobType.DataBlob, null);

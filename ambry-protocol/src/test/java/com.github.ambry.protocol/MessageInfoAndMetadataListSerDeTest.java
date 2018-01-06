@@ -61,12 +61,12 @@ public class MessageInfoAndMetadataListSerDeTest {
     short[] containerIds = {10, 11, 12, 13};
     StoreKey[] keys =
         {new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
-            accountIds[0], containerIds[0], partitionId), new BlobId(
+            accountIds[0], containerIds[0], partitionId, false), new BlobId(
             TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[1],
-            containerIds[1], partitionId), new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()),
-            BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2], partitionId), new BlobId(
+            containerIds[1], partitionId, false), new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()),
+            BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2], partitionId, false), new BlobId(
             TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[3],
-            containerIds[3], partitionId)};
+            containerIds[3], partitionId, false)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
     long[] operationTimes = {SystemTime.getInstance().milliseconds(),
         SystemTime.getInstance().milliseconds() + 10,

@@ -117,22 +117,6 @@ public class BlobId extends StoreKey {
    * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
    * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
-   */
-  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      PartitionId partitionId) {
-    this(version, type, datacenterId, accountId, containerId, partitionId, false, UUID.randomUUID().toString());
-  }
-
-  /**
-   * Constructs a new BlobId by taking arguments for the required fields.
-   * Not all the fields in the constructor may be used in constructing it. The current active version determines what
-   * fields will be used.
-   * @param version the version in which this blob should be created.
-   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
-   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
-   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
-   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
-   * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,

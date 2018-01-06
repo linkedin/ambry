@@ -198,7 +198,7 @@ public class GetBlobInfoOperationTest {
   public void testInstantiation() throws Exception {
     String blobIdStr = (new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random), Utils.getRandomShort(random),
-        mockClusterMap.getWritablePartitionIds().get(0))).getID();
+        mockClusterMap.getWritablePartitionIds().get(0), false)).getID();
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
       // no op.
     };
