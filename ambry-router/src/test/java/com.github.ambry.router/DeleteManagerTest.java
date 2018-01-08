@@ -105,7 +105,7 @@ public class DeleteManagerTest {
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
     blobId =
         new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition);
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false);
     blobIdString = blobId.getID();
   }
 

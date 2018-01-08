@@ -325,7 +325,7 @@ public class ReplicationTest {
       // add an expired message to the remote host only
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId);
+              containerId, partitionId, false);
       Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
@@ -339,7 +339,7 @@ public class ReplicationTest {
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
       // add a corrupt message to the remote host only
       id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId);
+          containerId, partitionId, false);
       putMsgInfo = getPutMessage(id, accountId, containerId);
       byte[] data = putMsgInfo.getFirst().array();
       // flip every bit in the array
@@ -573,7 +573,7 @@ public class ReplicationTest {
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId);
+          containerId, partitionId, false);
       ids.add(id);
       Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
       for (Host host : hosts) {

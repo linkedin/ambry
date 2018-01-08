@@ -266,7 +266,7 @@ public class ServerHardDeleteTest {
     for (int i = 0; i < 9; i++) {
       blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           mockClusterMap.getLocalDatacenterId(), properties.get(i).getAccountId(), properties.get(i).getContainerId(),
-          chosenPartition));
+          chosenPartition, false));
     }
 
     BlockingChannel channel =

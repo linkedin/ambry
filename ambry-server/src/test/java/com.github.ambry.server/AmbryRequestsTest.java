@@ -436,7 +436,7 @@ public class AmbryRequestsTest {
       String clientId = UtilsTest.getRandomString(10);
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-          Utils.getRandomShort(TestUtils.RANDOM), id);
+          Utils.getRandomShort(TestUtils.RANDOM), id, false);
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:

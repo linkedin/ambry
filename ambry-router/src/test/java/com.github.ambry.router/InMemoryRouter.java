@@ -355,7 +355,7 @@ class InMemoryBlobPoster implements Runnable {
     try {
       String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
           postData.getBlobProperties().getAccountId(), postData.getBlobProperties().getContainerId(),
-          getPartitionForPut()).getID();
+          getPartitionForPut(), false).getID();
       if (blobs.containsKey(blobId)) {
         exception = new RouterException("Blob ID duplicate created.", RouterErrorCode.UnexpectedInternalError);
       }

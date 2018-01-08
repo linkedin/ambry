@@ -68,7 +68,7 @@ public class GetReplicasHandlerTest {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-          partitionId);
+          partitionId, false);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
       ReadableStreamChannel channel = getReplicasHandler.getReplicas(blobId.getID(), restResponseChannel);
       assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());

@@ -75,6 +75,13 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
  * | (short) | (byte)| (byte)       | (short)   | (short)     | (n bytes)   | (int)    | (n bytes)|
  * +---------+----------------------+-----------+-------------+-------------+----------+----------+
+ *
+ * Flag format: 1 Byte
+ * +--------------+-------------+---------------+
+ * |  1 to 5 bits |    6th bit  | 7 and 8th bit |
+ * |  un-assigned | IsEncrypted |  BlobIdType   |
+ * +--------------+-------------+---------------+
+ *
  * </pre>
  */
 
@@ -88,6 +95,9 @@ public class BlobId extends StoreKey {
   private static final short DATACENTER_ID_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
   private static final short ACCOUNT_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
+  private static final int BLOB_ID_TYPE_MASK = 0x3;
+  private static final int IS_ENCRYPTED_MASK = 0x4;
+
   private final short version;
   private final BlobIdType type;
   private final Byte datacenterId;
@@ -95,6 +105,7 @@ public class BlobId extends StoreKey {
   private final Short containerId;
   private final PartitionId partitionId;
   private final String uuid;
+  private final boolean isEncrypted;
 
   /**
    * Constructs a new BlobId by taking arguments for the required fields.
@@ -106,10 +117,11 @@ public class BlobId extends StoreKey {
    * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
    * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      PartitionId partitionId) {
-    this(version, type, datacenterId, accountId, containerId, partitionId, UUID.randomUUID().toString());
+      PartitionId partitionId, boolean isEncrypted) {
+    this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, UUID.randomUUID().toString());
   }
 
   /**
@@ -122,10 +134,11 @@ public class BlobId extends StoreKey {
    * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
    * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
    * @param uuid The uuid that is to be used to construct this id.
    */
   private BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      PartitionId partitionId, String uuid) {
+      PartitionId partitionId, boolean isEncrypted, String uuid) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -135,18 +148,21 @@ public class BlobId extends StoreKey {
         this.datacenterId = UNKNOWN_DATACENTER_ID;
         this.accountId = UNKNOWN_ACCOUNT_ID;
         this.containerId = UNKNOWN_CONTAINER_ID;
+        this.isEncrypted = false;
         break;
       case BLOB_ID_V2:
         this.type = BlobIdType.NATIVE;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
+        this.isEncrypted = false;
         break;
       case BLOB_ID_V3:
         this.type = type;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
         this.containerId = containerId;
+        this.isEncrypted = isEncrypted;
         break;
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
@@ -173,6 +189,7 @@ public class BlobId extends StoreKey {
     datacenterId = preamble.datacenterId;
     accountId = preamble.accountId;
     containerId = preamble.containerId;
+    isEncrypted = preamble.isEncrypted;
     partitionId = clusterMap.getPartitionIdFromStream(stream);
     if (partitionId == null) {
       throw new IllegalArgumentException("Partition ID cannot be null");
@@ -277,6 +294,13 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * @return {@code true} if the blob that this id represents is encrypted. {@code false} otherwise
+   */
+  public boolean isEncrypted() {
+    return isEncrypted;
+  }
+
+  /**
    * @return the uuid string associated with this BlobId
    */
   protected String getUuid() {
@@ -292,7 +316,9 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
-        idBuf.put((byte) (type.ordinal() & 0x3));
+        byte flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
+        idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
         idBuf.putShort(containerId);
@@ -443,7 +469,7 @@ public class BlobId extends StoreKey {
       throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
     }
     return new BlobId(targetVersion, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
-        inputId.partitionId, inputId.uuid);
+        inputId.partitionId, inputId.isEncrypted, inputId.uuid);
   }
 
   /**
@@ -498,6 +524,7 @@ public class BlobId extends StoreKey {
     final byte datacenterId;
     final short accountId;
     final short containerId;
+    final boolean isEncrypted;
 
     /**
      * Construct a BlobIdPreamble object by reading all the fields from a BlobId up to and not including the
@@ -513,6 +540,7 @@ public class BlobId extends StoreKey {
           datacenterId = UNKNOWN_DATACENTER_ID;
           accountId = UNKNOWN_ACCOUNT_ID;
           containerId = UNKNOWN_CONTAINER_ID;
+          isEncrypted = false;
           break;
         case BLOB_ID_V2:
           stream.readByte();
@@ -520,9 +548,12 @@ public class BlobId extends StoreKey {
           datacenterId = stream.readByte();
           accountId = stream.readShort();
           containerId = stream.readShort();
+          isEncrypted = false;
           break;
         case BLOB_ID_V3:
-          type = BlobIdType.values()[stream.readByte() & 0x3];
+          byte blobIdFlag = stream.readByte();
+          type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
+          isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
           datacenterId = stream.readByte();
           accountId = stream.readShort();
           containerId = stream.readShort();

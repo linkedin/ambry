@@ -281,7 +281,7 @@ public class FrontendIntegrationTest {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-          partitionId);
+          partitionId, false);
       FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
           blobId.getID() + "/" + RestUtils.SubResource.Replicas, Unpooled.buffer(0));
       Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
