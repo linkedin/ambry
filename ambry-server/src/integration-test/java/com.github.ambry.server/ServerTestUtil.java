@@ -320,7 +320,7 @@ public final class ServerTestUtil {
       // encryptionKey in this test doesn't have any relation to the content. Both are random bytes for test purposes.
       if (!testEncryption) {
         // Use router to get the blob
-        Properties routerProperties = getRouterProps(routerDatacenter, true);
+        Properties routerProperties = getRouterProps(routerDatacenter);
         routerProperties.putAll(routerProps);
         VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProperties);
         Router router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, new MockNotificationSystem(9),
@@ -1295,7 +1295,7 @@ public final class ServerTestUtil {
       if (!testEncryption) {
         // get blob data
         // Use router to get the blob
-        Properties routerProperties = getRouterProps(routerDatacenter, true);
+        Properties routerProperties = getRouterProps(routerDatacenter);
         routerProperties.putAll(routerProps);
         VerifiableProperties routerVerifiableProperties = new VerifiableProperties(routerProperties);
         Router router = new NonBlockingRouterFactory(routerVerifiableProperties, clusterMap, notificationSystem,
@@ -1693,15 +1693,15 @@ public final class ServerTestUtil {
   }
 
   /**
-   *
-   * @param routerDatacenter
-   * @return
+   * Generate and return {@link Properties} to instantiate {@link Router}
+   * @param routerDatacenter Router's datacentre
+   * @return the {@link Properties} thus constructed
    */
-  private static Properties getRouterProps(String routerDatacenter, boolean enableCrossDC) {
+  private static Properties getRouterProps(String routerDatacenter) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
-    properties.setProperty("router.get.cross.dc.enabled", Boolean.toString(enableCrossDC));
+    properties.setProperty("router.get.cross.dc.enabled", "true");
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", routerDatacenter);
     properties.setProperty("clustermap.host.name", "localhost");

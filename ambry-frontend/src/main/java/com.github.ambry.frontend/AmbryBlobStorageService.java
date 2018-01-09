@@ -190,7 +190,6 @@ class AmbryBlobStorageService implements BlobStorageService {
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
-        boolean isSsl = restRequest.getSSLSession() != null;
         if (subresource != null) {
           logger.trace("Sub-resource requested: {}", subresource);
           if (subresource == SubResource.Replicas) {
@@ -199,10 +198,15 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
         boolean isEncrypted = new BlobId(operationOrBlobId, clusterMap).isEncrypted();
         restRequest.getMetricsTracker()
-            .injectMetrics(getRestRequestMetricsForGet(frontendMetrics, subresource, isSsl, isEncrypted));
+            .injectMetrics(
+                getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null,
+                    isEncrypted));
         securityService.processRequest(restRequest, securityCallback);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
+    } catch (IllegalArgumentException | IOException iaOrioException) {
+      submitResponse(restRequest, restResponseChannel, null,
+          new RestServiceException("Invalid BlobId passed", RestServiceErrorCode.BadRequest));
     } catch (Exception e) {
       submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
     } finally {
@@ -293,7 +297,12 @@ class AmbryBlobStorageService implements BlobStorageService {
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
     try {
-      boolean isEncrypted = new BlobId(restRequest.getUri(), clusterMap).isEncrypted();
+      String blobId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+          frontendConfig.frontendPathPrefixesToRemove);
+      if (blobId.startsWith("/")) {
+        blobId = blobId.substring(1);
+      }
+      boolean isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
       RestRequestMetrics requestMetrics =
           frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
               isEncrypted);
@@ -301,7 +310,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       checkAvailable();
       // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
-
       securityService.preProcessRequest(restRequest).get();
       HeadCallback routerCallback = new HeadCallback(restRequest, restResponseChannel);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;

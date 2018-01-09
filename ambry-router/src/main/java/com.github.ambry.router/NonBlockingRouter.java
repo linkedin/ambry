@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -147,28 +148,21 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
-    RouterException routerException = null;
     try {
       boolean isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
+      Meter blobInfoOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
+      Meter blobOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
+      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
+          : routerMetrics.getBlobWithRangeOperationRate;
       if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-        if (isEncrypted) {
-          routerMetrics.getEncryptedBlobInfoOperationRate.mark();
-        } else {
-          routerMetrics.getBlobInfoOperationRate.mark();
-        }
+        blobInfoOperationRate.mark();
       } else {
-        if (isEncrypted) {
-          routerMetrics.getEncryptedBlobOperationRate.mark();
-        } else {
-          routerMetrics.getBlobOperationRate.mark();
-        }
+        blobOperationRate.mark();
       }
       if (options.getRange() != null) {
-        if (isEncrypted) {
-          routerMetrics.getEncryptedBlobWithRangeOperationRate.mark();
-        } else {
-          routerMetrics.getBlobWithRangeOperationRate.mark();
-        }
+        blobWithRangeOperationRate.mark();
       }
       routerMetrics.operationQueuingRate.mark();
       if (isOpen.get()) {
@@ -183,12 +177,12 @@ class NonBlockingRouter implements Router {
           }
         });
       } else {
-        routerException =
+        RouterException routerException =
             new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
         completeOperation(routerException, internalOptions, futureResult, callback);
       }
     } catch (IOException e) {
-      routerException =
+      RouterException routerException =
           new RouterException("Exception thrown during construction of BlobId ", e, RouterErrorCode.InvalidBlobId);
       completeOperation(routerException, internalOptions, futureResult, callback);
     }

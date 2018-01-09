@@ -519,7 +519,7 @@ public class NonBlockingRouterMetrics {
     onError(e);
     Counter blobErrorCount = encrypted ? getEncryptedBlobErrorCount : getBlobErrorCount;
     Counter blobWithRangeErrorCount = encrypted ? getEncryptedBlobWithRangeErrorCount : getBlobWithRangeErrorCount;
-    Meter operationErrorRateMeter = encrypted ? operationErrorRate : encryptedBlobOperationErrorRate;
+    Meter operationErrorRateMeter = encrypted ? encryptedBlobOperationErrorRate : operationErrorRate;
     if (RouterUtils.isSystemHealthError(e)) {
       blobErrorCount.inc();
       if (options != null && options.getBlobOptions.getRange() != null) {
