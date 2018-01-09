@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -144,47 +145,52 @@ class NonBlockingRouter implements Router {
       throw new IllegalArgumentException("blobId or options must not be null");
     }
     currentOperationsCount.incrementAndGet();
-    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-      routerMetrics.getBlobInfoOperationRate.mark();
-    } else {
-      routerMetrics.getBlobOperationRate.mark();
-    }
-    if (options.getRange() != null) {
-      routerMetrics.getBlobWithRangeOperationRate.mark();
-    }
-    routerMetrics.operationQueuingRate.mark();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
-    if (isOpen.get()) {
-      getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
-        @Override
-        public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
-          GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
-          // best effort to update encryption metrics
-          if (getBlobResult != null && getBlobResult.getBlobInfo() != null && getBlobResult.getBlobInfo()
-              .getBlobProperties()
-              .isEncrypted()) {
-            if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-              routerMetrics.getEncryptedBlobInfoOperationRate.mark();
-            } else {
-              routerMetrics.getEncryptedBlobOperationRate.mark();
-            }
-            if (options.getRange() != null) {
-              routerMetrics.getEncryptedBlobWithRangeOperationRate.mark();
-            }
-          }
-          futureResult.done(getBlobResult, exception);
-          if (callback != null) {
-            callback.onCompletion(getBlobResult, exception);
-          }
+    RouterException routerException = null;
+    try {
+      boolean isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
+      if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+        if (isEncrypted) {
+          routerMetrics.getEncryptedBlobInfoOperationRate.mark();
+        } else {
+          routerMetrics.getBlobInfoOperationRate.mark();
         }
-      });
-    } else {
-      RouterException routerException =
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-      routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onGetBlobError(routerException, internalOptions, false);
-      completeOperation(futureResult, callback, null, routerException);
+      } else {
+        if (isEncrypted) {
+          routerMetrics.getEncryptedBlobOperationRate.mark();
+        } else {
+          routerMetrics.getBlobOperationRate.mark();
+        }
+      }
+      if (options.getRange() != null) {
+        if (isEncrypted) {
+          routerMetrics.getEncryptedBlobWithRangeOperationRate.mark();
+        } else {
+          routerMetrics.getBlobWithRangeOperationRate.mark();
+        }
+      }
+      routerMetrics.operationQueuingRate.mark();
+      if (isOpen.get()) {
+        getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
+          @Override
+          public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
+            GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+            futureResult.done(getBlobResult, exception);
+            if (callback != null) {
+              callback.onCompletion(getBlobResult, exception);
+            }
+          }
+        });
+      } else {
+        routerException =
+            new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+        completeOperation(routerException, internalOptions, futureResult, callback);
+      }
+    } catch (IOException e) {
+      routerException =
+          new RouterException("Exception thrown during construction of BlobId ", e, RouterErrorCode.InvalidBlobId);
+      completeOperation(routerException, internalOptions, futureResult, callback);
     }
     return futureResult;
   }
@@ -222,9 +228,10 @@ class NonBlockingRouter implements Router {
       userMetadata = new byte[0];
     }
     currentOperationsCount.incrementAndGet();
-    routerMetrics.putBlobOperationRate.mark();
     if (blobProperties.isEncrypted()) {
       routerMetrics.putEncryptedBlobOperationRate.mark();
+    } else {
+      routerMetrics.putBlobOperationRate.mark();
     }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<String>();
@@ -329,6 +336,21 @@ class NonBlockingRouter implements Router {
         new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.Include_All, null),
             true, routerMetrics.ageAtDelete);
     backgroundDeleter.getBlob(blobId, options, callback);
+  }
+
+  /**
+   * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with the given
+   * {@code {@link RouterException}}
+   * @param routerException {@link RouterException} to be set in the callback and future result
+   * @param internalOptions instance of {@link GetBlobOptionsInternal} to use
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   */
+  private void completeOperation(RouterException routerException, GetBlobOptionsInternal internalOptions,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback) {
+    routerMetrics.operationDequeuingRate.mark();
+    routerMetrics.onGetBlobError(routerException, internalOptions, false);
+    completeOperation(futureResult, callback, null, routerException);
   }
 
   /**

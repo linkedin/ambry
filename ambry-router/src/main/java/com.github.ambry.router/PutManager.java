@@ -262,9 +262,10 @@ class PutManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     long operationLatencyMs = time.milliseconds() - op.getSubmissionTimeMs();
-    routerMetrics.putBlobOperationLatencyMs.update(operationLatencyMs);
     if (op.isEncryptionEnabled()) {
       routerMetrics.putEncryptedBlobOperationLatencyMs.update(operationLatencyMs);
+    } else {
+      routerMetrics.putBlobOperationLatencyMs.update(operationLatencyMs);
     }
     NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }

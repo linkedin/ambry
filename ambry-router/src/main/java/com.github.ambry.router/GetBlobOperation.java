@@ -188,9 +188,10 @@ class GetBlobOperation extends GetOperation {
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
           long timeElapsed = time.milliseconds() - submissionTimeMs;
-          routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
-          if (blobInfo != null && blobInfo.getBlobProperties().isEncrypted()) {
+          if (blobId.isEncrypted()) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
+          } else {
+            routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
           }
           if (e == null) {
             blobDataChannel = new BlobDataReadableStreamChannel();
@@ -198,7 +199,7 @@ class GetBlobOperation extends GetOperation {
           } else {
             blobDataChannel = null;
             operationResult = null;
-            routerMetrics.onGetBlobError(e, options, blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
+            routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
           }
         }
         NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
@@ -402,12 +403,13 @@ class GetBlobOperation extends GetOperation {
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
-          routerMetrics.onGetBlobError(e, options, blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
+          routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
-        routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
-        if (blobInfo != null && blobInfo.getBlobProperties().isEncrypted()) {
+        if (blobId.isEncrypted()) {
           routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
+        } else {
+          routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
         }
       }
       operationCompleted = true;

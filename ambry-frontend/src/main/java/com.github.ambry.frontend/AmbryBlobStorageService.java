@@ -17,6 +17,7 @@ import com.codahale.metrics.Histogram;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -196,8 +197,9 @@ class AmbryBlobStorageService implements BlobStorageService {
             securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
           }
         }
+        boolean isEncrypted = new BlobId(operationOrBlobId, clusterMap).isEncrypted();
         restRequest.getMetricsTracker()
-            .injectMetrics(getRestRequestMetricsForGet(frontendMetrics, subresource, isSsl, false));
+            .injectMetrics(getRestRequestMetricsForGet(frontendMetrics, subresource, isSsl, isEncrypted));
         securityService.processRequest(restRequest, securityCallback);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
@@ -290,13 +292,16 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    RestRequestMetrics requestMetrics =
-        frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null, false);
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
+      boolean isEncrypted = new BlobId(restRequest.getUri(), clusterMap).isEncrypted();
+      RestRequestMetrics requestMetrics =
+          frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
+              isEncrypted);
+      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       checkAvailable();
       // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
+
       securityService.preProcessRequest(restRequest).get();
       HeadCallback routerCallback = new HeadCallback(restRequest, restResponseChannel);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
@@ -808,13 +813,6 @@ class AmbryBlobStorageService implements BlobStorageService {
           accountAndContainerInjector.ensureAccountAndContainerInjected(restRequest,
               routerResult.getBlobInfo().getBlobProperties());
           securityCallbackTracker.markOperationStart();
-          // inject encryption metrics if applicable
-          if (routerResult.getBlobInfo().getBlobProperties().isEncrypted()) {
-            restRequest.getMetricsTracker()
-                .injectMetrics(
-                    getRestRequestMetricsForGet(frontendMetrics, subResource, restRequest.getSSLSession() != null,
-                        true));
-          }
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {
                 securityCallbackTracker.markOperationEnd();

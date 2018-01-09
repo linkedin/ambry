@@ -252,11 +252,7 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      // best effort to update encryption metrics
-      routerMetrics.onGetBlobError(abortCause, op.getOptions(),
-          op.getOperationResult() != null && op.getOperationResult().getBlobResult != null
-              && op.getOperationResult().getBlobResult.getBlobInfo() != null
-              && op.getOperationResult().getBlobResult.getBlobInfo().getBlobProperties().isEncrypted());
+      routerMetrics.onGetBlobError(abortCause, op.getOptions(), op.blobId != null && op.blobId.isEncrypted());
     }
   }
 }

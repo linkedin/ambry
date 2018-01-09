@@ -467,13 +467,12 @@ public class NonBlockingRouterMetrics {
   void onPutBlobError(Exception e, boolean encryptionEnabled) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
-      putBlobErrorCount.inc();
       if (encryptionEnabled) {
         putEncryptedBlobErrorCount.inc();
-      }
-      operationErrorRate.mark();
-      if (encryptionEnabled) {
         encryptedBlobOperationErrorRate.mark();
+      } else {
+        putBlobErrorCount.inc();
+        operationErrorRate.mark();
       }
     }
   }
@@ -500,13 +499,12 @@ public class NonBlockingRouterMetrics {
   private void onGetBlobInfoError(Exception e, boolean encrypted) {
     onError(e);
     if (RouterUtils.isSystemHealthError(e)) {
-      getBlobInfoErrorCount.inc();
       if (encrypted) {
         getEncryptedBlobInfoErrorCount.inc();
-      }
-      operationErrorRate.mark();
-      if (encrypted) {
         encryptedBlobOperationErrorRate.mark();
+      } else {
+        getBlobInfoErrorCount.inc();
+        operationErrorRate.mark();
       }
     }
   }
@@ -519,21 +517,15 @@ public class NonBlockingRouterMetrics {
    */
   private void onGetBlobDataError(Exception e, GetBlobOptionsInternal options, boolean encrypted) {
     onError(e);
+    Counter blobErrorCount = encrypted ? getEncryptedBlobErrorCount : getBlobErrorCount;
+    Counter blobWithRangeErrorCount = encrypted ? getEncryptedBlobWithRangeErrorCount : getBlobWithRangeErrorCount;
+    Meter operationErrorRateMeter = encrypted ? operationErrorRate : encryptedBlobOperationErrorRate;
     if (RouterUtils.isSystemHealthError(e)) {
-      getBlobErrorCount.inc();
-      if (encrypted) {
-        getEncryptedBlobErrorCount.inc();
-      }
+      blobErrorCount.inc();
       if (options != null && options.getBlobOptions.getRange() != null) {
-        getBlobWithRangeErrorCount.inc();
-        if (encrypted) {
-          getEncryptedBlobWithRangeErrorCount.inc();
-        }
+        blobWithRangeErrorCount.inc();
       }
-      operationErrorRate.mark();
-      if (encrypted) {
-        encryptedBlobOperationErrorRate.mark();
-      }
+      operationErrorRateMeter.mark();
     }
   }
 

@@ -403,21 +403,14 @@ class GetBlobInfoOperation extends GetOperation {
       }
       if (e != null) {
         // best effort to update metrics if result is available
-        boolean encrypted = operationResult != null && operationResult.getBlobResult != null
-            && operationResult.getBlobResult.getBlobInfo() != null && operationResult.getBlobResult.getBlobInfo()
-            .getBlobProperties()
-            .isEncrypted();
         operationResult = null;
-        routerMetrics.onGetBlobError(e, options, encrypted);
+        routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
       }
       long operationLatencyMs = time.milliseconds() - submissionTimeMs;
-      routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
-      // best effort to update encryption metrics
-      if (operationResult != null && operationResult.getBlobResult != null
-          && operationResult.getBlobResult.getBlobInfo() != null && operationResult.getBlobResult.getBlobInfo()
-          .getBlobProperties()
-          .isEncrypted()) {
+      if (blobId.isEncrypted()) {
         routerMetrics.getEncryptedBlobInfoOperationLatencyMs.update(operationLatencyMs);
+      } else {
+        routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
       }
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
