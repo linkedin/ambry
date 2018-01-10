@@ -245,7 +245,7 @@ public class BlobId extends StoreKey {
   /**
    * @return the version of this BlobId.
    */
-  protected short getVersion() {
+  public short getVersion() {
     return version;
   }
 
