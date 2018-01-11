@@ -75,7 +75,7 @@ public class Container {
    * This variable should be declared/initialized before the default containers are constructed. Otherwise, this
    * field will not be initialized when those constructors are called and it will fail.
    */
-  private static short currentJsonVersion = JSON_VERSION_1;
+  private static short currentJsonVersion = JSON_VERSION_2;
 
   /**
    * The id of {@link #UNKNOWN_CONTAINER}.
