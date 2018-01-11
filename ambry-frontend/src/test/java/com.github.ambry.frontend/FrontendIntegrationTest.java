@@ -33,6 +33,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
+import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestServiceException;
@@ -242,8 +243,8 @@ public class FrontendIntegrationTest {
         null, refAccount.getName(), refContainer.getName());
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, ByteBuffer.allocate(0));
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertFalse("Channel should not be active", HttpUtil.isKeepAlive(response));
@@ -259,11 +260,11 @@ public class FrontendIntegrationTest {
   public void healthCheckRequestTest() throws ExecutionException, InterruptedException, IOException {
     FullHttpRequest httpRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     final String expectedResponseBody = "GOOD";
-    ByteBuffer content = getContent(responseParts, expectedResponseBody.length());
+    ByteBuffer content = getContent(responseParts.queue, expectedResponseBody.length());
     assertEquals("GET content does not match original content", expectedResponseBody, new String(content.array()));
   }
 
@@ -284,10 +285,10 @@ public class FrontendIntegrationTest {
           partitionId, false);
       FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
           blobId.getID() + "/" + RestUtils.SubResource.Replicas, Unpooled.buffer(0));
-      Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-      HttpResponse response = (HttpResponse) responseParts.poll();
+      ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+      HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
-      ByteBuffer content = getContent(responseParts, HttpUtil.getContentLength(response));
+      ByteBuffer content = getContent(responseParts.queue, HttpUtil.getContentLength(response));
       JSONObject responseJson = new JSONObject(new String(content.array()));
       String returnedReplicasStr = responseJson.getString(GetReplicasHandler.REPLICAS_KEY).replace("\"", "");
       assertEquals("Replica IDs returned for the BlobId do no match with the replicas IDs of partition",
@@ -319,13 +320,13 @@ public class FrontendIntegrationTest {
     // POST
     // Get signed URL
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, headers, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedPostUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed POST URL", signedPostUrl);
-    discardContent(responseParts, 1);
+    discardContent(responseParts.queue, 1);
 
     // Use signed URL to POST
     URI uri = new URI(signedPostUrl);
@@ -347,12 +348,12 @@ public class FrontendIntegrationTest {
     getHeaders.add(RestUtils.Headers.BLOB_ID, blobId);
     httpRequest = buildRequest(HttpMethod.GET, Operations.GET_SIGNED_URL, getHeaders, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    response = (HttpResponse) responseParts.poll();
+    response = getHttpResponse(responseParts);
     assertNotNull("There should be a response from the server", response);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     String signedGetUrl = response.headers().get(RestUtils.Headers.SIGNED_URL);
     assertNotNull("Did not get a signed GET URL", signedGetUrl);
-    discardContent(responseParts, 1);
+    discardContent(responseParts.queue, 1);
 
     // Use URL to GET blob
     uri = new URI(signedGetUrl);
@@ -368,8 +369,8 @@ public class FrontendIntegrationTest {
   @Test
   public void optionsTest() throws Exception {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.OPTIONS, "", null, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
@@ -604,7 +605,7 @@ public class FrontendIntegrationTest {
   private String postBlobAndVerify(HttpHeaders headers, ByteBuffer content)
       throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, "/", headers, content);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     return verifyPostAndReturnBlobId(responseParts);
   }
 
@@ -613,8 +614,8 @@ public class FrontendIntegrationTest {
    * @param responseParts the response received from the server.
    * @returnn the blob ID of the blob.
    */
-  private String verifyPostAndReturnBlobId(Queue<HttpObject> responseParts) {
-    HttpResponse response = (HttpResponse) responseParts.poll();
+  private String verifyPostAndReturnBlobId(ResponseParts responseParts) {
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.CREATED, response.status());
     assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
@@ -622,7 +623,7 @@ public class FrontendIntegrationTest {
     assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
     String blobId = response.headers().get(HttpHeaderNames.LOCATION, null);
     assertNotNull("Blob ID from POST should not be null", blobId);
-    discardContent(responseParts, 1);
+    discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
     return blobId;
   }
@@ -649,7 +650,7 @@ public class FrontendIntegrationTest {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, range, expectedHeaders, isPrivate, expectedContent);
   }
 
@@ -662,9 +663,9 @@ public class FrontendIntegrationTest {
    * @param expectedContent the expected content of the blob.
    * @throws RestServiceException
    */
-  private void verifyGetBlobResponse(Queue<HttpObject> responseParts, ByteRange range, HttpHeaders expectedHeaders,
+  private void verifyGetBlobResponse(ResponseParts responseParts, ByteRange range, HttpHeaders expectedHeaders,
       boolean isPrivate, ByteBuffer expectedContent) throws RestServiceException {
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status",
         range == null ? HttpResponseStatus.OK : HttpResponseStatus.PARTIAL_CONTENT, response.status());
     checkCommonGetHeadHeaders(response.headers());
@@ -689,7 +690,7 @@ public class FrontendIntegrationTest {
       assertEquals("Content-length not as expected", expectedContentArray.length, HttpUtil.getContentLength(response));
     }
     verifyCacheHeaders(isPrivate, response);
-    byte[] responseContentArray = getContent(responseParts, expectedContentArray.length).array();
+    byte[] responseContentArray = getContent(responseParts.queue, expectedContentArray.length).array();
     assertArrayEquals("GET content does not match original content", expectedContentArray, responseContentArray);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
@@ -708,8 +709,8 @@ public class FrontendIntegrationTest {
     }
     headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.NOT_MODIFIED, response.status());
     assertNotNull("Date header should be set", response.headers().get(RestUtils.Headers.DATE));
     assertNotNull("Last-Modified header should be set", response.headers().get("Last-Modified"));
@@ -720,7 +721,7 @@ public class FrontendIntegrationTest {
         response.headers().get(RestUtils.Headers.BLOB_SIZE));
     assertNull("Content-Type should have been null", response.headers().get(RestUtils.Headers.CONTENT_TYPE));
     verifyCacheHeaders(isPrivate, response);
-    assertNoContent(responseParts);
+    assertNoContent(responseParts.queue);
   }
 
   /**
@@ -740,11 +741,11 @@ public class FrontendIntegrationTest {
     }
     FullHttpRequest httpRequest =
         buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     checkCommonGetHeadHeaders(response.headers());
-    verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts);
+    verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
 
@@ -768,13 +769,13 @@ public class FrontendIntegrationTest {
     }
     FullHttpRequest httpRequest =
         buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
     checkCommonGetHeadHeaders(response.headers());
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
-    verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts);
+    verifyUserMetadata(expectedHeaders, response, usermetadata, responseParts.queue);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
 
@@ -801,8 +802,8 @@ public class FrontendIntegrationTest {
       headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
     }
     FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status",
         range == null ? HttpResponseStatus.OK : HttpResponseStatus.PARTIAL_CONTENT, response.status());
     checkCommonGetHeadHeaders(response.headers());
@@ -823,7 +824,7 @@ public class FrontendIntegrationTest {
         response.headers().get(HttpHeaderNames.CONTENT_TYPE));
     verifyBlobProperties(expectedHeaders, isPrivate, response);
     verifyAccountAndContainerHeaders(accountName, containerName, response);
-    discardContent(responseParts, 1);
+    discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
 
@@ -964,11 +965,11 @@ public class FrontendIntegrationTest {
    */
   private void verifyDeleted(FullHttpRequest httpRequest, HttpResponseStatus expectedStatusCode)
       throws ExecutionException, InterruptedException {
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
-    HttpResponse response = (HttpResponse) responseParts.poll();
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
     assertEquals("Unexpected response status", expectedStatusCode, response.status());
     assertTrue("No Date header", response.headers().get(HttpHeaderNames.DATE, null) != null);
-    discardContent(responseParts, 1);
+    discardContent(responseParts.queue, 1);
     assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
   }
 
@@ -1015,7 +1016,7 @@ public class FrontendIntegrationTest {
       throws Exception {
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, usermetadata);
-    Queue<HttpObject> responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
+    ResponseParts responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
     return verifyPostAndReturnBlobId(responseParts);
   }
 
@@ -1042,5 +1043,19 @@ public class FrontendIntegrationTest {
     fileUpload.setContent(Unpooled.wrappedBuffer(usermetadata));
     encoder.addBodyHttpData(fileUpload);
     return encoder;
+  }
+
+  /**
+   * @param responseParts a {@link ResponseParts}.
+   * @return the first response part, which should be a {@link HttpResponse}.
+   * @throws IllegalStateException if the response part queue is empty.
+   */
+  private HttpResponse getHttpResponse(ResponseParts responseParts) {
+    HttpResponse httpResponse = (HttpResponse) responseParts.queue.poll();
+    if (httpResponse == null) {
+      throw new IllegalStateException(
+          "Should have received response. completion context: " + responseParts.completionContext);
+    }
+    return httpResponse;
   }
 }
