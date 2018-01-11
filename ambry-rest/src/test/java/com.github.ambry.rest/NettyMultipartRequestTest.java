@@ -392,7 +392,9 @@ public class NettyMultipartRequestTest {
         }
         currentSizeAdded += readableBytes;
       }
-      assertEquals("Success state not as expected", maxSizeAllowed < encodedSize, failedToAdd);
+      assertEquals(
+          "Success state not as expected. maxSizeAllowed=[" + maxSizeAllowed + "], encodedSize expected=[" + encodedSize
+              + "], actual size added=[" + currentSizeAdded + "]", maxSizeAllowed < encodedSize, failedToAdd);
     }
   }
 
