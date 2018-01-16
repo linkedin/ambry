@@ -229,10 +229,8 @@ public class Utils {
   public static Thread newThread(String name, Runnable runnable, boolean daemon) {
     Thread thread = new Thread(runnable, name);
     thread.setDaemon(daemon);
-    thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-      public void uncaughtException(Thread t, Throwable e) {
-        e.printStackTrace();
-      }
+    thread.setUncaughtExceptionHandler((t, e) -> {
+      logger.error("Encountered throwable in {}", t, e);
     });
     return thread;
   }
