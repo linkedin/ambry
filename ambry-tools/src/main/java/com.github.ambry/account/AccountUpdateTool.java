@@ -109,7 +109,7 @@ public class AccountUpdateTool {
    * The different operations supported by AccountUpdateTool.
    */
   private enum Operation {
-    UpdateEntireJson, UpdateEncryptionFlag
+    UpdateEntireJson, UpdateEncryptionFlag, UpdateCacheability
   }
 
   /**
@@ -130,11 +130,11 @@ public class AccountUpdateTool {
             .describedAs("typeOfOperation")
             .ofType(String.class);
 
-    ArgumentAcceptingOptionSpec<String> enableEncryptionForOpt = parser.accepts("updateEncryptionFor",
-        "Update Account and container encrypted flag "
-            + "Format \"accountName1:containerName1:[true/false],accountName2:containerName2:[true/false]\"")
+    ArgumentAcceptingOptionSpec<String> propertyKeyValueInfoOpt = parser.accepts("propertyKeyValueInfo",
+        "Update Account and container property key value "
+            + "Format \"accountName1:containerName1:[value],accountName2:containerName2:[value]\"")
         .withOptionalArg()
-        .describedAs("updateEncryptionFor")
+        .describedAs("propertyKeyValueInfo")
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> accountJsonFilePathOpt = parser.accepts("accountJsonPath",
@@ -191,7 +191,7 @@ public class AccountUpdateTool {
     }
     Operation typeOfOperation = Operation.valueOf(options.valueOf(typeOfOperationOpt));
     String accountJsonFilePath = options.valueOf(accountJsonFilePathOpt);
-    String enableEncryptionFor = options.valueOf(enableEncryptionForOpt);
+    String propertyKeyValueInfo = options.valueOf(propertyKeyValueInfoOpt);
     String storePath = options.valueOf(storePathOpt);
     String zkServer = options.valueOf(zkServerOpt);
     Integer zkConnectionTimeoutMs = options.valueOf(zkConnectionTimeoutMsOpt);
@@ -207,7 +207,11 @@ public class AccountUpdateTool {
               containerJsonVersion);
           break;
         case UpdateEncryptionFlag:
-          updateAccountForEncryption(enableEncryptionFor, zkServer, storePath, zkConnectionTimeoutMs,
+          updateAccountForEncryption(propertyKeyValueInfo, zkServer, storePath, zkConnectionTimeoutMs,
+              zkSessionTimeoutMs, containerJsonVersion);
+          break;
+        case UpdateCacheability:
+          updateAccountForCacheability(propertyKeyValueInfo, zkServer, storePath, zkConnectionTimeoutMs,
               zkSessionTimeoutMs, containerJsonVersion);
           break;
       }
@@ -241,11 +245,53 @@ public class AccountUpdateTool {
       if (account != null && account.getContainerByName(accountAndContainerName[1]) != null) {
         Container container = account.getContainerByName(accountAndContainerName[1]);
         System.out.println(account.getName() + ":" + container.getName() + " to be updated for encryption");
-        System.out.println("Old account           : " + accountService.getAccountByName(account.getName()).toJson());
+        System.out.println("Old account value : " + accountService.getAccountByName(account.getName()).toString());
         Container updatedContainer =
             new ContainerBuilder(container).setEncrypted(Boolean.valueOf(accountAndContainerName[2])).build();
         Account updatedAccount = new AccountBuilder(account).addOrUpdateContainer(updatedContainer).build();
-        System.out.println("To be updated account : " + updatedAccount.toJson());
+        System.out.println("To be updated account value : " + updatedAccount.toString());
+        List<Account> accountsToUpdate = new ArrayList<>();
+        accountsToUpdate.add(updatedAccount);
+        if (accountService.updateAccounts(accountsToUpdate)) {
+          System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
+              System.currentTimeMillis() - startTime) + " ms");
+        } else {
+          throw new Exception("Updating accounts failed with unknown reason.");
+        }
+      }
+    }
+    accountService.close();
+  }
+
+  /**
+   * Performs the updating accounts operation.
+   * @param setCacheabilityFor String representation of list of triplets of {accountName:ContainerName:EncryptFlagValue}
+   *                            for which encryption needs to be update
+   * @param zkServer The {@code ZooKeeper} server address to connect.
+   * @param storePath The root path on the {@code ZooKeeper} for account data.
+   * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param containerJsonVersion The {@link Container} JSON version to write in.
+   * @throws Exception
+   */
+  private static void updateAccountForCacheability(String setCacheabilityFor, String zkServer, String storePath,
+      int zkConnectionTimeoutMs, int zkSessionTimeoutMs, short containerJsonVersion) throws Exception {
+    Container.setCurrentJsonVersion(containerJsonVersion);
+    long startTime = System.currentTimeMillis();
+    AccountService accountService =
+        getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
+    String[] accountContainerPairs = setCacheabilityFor.split(",");
+    for (String accountContainerPair : accountContainerPairs) {
+      String[] accountAndContainerName = accountContainerPair.split(":");
+      Account account = accountService.getAccountByName(accountAndContainerName[0]);
+      if (account != null && account.getContainerByName(accountAndContainerName[1]) != null) {
+        Container container = account.getContainerByName(accountAndContainerName[1]);
+        System.out.println(account.getName() + ":" + container.getName() + " to be updated for encryption");
+        System.out.println("Old account value : " + accountService.getAccountByName(account.getName()).toString());
+        Container updatedContainer =
+            new ContainerBuilder(container).setCacheable(Boolean.valueOf(accountAndContainerName[2])).build();
+        Account updatedAccount = new AccountBuilder(account).addOrUpdateContainer(updatedContainer).build();
+        System.out.println("To be updated account value : " + updatedAccount.toString());
         List<Account> accountsToUpdate = new ArrayList<>();
         accountsToUpdate.add(updatedAccount);
         if (accountService.updateAccounts(accountsToUpdate)) {
