@@ -456,7 +456,9 @@ class GetBlobOperation extends GetOperation {
     // the state of the chunk.
     protected volatile ChunkState state;
     // metrics tracker to track decrypt jobs
-    protected volatile CryptoJobMetricsTracker decryptJobMetricsTracker;
+    protected CryptoJobMetricsTracker decryptJobMetricsTracker =
+        new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
+    ;
 
     /**
      * Construct a GetChunk
@@ -507,7 +509,7 @@ class GetBlobOperation extends GetOperation {
       successfullyDeserialized = false;
       progressTracker = null;
       decryptCallbackResultInfo = null;
-      decryptJobMetricsTracker = null;
+      decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
       correlationIdToGetRequestInfo.clear();
       state = ChunkState.Free;
     }
@@ -560,7 +562,7 @@ class GetBlobOperation extends GetOperation {
     protected void maybeProcessCallbacks() {
       if (progressTracker.isDecryptionRequired() && decryptCallbackResultInfo.decryptJobComplete) {
         logger.trace("Processing decrypt callback stored result for data chunk {}", chunkBlobId);
-        decryptJobMetricsTracker.startResponseProcessing();
+        decryptJobMetricsTracker.onJobResultProcessingStart();
         if (decryptCallbackResultInfo.exception == null) {
           chunkIndexToBuffer.put(chunkIndex,
               filterChunkToRange(decryptCallbackResultInfo.result.getDecryptedBlobContent()));
@@ -576,7 +578,7 @@ class GetBlobOperation extends GetOperation {
                   decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
           progressTracker.setDecryptionFailed();
         }
-        decryptJobMetricsTracker.completeResponseProcessing();
+        decryptJobMetricsTracker.onJobResultProcessingComplete();
         logger.trace("Marking blob content available to process for data chunk {}", chunkBlobId);
       }
     }
@@ -668,17 +670,18 @@ class GetBlobOperation extends GetOperation {
         } else {
           decryptCallbackResultInfo = new DecryptCallBackResultInfo();
           progressTracker.initializeDecryptionTracker();
-          decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
-          decryptJobMetricsTracker.startTracker();
+          decryptJobMetricsTracker.onJobSubmission();
           logger.trace("Submitting decrypt job for data chunk {}", chunkBlobId);
           long startTimeMs = System.currentTimeMillis();
           cryptoJobHandler.submitJob(
               new DecryptJob(chunkBlobId, encryptionKey, blobData.getStream().getByteBuffer(), null, cryptoService, kms,
                   decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
                 routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                decryptJobMetricsTracker.onJobCallbackProcessingStart();
                 logger.trace("Handling decrypt job callback for data chunk {}", chunkBlobId);
                 decryptCallbackResultInfo.setResultAndException(result, exception);
                 routerCallback.onPollReady();
+                decryptJobMetricsTracker.onJobCallbackProcessingComplete();
               }));
         }
         successfullyDeserialized = true;
@@ -945,7 +948,7 @@ class GetBlobOperation extends GetOperation {
     @Override
     protected void maybeProcessCallbacks() {
       if (progressTracker.isDecryptionRequired() && decryptCallbackResultInfo.decryptJobComplete) {
-        decryptJobMetricsTracker.startResponseProcessing();
+        decryptJobMetricsTracker.onJobResultProcessingStart();
         if (decryptCallbackResultInfo.exception != null) {
           decryptJobMetricsTracker.incrementOperationError();
           logger.trace("Decryption job callback invoked with exception for {} blob {} ", blobType, blobId,
@@ -982,7 +985,7 @@ class GetBlobOperation extends GetOperation {
             }
           }
         }
-        decryptJobMetricsTracker.completeResponseProcessing();
+        decryptJobMetricsTracker.onJobResultProcessingComplete();
       }
     }
 
@@ -1097,18 +1100,19 @@ class GetBlobOperation extends GetOperation {
           if (getOperationFlag() != MessageFormatFlags.Blob && encryptionKey != null) {
             decryptCallbackResultInfo = new DecryptCallBackResultInfo();
             progressTracker.initializeDecryptionTracker();
-            decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
-            decryptJobMetricsTracker.startTracker();
+            decryptJobMetricsTracker.onJobSubmission();
             logger.trace("Submitting decrypt job for Metadaata chunk {}", blobId);
             long startTimeMs = System.currentTimeMillis();
             cryptoJobHandler.submitJob(
                 new DecryptJob(blobId, encryptionKey, null, ByteBuffer.wrap(userMetadata), cryptoService, kms,
                     decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
                   routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                  decryptJobMetricsTracker.onJobCallbackProcessingStart();
                   logger.trace("Handling decrypt job call back for Metadata chunk {} to set decrypt callback results",
                       blobId);
                   decryptCallbackResultInfo.setResultAndException(result, exception);
                   routerCallback.onPollReady();
+                  decryptJobMetricsTracker.onJobCallbackProcessingComplete();
                 }));
           } else {
             initializeDataChunks();
@@ -1157,16 +1161,17 @@ class GetBlobOperation extends GetOperation {
           long startTimeMs = System.currentTimeMillis();
           decryptCallbackResultInfo = new DecryptCallBackResultInfo();
           progressTracker.initializeDecryptionTracker();
-          decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
-          decryptJobMetricsTracker.startTracker();
+          decryptJobMetricsTracker.onJobSubmission();
           cryptoJobHandler.submitJob(new DecryptJob(blobId, encryptionKey, blobData.getStream().getByteBuffer(),
               userMetadata != null ? ByteBuffer.wrap(userMetadata) : null, cryptoService, kms, decryptJobMetricsTracker,
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
                 routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+                decryptJobMetricsTracker.onJobCallbackProcessingStart();
                 logger.trace("Handling decrypt job call back for simple blob {} to set decrypt callback results",
                     blobId);
                 decryptCallbackResultInfo.setResultAndException(result, exception);
                 routerCallback.onPollReady();
+                decryptJobMetricsTracker.onJobCallbackProcessingComplete();
               }));
         }
       }

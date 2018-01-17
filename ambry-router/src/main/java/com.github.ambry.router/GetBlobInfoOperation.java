@@ -55,7 +55,8 @@ class GetBlobInfoOperation extends GetOperation {
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // metrics tracker to track decrypt jobs
-  private volatile CryptoJobMetricsTracker decryptJobMetricsTracker;
+  private CryptoJobMetricsTracker decryptJobMetricsTracker =
+      new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
 
@@ -337,13 +338,12 @@ class GetBlobInfoOperation extends GetOperation {
       // submit decrypt job
       progressTracker.initializeDecryptionTracker();
       logger.trace("Submitting decrypt job for {}", blobId);
-      decryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
-      decryptJobMetricsTracker.startTracker();
+      decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
           new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
               decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
-            decryptJobMetricsTracker.startResponseProcessing();
+            decryptJobMetricsTracker.onJobResultProcessingStart();
             logger.trace("Handling decrypt job callback results for {}", blobId);
             routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
             if (exception == null) {
@@ -360,7 +360,7 @@ class GetBlobInfoOperation extends GetOperation {
                       RouterErrorCode.UnexpectedInternalError));
               progressTracker.setDecryptionFailed();
             }
-            decryptJobMetricsTracker.completeResponseProcessing();
+            decryptJobMetricsTracker.onJobResultProcessingComplete();
             routerCallback.onPollReady();
           }));
     }

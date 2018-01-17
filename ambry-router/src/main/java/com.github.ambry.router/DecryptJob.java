@@ -65,7 +65,7 @@ class DecryptJob implements CryptoJob {
    * 5. Invoke callback with the decryptedBlobContent
    */
   public void run() {
-    decryptJobMetricsTracker.startRequestProcessing();
+    decryptJobMetricsTracker.onJobProcessingStart();
     Exception exception = null;
     ByteBuffer decryptedBlobContent = null;
     ByteBuffer decryptedUserMetadata = null;
@@ -81,7 +81,7 @@ class DecryptJob implements CryptoJob {
     } catch (Exception e) {
       exception = e;
     } finally {
-      decryptJobMetricsTracker.completeRequestProcessing();
+      decryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
           exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,
           exception);

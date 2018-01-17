@@ -638,19 +638,21 @@ public class NonBlockingRouterMetrics {
  * used to track all jobs of that type.
  */
 class CryptoJobMetrics {
-  private static final String REQUEST_QUEUING_TIME_SUFFIX = "RequestQueuingTimeInMs";
-  private static final String REQUEST_PROCESSING_TIME_SUFFIX = "RequestProcessingTimeInMs";
-  private static final String RESPONSE_PROCESSING_WAIT_TIME_SUFFIX = "ResponseProcessingWaitTimeInMs";
-  private static final String RESPONSE_PROCESSING_TIME_SUFFIX = "ResponseProcessingTimeInMs";
+  private static final String JOB_QUEUING_TIME_SUFFIX = "JobQueuingTimeInMs";
+  private static final String JOB_PROCESSING_TIME_SUFFIX = "JobProcessingTimeInMs";
+  private static final String JOB_CALLBACK_PROCESSING_TIME_SUFFIX = "JobCallbackProcessingTimeInMs";
+  private static final String JOB_RESULT_PROCESSING_WAIT_TIME_SUFFIX = "JobResultProcessingWaitTimeInMs";
+  private static final String JOB_RESULT_PROCESSING_TIME_SUFFIX = "JobResultProcessingTimeInMs";
   private static final String ROUND_TRIP_TIME_SUFFIX = "RoundTripTimeInMs";
 
   private static final String OPERATION_RATE_SUFFIX = "Rate";
   private static final String OPERATION_ERROR_SUFFIX = "Error";
 
-  final Histogram requestQueuingTimeInMs;
-  final Histogram requestProcessingTimeInMs;
-  final Histogram responseProcessingWaitTimeInMs;
-  final Histogram responseProcessingTimeInMs;
+  final Histogram jobQueuingTimeInMs;
+  final Histogram jobProcessingTimeInMs;
+  final Histogram jobCallbackProcessingTimeMs;
+  final Histogram jobResultProcessingWaitTimeMs;
+  final Histogram jobResultProcessingTimeMs;
   final Histogram roundTripTimeInMs;
 
   final Meter operationRate;
@@ -664,14 +666,16 @@ class CryptoJobMetrics {
    * @param metricRegistry the {@link MetricRegistry} to use to register the created metrics.
    */
   CryptoJobMetrics(Class ownerClass, String requestType, MetricRegistry metricRegistry) {
-    requestQueuingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + REQUEST_QUEUING_TIME_SUFFIX));
-    requestProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + REQUEST_PROCESSING_TIME_SUFFIX));
-    responseProcessingWaitTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + RESPONSE_PROCESSING_WAIT_TIME_SUFFIX));
-    responseProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + RESPONSE_PROCESSING_TIME_SUFFIX));
+    jobQueuingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_QUEUING_TIME_SUFFIX));
+    jobProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_PROCESSING_TIME_SUFFIX));
+    jobCallbackProcessingTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_CALLBACK_PROCESSING_TIME_SUFFIX));
+    jobResultProcessingWaitTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_RESULT_PROCESSING_WAIT_TIME_SUFFIX));
+    jobResultProcessingTimeMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_RESULT_PROCESSING_TIME_SUFFIX));
     roundTripTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + ROUND_TRIP_TIME_SUFFIX));
 
     operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
@@ -693,56 +697,76 @@ class CryptoJobMetrics {
  *    by this tracker.
  */
 class CryptoJobMetricsTracker {
+  private static final int UNINITIATED = -1;
   private final CryptoJobMetrics cryptoJobMetrics;
-  private long trackerStartTimeMs;
-  private long lastSeenTimeMs;
+  private long jobSubmissionTimeMs = UNINITIATED;
+  private long jobProcessingStartTimeMs = UNINITIATED;
+  private long jobCallbackProcessingStartTimeMs = UNINITIATED;
+  private long jobCallbackProcessingCompleteTimeMs = UNINITIATED;
+  private long jobResultProcessingStartTimeMs = UNINITIATED;
 
   CryptoJobMetricsTracker(CryptoJobMetrics cryptoJobMetrics) {
     this.cryptoJobMetrics = cryptoJobMetrics;
   }
 
   /**
-   * Starts the operation tracker for the corresponding CryptoJob
+   * Initiates the timer for the crypto job on submission
    */
-  void startTracker() {
-    trackerStartTimeMs = System.currentTimeMillis();
-    lastSeenTimeMs = trackerStartTimeMs;
+  void onJobSubmission() {
+    jobSubmissionTimeMs = System.currentTimeMillis();
   }
 
   /**
-   * Notifies that the request processing has started for the corresponding CryptoJob
+   * Notifies that the job processing has started for the corresponding CryptoJob
    */
-  void startRequestProcessing() {
+  void onJobProcessingStart() {
     cryptoJobMetrics.operationRate.mark();
-    lastSeenTimeMs = System.currentTimeMillis();
-    cryptoJobMetrics.requestQueuingTimeInMs.update(lastSeenTimeMs - trackerStartTimeMs);
+    jobProcessingStartTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.jobQueuingTimeInMs.update(jobProcessingStartTimeMs - jobSubmissionTimeMs);
   }
 
   /**
-   * Notifies that the request processing has completed for the corresponding CryptoJob
+   * Notifies that the job processing has completed for the corresponding CryptoJob
    */
-  void completeRequestProcessing() {
-    long curTimeMs = System.currentTimeMillis();
-    cryptoJobMetrics.requestProcessingTimeInMs.update(curTimeMs - lastSeenTimeMs);
-    lastSeenTimeMs = curTimeMs;
+  void onJobProcessingComplete() {
+    cryptoJobMetrics.jobProcessingTimeInMs.update(System.currentTimeMillis() - jobProcessingStartTimeMs);
   }
 
   /**
-   * Notifies that the response processing has started for the corresponding CryptoJob
+   * Signifies that the job callback processing has started
    */
-  void startResponseProcessing() {
-    long curTimeMs = System.currentTimeMillis();
-    cryptoJobMetrics.responseProcessingWaitTimeInMs.update(curTimeMs - lastSeenTimeMs);
-    lastSeenTimeMs = curTimeMs;
+  void onJobCallbackProcessingStart() {
+    jobCallbackProcessingStartTimeMs = System.currentTimeMillis();
   }
 
   /**
-   * Notifies that the response processing has completed for the corresponding CryptoJob
+   * Signifies that the job callback processing has completed
    */
-  void completeResponseProcessing() {
-    long curTimeMs = System.currentTimeMillis();
-    cryptoJobMetrics.responseProcessingTimeInMs.update(lastSeenTimeMs - curTimeMs);
-    cryptoJobMetrics.roundTripTimeInMs.update(curTimeMs - trackerStartTimeMs);
+  void onJobCallbackProcessingComplete() {
+    jobCallbackProcessingCompleteTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.jobCallbackProcessingTimeMs.update(
+        jobCallbackProcessingCompleteTimeMs - jobCallbackProcessingStartTimeMs);
+  }
+
+  /**
+   * Signifies that the job result processing has started
+   */
+  void onJobResultProcessingStart() {
+    jobResultProcessingStartTimeMs = System.currentTimeMillis();
+    if (jobCallbackProcessingCompleteTimeMs != UNINITIATED) {
+      cryptoJobMetrics.jobResultProcessingWaitTimeMs.update(
+          jobResultProcessingStartTimeMs - jobCallbackProcessingCompleteTimeMs);
+    }
+  }
+
+  /**
+   * Signifies that the job callback processing has completed
+   */
+  void onJobResultProcessingComplete() {
+    long jobResultProcessingCompleteTimeMs = System.currentTimeMillis();
+    cryptoJobMetrics.jobResultProcessingTimeMs.update(
+        jobResultProcessingCompleteTimeMs - jobResultProcessingStartTimeMs);
+    cryptoJobMetrics.roundTripTimeInMs.update(jobResultProcessingCompleteTimeMs - jobSubmissionTimeMs);
   }
 
   /**

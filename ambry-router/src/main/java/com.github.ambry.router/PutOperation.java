@@ -647,7 +647,9 @@ class PutOperation {
     // the partitionId chosen for the current chunk.
     private PartitionId partitionId;
     // metrics tracker to track encrypt jobs
-    private volatile CryptoJobMetricsTracker encryptJobMetricsTracker;
+    private CryptoJobMetricsTracker encryptJobMetricsTracker =
+        new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics);
+    ;
     // the list of partitions already attempted for this chunk.
     private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // map of correlation id to the request metadata for every request issued for the current chunk.
@@ -848,15 +850,14 @@ class PutOperation {
         logger.trace("Chunk at index {} moves to {} state", chunkIndex, ChunkState.Encrypting);
         state = ChunkState.Encrypting;
         chunkEncryptReadyAtMs = time.milliseconds();
-        encryptJobMetricsTracker = new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics);
-        encryptJobMetricsTracker.startTracker();
+        encryptJobMetricsTracker.onJobSubmission();
         logger.trace("Submitting encrypt job for chunk at index {}", chunkIndex);
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
                 isMetadataChunk() ? null : buf, ByteBuffer.wrap(chunkUserMetadata), kms.getRandomKey(), cryptoService,
                 kms, encryptJobMetricsTracker, (EncryptJob.EncryptJobResult result, Exception exception) -> {
               logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
-              encryptJobMetricsTracker.startResponseProcessing();
+              encryptJobMetricsTracker.onJobResultProcessingStart();
               if (exception == null && !isOperationComplete()) {
                 if (!isMetadataChunk()) {
                   buf = result.getEncryptedBlobContent();
@@ -880,7 +881,7 @@ class PutOperation {
                 }
               }
               routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
-              encryptJobMetricsTracker.completeResponseProcessing();
+              encryptJobMetricsTracker.onJobResultProcessingComplete();
               routerCallback.onPollReady();
             }));
       } catch (GeneralSecurityException e) {

@@ -65,11 +65,11 @@ public class EncryptJob implements CryptoJob {
    */
   @Override
   public void run() {
+    encryptJobMetricsTracker.onJobProcessingStart();
     ByteBuffer encryptedBlobContent = null;
     ByteBuffer encryptedUserMetadata = null;
     ByteBuffer encryptedKey = null;
     Exception exception = null;
-    encryptJobMetricsTracker.startRequestProcessing();
     try {
       if (blobContentToEncrypt != null) {
         encryptedBlobContent = cryptoService.encrypt(blobContentToEncrypt, perBlobKey);
@@ -82,7 +82,7 @@ public class EncryptJob implements CryptoJob {
     } catch (Exception e) {
       exception = e;
     } finally {
-      encryptJobMetricsTracker.completeRequestProcessing();
+      encryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
           exception == null ? new EncryptJobResult(encryptedKey, encryptedBlobContent, encryptedUserMetadata) : null,
           exception);
