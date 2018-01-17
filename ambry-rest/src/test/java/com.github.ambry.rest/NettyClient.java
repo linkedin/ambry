@@ -67,8 +67,8 @@ public class NettyClient implements Closeable {
 
   private HttpRequest request;
   private ChunkedInput<HttpContent> content;
-  private FutureResult<Queue<HttpObject>> responseFuture;
-  private Callback<Queue<HttpObject>> callback;
+  private FutureResult<ResponseParts> responseFuture;
+  private Callback<ResponseParts> callback;
 
   private volatile ChannelFuture channelConnectFuture;
   private volatile Exception exception = null;
@@ -109,8 +109,8 @@ public class NettyClient implements Closeable {
    * @param callback the callback to invoke when the response is available. Can be null.
    * @return a {@link Future} that tracks the arrival of the response for this request.
    */
-  public Future<Queue<HttpObject>> sendRequest(HttpRequest request, ChunkedInput<HttpContent> content,
-      Callback<Queue<HttpObject>> callback) {
+  public Future<ResponseParts> sendRequest(HttpRequest request, ChunkedInput<HttpContent> content,
+      Callback<ResponseParts> callback) {
     this.request = request;
     this.content = content;
     this.callback = callback;
@@ -161,12 +161,13 @@ public class NettyClient implements Closeable {
 
   /**
    * Invokes the future and callback associated with the current request.
+   * @param completionContext a description of where this method was called from.
    */
-  private void invokeFutureAndCallback() {
+  private void invokeFutureAndCallback(String completionContext) {
     if (callbackInvoked.compareAndSet(false, true)) {
-      responseFuture.done(responseParts, exception);
+      responseFuture.done(new ResponseParts(responseParts, completionContext), exception);
       if (callback != null) {
-        callback.onCompletion(responseParts, exception);
+        callback.onCompletion(new ResponseParts(responseParts, completionContext), exception);
       }
     }
   }
@@ -186,7 +187,7 @@ public class NettyClient implements Closeable {
         future.channel().flush();
       } else {
         exception = (Exception) future.cause();
-        invokeFutureAndCallback();
+        invokeFutureAndCallback("RequestSender::operationComplete");
       }
     }
   }
@@ -200,7 +201,7 @@ public class NettyClient implements Closeable {
     public void operationComplete(ChannelFuture future) {
       if (!future.isSuccess()) {
         exception = (Exception) future.cause();
-        invokeFutureAndCallback();
+        invokeFutureAndCallback("WriteResultListener::operationComplete");
       }
     }
   }
@@ -215,7 +216,7 @@ public class NettyClient implements Closeable {
       if (isOpen.get()) {
         createChannel();
       }
-      invokeFutureAndCallback();
+      invokeFutureAndCallback("ChannelCloseListener::operationComplete");
     }
   }
 
@@ -240,11 +241,11 @@ public class NettyClient implements Closeable {
           exception =
               new Exception("Encountered Throwable when trying to decode response. Message: " + cause.getMessage());
         }
-        invokeFutureAndCallback();
+        invokeFutureAndCallback("CommunicationHandler::channelRead0 - decoder failure");
       }
       if (in instanceof LastHttpContent) {
         if (isKeepAlive) {
-          invokeFutureAndCallback();
+          invokeFutureAndCallback("CommunicationHandler::channelRead0 - last content");
         } else {
           // if not, the future will be invoked when the channel is closed.
           ctx.close();
@@ -265,6 +266,19 @@ public class NettyClient implements Closeable {
       } else {
         ctx.fireExceptionCaught(cause);
       }
+    }
+  }
+
+  /**
+   * A struct to hold the queue containing response parts and the context in which the request was completed.
+   */
+  public static class ResponseParts {
+    public final Queue<HttpObject> queue;
+    public final String completionContext;
+
+    private ResponseParts(Queue<HttpObject> queue, String completionContext) {
+      this.queue = queue;
+      this.completionContext = completionContext;
     }
   }
 }
