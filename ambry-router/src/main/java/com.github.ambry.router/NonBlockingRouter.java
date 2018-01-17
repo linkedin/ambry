@@ -148,42 +148,43 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    boolean isEncrypted = false;
     try {
-      boolean isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
-      Meter blobInfoOperationRate =
-          isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
-      Meter blobOperationRate =
-          isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
-      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
-          : routerMetrics.getBlobWithRangeOperationRate;
-      if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-        blobInfoOperationRate.mark();
-      } else {
-        blobOperationRate.mark();
-      }
-      if (options.getRange() != null) {
-        blobWithRangeOperationRate.mark();
-      }
-      routerMetrics.operationQueuingRate.mark();
-      if (isOpen.get()) {
-        getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
-          @Override
-          public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
-            GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
-            futureResult.done(getBlobResult, exception);
-            if (callback != null) {
-              callback.onCompletion(getBlobResult, exception);
-            }
-          }
-        });
-      } else {
-        RouterException routerException =
-            new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-        completeOperation(routerException, internalOptions, futureResult, callback);
-      }
+      isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
     } catch (IOException e) {
       RouterException routerException =
           new RouterException("Exception thrown during construction of BlobId ", e, RouterErrorCode.InvalidBlobId);
+      completeOperation(routerException, internalOptions, futureResult, callback);
+    }
+    Meter blobInfoOperationRate =
+        isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
+    Meter blobOperationRate =
+        isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
+    Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
+        : routerMetrics.getBlobWithRangeOperationRate;
+    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      blobInfoOperationRate.mark();
+    } else {
+      blobOperationRate.mark();
+    }
+    if (options.getRange() != null) {
+      blobWithRangeOperationRate.mark();
+    }
+    routerMetrics.operationQueuingRate.mark();
+    if (isOpen.get()) {
+      getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
+        @Override
+        public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
+          GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+          futureResult.done(getBlobResult, exception);
+          if (callback != null) {
+            callback.onCompletion(getBlobResult, exception);
+          }
+        }
+      });
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       completeOperation(routerException, internalOptions, futureResult, callback);
     }
     return futureResult;

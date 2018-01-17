@@ -17,7 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.rest.RestRequestMetrics;
 
 
@@ -27,6 +26,9 @@ import com.github.ambry.rest.RestRequestMetrics;
  * Exports metrics that are triggered by the Ambry frontend to the provided {@link MetricRegistry}.
  */
 class FrontendMetrics {
+  private static final String BLOB = "Blob";
+  private static final String BLOB_INFO = "BlobInfo";
+  private static final String USER_METADATA = "UserMetadata";
   private static final String SSL_SUFFIX = "Ssl";
   private static final String ENCRYPTED = "Encrypted";
   private final MetricRegistry metricRegistry;
@@ -192,11 +194,11 @@ class FrontendMetrics {
     optionsSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options" + SSL_SUFFIX, metricRegistry);
 
     // RestRequestMetricsGroup
-    postRequestMetricsGroup = new RestRequestMetricsGroup("Post", MessageFormatFlags.Blob.name());
-    getBlobInfoRequestMetricsGroup = new RestRequestMetricsGroup("Get", MessageFormatFlags.BlobInfo.name());
-    getBlobRequestMetricsGroup = new RestRequestMetricsGroup("Get", MessageFormatFlags.Blob.name());
-    getUserMetadataRequestMetricsGroup = new RestRequestMetricsGroup("Get", "UserMetadata");
-    headRequestMetricsGroup = new RestRequestMetricsGroup("Head", MessageFormatFlags.Blob.name());
+    postRequestMetricsGroup = new RestRequestMetricsGroup("Post", BLOB);
+    getBlobInfoRequestMetricsGroup = new RestRequestMetricsGroup("Get", BLOB_INFO);
+    getBlobRequestMetricsGroup = new RestRequestMetricsGroup("Get", BLOB);
+    getUserMetadataRequestMetricsGroup = new RestRequestMetricsGroup("Get", USER_METADATA);
+    headRequestMetricsGroup = new RestRequestMetricsGroup("Head", BLOB);
 
     // Rates
     // AmbrySecurityService

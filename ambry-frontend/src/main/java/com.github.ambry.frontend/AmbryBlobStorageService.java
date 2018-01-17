@@ -190,13 +190,15 @@ class AmbryBlobStorageService implements BlobStorageService {
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
-        if (subresource != null) {
-          logger.trace("Sub-resource requested: {}", subresource);
-          if (subresource == SubResource.Replicas) {
-            securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
-          }
+        if (subresource == SubResource.Replicas) {
+          securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
         }
-        boolean isEncrypted = new BlobId(operationOrBlobId, clusterMap).isEncrypted();
+        boolean isEncrypted = false;
+        try {
+          isEncrypted = new BlobId(operationOrBlobId, clusterMap).isEncrypted();
+        } catch (Exception e) {
+          throw new RestServiceException("Invalid blob id=" + operationOrBlobId, RestServiceErrorCode.BadRequest);
+        }
         restRequest.getMetricsTracker()
             .injectMetrics(
                 getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null,
@@ -204,9 +206,6 @@ class AmbryBlobStorageService implements BlobStorageService {
         securityService.processRequest(restRequest, securityCallback);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
-    } catch (IllegalArgumentException | IOException iaOrioException) {
-      submitResponse(restRequest, restResponseChannel, null,
-          new RestServiceException("Invalid BlobId passed", RestServiceErrorCode.BadRequest));
     } catch (Exception e) {
       submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
     } finally {
@@ -302,7 +301,12 @@ class AmbryBlobStorageService implements BlobStorageService {
       if (blobId.startsWith("/")) {
         blobId = blobId.substring(1);
       }
-      boolean isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
+      boolean isEncrypted = false;
+      try {
+        isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
+      } catch (Exception e) {
+        throw new RestServiceException("Invalid blob id=" + blobId, RestServiceErrorCode.BadRequest);
+      }
       RestRequestMetrics requestMetrics =
           frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
               isEncrypted);
