@@ -67,6 +67,7 @@ import org.slf4j.LoggerFactory;
 public class DiskReformatter {
   private static final String RELOCATED_DIR_NAME_SUFFIX = "_relocated";
   private static final String UNDER_REFORMAT_DIR_NAME_SUFFIX = "_under_reformat";
+  private static final String RELOCATION_IN_PROGRESS_SUFFIX = "_relocation_in_progress";
   private static final Logger logger = LoggerFactory.getLogger(DiskReformatter.class);
 
   private final DataNodeId dataNodeId;
@@ -253,13 +254,20 @@ public class DiskReformatter {
     ReplicaId toMove = replicasOnDisk.get(replicasOnDisk.size() - 1);
     String partIdString = toMove.getPartitionId().toString();
     File scratchSrc = new File(toMove.getReplicaPath());
+    File scratchTmp = new File(scratch, partIdString + RELOCATION_IN_PROGRESS_SUFFIX);
     File scratchTgt = new File(scratch, partIdString + RELOCATED_DIR_NAME_SUFFIX);
+    if (scratchTmp.exists()) {
+      throw new IllegalStateException(scratchTmp + " already exists");
+    }
     if (scratchTgt.exists()) {
       throw new IllegalStateException(scratchTgt + " already exists");
     }
     ensureNotInUse(scratchSrc, toMove.getCapacityInBytes());
     logger.info("Moving {} to {}", scratchSrc, scratchTgt);
-    FileUtils.moveDirectory(scratchSrc, scratchTgt);
+    FileUtils.moveDirectory(scratchSrc, scratchTmp);
+    if (!scratchTmp.renameTo(scratchTgt)) {
+      throw new IllegalStateException("Could not rename " + scratchTmp + " to " + scratchTgt);
+    }
 
     // reformat each store, except the one moved, one by one
     for (int i = 0; i < replicasOnDisk.size() - 1; i++) {
