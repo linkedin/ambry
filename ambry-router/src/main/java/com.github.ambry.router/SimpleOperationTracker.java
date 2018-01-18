@@ -94,7 +94,7 @@ class SimpleOperationTracker implements OperationTracker {
     // then the remote healthy ones, and finally the possibly down ones.
     List<? extends ReplicaId> replicas = partitionId.getReplicaIds();
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
-    LinkedList<ReplicaId> downLocalReplicas = new LinkedList<>();
+    LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
       Collections.shuffle(replicas);
     }
@@ -113,28 +113,22 @@ class SimpleOperationTracker implements OperationTracker {
         }
       } else {
         if (replicaDcName.equals(datacenterName)) {
-          downLocalReplicas.addFirst(replicaId);
+          downReplicas.addFirst(replicaId);
         } else if (crossColoEnabled) {
-          backupReplicas.addLast(replicaId);
+          downReplicas.addLast(replicaId);
         }
       }
     }
     if (includeNonOriginatingDcReplicas) {
       replicaPool.addAll(backupReplicas);
-      replicaPool.addAll(downLocalReplicas);
+      replicaPool.addAll(downReplicas);
     } else {
-      // This is for get request only.
-      if (datacenterName.equals(originatingDcName)) {
-        // In the case of local DC is originating DC, we try to arrange three health replicas and followed by
-        // local down replicas.
-        while (replicaPool.size() < 3 && backupReplicas.size() > 0) {
-          replicaPool.add(backupReplicas.pollFirst());
-        }
-        replicaPool.addAll(downLocalReplicas);
-      }
-      // Take at least replicasRequired copy of replicas to do the request
+      // This is for get request only. Take replicasRequired copy of replicas to do the request
       while (replicaPool.size() < replicasRequired && backupReplicas.size() > 0) {
         replicaPool.add(backupReplicas.pollFirst());
+      }
+      while (replicaPool.size() < replicasRequired && downReplicas.size() > 0) {
+        replicaPool.add(downReplicas.pollFirst());
       }
     }
     totalReplicaCount = replicaPool.size();
