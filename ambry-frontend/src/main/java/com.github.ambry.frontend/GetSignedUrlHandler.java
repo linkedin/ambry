@@ -13,6 +13,8 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -40,6 +42,7 @@ class GetSignedUrlHandler {
   private final IdConverter idConverter;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
+  private final ClusterMap clusterMap;
 
   /**
    * Constructs a handler for handling requests for signed URLs.
@@ -48,14 +51,16 @@ class GetSignedUrlHandler {
    * @param idConverter the {@link IdConverter} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param clusterMap the {@link ClusterMap} in use.
    */
   GetSignedUrlHandler(UrlSigningService urlSigningService, SecurityService securityService, IdConverter idConverter,
-      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap) {
     this.urlSigningService = urlSigningService;
     this.securityService = securityService;
     this.idConverter = idConverter;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.metrics = metrics;
+    this.clusterMap = clusterMap;
   }
 
   /**
@@ -161,7 +166,13 @@ class GetSignedUrlHandler {
       metrics.getSignedUrlSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
       try {
         if (exception == null) {
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(result, restRequest);
+          BlobId blobId;
+          try {
+            blobId = new BlobId(result, clusterMap);
+          } catch (Exception e) {
+            throw new RestServiceException("Invalid blob id=" + result, RestServiceErrorCode.BadRequest);
+          }
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
           securityService.postProcessRequest(restRequest,
               new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, callback));
         }

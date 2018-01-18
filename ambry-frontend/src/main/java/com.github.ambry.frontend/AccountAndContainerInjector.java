@@ -88,32 +88,25 @@ class AccountAndContainerInjector {
    * Obtains the target {@link Account} and {@link Container} id from the blobId string, queries the {@link AccountService}
    * to get the corresponding {@link Account} and {@link Container}, and injects the target {@link Account} and
    * {@link Container} into the {@link RestRequest}.
-   * @param blobIdStr The blobId string to get the target {@link Account} and {@link Container} id.
+   * @param blobId The blobId to get the target {@link Account} and {@link Container} id.
    * @param restRequest The rest request to insert the target {@link Account} and {@link Container}.
    * @throws RestServiceException if 1) either {@link Account} or {@link Container} could not be found; or 2)
    *                              either {@link Account} or {@link Container} were explicitly specified as
    *                              {@link Account#UNKNOWN_ACCOUNT} or {@link Container#UNKNOWN_CONTAINER}.
    */
-  void injectTargetAccountAndContainerFromBlobId(String blobIdStr, RestRequest restRequest)
-      throws RestServiceException {
-    BlobId blobId;
-    try {
-      blobId = new BlobId(blobIdStr, clusterMap);
-    } catch (Exception e) {
-      throw new RestServiceException("Invalid blob id=" + blobIdStr, RestServiceErrorCode.BadRequest);
-    }
+  void injectTargetAccountAndContainerFromBlobId(BlobId blobId, RestRequest restRequest) throws RestServiceException {
     Account targetAccount = accountService.getAccountById(blobId.getAccountId());
     if (targetAccount == null) {
       frontendMetrics.getHeadDeleteUnrecognizedAccountCount.inc();
       // @todo The check can be removed once HelixAccountService is running with UNKNOWN_ACCOUNT created.
       if (blobId.getAccountId() != Account.UNKNOWN_ACCOUNT_ID) {
         throw new RestServiceException(
-            "Account from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " cannot be recognized",
+            "Account from blobId=" + blobId.getID() + "with accountId=" + blobId.getAccountId() + " cannot be recognized",
             RestServiceErrorCode.InvalidAccount);
       } else {
         logger.debug(
-            "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
-            blobIdStr, blobId.getAccountId());
+            "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT", blobId.getID(),
+            blobId.getAccountId());
         targetAccount = Account.UNKNOWN_ACCOUNT;
       }
     }
@@ -121,7 +114,7 @@ class AccountAndContainerInjector {
     if (targetContainer == null) {
       frontendMetrics.getHeadDeleteUnrecognizedContainerCount.inc();
       throw new RestServiceException(
-          "Container from blobId=" + blobIdStr + "with accountId=" + blobId.getAccountId() + " containerId="
+          "Container from blobId=" + blobId.getID() + "with accountId=" + blobId.getAccountId() + " containerId="
               + blobId.getContainerId() + " cannot be recognized", RestServiceErrorCode.InvalidContainer);
     }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer);

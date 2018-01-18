@@ -78,7 +78,7 @@ public class GetSignedUrlHandlerTest {
         new AccountAndContainerInjector(ACCOUNT_SERVICE, CLUSTER_MAP, metrics, config);
     getSignedUrlHandler = new GetSignedUrlHandler(urlSigningServiceFactory.getUrlSigningService(),
         securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), accountAndContainerInjector,
-        metrics);
+        metrics, CLUSTER_MAP);
   }
 
   /**
