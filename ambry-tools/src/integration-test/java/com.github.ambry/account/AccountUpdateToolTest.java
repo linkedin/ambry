@@ -104,6 +104,7 @@ public class AccountUpdateToolTest {
    * @throws Exception Any unexpected exception.
    */
   public AccountUpdateToolTest(short containerJsonVersion) throws Exception {
+    Container.setCurrentJsonVersion(containerJsonVersion);
     this.containerJsonVersion = containerJsonVersion;
     idToRefAccountMap = new HashMap<>();
     idToRefContainerMap = new HashMap<>();
