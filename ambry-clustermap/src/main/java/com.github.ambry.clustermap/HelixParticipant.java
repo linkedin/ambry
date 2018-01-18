@@ -179,6 +179,10 @@ class HelixParticipant implements ClusterParticipant {
   private boolean setSealedReplicas(List<String> sealedReplicas) {
     HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
