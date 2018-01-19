@@ -166,12 +166,7 @@ class GetSignedUrlHandler {
       metrics.getSignedUrlSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
       try {
         if (exception == null) {
-          BlobId blobId;
-          try {
-            blobId = new BlobId(result, clusterMap);
-          } catch (Exception e) {
-            throw new RestServiceException("Invalid blob id=" + result, RestServiceErrorCode.BadRequest);
-          }
+          BlobId blobId = BlobId.getBlobIdFromString(result, clusterMap);
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
           securityService.postProcessRequest(restRequest,
               new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, callback));

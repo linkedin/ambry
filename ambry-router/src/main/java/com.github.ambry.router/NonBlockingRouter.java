@@ -28,6 +28,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -150,11 +151,11 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     boolean isEncrypted = false;
     try {
-      isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
-    } catch (IOException e) {
+      isEncrypted = BlobId.getBlobIdFromString(blobId, clusterMap).isEncrypted();
+    } catch (RestServiceException e) {
       RouterException routerException =
           new RouterException("Exception thrown during construction of BlobId ", e, RouterErrorCode.InvalidBlobId);
-      completeOperation(routerException, internalOptions, futureResult, callback);
+      completeGetBlobOperation(routerException, internalOptions, futureResult, callback);
     }
     Meter blobInfoOperationRate =
         isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
@@ -185,7 +186,7 @@ class NonBlockingRouter implements Router {
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-      completeOperation(routerException, internalOptions, futureResult, callback);
+      completeGetBlobOperation(routerException, internalOptions, futureResult, callback);
     }
     return futureResult;
   }
@@ -334,14 +335,14 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with the given
+   * Completes a getBlob operation by invoking the {@code callback} and setting the {@code futureResult} with the given
    * {@code {@link RouterException}}
    * @param routerException {@link RouterException} to be set in the callback and future result
    * @param internalOptions instance of {@link GetBlobOptionsInternal} to use
    * @param futureResult the {@link FutureResult} that needs to be set.
    * @param callback that {@link Callback} that needs to be invoked. Can be null.
    */
-  private void completeOperation(RouterException routerException, GetBlobOptionsInternal internalOptions,
+  private void completeGetBlobOperation(RouterException routerException, GetBlobOptionsInternal internalOptions,
       FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback) {
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.onGetBlobError(routerException, internalOptions, false);

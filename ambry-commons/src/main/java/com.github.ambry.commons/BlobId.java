@@ -18,6 +18,8 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
@@ -496,6 +498,21 @@ public class BlobId extends StoreKey {
     BlobIdPreamble blobIdPreamble =
         new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
     return new Pair<>(blobIdPreamble.accountId, blobIdPreamble.containerId);
+  }
+
+  /**
+   * Fetches {@link BlobId} from the given string representation of BlobId
+   * @param blobIdStr string representation of BlobId
+   * @param clusterMap {@link ClusterMap} instance to use
+   * @return the {@link BlobId} thus generated
+   * @throws RestServiceException
+   */
+  public static BlobId getBlobIdFromString(String blobIdStr, ClusterMap clusterMap) throws RestServiceException {
+    try {
+      return new BlobId(blobIdStr, clusterMap);
+    } catch (Exception e) {
+      throw new RestServiceException("Invalid blob id=" + blobIdStr, RestServiceErrorCode.BadRequest);
+    }
   }
 
   /**
