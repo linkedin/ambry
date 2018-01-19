@@ -325,7 +325,7 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test to ensure that replicas in originating DC are first priority when preffered DC is local DC.
+   * Test to ensure that replicas in originating DC are first priority when originating DC is local DC.
    */
   @Test
   public void replicasOrderingTestOriginatingIsLocal() {
