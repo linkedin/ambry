@@ -262,7 +262,7 @@ public class StoreCopier implements Closeable {
           if (tgt.findMissingKeys(Collections.singletonList(messageInfo.getStoreKey())).size() == 1) {
             int size = (int) messageInfo.getSize();
             StoreInfo storeInfo =
-                src.get(Collections.singletonList(messageInfo.getStoreKey()), EnumSet.noneOf(StoreGetOptions.class));
+                src.get(Collections.singletonList(messageInfo.getStoreKey()), EnumSet.allOf(StoreGetOptions.class));
             MessageReadSet readSet = storeInfo.getMessageReadSet();
             byte[] buf = new byte[size];
             readSet.writeTo(0, new ByteBufferChannel(ByteBuffer.wrap(buf)), 0, size);
