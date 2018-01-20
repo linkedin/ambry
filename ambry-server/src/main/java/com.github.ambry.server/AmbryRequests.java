@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -84,6 +85,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.account.Account.UNKNOWN_ACCOUNT_ID;
+import static com.github.ambry.account.Container.UNKNOWN_CONTAINER_ID;
 
 
 /**
@@ -300,6 +304,19 @@ public class AmbryRequests implements RequestAPI {
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
+
+            for (int i = 0; i < info.getMessageReadSetInfo().size(); i++) {
+              MessageInfo messageInfo = info.getMessageReadSetInfo().get(i);
+              if (messageInfo.getAccountId() == UNKNOWN_ACCOUNT_ID
+                  && messageInfo.getContainerId() == UNKNOWN_CONTAINER_ID) {
+                continue;
+              }
+              BlobId blobId = (BlobId) partitionRequestInfo.getBlobIds().get(i);
+              if (!messageInfo.validateAuthorization(blobId.getAccountId(), blobId.getContainerId())) {
+                throw new StoreException("GET authorization failure. Key: " + blobId.getID(), StoreErrorCodes.Authorization_Failure);
+              }
+            }
+
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory);
@@ -321,6 +338,10 @@ public class AmbryRequests implements RequestAPI {
               logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
                   + partitionRequestInfo.getPartition(), e);
               metrics.idDeletedError.inc();
+            } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
+              metrics.getAuthorizationFailure.inc();
             } else {
               logger.error("Store exception on a get with error code " + e.getErrorCode() + " for partition "
                   + partitionRequestInfo.getPartition(), e);
@@ -416,6 +437,10 @@ public class AmbryRequests implements RequestAPI {
         logger.trace(
             "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
+        metrics.deleteAuthorizationFailure.inc();
       } else {
         logger.error(
             "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
