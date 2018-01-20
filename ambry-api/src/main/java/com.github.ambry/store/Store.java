@@ -38,6 +38,7 @@ public interface Store {
    */
   StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException;
 
+  void validateGetAuthorization(MessageInfo info, short accountId, short containerId) throws StoreException;
   /**
    * Puts a set of messages into the store
    * @param messageSetToWrite The message set to write to the store
@@ -52,6 +53,7 @@ public interface Store {
    */
   void delete(MessageWriteSet messageSetToDelete) throws StoreException;
 
+  void validateDeleteAuthorization(MessageInfo info) throws StoreException;
   /**
    * Finds all the entries from the store given a find token
    * @param token The token that acts as a bookmark to make subsequent searches

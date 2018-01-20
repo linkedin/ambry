@@ -63,6 +63,7 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
@@ -749,6 +750,11 @@ public class AmbryRequestsTest {
       }
 
       @Override
+      public void validateGetAuthorization(MessageInfo info, short accountId, short containerId) {
+        return;
+      }
+
+      @Override
       public void put(MessageWriteSet messageSetToWrite) throws StoreException {
         operationReceived = RequestOrResponseType.PutRequest;
       }
@@ -756,6 +762,11 @@ public class AmbryRequestsTest {
       @Override
       public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
         operationReceived = RequestOrResponseType.DeleteRequest;
+      }
+
+      @Override
+      public void validateDeleteAuthorization(MessageInfo info) {
+        return;
       }
 
       @Override
