@@ -1564,7 +1564,7 @@ public class AmbryBlobStorageServiceTest {
             converterFactory, securityServiceFactory, accountService, urlSigningService);
     ambryBlobStorageService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
-    doExternalServicesBadInputTest(restMethods, expectedExceptionMsg);
+    doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
   }
 
   /**
@@ -1590,7 +1590,8 @@ public class AmbryBlobStorageServiceTest {
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
               clusterMap, idConverterFactory, securityFactory, accountService, urlSigningService);
       ambryBlobStorageService.start();
-      doExternalServicesBadInputTest(restMethods, exceptionMsg);
+      doExternalServicesBadInputTest(restMethods, exceptionMsg,
+          mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
     }
   }
 
@@ -1598,10 +1599,11 @@ public class AmbryBlobStorageServiceTest {
    * Does the tests to check for exception pipelining for exceptions returned/thrown by external services.
    * @param restMethods the {@link RestMethod} types for which the test has to be run.
    * @param expectedExceptionMsg the expected exception message.
+   * @param expectRouterCall if the router should have returned a value before the exception occurs.
    * @throws JSONException
    */
-  private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg)
-      throws JSONException {
+  private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg,
+      boolean expectRouterCall) throws JSONException {
     for (RestMethod restMethod : restMethods) {
       if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.PUT)) {
         continue;
@@ -1622,6 +1624,10 @@ public class AmbryBlobStorageServiceTest {
             + " should have failed because an external service would have thrown an exception");
       } catch (Exception e) {
         assertEquals("Unexpected exception message", expectedExceptionMsg, e.getMessage());
+        if (expectRouterCall && restMethod == RestMethod.GET) {
+          assertNotNull("expected router.getBlob() call to provide a response to responseHandler",
+              responseHandler.getResponse());
+        }
       }
     }
   }

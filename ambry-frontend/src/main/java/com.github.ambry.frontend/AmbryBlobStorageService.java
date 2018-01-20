@@ -790,8 +790,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
               (securityResult, securityException) -> {
                 securityCallbackTracker.markOperationEnd();
-                ReadableStreamChannel response = null;
-                boolean blobNotModified = restResponseChannel.getStatus() == ResponseStatus.NotModified;
+                ReadableStreamChannel response = routerResult.getBlobDataChannel();
                 try {
                   if (securityException == null) {
                     if (subResource != null) {
@@ -806,9 +805,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                         restResponseChannel.setHeader(Headers.CONTENT_LENGTH, 0);
                         response = new ByteBufferReadableStreamChannel(AmbryBlobStorageService.EMPTY_BUFFER);
                       }
-                    } else if (!blobNotModified) {
-                      response = routerResult.getBlobDataChannel();
-                    } else {
+                    } else if (restResponseChannel.getStatus() == ResponseStatus.NotModified) {
+                      response = null;
                       // If the blob was not modified, we need to close the channel, as it will not be submitted to
                       // the RestResponseHandler
                       routerResult.getBlobDataChannel().close();
