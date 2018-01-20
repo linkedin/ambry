@@ -180,6 +180,12 @@ class IndexValue {
     version = PersistentIndex.CURRENT_VERSION;
   }
 
+  public boolean validateAuthorization(short accountId, short containerId) {
+    if (this.accountId != UNKNOWN_ACCOUNT_ID && this.containerId != UNKNOWN_CONTAINER_ID) {
+      return accountId == this.accountId && containerId == this.containerId;
+    }
+    return true;
+  }
   /**
    * @return the size of the blob that this index value refers to
    */

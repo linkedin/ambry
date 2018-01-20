@@ -177,6 +177,8 @@ public class ServerMetrics {
   public final Counter ttlExpiredError;
   public final Counter badRequestError;
   public final Counter temporarilyDisabledError;
+  public final Counter getAuthorizationFailure;
+  public final Counter deleteAuthorizationFailure;
 
   public ServerMetrics(MetricRegistry registry) {
     putBlobRequestQueueTimeInMs =
@@ -391,6 +393,10 @@ public class ServerMetrics {
     unExpectedStoreTTLError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTTLError"));
     unExpectedStoreFindEntriesError =
         registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreFindEntriesError"));
+    getAuthorizationFailure =
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "GetAuthorizationFailure"));
+    deleteAuthorizationFailure =
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "DeleteAuthroizationFailure"));
   }
 
   public void markPutBlobRequestRateBySize(long blobSize) {
