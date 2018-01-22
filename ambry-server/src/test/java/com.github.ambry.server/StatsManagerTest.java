@@ -23,6 +23,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
@@ -296,6 +297,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public void validateGetAuthorization(MessageInfo info, short accountId, short containerId) throws StoreException {
+      return;
+    }
+
+    @Override
     public void put(MessageWriteSet messageSetToWrite) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
@@ -303,6 +309,11 @@ public class StatsManagerTest {
     @Override
     public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
       throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void validateDeleteAuthorization(MessageInfo info) throws StoreException {
+      return;
     }
 
     @Override

@@ -938,6 +938,11 @@ public class ReplicationTest {
     }
 
     @Override
+    public void validateGetAuthorization(MessageInfo info, short accountId, short containerId) {
+      return;
+    }
+
+    @Override
     public void put(MessageWriteSet messageSetToWrite) throws StoreException {
       List<MessageInfo> newInfos = messageSetToWrite.getMessageSetInfo();
       try {
@@ -975,6 +980,11 @@ public class ReplicationTest {
             messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
             messageInfoFound.getContainerId(), System.currentTimeMillis()));
       }
+    }
+
+    @Override
+    public void validateDeleteAuthorization(MessageInfo info) {
+      return;
     }
 
     @Override

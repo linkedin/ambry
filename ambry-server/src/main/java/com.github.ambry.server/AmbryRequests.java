@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -300,6 +301,13 @@ public class AmbryRequests implements RequestAPI {
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
+            // check permission for frontend request which is exactly one blob request.
+            if (info.getMessageReadSetInfo().size() == 1) {
+              BlobId blobId = (BlobId) partitionRequestInfo.getBlobIds().get(0);
+              storeToGet.validateGetAuthorization(info.getMessageReadSetInfo().get(0), blobId.getAccountId(),
+                  blobId.getContainerId());
+            }
+
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory);
@@ -395,6 +403,10 @@ public class AmbryRequests implements RequestAPI {
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
         Store storeToDelete = storageManager.getStore(deleteRequest.getBlobId().getPartition());
+        // check permission for frontend request which is exactly one blob request.
+        if (writeset.getMessageSetInfo().size() == 1) {
+          storeToDelete.validateDeleteAuthorization(writeset.getMessageSetInfo().get(0));
+        }
         storeToDelete.delete(writeset);
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);

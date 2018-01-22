@@ -114,6 +114,10 @@ public class MessageInfo {
     return key;
   }
 
+  public boolean validateAuthorization(short accountId, short containerId) {
+    return (accountId == this.accountId && containerId == this.containerId);
+  }
+
   /**
    * Get size of message in bytes
    * @return size in bytes

@@ -224,6 +224,14 @@ class BlobStore implements Store {
   }
 
   @Override
+  public void validateGetAuthorization(MessageInfo info, short accountId, short containerId) throws StoreException {
+    if (!info.validateAuthorization(accountId, containerId)) {
+      throw new StoreException(
+          "Access Denied for Get. key: " + info.getStoreKey() + " accountId: " + info.getAccountId() + " containerId: "
+              + info.getContainerId(), StoreErrorCodes.ID_Not_Found);
+    }
+  }
+  @Override
   public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions) throws StoreException {
     checkStarted();
     // allows concurrent gets
@@ -375,6 +383,19 @@ class BlobStore implements Store {
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
+    }
+  }
+
+  @Override
+  public void validateDeleteAuthorization(MessageInfo info) throws StoreException {
+    IndexValue value = index.findKey(info.getStoreKey());
+    if (value != null) {
+      throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
+          StoreErrorCodes.ID_Not_Found);
+    } else if (!info.validateAuthorization(value.getAccountId(), value.getContainerId())) {
+      throw new StoreException(
+          "Access Denied for Delete. key: " + info.getStoreKey() + " accountId: " + info.getAccountId() + " containerId: "
+              + info.getContainerId(), StoreErrorCodes.ID_Not_Found);
     }
   }
 
