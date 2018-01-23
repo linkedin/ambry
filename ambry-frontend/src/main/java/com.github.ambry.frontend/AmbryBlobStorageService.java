@@ -511,7 +511,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
-          BlobId blobId = BlobId.getBlobIdFromString(result, clusterMap);
+          BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
           boolean isEncrypted = blobId.isEncrypted();
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
           // TODO use callback when AmbryBlobStorageService gets refactored into handlers.

@@ -28,7 +28,6 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -151,8 +150,8 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     boolean isEncrypted = false;
     try {
-      isEncrypted = BlobId.getBlobIdFromString(blobId, clusterMap).isEncrypted();
-    } catch (RestServiceException e) {
+      isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
+    } catch (IOException e) {
       RouterException routerException =
           new RouterException("Exception thrown during construction of BlobId ", e, RouterErrorCode.InvalidBlobId);
       completeGetBlobOperation(routerException, internalOptions, futureResult, callback);

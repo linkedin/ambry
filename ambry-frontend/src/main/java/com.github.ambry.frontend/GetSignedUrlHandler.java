@@ -166,7 +166,7 @@ class GetSignedUrlHandler {
       metrics.getSignedUrlSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
       try {
         if (exception == null) {
-          BlobId blobId = BlobId.getBlobIdFromString(result, clusterMap);
+          BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
           securityService.postProcessRequest(restRequest,
               new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, callback));
