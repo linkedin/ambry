@@ -91,7 +91,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
     CryptoServiceFactory cryptoServiceFactory =
         Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, registry);
     cryptoService = cryptoServiceFactory.getCryptoService();
-    cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
+    cryptoJobHandler =
+        new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount, routerConfig.routerCryptoJobsTimeoutMs, time);
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 

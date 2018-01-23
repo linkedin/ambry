@@ -596,6 +596,9 @@ class NonBlockingRouter implements Router {
       final int NETWORK_CLIENT_POLL_TIMEOUT = routerConfig.routerRequestTimeoutMs / 10;
       try {
         while (isOpen.get()) {
+          if (cryptoJobHandler != null) {
+            cryptoJobHandler.cleanUpExpiredCryptoJobs();
+          }
           List<RequestInfo> requestInfoList = pollForRequests();
           List<ResponseInfo> responseInfoList = networkClient.sendAndPoll(requestInfoList, NETWORK_CLIENT_POLL_TIMEOUT);
           onResponse(responseInfoList);

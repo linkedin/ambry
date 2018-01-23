@@ -15,18 +15,16 @@ package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
 import java.nio.ByteBuffer;
-import java.security.GeneralSecurityException;
 
 
 /**
  * Class representing an decrypt Job.
  */
-class DecryptJob implements CryptoJob {
+class DecryptJob extends CryptoJob {
   private final BlobId blobId;
   private final ByteBuffer encryptedBlobContent;
   private final ByteBuffer encryptedUserMetadata;
   private final ByteBuffer encryptedPerBlobKey;
-  private final Callback<DecryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final CryptoJobMetricsTracker decryptJobMetricsTracker;
@@ -46,11 +44,11 @@ class DecryptJob implements CryptoJob {
   DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuffer encryptedBlobContent,
       ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
       CryptoJobMetricsTracker decryptJobMetricsTracker, Callback<DecryptJobResult> callback) {
+    super(callback);
     this.blobId = blobId;
     this.encryptedBlobContent = encryptedBlobContent;
     this.encryptedUserMetadata = encryptedUserMetadata;
     this.encryptedPerBlobKey = encryptedPerBlobKey;
-    this.callback = callback;
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.decryptJobMetricsTracker = decryptJobMetricsTracker;
@@ -69,31 +67,25 @@ class DecryptJob implements CryptoJob {
     Exception exception = null;
     ByteBuffer decryptedBlobContent = null;
     ByteBuffer decryptedUserMetadata = null;
-    try {
-      Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
-      Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
-      if (encryptedBlobContent != null) {
-        decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
+    if (!isComplete()) {
+      try {
+        Object containerKey = kms.getKey(blobId.getAccountId(), blobId.getContainerId());
+        Object perBlobKey = cryptoService.decryptKey(encryptedPerBlobKey, containerKey);
+        if (encryptedBlobContent != null) {
+          decryptedBlobContent = cryptoService.decrypt(encryptedBlobContent, perBlobKey);
+        }
+        if (encryptedUserMetadata != null) {
+          decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
+        }
+      } catch (Exception e) {
+        exception = e;
+      } finally {
+        decryptJobMetricsTracker.onJobProcessingComplete();
+        completeJob(
+            exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,
+            exception);
       }
-      if (encryptedUserMetadata != null) {
-        decryptedUserMetadata = cryptoService.decrypt(encryptedUserMetadata, perBlobKey);
-      }
-    } catch (Exception e) {
-      exception = e;
-    } finally {
-      decryptJobMetricsTracker.onJobProcessingComplete();
-      callback.onCompletion(
-          exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,
-          exception);
     }
-  }
-
-  /**
-   * Close the job with the given {@code gse}
-   * @param gse the {@link GeneralSecurityException} that needs to be set while invoking callback for the job
-   */
-  public void closeJob(GeneralSecurityException gse) {
-    callback.onCompletion(null, gse);
   }
 
   /**

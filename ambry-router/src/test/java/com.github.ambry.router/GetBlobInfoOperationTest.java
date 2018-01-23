@@ -57,6 +57,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.CryptoJobHandlerTest.*;
 import static com.github.ambry.router.PutManagerTest.*;
 
 
@@ -70,6 +71,7 @@ public class GetBlobInfoOperationTest {
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final int BLOB_SIZE = 100;
   private static final int BLOB_USER_METADATA_SIZE = 10;
+  private final MockTime mockTime = new MockTime();
 
   private int requestParallelism = 2;
   private int successTarget = 1;
@@ -187,7 +189,8 @@ public class GetBlobInfoOperationTest {
   private void instantiateCryptoComponents(VerifiableProperties vprops) throws GeneralSecurityException {
     kms = new MockKeyManagementService(new KMSConfig(vprops), kmsSingleKey);
     cryptoService = new MockCryptoService(new CryptoServiceConfig(vprops));
-    cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    cryptoJobHandler =
+        new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
   }
 
   /**

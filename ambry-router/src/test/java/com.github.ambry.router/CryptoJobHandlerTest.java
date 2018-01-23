@@ -21,7 +21,9 @@ import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -32,6 +34,7 @@ import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.After;
 import org.junit.Test;
@@ -46,6 +49,7 @@ import static org.junit.Assert.*;
  */
 public class CryptoJobHandlerTest {
   static final int DEFAULT_THREAD_COUNT = 2;
+  static final int DEFAULT_CRYPTO_JOB_TIMEOUT_MS = Time.MsPerSec;
   static final int DEFAULT_KEY_SIZE = 64;
   private static final int MAX_DATA_SIZE_IN_BYTES = 10000;
   private static final int RANDOM_KEY_SIZE_IN_BITS = 256;
@@ -53,6 +57,7 @@ public class CryptoJobHandlerTest {
   private static final String DECRYPT_JOB_TYPE = "decrypt";
   private static final String CLUSTER_NAME = UtilsTest.getRandomString(10);
   private static final MetricRegistry REGISTRY = new MetricRegistry();
+  private final Time mockTime;
   private final CryptoService<SecretKeySpec> cryptoService;
   private final KeyManagementService<SecretKeySpec> kms;
   private final ClusterMap referenceClusterMap;
@@ -65,9 +70,10 @@ public class CryptoJobHandlerTest {
     defaultKey = TestUtils.getRandomKey(DEFAULT_KEY_SIZE);
     Properties props = getKMSProperties(defaultKey, RANDOM_KEY_SIZE_IN_BITS);
     verifiableProperties = new VerifiableProperties((props));
+    mockTime = new MockTime();
     kms = new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
     cryptoService = new GCMCryptoServiceFactory(verifiableProperties, REGISTRY).getCryptoService();
-    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
     referenceClusterMap = new MockClusterMap();
     routerMetrics = new NonBlockingRouterMetrics(referenceClusterMap);
   }
@@ -107,7 +113,7 @@ public class CryptoJobHandlerTest {
     int totalDataCount = 10;
     for (int j = 0; j < 5; j++) {
       cryptoJobHandler.close();
-      cryptoJobHandler = new CryptoJobHandler(j + 1);
+      cryptoJobHandler = new CryptoJobHandler(j + 1, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
       CountDownLatch encryptCallBackCount = new CountDownLatch(totalDataCount);
       CountDownLatch decryptCallBackCount = new CountDownLatch(totalDataCount);
       SecretKeySpec perBlobKey = kms.getRandomKey();
@@ -128,17 +134,33 @@ public class CryptoJobHandlerTest {
   public void testEncryptionFailure() throws InterruptedException, GeneralSecurityException {
     cryptoJobHandler.close();
     MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
+    IllegalStateException illegalStateException = new IllegalStateException();
     mockCryptoService.exceptionOnEncryption.set(
-        new GeneralSecurityException("Exception to test", new IllegalStateException()));
-    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+        new GeneralSecurityException("Exception to test", illegalStateException));
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
-    testFailureOnEncryption(perBlobSecretKey, mockCryptoService, kms);
+    testFailureOnEncryption(perBlobSecretKey, mockCryptoService, kms, illegalStateException, false);
     mockCryptoService.clearStates();
     cryptoJobHandler.close();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
     mockKms.exceptionToThrow.set(new GeneralSecurityException("Exception to test", new IllegalStateException()));
-    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
-    testFailureOnEncryption(perBlobSecretKey, cryptoService, mockKms);
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
+    testFailureOnEncryption(perBlobSecretKey, cryptoService, mockKms, illegalStateException, false);
+    mockCryptoService.clearStates();
+    cryptoJobHandler.close();
+
+    // test timeout
+    long[] timeToBlockKms =
+        {DEFAULT_CRYPTO_JOB_TIMEOUT_MS + 2, DEFAULT_CRYPTO_JOB_TIMEOUT_MS * 2, DEFAULT_CRYPTO_JOB_TIMEOUT_MS * 5};
+    TimeoutException timeoutException = new TimeoutException();
+    for (long timeToBlock : timeToBlockKms) {
+      mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
+      mockKms.timeToBlockResponse.set(timeToBlock);
+      cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
+      testFailureOnEncryption(perBlobSecretKey, cryptoService, mockKms, timeoutException, true);
+      mockCryptoService.clearStates();
+      cryptoJobHandler.close();
+    }
   }
 
   /**
@@ -150,16 +172,30 @@ public class CryptoJobHandlerTest {
   public void testDecryptionFailure() throws InterruptedException, GeneralSecurityException {
     cryptoJobHandler.close();
     MockCryptoService mockCryptoService = new MockCryptoService(new CryptoServiceConfig(verifiableProperties));
+    IllegalStateException illegalStateException = new IllegalStateException();
     mockCryptoService.exceptionOnDecryption.set(
-        new GeneralSecurityException("Exception to test", new IllegalStateException()));
-    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
+        new GeneralSecurityException("Exception to test", illegalStateException));
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
     SecretKeySpec perBlobSecretKey = kms.getRandomKey();
-    testFailureOnDecryption(perBlobSecretKey, null, false, mockCryptoService, kms);
+    testFailureOnDecryption(perBlobSecretKey, null, false, mockCryptoService, kms, illegalStateException, false, -1);
     mockCryptoService.clearStates();
     cryptoJobHandler.close();
     MockKeyManagementService mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
-    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT);
-    testFailureOnDecryption(perBlobSecretKey, mockKms, true, cryptoService, mockKms);
+    cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
+    testFailureOnDecryption(perBlobSecretKey, mockKms, true, cryptoService, mockKms, illegalStateException, false, -1);
+    cryptoJobHandler.close();
+
+    // test timeouts
+    long[] timeToBlockKms =
+        {DEFAULT_CRYPTO_JOB_TIMEOUT_MS + 2, DEFAULT_CRYPTO_JOB_TIMEOUT_MS * 2, DEFAULT_CRYPTO_JOB_TIMEOUT_MS * 5};
+    TimeoutException timeoutException = new TimeoutException();
+    for (long timeToBlock : timeToBlockKms) {
+      mockKms = new MockKeyManagementService(new KMSConfig(verifiableProperties), defaultKey);
+      cryptoJobHandler = new CryptoJobHandler(DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
+      testFailureOnDecryption(perBlobSecretKey, mockKms, false, cryptoService, mockKms, timeoutException, true,
+          timeToBlock);
+      cryptoJobHandler.close();
+    }
   }
 
   /**
@@ -345,7 +381,7 @@ public class CryptoJobHandlerTest {
     cryptoJobHandler.submitJob(
         new EncryptJob(randomData.blobId.getAccountId(), randomData.blobId.getContainerId(), content, userMetadata,
             perBlobKey, cryptoService, kms, new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
-            new EncryptCallbackVerifier(randomData.blobId, false, encryptCallBackCount,
+            new EncryptCallbackVerifier(randomData.blobId, false, null, encryptCallBackCount,
                 new DecryptCallbackVerifier(randomData.blobId, content, userMetadata, false, decryptCallBackCount),
                 mode)));
   }
@@ -353,17 +389,25 @@ public class CryptoJobHandlerTest {
   /**
    * Test failure during encryption
    * @param perBlobKey the {@link SecretKeySpec} representing the per blob key
+   * @param cryptoService {@link CryptoService} instance to use
+   * @param kms {@link KeyManagementService} instance to use
+   * @param expectedCause Expected cause for the failure
+   * @param testTimeout {@code true} if time out needs to be tested, {@code false} otherwise
    * @throws InterruptedException
    */
-  private void testFailureOnEncryption(SecretKeySpec perBlobKey, CryptoService cryptoService, KeyManagementService kms)
-      throws InterruptedException {
+  private void testFailureOnEncryption(SecretKeySpec perBlobKey, CryptoService cryptoService, KeyManagementService kms,
+      Exception expectedCause, boolean testTimeout) throws InterruptedException {
     TestBlobData testData = getRandomBlob(referenceClusterMap);
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     cryptoJobHandler.submitJob(
         new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
             testData.userMetadata, perBlobKey, cryptoService, kms,
             new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics),
-            new EncryptCallbackVerifier(testData.blobId, true, encryptCallBackCount, null, Mode.Both)));
+            new EncryptCallbackVerifier(testData.blobId, true, expectedCause, encryptCallBackCount, null, Mode.Both)));
+    if (testTimeout) {
+      mockTime.sleep(DEFAULT_CRYPTO_JOB_TIMEOUT_MS + 1);
+      cryptoJobHandler.cleanUpExpiredCryptoJobs();
+    }
     awaitCountDownLatch(encryptCallBackCount, ENCRYPT_JOB_TYPE);
   }
 
@@ -373,13 +417,20 @@ public class CryptoJobHandlerTest {
    * @param mockKMS {@link MockKeyManagementService} that mocks {@link KeyManagementService}
    * @param setExceptionForKMS {@code true} if exception needs to be set using {@link MockKeyManagementService}
    *                           {@code false} otherwise
+   * @param cryptoService {@link CryptoService} instance to use
+   * @param kms {@link KeyManagementService} instance to use
+   * @param expectedCause expected cause for the failure
+   * @param testTimeout {@code true} if time out needs to be tested, {@code false} otherwise
+   * @param timeToBlockKmsMs time to block kms in ms
    * @throws InterruptedException
    */
   private void testFailureOnDecryption(SecretKeySpec perBlobKey, MockKeyManagementService mockKMS,
-      boolean setExceptionForKMS, CryptoService cryptoService, KeyManagementService kms) throws InterruptedException {
+      boolean setExceptionForKMS, CryptoService cryptoService, KeyManagementService kms, Exception expectedCause,
+      boolean testTimeout, long timeToBlockKmsMs) throws InterruptedException {
     TestBlobData testData = getRandomBlob(referenceClusterMap);
     CountDownLatch encryptCallBackCount = new CountDownLatch(1);
     CountDownLatch decryptCallBackCount = new CountDownLatch(1);
+    CountDownLatch timeManipulaterLatch = new CountDownLatch(1);
     cryptoJobHandler.submitJob(
         new EncryptJob(testData.blobId.getAccountId(), testData.blobId.getContainerId(), testData.blobContent,
             testData.userMetadata, perBlobKey, cryptoService, kms,
@@ -395,6 +446,8 @@ public class CryptoJobHandlerTest {
               if (setExceptionForKMS) {
                 mockKMS.exceptionToThrow.set(
                     new GeneralSecurityException("Exception to test", new IllegalStateException()));
+              } else if (testTimeout) {
+                mockKMS.timeToBlockResponse.set(timeToBlockKmsMs);
               }
               cryptoJobHandler.submitJob(new DecryptJob(testData.blobId, encryptJobResult.getEncryptedKey(),
                   encryptJobResult.getEncryptedBlobContent(), encryptJobResult.getEncryptedUserMetadata(),
@@ -402,11 +455,19 @@ public class CryptoJobHandlerTest {
                   (DecryptJob.DecryptJobResult result, Exception e) -> {
                     decryptCallBackCount.countDown();
                     assertNotNull("Exception should have been thrown to decrypt contents for " + testData.blobId, e);
-                    assertTrue("Exception cause should have been GeneralSecurityException",
+                    assertTrue("Exception should have been GeneralSecurityException",
                         e instanceof GeneralSecurityException);
+                    assertEquals("Exception cause mismatch", expectedCause.getCause(), e.getCause().getCause());
                     assertNull("Result should have been null", result);
                   }));
+              timeManipulaterLatch.countDown();
             }));
+    if (testTimeout) {
+      // before maipulating the time, ensure decrypt job is submitted
+      awaitCountDownLatch(timeManipulaterLatch, "TIME_MANIPULATER");
+      mockTime.sleep(DEFAULT_CRYPTO_JOB_TIMEOUT_MS + 1);
+      cryptoJobHandler.cleanUpExpiredCryptoJobs();
+    }
     awaitCountDownLatch(decryptCallBackCount, DECRYPT_JOB_TYPE);
   }
 
@@ -417,14 +478,16 @@ public class CryptoJobHandlerTest {
   private class EncryptCallbackVerifier implements Callback<EncryptJob.EncryptJobResult> {
     private final BlobId blobId;
     private final boolean expectException;
+    private final Exception expectedCause;
     private final CountDownLatch countDownLatch;
     private final DecryptCallbackVerifier decryptCallBackVerifier;
     private final Mode mode;
 
-    EncryptCallbackVerifier(BlobId blobId, boolean expectException, CountDownLatch encryptCountDownLatch,
-        DecryptCallbackVerifier decryptCallBackVerifier, Mode mode) {
+    EncryptCallbackVerifier(BlobId blobId, boolean expectException, Exception expectedCause,
+        CountDownLatch encryptCountDownLatch, DecryptCallbackVerifier decryptCallBackVerifier, Mode mode) {
       this.blobId = blobId;
       this.expectException = expectException;
+      this.expectedCause = expectedCause;
       this.countDownLatch = encryptCountDownLatch;
       this.decryptCallBackVerifier = decryptCallBackVerifier;
       this.mode = mode;
@@ -450,8 +513,9 @@ public class CryptoJobHandlerTest {
                 new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), decryptCallBackVerifier));
       } else {
         assertNotNull("Exception should have been thrown to encrypt contents for " + blobId, exception);
-        assertTrue("Exception cause should have been GeneralSecurityException",
+        assertTrue("Exception should have been GeneralSecurityException",
             exception instanceof GeneralSecurityException);
+        assertEquals("Exception cause mismatch", expectedCause.getCause(), exception.getCause().getCause());
         assertNull("Result should have been null", encryptJobResult);
       }
     }

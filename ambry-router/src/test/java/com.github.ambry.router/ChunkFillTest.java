@@ -45,6 +45,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.CryptoJobHandlerTest.*;
+
 
 /**
  * A class to test the chunk filling flow in the {@link PutManager}. Tests create operations with a channel and
@@ -52,6 +54,7 @@ import org.junit.runners.Parameterized;
  */
 @RunWith(Parameterized.class)
 public class ChunkFillTest {
+  private final MockTime mockTime = new MockTime();
   private final boolean testEncryption;
   private ByteBuffer[] compositeBuffers;
   private ByteBuffer[] compositeEncryptionKeys;
@@ -254,7 +257,8 @@ public class ChunkFillTest {
       kms = new MockKeyManagementService(new KMSConfig(vProps),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new MockCryptoService(new CryptoServiceConfig(vProps));
-      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+      cryptoJobHandler =
+          new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
     }
     MockRouterCallback routerCallback =
         new MockRouterCallback(networkClientFactory.getNetworkClient(), Collections.EMPTY_LIST);

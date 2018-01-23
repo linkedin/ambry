@@ -44,6 +44,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.CryptoJobHandlerTest.*;
+
 
 @RunWith(Parameterized.class)
 public class GetManagerTest {
@@ -100,7 +102,8 @@ public class GetManagerTest {
       kms = new SingleKeyManagementService(new KMSConfig(vProps),
           TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS));
       cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
-      cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+      cryptoJobHandler =
+          new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT, DEFAULT_CRYPTO_JOB_TIMEOUT_MS, mockTime);
     }
   }
 
