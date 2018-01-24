@@ -20,7 +20,7 @@ import java.nio.ByteBuffer;
 /**
  * Class representing an decrypt Job.
  */
-class DecryptJob extends CryptoJob {
+class DecryptJob extends CryptoJob<DecryptJob.DecryptJobResult> {
   private final BlobId blobId;
   private final ByteBuffer encryptedBlobContent;
   private final ByteBuffer encryptedUserMetadata;

@@ -89,7 +89,7 @@ public class CryptoJobHandlerTest {
    * @throws InterruptedException
    */
   @Test
-  public void testCryptoJobExecutorService() throws GeneralSecurityException, InterruptedException {
+  public void testCryptoJobHandler() throws GeneralSecurityException, InterruptedException {
     int totalDataCount = 10;
     CountDownLatch encryptCallBackCount = new CountDownLatch(totalDataCount * 3);
     CountDownLatch decryptCallBackCount = new CountDownLatch(totalDataCount * 3);
@@ -109,7 +109,7 @@ public class CryptoJobHandlerTest {
    * @throws InterruptedException
    */
   @Test
-  public void testCryptoJobExecutorServiceDiffThreadCount() throws GeneralSecurityException, InterruptedException {
+  public void testCryptoJobHandlerDiffThreadCount() throws GeneralSecurityException, InterruptedException {
     int totalDataCount = 10;
     for (int j = 0; j < 5; j++) {
       cryptoJobHandler.close();

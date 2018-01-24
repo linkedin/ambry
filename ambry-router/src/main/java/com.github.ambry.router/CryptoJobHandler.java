@@ -40,7 +40,7 @@ class CryptoJobHandler implements Closeable {
       new GeneralSecurityException("CryptoJobHandler closed");
   private static final GeneralSecurityException CRYPTO_JOB_TIMEOUT_EXCEPTION =
       new GeneralSecurityException("CryptoJob timeout", new TimeoutException());
-  private ExecutorService scheduler;
+  private ExecutorService executor;
   private ConcurrentHashMap<CryptoJob, Long> pendingCryptoJobs = new ConcurrentHashMap<>();
   private final Time time;
 
@@ -55,7 +55,7 @@ class CryptoJobHandler implements Closeable {
   CryptoJobHandler(int threadCount, long cryptoJobTimeoutMs, Time time) {
     this.cryptoJobTimeoutMs = cryptoJobTimeoutMs;
     enabled.set(true);
-    scheduler = Executors.newFixedThreadPool(threadCount);
+    executor = Executors.newFixedThreadPool(threadCount);
     this.time = time;
   }
 
@@ -80,7 +80,7 @@ class CryptoJobHandler implements Closeable {
 
   void submitJob(CryptoJob cryptoJob) {
     if (enabled.get()) {
-      scheduler.execute(cryptoJob);
+      executor.execute(cryptoJob);
       pendingCryptoJobs.put(cryptoJob, time.milliseconds());
     }
   }
@@ -91,7 +91,7 @@ class CryptoJobHandler implements Closeable {
    */
   public void close() {
     if (enabled.compareAndSet(true, false)) {
-      List<Runnable> pendingTasks = scheduler.shutdownNow();
+      List<Runnable> pendingTasks = executor.shutdownNow();
       for (Runnable task : pendingTasks) {
         if (task instanceof CryptoJob) {
           ((CryptoJob) task).completeJob(null, CLOSED_EXCEPTION);

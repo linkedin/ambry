@@ -19,7 +19,7 @@ import java.nio.ByteBuffer;
 /**
  * Class representing an Encrypt Job
  */
-public class EncryptJob extends CryptoJob {
+public class EncryptJob extends CryptoJob<EncryptJob.EncryptJobResult> {
   private final short accountId;
   private final short containerId;
   private final ByteBuffer blobContentToEncrypt;

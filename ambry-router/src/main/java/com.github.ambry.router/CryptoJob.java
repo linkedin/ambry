@@ -20,11 +20,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * CryptoJob representing the job that needs processing by {@link CryptoJobHandler}
  */
 public abstract class CryptoJob<T> implements Runnable {
-  private AtomicBoolean isComplete = new AtomicBoolean(false);
-  private Callback callback;
+  private Callback<T> callback;
   private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
 
-  CryptoJob(Callback callback) {
+  CryptoJob(Callback<T> callback) {
     this.callback = callback;
   }
 
@@ -32,7 +31,7 @@ public abstract class CryptoJob<T> implements Runnable {
    * @return {@code true} if the job is complete. {@code false} otherwise
    */
   boolean isComplete() {
-    return isComplete.get();
+    return callbackInvoked.get();
   }
 
   /**
@@ -43,7 +42,7 @@ public abstract class CryptoJob<T> implements Runnable {
   void completeJob(T result, Exception e) {
     if (callbackInvoked.compareAndSet(false, true)) {
       callback.onCompletion(result, e);
-      isComplete.set(true);
+      callback = null;
     }
   }
 }
