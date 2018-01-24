@@ -713,6 +713,7 @@ class CryptoJobMetricsTracker {
    * Initiates the timer for the crypto job on submission
    */
   void onJobSubmission() {
+    cryptoJobMetrics.operationRate.mark();
     jobSubmissionTimeMs = System.currentTimeMillis();
   }
 
@@ -720,7 +721,6 @@ class CryptoJobMetricsTracker {
    * Notifies that the job processing has started for the corresponding CryptoJob
    */
   void onJobProcessingStart() {
-    cryptoJobMetrics.operationRate.mark();
     jobProcessingStartTimeMs = System.currentTimeMillis();
     cryptoJobMetrics.jobQueuingTimeInMs.update(jobProcessingStartTimeMs - jobSubmissionTimeMs);
   }

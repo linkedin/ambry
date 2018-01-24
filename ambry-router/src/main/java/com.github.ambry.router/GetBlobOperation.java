@@ -458,7 +458,6 @@ class GetBlobOperation extends GetOperation {
     // metrics tracker to track decrypt jobs
     protected CryptoJobMetricsTracker decryptJobMetricsTracker =
         new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
-    ;
 
     /**
      * Construct a GetChunk

@@ -55,7 +55,7 @@ class GetBlobInfoOperation extends GetOperation {
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // metrics tracker to track decrypt jobs
-  private CryptoJobMetricsTracker decryptJobMetricsTracker =
+  private final CryptoJobMetricsTracker decryptJobMetricsTracker =
       new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();

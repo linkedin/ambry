@@ -647,9 +647,8 @@ class PutOperation {
     // the partitionId chosen for the current chunk.
     private PartitionId partitionId;
     // metrics tracker to track encrypt jobs
-    private CryptoJobMetricsTracker encryptJobMetricsTracker =
+    private final CryptoJobMetricsTracker encryptJobMetricsTracker =
         new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics);
-    ;
     // the list of partitions already attempted for this chunk.
     private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // map of correlation id to the request metadata for every request issued for the current chunk.
