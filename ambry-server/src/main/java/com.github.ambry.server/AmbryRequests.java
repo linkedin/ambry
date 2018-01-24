@@ -305,7 +305,9 @@ public class AmbryRequests implements RequestAPI {
             }
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
             // Check accountId and containerId.
-            for (int i = 0; i < info.getMessageReadSetInfo().size(); i++) {
+            for (int i = 0;
+                storageManager.getStoreConfig().storeGetAuthorizationCheck && i < info.getMessageReadSetInfo().size();
+                i++) {
               MessageInfo messageInfo = info.getMessageReadSetInfo().get(i);
               if (messageInfo.getAccountId() == UNKNOWN_ACCOUNT_ID
                   && messageInfo.getContainerId() == UNKNOWN_CONTAINER_ID) {
@@ -313,7 +315,8 @@ public class AmbryRequests implements RequestAPI {
               }
               BlobId blobId = (BlobId) partitionRequestInfo.getBlobIds().get(i);
               if (!messageInfo.validateAuthorization(blobId.getAccountId(), blobId.getContainerId())) {
-                throw new StoreException("GET authorization failure. Key: " + blobId.getID(), StoreErrorCodes.Authorization_Failure);
+                throw new StoreException("GET authorization failure. Key: " + blobId.getID(),
+                    StoreErrorCodes.Authorization_Failure);
               }
             }
 

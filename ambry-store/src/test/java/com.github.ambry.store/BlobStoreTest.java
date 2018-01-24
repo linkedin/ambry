@@ -574,7 +574,7 @@ public class BlobStoreTest {
    * Tests error cases for {@link BlobStore#delete(MessageWriteSet)}.
    */
   @Test
-  public void deleteErrorCasesTest() {
+  public void deleteErrorCasesTest() throws Exception{
     // ID that is already deleted
     verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
     // ID that does not exist
@@ -1201,7 +1201,7 @@ public class BlobStoreTest {
    * @param idToDelete the {@link MockId} to DELETE.
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
-  private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
+  private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) throws StoreException {
     short accoundId = accountIdMap.containsKey(idToDelete) == true ? accountIdMap.get(idToDelete)
         : Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = containerIdMap.containsKey(idToDelete) == true ? containerIdMap.get(idToDelete)
@@ -1210,11 +1210,13 @@ public class BlobStoreTest {
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, accoundId, containerId, System.currentTimeMillis());
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
-    try {
-      store.delete(writeSet);
-      fail("Store DELETE should have failed");
-    } catch (StoreException e) {
-      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
+    if (store.getConfig().storeDeleteAuthorizationCheck == true) {
+      try {
+        store.delete(writeSet);
+        fail("Store DELETE should have failed");
+      } catch (StoreException e) {
+        assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
+      }
     }
   }
 
