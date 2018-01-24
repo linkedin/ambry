@@ -54,6 +54,9 @@ class GetBlobInfoOperation extends GetOperation {
   private final ProgressTracker progressTracker;
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
+  // metrics tracker to track decrypt jobs
+  private final CryptoJobMetricsTracker decryptJobMetricsTracker =
+      new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics);
   // map of correlation id to the request metadata for every request issued for this operation.
   private final Map<Integer, GetRequestInfo> correlationIdToGetRequestInfo = new TreeMap<Integer, GetRequestInfo>();
 
@@ -335,27 +338,31 @@ class GetBlobInfoOperation extends GetOperation {
       // submit decrypt job
       progressTracker.initializeDecryptionTracker();
       logger.trace("Submitting decrypt job for {}", blobId);
+      decryptJobMetricsTracker.onJobSubmission();
       long startTimeMs = System.currentTimeMillis();
       cryptoJobHandler.submitJob(
           new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
-              (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                logger.trace("Handling decrypt job callback results for {}", blobId);
-                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-                if (exception == null) {
-                  logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-                  operationResult = new GetBlobResultInternal(
-                      new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
-                          null), null);
-                  progressTracker.setDecryptionSuccess();
-                } else {
-                  logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
-                  setOperationException(
-                      new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
-                          RouterErrorCode.UnexpectedInternalError));
-                  progressTracker.setDecryptionFailed();
-                }
-                routerCallback.onPollReady();
-              }));
+              decryptJobMetricsTracker, (DecryptJob.DecryptJobResult result, Exception exception) -> {
+            decryptJobMetricsTracker.onJobResultProcessingStart();
+            logger.trace("Handling decrypt job callback results for {}", blobId);
+            routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
+            if (exception == null) {
+              logger.trace("Successfully updating decrypt job callback results for {}", blobId);
+              operationResult = new GetBlobResultInternal(
+                  new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
+                      null), null);
+              progressTracker.setDecryptionSuccess();
+            } else {
+              decryptJobMetricsTracker.incrementOperationError();
+              logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
+              setOperationException(
+                  new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
+                      RouterErrorCode.UnexpectedInternalError));
+              progressTracker.setDecryptionFailed();
+            }
+            decryptJobMetricsTracker.onJobResultProcessingComplete();
+            routerCallback.onPollReady();
+          }));
     }
   }
 

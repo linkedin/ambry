@@ -29,6 +29,7 @@ class DecryptJob implements CryptoJob {
   private final Callback<DecryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
+  private final CryptoJobMetricsTracker decryptJobMetricsTracker;
 
   /**
    * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
@@ -39,11 +40,12 @@ class DecryptJob implements CryptoJob {
    * @param encryptedUserMetadata encrypted user metadata. Could be {@null}
    * @param cryptoService the {@link CryptoService} instance to use
    * @param kms the {@link KeyManagementService} instance to use
+   * @param decryptJobMetricsTracker metrics tracker to track the decryption job
    * @param callback {@link Callback} to be invoked on completion
    */
   DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuffer encryptedBlobContent,
       ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
-      Callback<DecryptJobResult> callback) {
+      CryptoJobMetricsTracker decryptJobMetricsTracker, Callback<DecryptJobResult> callback) {
     this.blobId = blobId;
     this.encryptedBlobContent = encryptedBlobContent;
     this.encryptedUserMetadata = encryptedUserMetadata;
@@ -51,6 +53,7 @@ class DecryptJob implements CryptoJob {
     this.callback = callback;
     this.cryptoService = cryptoService;
     this.kms = kms;
+    this.decryptJobMetricsTracker = decryptJobMetricsTracker;
   }
 
   /**
@@ -62,6 +65,7 @@ class DecryptJob implements CryptoJob {
    * 5. Invoke callback with the decryptedBlobContent
    */
   public void run() {
+    decryptJobMetricsTracker.onJobProcessingStart();
     Exception exception = null;
     ByteBuffer decryptedBlobContent = null;
     ByteBuffer decryptedUserMetadata = null;
@@ -77,6 +81,7 @@ class DecryptJob implements CryptoJob {
     } catch (Exception e) {
       exception = e;
     } finally {
+      decryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
           exception == null ? new DecryptJobResult(blobId, decryptedBlobContent, decryptedUserMetadata) : null,
           exception);

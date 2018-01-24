@@ -29,6 +29,7 @@ public class EncryptJob implements CryptoJob {
   private final Callback<EncryptJobResult> callback;
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
+  private final CryptoJobMetricsTracker encryptJobMetricsTracker;
 
   /**
    * Instantiates {@link EncryptJob} for an upload.
@@ -37,10 +38,12 @@ public class EncryptJob implements CryptoJob {
    * @param blobContentToEncrypt {@link ByteBuffer} to be encrypted. Could be {@code null} for a metadata chunk.
    * @param userMetadataToEncrypt user metadata to be encrypted. Could be {@code null} for data chunks.
    * @param perBlobKey per blob key to use to encrypt the blob content
+   * @param encryptJobMetricsTracker metrics tracker to track the encryption job
    * @param callback {@link Callback} to be invoked on completion
    */
   EncryptJob(short accountId, short containerId, ByteBuffer blobContentToEncrypt, ByteBuffer userMetadataToEncrypt,
-      Object perBlobKey, CryptoService cryptoService, KeyManagementService kms, Callback<EncryptJobResult> callback) {
+      Object perBlobKey, CryptoService cryptoService, KeyManagementService kms,
+      CryptoJobMetricsTracker encryptJobMetricsTracker, Callback<EncryptJobResult> callback) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.blobContentToEncrypt = blobContentToEncrypt;
@@ -49,6 +52,7 @@ public class EncryptJob implements CryptoJob {
     this.callback = callback;
     this.cryptoService = cryptoService;
     this.kms = kms;
+    this.encryptJobMetricsTracker = encryptJobMetricsTracker;
   }
 
   /**
@@ -61,6 +65,7 @@ public class EncryptJob implements CryptoJob {
    */
   @Override
   public void run() {
+    encryptJobMetricsTracker.onJobProcessingStart();
     ByteBuffer encryptedBlobContent = null;
     ByteBuffer encryptedUserMetadata = null;
     ByteBuffer encryptedKey = null;
@@ -77,6 +82,7 @@ public class EncryptJob implements CryptoJob {
     } catch (Exception e) {
       exception = e;
     } finally {
+      encryptJobMetricsTracker.onJobProcessingComplete();
       callback.onCompletion(
           exception == null ? new EncryptJobResult(encryptedKey, encryptedBlobContent, encryptedUserMetadata) : null,
           exception);

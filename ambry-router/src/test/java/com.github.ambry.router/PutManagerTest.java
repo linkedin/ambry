@@ -77,6 +77,7 @@ public class PutManagerTest {
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
+  private NonBlockingRouterMetrics metrics;
   private MockKeyManagementService kms;
   private MockCryptoService cryptoService;
   private CryptoJobHandler cryptoJobHandler;
@@ -660,7 +661,8 @@ public class PutManagerTest {
     if (testEncryption && instantiateEncryptionCast) {
       setupEncryptionCast(vProps);
     }
-    router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap),
+    metrics = new NonBlockingRouterMetrics(mockClusterMap);
+    router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, mockTime);
@@ -814,12 +816,12 @@ public class PutManagerTest {
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
-            (result, exception) -> {
-              Assert.assertNull("Exception should not be thrown", exception);
-              Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-              Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                  result.getDecryptedUserMetadata().array());
-            }).run();
+            new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
+          Assert.assertNull("Exception should not be thrown", exception);
+          Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+          Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+              result.getDecryptedUserMetadata().array());
+        }).run();
       } else {
         Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata, request.getUsermetadata().array());
       }
@@ -839,16 +841,18 @@ public class PutManagerTest {
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,
-            cryptoService, kms, new Callback<DecryptJob.DecryptJobResult>() {
-          @Override
-          public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
-            Assert.assertNull("Exception should not be thrown", exception);
-            Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
-            Assert.assertArrayEquals("Content mismatch", originalPutContent, result.getDecryptedBlobContent().array());
-            Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                result.getDecryptedUserMetadata().array());
-          }
-        }).run();
+            cryptoService, kms, new CryptoJobMetricsTracker(metrics.decryptJobMetrics),
+            new Callback<DecryptJob.DecryptJobResult>() {
+              @Override
+              public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
+                Assert.assertNull("Exception should not be thrown", exception);
+                Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+                Assert.assertArrayEquals("Content mismatch", originalPutContent,
+                    result.getDecryptedBlobContent().array());
+                Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+                    result.getDecryptedUserMetadata().array());
+              }
+            }).run();
       }
     }
     notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
@@ -884,14 +888,14 @@ public class PutManagerTest {
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(dataBlobPutRequest.getBlobId(), dataBlobPutRequest.getBlobEncryptionKey().duplicate(),
             ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
-            (result, exception) -> {
-              Assert.assertNull("Exception should not be thrown", exception);
-              Assert.assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
-              Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
-                  result.getDecryptedUserMetadata().array());
-              dataBlobLength.set(result.getDecryptedBlobContent().remaining());
-              result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
-            }).run();
+            new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
+          Assert.assertNull("Exception should not be thrown", exception);
+          Assert.assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
+          Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
+              result.getDecryptedUserMetadata().array());
+          dataBlobLength.set(result.getDecryptedBlobContent().remaining());
+          result.getDecryptedBlobContent().get(content, offset.get(), dataBlobLength.get());
+        }).run();
       }
       if (key != lastKey) {
         Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());

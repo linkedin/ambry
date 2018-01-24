@@ -62,6 +62,7 @@ public class ChunkFillTest {
   private int blobSize;
   private int chunkSize;
   private Random random = new Random();
+  private NonBlockingRouterMetrics routerMetrics;
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
@@ -233,7 +234,7 @@ public class ChunkFillTest {
     VerifiableProperties vProps = getNonBlockingRouterProperties();
     MockClusterMap mockClusterMap = new MockClusterMap();
     RouterConfig routerConfig = new RouterConfig(vProps);
-    NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+    routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     ResponseHandler responseHandler = new ResponseHandler(mockClusterMap);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
@@ -330,7 +331,7 @@ public class ChunkFillTest {
         compositeBuffers[i].flip();
         DecryptJob decryptJob =
             new DecryptJob(compositeBlobIds[i], compositeEncryptionKeys[i], compositeBuffers[i], null, cryptoService,
-                kms, (result, exception) -> {
+                kms, new CryptoJobMetricsTracker(routerMetrics.decryptJobMetrics), (result, exception) -> {
               Assert.assertNull("Exception shouldn't have been thrown", exception);
               int chunkSize = result.getDecryptedBlobContent().remaining();
               result.getDecryptedBlobContent().get(content, offset.get(), chunkSize);

@@ -646,6 +646,9 @@ class PutOperation {
     private int failedAttempts;
     // the partitionId chosen for the current chunk.
     private PartitionId partitionId;
+    // metrics tracker to track encrypt jobs
+    private final CryptoJobMetricsTracker encryptJobMetricsTracker =
+        new CryptoJobMetricsTracker(routerMetrics.encryptJobMetrics);
     // the list of partitions already attempted for this chunk.
     private List<PartitionId> attemptedPartitionIds = new ArrayList<PartitionId>();
     // map of correlation id to the request metadata for every request issued for the current chunk.
@@ -846,12 +849,14 @@ class PutOperation {
         logger.trace("Chunk at index {} moves to {} state", chunkIndex, ChunkState.Encrypting);
         state = ChunkState.Encrypting;
         chunkEncryptReadyAtMs = time.milliseconds();
+        encryptJobMetricsTracker.onJobSubmission();
         logger.trace("Submitting encrypt job for chunk at index {}", chunkIndex);
         cryptoJobHandler.submitJob(
             new EncryptJob(passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
                 isMetadataChunk() ? null : buf, ByteBuffer.wrap(chunkUserMetadata), kms.getRandomKey(), cryptoService,
-                kms, (EncryptJob.EncryptJobResult result, Exception exception) -> {
+                kms, encryptJobMetricsTracker, (EncryptJob.EncryptJobResult result, Exception exception) -> {
               logger.trace("Processing encrypt job callback for chunk at index {}", chunkIndex);
+              encryptJobMetricsTracker.onJobResultProcessingStart();
               if (exception == null && !isOperationComplete()) {
                 if (!isMetadataChunk()) {
                   buf = result.getEncryptedBlobContent();
@@ -862,6 +867,7 @@ class PutOperation {
                 prepareForSending();
                 chunkReadyAtMs = time.milliseconds();
               } else {
+                encryptJobMetricsTracker.incrementOperationError();
                 if (!isOperationComplete()) {
                   logger.trace("Setting exception from encrypt of chunk at index {} ", chunkIndex, exception);
                   setOperationExceptionAndComplete(
@@ -874,9 +880,11 @@ class PutOperation {
                 }
               }
               routerMetrics.encryptTimeMs.update(time.milliseconds() - chunkEncryptReadyAtMs);
+              encryptJobMetricsTracker.onJobResultProcessingComplete();
               routerCallback.onPollReady();
             }));
       } catch (GeneralSecurityException e) {
+        encryptJobMetricsTracker.incrementOperationError();
         logger.trace("Exception thrown while generating random key for chunk at index {}", chunkIndex, e);
         setOperationExceptionAndComplete(new RouterException(
             "GeneralSecurityException thrown while generating random key for chunk at index " + chunkIndex, e,
