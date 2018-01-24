@@ -579,8 +579,6 @@ public class BlobStoreTest {
     verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
     // ID that does not exist
     verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
-    // accoundId and containerId not match
-    // TODO
   }
 
 

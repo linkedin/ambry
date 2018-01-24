@@ -391,7 +391,7 @@ class BlobStore implements Store {
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
-        } else if (!value.validateAuthorization(info.getAccountId(), info.getContainerId())) {
+        } else if (config.storeGetAuthorizationCheck && !value.validateAuthorization(info.getAccountId(), info.getContainerId())) {
           throw new StoreException(
               "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: " + value.getAccountId()
                   + "Actually containerId: " + value.getContainerId(), StoreErrorCodes.Authorization_Failure);

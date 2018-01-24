@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
@@ -63,6 +64,7 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
@@ -95,6 +97,7 @@ import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -126,6 +129,51 @@ public class AmbryRequestsTest {
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
+  }
+
+  /**
+   * Tests Authorization validation is correct.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void getRequestExceptionTest() throws InterruptedException, IOException, StoreException {
+    // From request
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), new MockPartitionId());
+    // Truth of source
+    MessageInfo info =
+        new MessageInfo(blobId, 50, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), 1);
+    StoreInfo storeInfo = new StoreInfo(null, Collections.singletonList(info));
+    // Mock objects
+    Store mockStore = mock(Store.class);
+    when(mockStore.get(any(), any())).thenReturn(storeInfo);
+    StorageManager mockStorageManager = mock(StorageManager.class);
+    when(mockStorageManager.getStore(any())).thenReturn(mockStore);
+    // Build Request
+    PartitionRequestInfo partitionRequestInfo =
+        new PartitionRequestInfo(new MockPartitionId(), Collections.singletonList(blobId));
+    GetRequest getRequest =
+        new GetRequest(1, new String("1"), MessageFormatFlags.Blob, Collections.singletonList(partitionRequestInfo),
+            GetOption.Include_All);
+    MockRequest mockRequest = MockRequest.fromRequest(getRequest);
+    // Validation
+    AmbryRequests testAmbryRequests =
+        new AmbryRequests(mockStorageManager, requestResponseChannel, clusterMap, dataNodeId,
+            clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
+
+    testAmbryRequests.handleRequests(mockRequest);
+    assertEquals("Request accompanying response does not match original request", mockRequest,
+        requestResponseChannel.lastOriginalRequest);
+    assertNotNull("Response not sent", requestResponseChannel.lastResponse);
+    GetResponse response = (GetResponse) requestResponseChannel.lastResponse;
+    assertTrue("Should have one Partition Response Info.", response.getPartitionResponseInfoList().size() >= 1);
+    for (PartitionResponseInfo partitionResponseInfo : response.getPartitionResponseInfoList()) {
+      assertEquals("Error code does not match expected", ServerErrorCode.Blob_Not_Found,
+          partitionResponseInfo.getErrorCode());
+    }
   }
 
   /**
@@ -713,6 +761,7 @@ public class AmbryRequestsTest {
     /**
      * An empty {@link Store} implementation.
      */
+
     private static Store store = new Store() {
 
       @Override

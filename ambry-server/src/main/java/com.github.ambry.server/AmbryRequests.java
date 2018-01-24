@@ -304,7 +304,7 @@ public class AmbryRequests implements RequestAPI {
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
-
+            // Check accountId and containerId.
             for (int i = 0; i < info.getMessageReadSetInfo().size(); i++) {
               MessageInfo messageInfo = info.getMessageReadSetInfo().get(i);
               if (messageInfo.getAccountId() == UNKNOWN_ACCOUNT_ID
