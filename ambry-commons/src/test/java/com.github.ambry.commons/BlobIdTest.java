@@ -95,8 +95,6 @@ public class BlobIdTest {
     assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
     assertBlobIdFieldValues(version, blobId, referenceType, referenceDatacenterId, referenceAccountId,
         referenceContainerId, referencePartitionId, referenceIsEncrypted);
-    BlobId regeneratedBlobId = BlobId.getBlobIdFromString(blobId.getID(), referenceClusterMap);
-    assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
   }
 
   /**
