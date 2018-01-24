@@ -183,11 +183,11 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   @Config("store.get.authorization.check")
-  @Default("false")
+  @Default("true")
   public final boolean storeGetAuthorizationCheck;
 
   @Config("store.delete.authorization.check")
-  @Default("false")
+  @Default("true")
   public final boolean storeDeleteAuthorizationCheck;
 
   /**
@@ -260,8 +260,8 @@ public class StoreConfig {
     storeReadWriteEnableSizeThresholdPercentageDelta =
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
-    storeGetAuthorizationCheck = verifiableProperties.getBoolean("store.get.authorization.check", false);
-    storeDeleteAuthorizationCheck = verifiableProperties.getBoolean("store.delete.authorization.check", false);
+    storeGetAuthorizationCheck = verifiableProperties.getBoolean("store.get.authorization.check", true);
+    storeDeleteAuthorizationCheck = verifiableProperties.getBoolean("store.delete.authorization.check", true);
   }
 }
 
