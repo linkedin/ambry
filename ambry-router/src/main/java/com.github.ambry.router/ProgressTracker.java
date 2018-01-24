@@ -44,6 +44,13 @@ class ProgressTracker {
   }
 
   /**
+   * @return {@code true} if decryption is in progress. {@code false} otherwise
+   */
+  boolean isDecryptionInProgress() {
+    return decryptionStatusTracker != null && !decryptionStatusTracker.isDone();
+  }
+
+  /**
    * Sets decryption as succeeded
    */
   void setDecryptionSuccess() {

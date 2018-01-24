@@ -24,6 +24,7 @@ import javax.crypto.spec.SecretKeySpec;
  */
 class MockKeyManagementService extends SingleKeyManagementService {
   AtomicReference<GeneralSecurityException> exceptionToThrow = new AtomicReference<>();
+  long timeToSleep = 0;
 
   MockKeyManagementService(KMSConfig KMSConfig, String defaultKey) throws GeneralSecurityException {
     super(KMSConfig, defaultKey);
@@ -34,6 +35,13 @@ class MockKeyManagementService extends SingleKeyManagementService {
     if (exceptionToThrow.get() != null) {
       throw exceptionToThrow.get();
     } else {
+      if (timeToSleep > 0) {
+        try {
+          Thread.sleep(timeToSleep);
+        } catch (InterruptedException e) {
+          Thread.currentThread().isInterrupted();
+        }
+      }
       return super.getKey(accountId, containerId);
     }
   }

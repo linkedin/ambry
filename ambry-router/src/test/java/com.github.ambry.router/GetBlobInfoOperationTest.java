@@ -398,8 +398,9 @@ public class GetBlobInfoOperationTest {
   @Test
   public void testKMSFailure() throws Exception {
     if (testEncryption) {
+      // throw exception
       kms.exceptionToThrow.set(GSE);
-      assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
+      assertOperationFailure(RouterErrorCode.UnexpectedInternalError, false, -1);
     }
   }
 
@@ -411,7 +412,20 @@ public class GetBlobInfoOperationTest {
   public void testCryptoServiceFailure() throws Exception {
     if (testEncryption) {
       cryptoService.exceptionOnDecryption.set(GSE);
-      assertOperationFailure(RouterErrorCode.UnexpectedInternalError);
+      assertOperationFailure(RouterErrorCode.UnexpectedInternalError, false, -1);
+    }
+  }
+
+  /**
+   * Test crypto job timeout
+   * @throws Exception
+   */
+  @Test
+  public void testCryptoJobTimeout() throws Exception {
+    if (testEncryption) {
+      // time out
+      kms.timeToSleep = routerConfig.routerCryptoJobTimeoutMs * 2;
+      assertOperationFailure(RouterErrorCode.OperationTimedOut, true, kms.timeToSleep);
     }
   }
 
@@ -528,9 +542,11 @@ public class GetBlobInfoOperationTest {
   /**
    * Assert that operation fails with the expected error code
    * @param errorCode expected error code on failure
+   * @param testTimeOut {@code true} if timeout need to be tested. {@code false} otherwise
+   * @param timeUnitsToIncrementMockTime time units to increment the mock time
    * @throws RouterException
    */
-  private void assertOperationFailure(RouterErrorCode errorCode)
+  private void assertOperationFailure(RouterErrorCode errorCode, boolean testTimeOut, long timeUnitsToIncrementMockTime)
       throws RouterException, IOException, InterruptedException {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobInfoOperation op =
@@ -555,8 +571,11 @@ public class GetBlobInfoOperationTest {
       }
     }
 
-    if (!op.isOperationComplete()) {
+    if (!op.isOperationComplete() && !testTimeOut) {
       Assert.assertTrue("Latch should have been zeroed ", onPollLatch.await(500, TimeUnit.MILLISECONDS));
+      op.poll(requestRegistrationCallback);
+    } else {
+      time.sleep(timeUnitsToIncrementMockTime + 1);
       op.poll(requestRegistrationCallback);
     }
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());

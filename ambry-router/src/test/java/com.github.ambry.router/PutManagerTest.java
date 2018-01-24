@@ -68,6 +68,7 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class PutManagerTest {
   static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
+  private static final int CRYPTO_JOB_TIMEOUT_MS = 1000;
   private static final long MAX_WAIT_MS = 2000;
   private final boolean testEncryption;
   private final MockServerLayout mockServerLayout;
@@ -275,28 +276,19 @@ public class PutManagerTest {
   @Test
   public void testFailureOnKMS() throws Exception {
     if (testEncryption) {
+      // KMS throws exception
       setupEncryptionCast(new VerifiableProperties(new Properties()));
       instantiateEncryptionCast = false;
       kms.exceptionToThrow.set(GSE);
       // simple blob
-      requestAndResultsList.clear();
-      requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
       Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
-      submitPutsAndAssertFailure(expectedException, false, true, true);
-      // this should not close the router.
-      Assert.assertTrue("Router should not be closed", router.isOpen());
-      assertCloseCleanup();
+      assertPutFailure(expectedException, random.nextInt(chunkSize) + 1, false);
 
       setupEncryptionCast(new VerifiableProperties(new Properties()));
       instantiateEncryptionCast = false;
       kms.exceptionToThrow.set(GSE);
       // composite blob
-      requestAndResultsList.clear();
-      requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
-      submitPutsAndAssertFailure(expectedException, false, true, true);
-      // this should not close the router.
-      Assert.assertTrue("Router should not be closed", router.isOpen());
-      assertCloseCleanup();
+      assertPutFailure(expectedException, chunkSize * random.nextInt(10), false);
     }
   }
 
@@ -310,24 +302,40 @@ public class PutManagerTest {
       instantiateEncryptionCast = false;
       cryptoService.exceptionOnEncryption.set(GSE);
       // simple blob
-      requestAndResultsList.clear();
-      requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
       Exception expectedException = new RouterException("", GSE, RouterErrorCode.UnexpectedInternalError);
-      submitPutsAndAssertFailure(expectedException, false, true, true);
-      // this should not close the router.
-      Assert.assertTrue("Router should not be closed", router.isOpen());
-      assertCloseCleanup();
+      assertPutFailure(expectedException, random.nextInt(chunkSize) + 1, false);
 
       setupEncryptionCast(new VerifiableProperties(new Properties()));
       instantiateEncryptionCast = false;
       cryptoService.exceptionOnEncryption.set(GSE);
       // composite blob
-      requestAndResultsList.clear();
-      requestAndResultsList.add(new RequestAndResult(chunkSize * random.nextInt(10)));
-      submitPutsAndAssertFailure(expectedException, false, true, true);
-      // this should not close the router.
-      Assert.assertTrue("Router should not be closed", router.isOpen());
-      assertCloseCleanup();
+      assertPutFailure(expectedException, chunkSize * random.nextInt(10), false);
+    }
+  }
+
+  /**
+   * Tests a time out of crypto job
+   */
+  @Test
+  public void testCryptoJobTimeout() throws Exception {
+    if (testEncryption) {
+      // KMS throws exception
+      Properties properties = new Properties();
+      properties.setProperty("router.crypto.job.timeout.ms", Integer.toString(CRYPTO_JOB_TIMEOUT_MS));
+      VerifiableProperties vProps = new VerifiableProperties(properties);
+      // timeout from KMS
+      setupEncryptionCast(vProps);
+      instantiateEncryptionCast = false;
+      kms.timeToSleep = CRYPTO_JOB_TIMEOUT_MS * 50;
+      // simple blob
+      Exception expectedException = new RouterException("", RouterErrorCode.OperationTimedOut);
+      assertPutFailure(expectedException, random.nextInt(chunkSize) + 1, true);
+
+      setupEncryptionCast(vProps);
+      instantiateEncryptionCast = false;
+      kms.timeToSleep = CRYPTO_JOB_TIMEOUT_MS * 50;
+      // composite blob
+      assertPutFailure(expectedException, chunkSize * random.nextInt(10), true);
     }
   }
 
@@ -656,6 +664,7 @@ public class PutManagerTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.crypto.job.timeout.ms", Integer.toString(CRYPTO_JOB_TIMEOUT_MS * 10));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     if (testEncryption && instantiateEncryptionCast) {
       setupEncryptionCast(vProps);
@@ -689,6 +698,22 @@ public class PutManagerTest {
     if (shouldCloseRouterAfter) {
       assertCloseCleanup();
     }
+  }
+
+  /**
+   * Sets up the input, submits put and assert for failure with the given {@code expectedException}
+   * @param expectedException Expected {@link Exception} on failure
+   * @param blobSize blob size to be tested for put failure
+   * @param incrementTimer {@code true} if mock time need to be manipulated
+   * @throws Exception
+   */
+  private void assertPutFailure(Exception expectedException, int blobSize, boolean incrementTimer) throws Exception {
+    requestAndResultsList.clear();
+    requestAndResultsList.add(new RequestAndResult(blobSize));
+    submitPutsAndAssertFailure(expectedException, false, incrementTimer, true);
+    // this should not close the router.
+    Assert.assertTrue("Router should not be closed", router.isOpen());
+    assertCloseCleanup();
   }
 
   /**

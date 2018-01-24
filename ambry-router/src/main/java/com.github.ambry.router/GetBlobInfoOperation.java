@@ -37,6 +37,7 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +53,10 @@ class GetBlobInfoOperation extends GetOperation {
   private final OperationTracker operationTracker;
   // progress tracker used to track whether the operation is completed or not and whether it succeeded or failed on complete
   private final ProgressTracker progressTracker;
+  // time at which the decryption job started
+  private long decryptJobStartTimeMs;
+  // whether decrypt job result processing is complete or not
+  private AtomicBoolean decryptJobProcessingComplete = new AtomicBoolean(false);
   // refers to blob properties received from the server
   private BlobProperties serverBlobProperties;
   // map of correlation id to the request metadata for every request issued for this operation.
@@ -109,7 +114,7 @@ class GetBlobInfoOperation extends GetOperation {
   @Override
   void poll(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
     //First, check if any of the existing requests have timed out.
-    cleanupExpiredInFlightRequests();
+    cleanupExpiredInFlightRequestsAndMaybeDecryptJob();
     checkAndMaybeComplete();
     if (!isOperationComplete()) {
       fetchRequests(requestRegistrationCallback);
@@ -118,8 +123,9 @@ class GetBlobInfoOperation extends GetOperation {
 
   /**
    * Clean up requests sent out by this operation that have now timed out.
+   * Cleans up decryption job if applicable
    */
-  private void cleanupExpiredInFlightRequests() {
+  private void cleanupExpiredInFlightRequestsAndMaybeDecryptJob() {
     Iterator<Map.Entry<Integer, GetRequestInfo>> inFlightRequestsIterator =
         correlationIdToGetRequestInfo.entrySet().iterator();
     while (inFlightRequestsIterator.hasNext()) {
@@ -139,32 +145,39 @@ class GetBlobInfoOperation extends GetOperation {
         break;
       }
     }
+
+    if (progressTracker.isDecryptionInProgress() && (time.milliseconds() - decryptJobStartTimeMs
+        > routerConfig.routerCryptoJobTimeoutMs)) {
+      handleDecryptJobTimeOut();
+    }
   }
 
   /**
    * Fetch {@link GetRequest}s to send for the operation.
    */
   private void fetchRequests(RequestRegistrationCallback<GetOperation> requestRegistrationCallback) {
-    Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
-    while (replicaIterator.hasNext()) {
-      ReplicaId replicaId = replicaIterator.next();
-      String hostname = replicaId.getDataNodeId().getHostname();
-      Port port = replicaId.getDataNodeId().getPortToConnectTo();
-      GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
-      RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
-      int correlationId = getRequest.getCorrelationId();
-      correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
-      requestRegistrationCallback.registerRequestToSend(this, request);
-      replicaIterator.remove();
-      if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
-        logger.trace("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
-            replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
-        routerMetrics.crossColoRequestCount.inc();
-      } else {
-        logger.trace("Making request with correlationId {} to a local replica {} ", correlationId,
-            replicaId.getDataNodeId());
+    if (!progressTracker.isDecryptionRequired()) {
+      Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
+      while (replicaIterator.hasNext()) {
+        ReplicaId replicaId = replicaIterator.next();
+        String hostname = replicaId.getDataNodeId().getHostname();
+        Port port = replicaId.getDataNodeId().getPortToConnectTo();
+        GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getBlobOptions.getGetOption());
+        RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
+        int correlationId = getRequest.getCorrelationId();
+        correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
+        requestRegistrationCallback.registerRequestToSend(this, request);
+        replicaIterator.remove();
+        if (RouterUtils.isRemoteReplica(routerConfig, replicaId)) {
+          logger.info("Making request with correlationId {} to a remote replica {} in {} ", correlationId,
+              replicaId.getDataNodeId(), replicaId.getDataNodeId().getDatacenterName());
+          routerMetrics.crossColoRequestCount.inc();
+        } else {
+          logger.info("Making request with correlationId {} to a local replica {} ", correlationId,
+              replicaId.getDataNodeId());
+        }
+        routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestRate.mark();
       }
-      routerMetrics.getDataNodeBasedMetrics(replicaId.getDataNodeId()).getBlobInfoRequestRate.mark();
     }
   }
 
@@ -334,28 +347,50 @@ class GetBlobInfoOperation extends GetOperation {
     } else {
       // submit decrypt job
       progressTracker.initializeDecryptionTracker();
-      logger.trace("Submitting decrypt job for {}", blobId);
-      long startTimeMs = System.currentTimeMillis();
+      logger.info("Submitting decrypt job for {}", blobId);
+      decryptJobStartTimeMs = time.milliseconds();
       cryptoJobHandler.submitJob(
           new DecryptJob(blobId, encryptionKey.duplicate(), null, userMetadata, cryptoService, kms,
               (DecryptJob.DecryptJobResult result, Exception exception) -> {
-                logger.trace("Handling decrypt job callback results for {}", blobId);
-                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - startTimeMs);
-                if (exception == null) {
-                  logger.trace("Successfully updating decrypt job callback results for {}", blobId);
-                  operationResult = new GetBlobResultInternal(
-                      new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()),
-                          null), null);
-                  progressTracker.setDecryptionSuccess();
-                } else {
-                  logger.trace("Exception {} thrown on decryption for {}", exception, blobId);
-                  setOperationException(
-                      new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
-                          RouterErrorCode.UnexpectedInternalError));
-                  progressTracker.setDecryptionFailed();
-                }
-                routerCallback.onPollReady();
+                logger.info("Handling decrypt job callback results for {}", blobId);
+                routerMetrics.decryptTimeMs.update(System.currentTimeMillis() - decryptJobStartTimeMs);
+                processDecryptJobCallback(result, exception);
               }));
+    }
+  }
+
+  /**
+   * Processes decrypt job callback
+   * @param result {@link com.github.ambry.router.DecryptJob.DecryptJobResult} to be processed. Could be null.
+   * @param exception {@link Exception} from the encrypt job. Could be null.
+   */
+  private void processDecryptJobCallback(DecryptJob.DecryptJobResult result, Exception exception) {
+    if (decryptJobProcessingComplete.compareAndSet(false, true)) {
+      if (exception == null) {
+        logger.info("Successfully updating decrypt job callback results for {}", blobId);
+        operationResult = new GetBlobResultInternal(
+            new GetBlobResult(new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array()), null),
+            null);
+        progressTracker.setDecryptionSuccess();
+      } else {
+        logger.error("Exception {} thrown on decryption for {}", exception, blobId);
+        setOperationException(new RouterException("Exception thrown on decrypting the content for " + blobId, exception,
+            RouterErrorCode.UnexpectedInternalError));
+        progressTracker.setDecryptionFailed();
+      }
+      routerCallback.onPollReady();
+    }
+  }
+
+  /**
+   * Handles decrypt job timeout.
+   */
+  private void handleDecryptJobTimeOut() {
+    if (decryptJobProcessingComplete.compareAndSet(false, true)) {
+      logger.error("Timing out decrypt job for {}", blobId);
+      setOperationException(
+          new RouterException("Timing out decrypt job for " + blobId, RouterErrorCode.OperationTimedOut));
+      progressTracker.setDecryptionFailed();
     }
   }
 
