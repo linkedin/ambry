@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -391,7 +392,8 @@ class BlobStore implements Store {
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
-        } else if (!value.validateAuthorization(info.getAccountId(), info.getContainerId())) {
+        } else if (!Utils.validateAuthorization(value.getAccountId(), value.getContainerId(), info.getAccountId(),
+            info.getContainerId())) {
           throw new StoreException(
               "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: " + value.getAccountId()
                   + "Actually containerId: " + value.getContainerId(), StoreErrorCodes.Authorization_Failure);
