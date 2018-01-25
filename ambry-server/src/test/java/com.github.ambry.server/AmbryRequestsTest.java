@@ -144,7 +144,7 @@ public class AmbryRequestsTest {
   public void authorizationFailTest() throws Exception {
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), (PartitionId) new MockPartitionId());
+        Utils.getRandomShort(TestUtils.RANDOM), new MockPartitionId(), false);
     // Truth of source
     MessageInfo messageInfo =
         new MessageInfo(blobId, 50, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), 1);
@@ -160,7 +160,7 @@ public class AmbryRequestsTest {
   public void authorizationSuccessTest() throws Exception {
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), (PartitionId) new MockPartitionId());
+        Utils.getRandomShort(TestUtils.RANDOM), new MockPartitionId(), false);
     // Truth of source
     MessageInfo messageInfo = new MessageInfo(blobId, 50, blobId.getAccountId(), blobId.getContainerId(), 1);
     // validate response
