@@ -314,7 +314,8 @@ public class AmbryRequests implements RequestAPI {
                 continue;
               }
               BlobId blobId = (BlobId) partitionRequestInfo.getBlobIds().get(i);
-              if (!messageInfo.validateAuthorization(blobId.getAccountId(), blobId.getContainerId())) {
+              if (!Utils.validateAuthorization(messageInfo.getAccountId(), messageInfo.getContainerId(),
+                  blobId.getAccountId(), blobId.getContainerId())) {
                 throw new StoreException("GET authorization failure. Key: " + blobId.getID(),
                     StoreErrorCodes.Authorization_Failure);
               }

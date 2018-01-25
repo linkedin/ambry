@@ -868,6 +868,14 @@ public class Utils {
     }
   }
 
+  public static boolean validateAuthorization(short storeAccountId, short storeContainerId, short requestAccountId,
+      short requestContainerId) {
+    if (storeAccountId != -1 && storeContainerId != -1) {
+      return (storeAccountId == requestAccountId) && (storeContainerId == requestContainerId);
+    }
+    return true;
+  }
+
   /**
    * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
    * {@link #newScheduler(int, String, boolean)}.
