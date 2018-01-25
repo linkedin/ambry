@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.HttpContent;
@@ -123,7 +124,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     nettyMetrics.channelDestructionRate.mark();
     if (request != null && request.isOpen()) {
       logger.error("Request {} was aborted because the channel {} became inactive", request.getUri(), ctx.channel());
-      onRequestAborted(new ClosedChannelException());
+      onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
     } else {
       close();
     }
@@ -196,7 +197,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           nettyConfig.nettyServerIdleTimeSeconds);
       nettyMetrics.idleConnectionCloseCount.inc();
       if (request != null && request.isOpen()) {
-        onRequestAborted(new ClosedChannelException());
+        onRequestAborted(Utils.convertToClientTerminationException(new ClosedChannelException()));
       } else {
         close();
       }
