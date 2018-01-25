@@ -719,7 +719,7 @@ public class AmbrySecurityServiceTest {
     Assert.assertEquals("Private value mismatch", blobProperties.isPrivate(),
         Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
     Assert.assertEquals("IsEncrypted value mismatch", blobProperties.isEncrypted(),
-        Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.IS_ENCRYPTED_ON_STORAGE)));
+        Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.ENCRYPTED_IN_STORAGE)));
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       Assert.assertEquals("TTL mismatch", blobProperties.getTimeToLiveInSeconds(),
           Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.TTL)));

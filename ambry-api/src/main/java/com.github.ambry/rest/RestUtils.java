@@ -183,7 +183,7 @@ public class RestUtils {
      * Header that is set in the response of GetBlobInfo
      * 'true' or 'false' case insensitive; true indicates content is encrypted at the storage layer. false otherwise
      */
-    public final static String IS_ENCRYPTED_ON_STORAGE = "x-ambry-is-encrypted-on-storage";
+    public final static String ENCRYPTED_IN_STORAGE = "x-ambry-encrypted-in-storage";
   }
 
   /**
