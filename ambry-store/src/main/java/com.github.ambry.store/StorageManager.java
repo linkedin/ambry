@@ -187,6 +187,9 @@ public class StorageManager {
     }
   }
 
+  /**
+   * @return storeConfig.
+   */
   public StoreConfig getStoreConfig() {
     return storeConfig;
   }
@@ -203,6 +206,4 @@ public class StorageManager {
     }
     return count;
   }
-
-
 }

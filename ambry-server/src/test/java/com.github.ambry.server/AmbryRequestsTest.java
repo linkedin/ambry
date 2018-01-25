@@ -401,6 +401,13 @@ public class AmbryRequestsTest {
     return response;
   }
 
+  /**
+   * Calls {@link AmbryRequests#handleRequests(Request)} with self-define blobId and MessageInfo.
+   * @param blobId is used to build request.
+   * @param info is source of truth.
+   * @return the {@link Response} received.
+   * @throws Exception
+   */
   private GetResponse sendRequestGetResponse(BlobId blobId, MessageInfo info) throws Exception {
     // Mock objects(truth of source)
     StoreInfo storeInfo =
@@ -411,7 +418,7 @@ public class AmbryRequestsTest {
     when(mockStorageManager.getStore(any())).thenReturn(mockStore);
     Properties properties = new Properties();
     properties.setProperty("store.get.authorization.check", "true");
-    StoreConfig storeConfig =new StoreConfig(new VerifiableProperties(properties));
+    StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
     when(mockStorageManager.getStoreConfig()).thenReturn(storeConfig);
     // Build Request
     PartitionRequestInfo partitionRequestInfo =
@@ -791,7 +798,6 @@ public class AmbryRequestsTest {
     /**
      * An empty {@link Store} implementation.
      */
-
     private static Store store = new Store() {
 
       @Override
