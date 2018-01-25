@@ -290,6 +290,7 @@ class AmbrySecurityService implements SecurityService {
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     restResponseChannel.setHeader(RestUtils.Headers.SERVICE_ID, blobProperties.getServiceId());
     restResponseChannel.setHeader(RestUtils.Headers.CREATION_TIME, new Date(blobProperties.getCreationTimeInMs()));
+    restResponseChannel.setHeader(RestUtils.Headers.ENCRYPTED_IN_STORAGE, blobProperties.isEncrypted());
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       restResponseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
     }

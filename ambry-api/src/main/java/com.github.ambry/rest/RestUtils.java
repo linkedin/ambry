@@ -179,6 +179,11 @@ public class RestUtils {
      * Header that is set in the response of OPTIONS request that specifies the validity of the options returned.
      */
     public static final String ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
+    /**
+     * Header that is set in the response of GetBlobInfo
+     * 'true' or 'false' case insensitive; true indicates content is encrypted at the storage layer. false otherwise
+     */
+    public final static String ENCRYPTED_IN_STORAGE = "x-ambry-encrypted-in-storage";
   }
 
   /**

@@ -72,6 +72,9 @@ public class AmbrySecurityServiceTest {
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
           Container.UNKNOWN_CONTAINER_ID, false), null);
+  private static final BlobInfo UNKNOWN_INFO_ENC = new BlobInfo(
+      new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
+          Container.UNKNOWN_CONTAINER_ID, true), null);
   private static final FrontendTestUrlSigningServiceFactory URL_SIGNING_SERVICE_FACTORY =
       new FrontendTestUrlSigningServiceFactory();
 
@@ -176,6 +179,8 @@ public class AmbrySecurityServiceTest {
     testHeadBlobWithVariousRanges(DEFAULT_INFO);
     // unknown account
     testHeadBlobWithVariousRanges(UNKNOWN_INFO);
+    // encrypted unknown account
+    testHeadBlobWithVariousRanges(UNKNOWN_INFO_ENC);
     // with no owner id
     BlobInfo blobInfo = new BlobInfo(
         new BlobProperties(100, SERVICE_ID, null, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
@@ -196,6 +201,7 @@ public class AmbrySecurityServiceTest {
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
     testGetSubResource(UNKNOWN_INFO, RestUtils.SubResource.BlobInfo);
+    testGetSubResource(UNKNOWN_INFO_ENC, RestUtils.SubResource.BlobInfo);
     // GET UserMetadata
     testGetSubResource(DEFAULT_INFO, RestUtils.SubResource.UserMetadata);
 
@@ -712,6 +718,8 @@ public class AmbrySecurityServiceTest {
         RestUtils.getTimeFromDateString(restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME)).longValue());
     Assert.assertEquals("Private value mismatch", blobProperties.isPrivate(),
         Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.PRIVATE)));
+    Assert.assertEquals("IsEncrypted value mismatch", blobProperties.isEncrypted(),
+        Boolean.parseBoolean(restResponseChannel.getHeader(RestUtils.Headers.ENCRYPTED_IN_STORAGE)));
     if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
       Assert.assertEquals("TTL mismatch", blobProperties.getTimeToLiveInSeconds(),
           Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.TTL)));
