@@ -581,9 +581,8 @@ public class BlobStoreTest {
     verifyDeleteFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
   }
 
-
   /**
-   * Tests authorization for {@link BlobStore#delete(MessageWriteSet)}.
+   * Tests authorization failure for {@link BlobStore#delete(MessageWriteSet)}. Success is covered by other tests.
    */
   @Test
   public void authorizationFailureTest() {
@@ -598,6 +597,7 @@ public class BlobStoreTest {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Authorization_Failure, e.getErrorCode());
     }
   }
+
   /**
    * Test various duplicate and collision cases for {@link BlobStore#put(MessageWriteSet)}
    * @throws Exception
@@ -1210,7 +1210,7 @@ public class BlobStoreTest {
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, accoundId, containerId, System.currentTimeMillis());
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
-    if (store.getConfig().storeDeleteAuthorizationCheck == true) {
+    if (store.getStoreConfig().storeDeleteAuthorizationCheck == true) {
       try {
         store.delete(writeSet);
         fail("Store DELETE should have failed");

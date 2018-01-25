@@ -392,8 +392,8 @@ class BlobStore implements Store {
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
-        } else if (!Utils.validateAuthorization(value.getAccountId(), value.getContainerId(), info.getAccountId(),
-            info.getContainerId())) {
+        } else if (getStoreConfig().storeDeleteAuthorizationCheck && !Utils.validateAuthorization(value.getAccountId(),
+            value.getContainerId(), info.getAccountId(), info.getContainerId())) {
           throw new StoreException(
               "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: " + value.getAccountId()
                   + "Actually containerId: " + value.getContainerId(), StoreErrorCodes.Authorization_Failure);
@@ -563,7 +563,7 @@ class BlobStore implements Store {
     checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
-  public StoreConfig getConfig() {
+  public StoreConfig getStoreConfig() {
     return config;
   }
 

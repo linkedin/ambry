@@ -86,9 +86,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.account.Account.UNKNOWN_ACCOUNT_ID;
-import static com.github.ambry.account.Container.UNKNOWN_CONTAINER_ID;
-
 
 /**
  * The main request implementation class. All requests to the server are
@@ -309,10 +306,6 @@ public class AmbryRequests implements RequestAPI {
                 storageManager.getStoreConfig().storeGetAuthorizationCheck && i < info.getMessageReadSetInfo().size();
                 i++) {
               MessageInfo messageInfo = info.getMessageReadSetInfo().get(i);
-              if (messageInfo.getAccountId() == UNKNOWN_ACCOUNT_ID
-                  && messageInfo.getContainerId() == UNKNOWN_CONTAINER_ID) {
-                continue;
-              }
               BlobId blobId = (BlobId) partitionRequestInfo.getBlobIds().get(i);
               if (!Utils.validateAuthorization(messageInfo.getAccountId(), messageInfo.getContainerId(),
                   blobId.getAccountId(), blobId.getContainerId())) {
