@@ -43,6 +43,7 @@ public class StorageManager {
   private final StorageManagerMetrics metrics;
   private final Time time;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
+  private final StoreConfig storeConfig;
 
   /**
    * Constructs a {@link StorageManager}
@@ -61,6 +62,7 @@ public class StorageManager {
       StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       WriteStatusDelegate writeStatusDelegate, Time time) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
+    this.storeConfig = storeConfig;
     metrics = new StorageManagerMetrics(registry);
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
     StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
@@ -183,6 +185,13 @@ public class StorageManager {
     } finally {
       metrics.storageManagerShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
+  }
+
+  /**
+   * @return storeConfig.
+   */
+  public StoreConfig getStoreConfig() {
+    return storeConfig;
   }
 
   /**

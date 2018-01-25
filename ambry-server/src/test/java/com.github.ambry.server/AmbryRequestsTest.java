@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
@@ -63,6 +64,7 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
@@ -71,9 +73,11 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -91,10 +95,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -126,6 +132,42 @@ public class AmbryRequestsTest {
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
+  }
+
+  /**
+   * Tests Authorization validation is correct.
+   * @throws InterruptedException
+   * @throws IOException
+   * @throws StoreException
+   */
+  @Test
+  public void authorizationFailTest() throws Exception {
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), new MockPartitionId(), false);
+    // Truth of source
+    MessageInfo messageInfo =
+        new MessageInfo(blobId, 50, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), 1);
+    // validate response
+    GetResponse response = sendRequestGetResponse(blobId, messageInfo);
+    for (PartitionResponseInfo partitionResponseInfo : response.getPartitionResponseInfoList()) {
+      assertEquals("Error code does not match expected", ServerErrorCode.Blob_Not_Found,
+          partitionResponseInfo.getErrorCode());
+    }
+  }
+
+  @Test
+  public void authorizationSuccessTest() throws Exception {
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), new MockPartitionId(), false);
+    // Truth of source
+    MessageInfo messageInfo = new MessageInfo(blobId, 50, blobId.getAccountId(), blobId.getContainerId(), 1);
+    // validate response
+    GetResponse response = sendRequestGetResponse(blobId, messageInfo);
+    for (PartitionResponseInfo partitionResponseInfo : response.getPartitionResponseInfoList()) {
+      assertEquals("Should be No_Error", ServerErrorCode.No_Error, partitionResponseInfo.getErrorCode());
+    }
   }
 
   /**
@@ -356,6 +398,49 @@ public class AmbryRequestsTest {
     assertEquals("Client id in response does match the one in the request", request.getClientId(),
         response.getClientId());
     assertEquals("Error code does not match expected", expectedServerErrorCode, response.getError());
+    return response;
+  }
+
+  /**
+   * Calls {@link AmbryRequests#handleRequests(Request)} with self-define blobId and MessageInfo.
+   * @param blobId is used to build request.
+   * @param info is source of truth.
+   * @return the {@link Response} received.
+   * @throws Exception
+   */
+  private GetResponse sendRequestGetResponse(BlobId blobId, MessageInfo info) throws Exception {
+    // Mock objects(truth of source)
+    StoreInfo storeInfo =
+        new StoreInfo(MockMessageReadSet.getMessageReadSet(info.getStoreKey()), Collections.singletonList(info));
+    Store mockStore = mock(Store.class);
+    when(mockStore.get(any(), any())).thenReturn(storeInfo);
+    StorageManager mockStorageManager = mock(StorageManager.class);
+    when(mockStorageManager.getStore(any())).thenReturn(mockStore);
+    Properties properties = new Properties();
+    properties.setProperty("store.get.authorization.check", "true");
+    StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
+    when(mockStorageManager.getStoreConfig()).thenReturn(storeConfig);
+    // Build Request
+    PartitionRequestInfo partitionRequestInfo =
+        new PartitionRequestInfo(new MockPartitionId(), Collections.singletonList(blobId));
+    GetRequest getRequest =
+        new GetRequest(1, new String("1"), MessageFormatFlags.Blob, Collections.singletonList(partitionRequestInfo),
+            GetOption.Include_All);
+    MockRequest mockRequest = MockRequest.fromRequest(getRequest);
+
+    StoreKeyFactory storeKeyFactory = mock(StoreKeyFactory.class);
+    when(storeKeyFactory.getStoreKey(any())).thenReturn(info.getStoreKey());
+    // Validation
+    AmbryRequests testAmbryRequests =
+        new AmbryRequests(mockStorageManager, requestResponseChannel, clusterMap, dataNodeId,
+            clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, storeKeyFactory);
+
+    testAmbryRequests.handleRequests(mockRequest);
+    assertEquals("Request accompanying response does not match original request", mockRequest,
+        requestResponseChannel.lastOriginalRequest);
+    assertNotNull("Response not sent", requestResponseChannel.lastResponse);
+    GetResponse response = (GetResponse) requestResponseChannel.lastResponse;
+    assertTrue("Should have one Partition Response Info.", response.getPartitionResponseInfoList().size() >= 1);
     return response;
   }
 
@@ -943,6 +1028,91 @@ public class AmbryRequestsTest {
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
+    }
+  }
+
+  static class MockMessageReadSet implements MessageReadSet {
+
+    ArrayList<ByteBuffer> buffers;
+    ArrayList<StoreKey> keys;
+
+    public static MockMessageReadSet getMessageReadSet(StoreKey storeKey) {
+      // add header,system metadata, user metadata and data to the buffers
+      ByteBuffer buf1 = ByteBuffer.allocate(1010);
+      // fill header
+      buf1.putShort((short) 1);                    // version
+      buf1.putLong(950);                          // total size
+      // put relative offsets
+      buf1.putInt(60);                           // blob property relative offset
+      buf1.putInt(-1);                           // delete relative offset
+      buf1.putInt(81);                           // user metadata relative offset
+      buf1.putInt(191);                          // data relative offset
+      Crc32 crc = new Crc32();
+      crc.update(buf1.array(), 0, buf1.position());
+      buf1.putLong(crc.getValue());                          // crc
+      String id = new String("012345678910123456789012");     // fake blob id
+      buf1.putShort((short) id.length());
+      buf1.put(id.getBytes());
+
+      buf1.putShort((short) 1); // blob property version
+      String attribute1 = "ttl";
+      String attribute2 = "del";
+      buf1.put(attribute1.getBytes()); // ttl name
+      buf1.putLong(12345);             // ttl value
+      buf1.put(attribute2.getBytes()); // delete name
+      byte b = 1;
+      buf1.put(b);      // delete flag
+      buf1.putInt(456); //crc
+
+      buf1.putShort((short) 1); // user metadata version
+      buf1.putInt(100);
+      byte[] usermetadata = new byte[100];
+      new Random().nextBytes(usermetadata);
+      buf1.put(usermetadata);
+      buf1.putInt(123);
+
+      buf1.putShort((short) 0); // blob version
+      buf1.putLong(805);       // blob size
+      byte[] data = new byte[805];         // blob
+      new Random().nextBytes(data);
+      buf1.put(data);
+      buf1.putInt(123);                    // blob crc
+      buf1.flip();
+
+      ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
+      listbuf.add(buf1);
+      ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
+      storeKeys.add(storeKey);
+      return new MockMessageReadSet(listbuf, storeKeys);
+    }
+
+    public MockMessageReadSet(ArrayList<ByteBuffer> buffers, ArrayList<StoreKey> keys) {
+      this.buffers = buffers;
+      this.keys = keys;
+    }
+
+    @Override
+    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
+      buffers.get(index).position((int) relativeOffset);
+      buffers.get(index).limit((int) Math.min(buffers.get(index).limit(), relativeOffset + maxSize));
+      int written = channel.write(buffers.get(index));
+      buffers.get(index).clear();
+      return written;
+    }
+
+    @Override
+    public int count() {
+      return buffers.size();
+    }
+
+    @Override
+    public long sizeInBytes(int index) {
+      return buffers.get(index).remaining();
+    }
+
+    @Override
+    public StoreKey getKeyAt(int index) {
+      return keys.get(index);
     }
   }
 }
