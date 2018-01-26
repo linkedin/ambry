@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -110,11 +111,11 @@ class GetManager {
 
   /**
    * Submit an operation to get a blob asynchronously.
-   * @param blobId The blobId for which the BlobInfo is being requested, in string form.
+   * @param blobId The {@link BlobId} associated with the request.
    * @param options The {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
-  void submitGetBlobOperation(String blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback) {
+  void submitGetBlobOperation(BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback) {
     try {
       GetOperation getOperation;
       if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {

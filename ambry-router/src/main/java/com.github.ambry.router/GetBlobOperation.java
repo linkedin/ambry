@@ -116,7 +116,7 @@ class GetBlobOperation extends GetOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobIdStr the blob id associated with the operation in string form.
+   * @param blobId the {@link BlobId} associated with the operation.
    * @param options the {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback the {@link RouterCallback} to use to complete operations.
@@ -128,11 +128,11 @@ class GetBlobOperation extends GetOperation {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time)
       throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobLocalColoLatencyMs, routerMetrics.getBlobCrossColoLatencyMs,
         routerMetrics.getBlobPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;

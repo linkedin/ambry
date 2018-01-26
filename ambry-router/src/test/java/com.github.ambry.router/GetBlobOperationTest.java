@@ -108,6 +108,7 @@ public class GetBlobOperationTest {
 
   // Parameters for puts which are also used to verify the gets.
   private String blobIdStr;
+  private BlobId blobId;
   private BlobProperties blobProperties;
   private byte[] userMetadata;
   private byte[] putContent;
@@ -216,6 +217,7 @@ public class GetBlobOperationTest {
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
+    blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
   }
 
   /**
@@ -231,22 +233,13 @@ public class GetBlobOperationTest {
       }
     };
 
-    // test a bad case
-    try {
-      new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, "invalid_id", null,
-          getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
-      Assert.fail("Instantiation of GetBlobOperation with an invalid blob id must fail");
-    } catch (RouterException e) {
-      Assert.assertEquals("Unexpected exception received on creating GetBlobOperation", RouterErrorCode.InvalidBlobId,
-          e.getErrorCode());
-    }
-
-    blobIdStr = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+    blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), mockClusterMap.getWritablePartitionIds().get(0), false).getID();
+        Utils.getRandomShort(TestUtils.RANDOM), mockClusterMap.getWritablePartitionIds().get(0), false);
+    blobIdStr = blobId.getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.
-    GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
+    GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
         getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
@@ -257,7 +250,7 @@ public class GetBlobOperationTest {
     properties.setProperty("router.get.operation.tracker.type", "NonExistentTracker");
     RouterConfig badConfig = new RouterConfig(new VerifiableProperties(properties));
     try {
-      new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr,
+      new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
           getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
@@ -974,7 +967,7 @@ public class GetBlobOperationTest {
   private GetBlobOperation createOperation(Callback<GetBlobResultInternal> callback) throws Exception {
     NonBlockingRouter.currentOperationsCount.incrementAndGet();
     GetBlobOperation op =
-        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobIdStr, options, callback,
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
             routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
     requestRegistrationCallback.requestListToFill = new ArrayList<>();
     return op;
