@@ -121,8 +121,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
-    accountAndContainerInjector =
-        new AccountAndContainerInjector(accountService, clusterMap, frontendMetrics, frontendConfig);
+    accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
 
@@ -512,7 +511,6 @@ class AmbryBlobStorageService implements BlobStorageService {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
           BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
-          boolean isEncrypted = blobId.isEncrypted();
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
           // TODO use callback when AmbryBlobStorageService gets refactored into handlers.
           securityService.postProcessRequest(restRequest).get();
@@ -520,7 +518,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
               // inject encryption metrics if need be
-              if (isEncrypted) {
+              if (blobId.isEncrypted()) {
                 restRequest.getMetricsTracker()
                     .injectMetrics(
                         getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null,
@@ -545,7 +543,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             case HEAD:
               GetOption getOption = RestUtils.getGetOption(restRequest);
               // inject encryption metrics if need be
-              if (isEncrypted) {
+              if (blobId.isEncrypted()) {
                 RestRequestMetrics requestMetrics =
                     frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
                         true);

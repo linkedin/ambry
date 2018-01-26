@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -150,26 +149,11 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     boolean isEncrypted = false;
     try {
-      isEncrypted = new BlobId(blobId, clusterMap).isEncrypted();
-    } catch (IOException e) {
-      RouterException routerException =
-          new RouterException("Exception thrown during construction of BlobId ", e, RouterErrorCode.InvalidBlobId);
-      completeGetBlobOperation(routerException, internalOptions, futureResult, callback);
+      isEncrypted = RouterUtils.getBlobIdFromString(blobId, clusterMap).isEncrypted();
+    } catch (RouterException e) {
+      completeGetBlobOperation(e, internalOptions, futureResult, callback, false);
     }
-    Meter blobInfoOperationRate =
-        isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
-    Meter blobOperationRate =
-        isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
-    Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
-        : routerMetrics.getBlobWithRangeOperationRate;
-    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-      blobInfoOperationRate.mark();
-    } else {
-      blobOperationRate.mark();
-    }
-    if (options.getRange() != null) {
-      blobWithRangeOperationRate.mark();
-    }
+    trackGetBlobRateMetrics(options, isEncrypted);
     routerMetrics.operationQueuingRate.mark();
     if (isOpen.get()) {
       getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
@@ -185,7 +169,7 @@ class NonBlockingRouter implements Router {
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-      completeGetBlobOperation(routerException, internalOptions, futureResult, callback);
+      completeGetBlobOperation(routerException, internalOptions, futureResult, callback, isEncrypted);
     }
     return futureResult;
   }
@@ -334,17 +318,40 @@ class NonBlockingRouter implements Router {
   }
 
   /**
+   * Track get blob rate metrics based on the {@link GetBlobOptions} and whether the blob is encrypted or not
+   * @param options {@link GetBlobOptions} instance to use
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
+   */
+  private void trackGetBlobRateMetrics(GetBlobOptions options, boolean isEncrypted) {
+    Meter blobInfoOperationRate =
+        isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
+    Meter blobOperationRate =
+        isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
+    Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
+        : routerMetrics.getBlobWithRangeOperationRate;
+    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      blobInfoOperationRate.mark();
+    } else {
+      blobOperationRate.mark();
+    }
+    if (options.getRange() != null) {
+      blobWithRangeOperationRate.mark();
+    }
+  }
+
+  /**
    * Completes a getBlob operation by invoking the {@code callback} and setting the {@code futureResult} with the given
    * {@code {@link RouterException}}
    * @param routerException {@link RouterException} to be set in the callback and future result
    * @param internalOptions instance of {@link GetBlobOptionsInternal} to use
    * @param futureResult the {@link FutureResult} that needs to be set.
    * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
    */
   private void completeGetBlobOperation(RouterException routerException, GetBlobOptionsInternal internalOptions,
-      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback) {
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback, boolean isEncrypted) {
     routerMetrics.operationDequeuingRate.mark();
-    routerMetrics.onGetBlobError(routerException, internalOptions, false);
+    routerMetrics.onGetBlobError(routerException, internalOptions, isEncrypted);
     completeOperation(futureResult, callback, null, routerException);
   }
 

@@ -402,7 +402,6 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.operationFailureWithUnsetExceptionCount.inc();
       }
       if (e != null) {
-        // best effort to update metrics if result is available
         operationResult = null;
         routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
       }

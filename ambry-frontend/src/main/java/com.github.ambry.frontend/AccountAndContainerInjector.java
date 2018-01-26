@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -45,14 +44,12 @@ class AccountAndContainerInjector {
   private static final Logger logger = LoggerFactory.getLogger(AccountAndContainerInjector.class);
 
   private final AccountService accountService;
-  private final ClusterMap clusterMap;
   private final FrontendMetrics frontendMetrics;
   private final FrontendConfig frontendConfig;
 
-  AccountAndContainerInjector(AccountService accountService, ClusterMap clusterMap, FrontendMetrics frontendMetrics,
+  AccountAndContainerInjector(AccountService accountService, FrontendMetrics frontendMetrics,
       FrontendConfig frontendConfig) {
     this.accountService = accountService;
-    this.clusterMap = clusterMap;
     this.frontendMetrics = frontendMetrics;
     this.frontendConfig = frontendConfig;
   }
@@ -101,12 +98,12 @@ class AccountAndContainerInjector {
       // @todo The check can be removed once HelixAccountService is running with UNKNOWN_ACCOUNT created.
       if (blobId.getAccountId() != Account.UNKNOWN_ACCOUNT_ID) {
         throw new RestServiceException(
-            "Account from blobId=" + blobId.getID() + "with accountId=" + blobId.getAccountId() + " cannot be recognized",
-            RestServiceErrorCode.InvalidAccount);
+            "Account from blobId=" + blobId.getID() + "with accountId=" + blobId.getAccountId()
+                + " cannot be recognized", RestServiceErrorCode.InvalidAccount);
       } else {
         logger.debug(
-            "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT", blobId.getID(),
-            blobId.getAccountId());
+            "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
+            blobId.getID(), blobId.getAccountId());
         targetAccount = Account.UNKNOWN_ACCOUNT;
       }
     }

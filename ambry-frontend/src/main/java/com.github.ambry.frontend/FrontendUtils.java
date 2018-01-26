@@ -29,7 +29,7 @@ class FrontendUtils {
    * @param blobIdStr string representation of BlobId
    * @param clusterMap {@link ClusterMap} instance to use
    * @return the {@link BlobId} thus generated
-   * @throws RestServiceException
+   * @throws RestServiceException on invalid blobId
    */
   static BlobId getBlobIdFromString(String blobIdStr, ClusterMap clusterMap) throws RestServiceException {
     try {
