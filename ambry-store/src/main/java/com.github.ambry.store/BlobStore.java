@@ -236,6 +236,15 @@ class BlobStore implements Store {
         BlobReadOptions readInfo = index.getBlobReadInfo(key, storeGetOptions);
         readOptions.add(readInfo);
         indexMessages.put(key, readInfo.getMessageInfo());
+        // validate accountId and containerId
+        if (config.storeGetAuthorizationCheck && !Utils.validateAuthorization(
+            readInfo.getMessageInfo().getAccountId(), readInfo.getMessageInfo().getContainerId(),
+            key.getAccountId(), key.getContainerId())) {
+          throw new StoreException(
+              "GET authorization failure. Key: " + key.getID() + " Actually accountId: "
+                  + readInfo.getMessageInfo().getAccountId() + " Actually containerId: " + readInfo.getMessageInfo()
+                  .getContainerId(), StoreErrorCodes.Authorization_Failure);
+        }
       }
 
       MessageReadSet readSet = new StoreMessageReadSet(readOptions);
@@ -392,7 +401,7 @@ class BlobStore implements Store {
         if (value == null) {
           throw new StoreException("Cannot delete id " + info.getStoreKey() + " since it is not present in the index.",
               StoreErrorCodes.ID_Not_Found);
-        } else if (getStoreConfig().storeDeleteAuthorizationCheck && !Utils.validateAuthorization(value.getAccountId(),
+        } else if (config.storeDeleteAuthorizationCheck && !Utils.validateAuthorization(value.getAccountId(),
             value.getContainerId(), info.getAccountId(), info.getContainerId())) {
           throw new StoreException(
               "DELETE authorization failure. Key: " + info.getStoreKey() + "Actually accountId: " + value.getAccountId()

@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -221,9 +220,6 @@ public class BlobStoreTest {
   private final Set<MockId> expiredKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // Set of all keys that are not deleted/expired
   private final Set<MockId> liveKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
-  // Maps of key to accountId or containerid
-  private final Map<MockId, Short> accountIdMap = new HashMap<>();
-  private final Map<MockId, Short> containerIdMap = new HashMap<>();
 
   // Indicates whether the log is segmented
   private final boolean isLogSegmented;
@@ -574,7 +570,7 @@ public class BlobStoreTest {
    * Tests error cases for {@link BlobStore#delete(MessageWriteSet)}.
    */
   @Test
-  public void deleteErrorCasesTest() throws Exception{
+  public void deleteErrorCasesTest() throws Exception {
     // ID that is already deleted
     verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
     // ID that does not exist
@@ -582,12 +578,13 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests authorization failure for {@link BlobStore#delete(MessageWriteSet)}. Success is covered by other tests.
+   * Test DELETE authorization failure for {@link BlobStore#delete(MessageWriteSet)}.
+   * Success is covered by other tests.
    */
   @Test
-  public void authorizationFailureTest() {
-    MessageInfo info =
-        new MessageInfo(deletedKeys.iterator().next(), DELETE_RECORD_SIZE, (short) 0, (short) 0, System.currentTimeMillis());
+  public void deleteAuthorizationFailureTest() {
+    MessageInfo info = new MessageInfo(deletedKeys.iterator().next(), DELETE_RECORD_SIZE, (short) 0, (short) 0,
+        System.currentTimeMillis());
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
@@ -596,6 +593,18 @@ public class BlobStoreTest {
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Authorization_Failure, e.getErrorCode());
     }
+  }
+
+  /**
+   * Test GET authorization failure for {@link BlobStore#get(List, EnumSet)}.
+   * Success is covered by other tests.
+   */
+  @Test
+  public void getAuthorizationFailureTest() throws Exception {
+    MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    assertNotSame("accountId should not be -1 for added Blob.", -1, addedId.getAccountId());
+    assertNotSame("containerId should not be -1 for added Blob.", -1, addedId.getContainerId());
+    verifyGetFailure(new MockId(addedId.getID()), StoreErrorCodes.Authorization_Failure);
   }
 
   /**
@@ -809,12 +818,8 @@ public class BlobStoreTest {
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId();
       long crc = random.nextLong();
-      short accountdId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      MessageInfo info =
-          new MessageInfo(id, size, false, expiresAtMs, crc, accountdId, containerId, Utils.Infinite_Time);
-      accountIdMap.put(id, accountdId);
-      containerIdMap.put(id, containerId);
+      MessageInfo info = new MessageInfo(id, size, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+          Utils.Infinite_Time);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);
@@ -1202,12 +1207,9 @@ public class BlobStoreTest {
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
   private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) throws StoreException {
-    short accoundId = accountIdMap.containsKey(idToDelete) == true ? accountIdMap.get(idToDelete)
-        : Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = containerIdMap.containsKey(idToDelete) == true ? containerIdMap.get(idToDelete)
-        : Utils.getRandomShort(TestUtils.RANDOM);
     MessageInfo info =
-        new MessageInfo(idToDelete, DELETE_RECORD_SIZE, accoundId, containerId, System.currentTimeMillis());
+        new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
+            System.currentTimeMillis());
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     if (store.getStoreConfig().storeDeleteAuthorizationCheck == true) {

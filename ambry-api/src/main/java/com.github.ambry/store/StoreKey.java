@@ -38,6 +38,18 @@ public abstract class StoreKey implements Comparable<StoreKey> {
   public abstract String getID();
 
   /**
+   * Get accountId of StoreKey
+   * @return accountId
+   */
+  public abstract short getAccountId();
+
+  /**
+   * Get containerId of StoreKey
+   * @return containerId
+   */
+  public abstract short getContainerId();
+
+  /**
    * Get a long form of the key for printing.
    * @return the long form of the key
    */

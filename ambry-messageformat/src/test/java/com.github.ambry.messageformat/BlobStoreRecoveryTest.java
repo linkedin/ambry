@@ -67,6 +67,16 @@ class MockId extends StoreKey {
   }
 
   @Override
+  public short getAccountId() {
+    return -1;
+  }
+
+  @Override
+  public short getContainerId() {
+    return -1;
+  }
+
+  @Override
   public short sizeInBytes() {
     return (short) (Id_Size_In_Bytes + id.length());
   }

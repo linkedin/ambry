@@ -301,19 +301,6 @@ public class AmbryRequests implements RequestAPI {
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
-            // Check accountId and containerId.
-            for (int i = 0;
-                storageManager.getStoreConfig().storeGetAuthorizationCheck && i < info.getMessageReadSetInfo().size();
-                i++) {
-              MessageInfo messageInfo = info.getMessageReadSetInfo().get(i);
-              BlobId blobId = (BlobId) partitionRequestInfo.getBlobIds().get(i);
-              if (!Utils.validateAuthorization(messageInfo.getAccountId(), messageInfo.getContainerId(),
-                  blobId.getAccountId(), blobId.getContainerId())) {
-                throw new StoreException("GET authorization failure. Key: " + blobId.getID(),
-                    StoreErrorCodes.Authorization_Failure);
-              }
-            }
-
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory);
