@@ -313,6 +313,29 @@ public class GetManagerTest {
   }
 
   /**
+   * Tests Bad blobId for different get operations
+   * @throws Exception
+   */
+  @Test
+  public void testBadBlobId() throws Exception {
+    router = getNonBlockingRouter();
+    setOperationParams(chunkSize, new GetBlobOptionsBuilder().build());
+    String[] badBlobIds = {"", "abc", "123", "invalid_id", "[],/-"};
+    for (String blobId : badBlobIds) {
+      getBlobAndAssertFailure(blobId,
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
+          RouterErrorCode.InvalidBlobId);
+      getBlobAndAssertFailure(blobId,
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(),
+          RouterErrorCode.InvalidBlobId);
+      getBlobAndAssertFailure(blobId,
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+          RouterErrorCode.InvalidBlobId);
+    }
+    router.close();
+  }
+
+  /**
    * Do a getBlob on the given blob id and ensure that all the data is fetched and is correct.
    * @param blobId the id of the blob (simple or composite) that needs to be fetched and compared.
    * @throws Exception
@@ -331,6 +354,29 @@ public class GetManagerTest {
         compareBlobInfo(result.getBlobInfo());
         Assert.assertNull("Unexpected blob data channel in result", result.getBlobDataChannel());
         break;
+    }
+  }
+
+  /**
+   * Do a getBlob on the given blob id and ensure that exception is thrown with the expected error code
+   * @param blobId the id of the blob (simple or composite) that needs to be fetched and compared.
+   * @param options {@link GetBlobOptions} to be used in the get call
+   * @param expectedErrorCode expected {@link RouterErrorCode}
+   * @throws Exception
+   */
+  private void getBlobAndAssertFailure(String blobId, GetBlobOptions options, RouterErrorCode expectedErrorCode)
+      throws Exception {
+    try {
+      Future future = router.getBlob(blobId, options);
+      while (!future.isDone()) {
+        mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
+        Thread.yield();
+      }
+      future.get();
+      Assert.fail("operation should have thrown");
+    } catch (ExecutionException e) {
+      RouterException routerException = (RouterException) e.getCause();
+      Assert.assertEquals(expectedErrorCode, routerException.getErrorCode());
     }
   }
 
