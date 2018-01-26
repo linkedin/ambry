@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
@@ -68,7 +69,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobIdStr the blob id associated with the operation in string form.
+   * @param blobId the {@link BlobId} associated with the operation.
    * @param options the {@link GetBlobOptionsInternal} containing the options associated with this operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback the {@link RouterCallback} to use to complete operations.
@@ -76,13 +77,12 @@ class GetBlobInfoOperation extends GetOperation {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
-   * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) throws RouterException {
-    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, callback,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+    super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
     this.routerCallback = routerCallback;
@@ -410,9 +410,14 @@ class GetBlobInfoOperation extends GetOperation {
       }
       if (e != null) {
         operationResult = null;
-        routerMetrics.onGetBlobError(e, options);
+        routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
       }
-      routerMetrics.getBlobInfoOperationLatencyMs.update(time.milliseconds() - submissionTimeMs);
+      long operationLatencyMs = time.milliseconds() - submissionTimeMs;
+      if (blobId.isEncrypted()) {
+        routerMetrics.getEncryptedBlobInfoOperationLatencyMs.update(operationLatencyMs);
+      } else {
+        routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
+      }
       NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
   }

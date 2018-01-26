@@ -13,7 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -132,46 +134,43 @@ class NonBlockingRouter implements Router {
   /**
    * Requests for the blob data asynchronously with user-set {@link GetBlobOptions} and invokes the {@link Callback}
    * when the request completes.
-   * @param blobId The ID of the blob for which blob data is requested.
+   * @param blobIdStr The ID of the blob for which blob data is requested.
    * @param options The options associated with the request. This cannot be null.
    * @param callback The callback which will be invoked on the completion of the request.
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, final Callback<GetBlobResult> callback) {
-    if (blobId == null || options == null) {
+  public Future<GetBlobResult> getBlob(String blobIdStr, GetBlobOptions options,
+      final Callback<GetBlobResult> callback) {
+    if (blobIdStr == null || options == null) {
       throw new IllegalArgumentException("blobId or options must not be null");
     }
     currentOperationsCount.incrementAndGet();
-    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-      routerMetrics.getBlobInfoOperationRate.mark();
-    } else {
-      routerMetrics.getBlobOperationRate.mark();
-    }
-    if (options.getRange() != null) {
-      routerMetrics.getBlobWithRangeOperationRate.mark();
-    }
-    routerMetrics.operationQueuingRate.mark();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
-    if (isOpen.get()) {
-      getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
-        @Override
-        public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
-          GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
-          futureResult.done(getBlobResult, exception);
-          if (callback != null) {
-            callback.onCompletion(getBlobResult, exception);
+    try {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+      trackGetBlobRateMetrics(options, blobId.isEncrypted());
+      routerMetrics.operationQueuingRate.mark();
+      if (isOpen.get()) {
+        getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
+          @Override
+          public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
+            GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
+            futureResult.done(getBlobResult, exception);
+            if (callback != null) {
+              callback.onCompletion(getBlobResult, exception);
+            }
           }
-        }
-      });
-    } else {
-      RouterException routerException =
-          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-      routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onGetBlobError(routerException, internalOptions);
-      completeOperation(futureResult, callback, null, routerException);
+        });
+      } else {
+        RouterException routerException =
+            new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, blobId.isEncrypted());
+      }
+    } catch (RouterException e) {
+      completeGetBlobOperation(e, internalOptions, futureResult, callback, false);
     }
     return futureResult;
   }
@@ -209,7 +208,11 @@ class NonBlockingRouter implements Router {
       userMetadata = new byte[0];
     }
     currentOperationsCount.incrementAndGet();
-    routerMetrics.putBlobOperationRate.mark();
+    if (blobProperties.isEncrypted()) {
+      routerMetrics.putEncryptedBlobOperationRate.mark();
+    } else {
+      routerMetrics.putBlobOperationRate.mark();
+    }
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<String>();
     if (isOpen.get()) {
@@ -218,7 +221,7 @@ class NonBlockingRouter implements Router {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(routerException);
+      routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
@@ -284,10 +287,10 @@ class NonBlockingRouter implements Router {
   /**
    * Initiate the deletes of the data chunks associated with this blobId, if this blob turns out to be a composite
    * blob. Note that this causes the rate of gets to increase at the servers.
-   * @param blobId the blobId string associated with the possibly composite blob.
+   * @param blobId the {@link BlobId} associated with the possibly composite blob.
    * @param serviceId the service ID associated with the original delete request.
    */
-  private void initiateChunkDeletesIfAny(final String blobId, final String serviceId) {
+  private void initiateChunkDeletesIfAny(final BlobId blobId, final String serviceId) {
     Callback<GetBlobResultInternal> callback = (GetBlobResultInternal result, Exception exception) -> {
       if (exception != null) {
         // It is expected that these requests will not always succeed. For example, this may have been triggered by a
@@ -313,6 +316,44 @@ class NonBlockingRouter implements Router {
         new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.Include_All, null),
             true, routerMetrics.ageAtDelete);
     backgroundDeleter.getBlob(blobId, options, callback);
+  }
+
+  /**
+   * Track get blob rate metrics based on the {@link GetBlobOptions} and whether the blob is encrypted or not
+   * @param options {@link GetBlobOptions} instance to use
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
+   */
+  private void trackGetBlobRateMetrics(GetBlobOptions options, boolean isEncrypted) {
+    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      Meter blobInfoOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
+      blobInfoOperationRate.mark();
+    } else {
+      Meter blobOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
+      blobOperationRate.mark();
+    }
+    if (options.getRange() != null) {
+      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
+          : routerMetrics.getBlobWithRangeOperationRate;
+      blobWithRangeOperationRate.mark();
+    }
+  }
+
+  /**
+   * Completes a getBlob operation by invoking the {@code callback} and setting the {@code futureResult} with the given
+   * {@code {@link RouterException}}
+   * @param routerException {@link RouterException} to be set in the callback and future result
+   * @param internalOptions instance of {@link GetBlobOptionsInternal} to use
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
+   */
+  private void completeGetBlobOperation(RouterException routerException, GetBlobOptionsInternal internalOptions,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback, boolean isEncrypted) {
+    routerMetrics.operationDequeuingRate.mark();
+    routerMetrics.onGetBlobError(routerException, internalOptions, isEncrypted);
+    completeOperation(futureResult, callback, null, routerException);
   }
 
   /**
@@ -460,11 +501,11 @@ class NonBlockingRouter implements Router {
     /**
      * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request
      * completes.
-     * @param blobId The ID of the blob for which blob data is requested.
+     * @param blobId The {@link BlobId} for which blob data is requested.
      * @param options The {@link GetBlobOptionsInternal} associated with the request.
      * @param callback The callback which will be invoked on the completion of the request.
      */
-    protected void getBlob(String blobId, GetBlobOptionsInternal options,
+    protected void getBlob(BlobId blobId, GetBlobOptionsInternal options,
         final Callback<GetBlobResultInternal> callback) {
       getManager.submitGetBlobOperation(blobId, options, callback);
       routerCallback.onPollReady();
@@ -484,7 +525,7 @@ class NonBlockingRouter implements Router {
         RouterException routerException =
             new RouterException(" because Router is closed", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
-        routerMetrics.onPutBlobError(routerException);
+        routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
         completeOperation(futureResult, callback, null, routerException);
         // Close so that any existing operations are also disposed off.
         close();
@@ -496,7 +537,7 @@ class NonBlockingRouter implements Router {
 
     /**
      * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
-     * @param blobId The ID of the blob that needs to be deleted.
+     * @param blobIdStr The ID of the blob that needs to be deleted in string form
      * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
      * @param futureResult A future that would contain information about whether the deletion succeeded or not,
      *                     eventually.
@@ -504,16 +545,23 @@ class NonBlockingRouter implements Router {
      * @param attemptChunkDeletes whether delete of chunks of the given blob (if it turns out to be composite) should be
      *                            attempted. Set this to false if it is known that the given blob is a data chunk.
      */
-    protected void deleteBlob(final String blobId, final String serviceId, FutureResult<Void> futureResult,
+    protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
         final Callback<Void> callback, boolean attemptChunkDeletes) {
-      deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, (Void result, Exception exception) -> {
-        if (exception == null && attemptChunkDeletes) {
-          initiateChunkDeletesIfAny(blobId, serviceId);
-        }
-        if (callback != null) {
-          callback.onCompletion(result, exception);
-        }
-      });
+      try {
+        final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+        deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, (Void result, Exception exception) -> {
+          if (exception == null && attemptChunkDeletes) {
+            initiateChunkDeletesIfAny(blobId, serviceId);
+          }
+          if (callback != null) {
+            callback.onCompletion(result, exception);
+          }
+        });
+      } catch (RouterException e) {
+        routerMetrics.operationDequeuingRate.mark();
+        routerMetrics.onDeleteBlobError(e);
+        NonBlockingRouter.completeOperation(futureResult, callback, null, e);
+      }
       routerCallback.onPollReady();
     }
 
@@ -648,7 +696,7 @@ class NonBlockingRouter implements Router {
           new RouterException("Illegal attempt to put blob through backgroundDeleteOperationController",
               RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(routerException);
+      routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
       completeOperation(futureResult, callback, null, routerException);
     }
 

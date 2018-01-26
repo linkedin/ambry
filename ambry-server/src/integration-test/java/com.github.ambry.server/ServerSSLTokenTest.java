@@ -20,6 +20,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -74,6 +75,7 @@ public class ServerSSLTokenTest {
     serverSSLProps = new Properties();
     TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     routerProps = new Properties();
+    routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
     notificationSystem = new MockNotificationSystem(9);
     sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());

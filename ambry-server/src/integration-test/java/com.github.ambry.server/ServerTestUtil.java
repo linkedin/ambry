@@ -1692,14 +1692,19 @@ public final class ServerTestUtil {
     }
   }
 
+  /**
+   * Generate and return {@link Properties} to instantiate {@link Router}
+   * @param routerDatacenter Router's datacentre
+   * @return the {@link Properties} thus constructed
+   */
   private static Properties getRouterProps(String routerDatacenter) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
     properties.setProperty("router.datacenter.name", routerDatacenter);
+    properties.setProperty("router.get.cross.dc.enabled", "true");
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", routerDatacenter);
     properties.setProperty("clustermap.host.name", "localhost");
-    properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     return properties;
   }
 

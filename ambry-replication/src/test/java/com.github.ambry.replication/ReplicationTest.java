@@ -322,11 +322,12 @@ public class ReplicationTest {
 
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
       // add an expired message to the remote host only
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, false);
-      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
+              containerId, partitionId, toEncrypt);
+      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
               putMsgInfo.getSecond().getOperationTimeMs()), putMsgInfo.getFirst());
@@ -337,10 +338,11 @@ public class ReplicationTest {
 
       accountId = Utils.getRandomShort(TestUtils.RANDOM);
       containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      toEncrypt = TestUtils.RANDOM.nextBoolean();
       // add a corrupt message to the remote host only
       id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId, false);
-      putMsgInfo = getPutMessage(id, accountId, containerId);
+          containerId, partitionId, toEncrypt);
+      putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
       byte[] data = putMsgInfo.getFirst().array();
       // flip every bit in the array
       for (int j = 0; j < data.length; j++) {
@@ -572,10 +574,11 @@ public class ReplicationTest {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+      boolean toEncrypt = i % 2 == 0;
       BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId, false);
+          containerId, partitionId, toEncrypt);
       ids.add(id);
-      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId);
+      Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
       for (Host host : hosts) {
         host.addMessage(partitionId, putMsgInfo.getSecond(), putMsgInfo.getFirst().duplicate());
       }
@@ -608,19 +611,20 @@ public class ReplicationTest {
    * @param id id for which the message has to be constructed.
    * @param accountId accountId of the blob
    * @param containerId containerId of the blob
+   * @param enableEncryption {@code true} if encryption needs to be enabled. {@code false} otherwise
    * @return a {@link Pair} of {@link ByteBuffer} and {@link MessageInfo} representing the entire message and the
    *         associated {@link MessageInfo}
    * @throws MessageFormatException
    * @throws IOException
    */
-  private Pair<ByteBuffer, MessageInfo> getPutMessage(StoreKey id, short accountId, short containerId)
-      throws MessageFormatException, IOException {
+  private Pair<ByteBuffer, MessageInfo> getPutMessage(StoreKey id, short accountId, short containerId,
+      boolean enableEncryption) throws MessageFormatException, IOException {
     int blobSize = TestUtils.RANDOM.nextInt(500) + 501;
     int userMetadataSize = TestUtils.RANDOM.nextInt(blobSize / 2);
     int encryptionKeySize = TestUtils.RANDOM.nextInt(blobSize / 4);
     byte[] blob = new byte[blobSize];
     byte[] usermetadata = new byte[userMetadataSize];
-    byte[] encryptionKey = TestUtils.RANDOM.nextBoolean() ? new byte[encryptionKeySize] : null;
+    byte[] encryptionKey = enableEncryption ? new byte[encryptionKeySize] : null;
     TestUtils.RANDOM.nextBytes(blob);
     TestUtils.RANDOM.nextBytes(usermetadata);
     BlobProperties blobProperties = new BlobProperties(blobSize, "test", accountId, containerId, encryptionKey != null);

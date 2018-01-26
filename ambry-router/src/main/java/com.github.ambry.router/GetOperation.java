@@ -67,7 +67,7 @@ abstract class GetOperation {
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
-   * @param blobIdStr the blobId of the associated blob in string form.
+   * @param blobId the {@link BlobId} of the associated blob
    * @param options the {@link GetBlobOptionsInternal} associated with this operation.
    * @param getOperationCallback the callback that is to be called when the operation completes.
    * @param localColoTracker the {@link Histogram} that tracks intra datacenter latencies for this class of requests.
@@ -77,13 +77,12 @@ abstract class GetOperation {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the {@link Time} instance to use.
-   * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, String blobIdStr, GetBlobOptionsInternal options,
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> getOperationCallback, Histogram localColoTracker, Histogram crossColoTracker,
       Counter pastDueCounter, KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      Time time) throws RouterException {
+      Time time) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
@@ -98,7 +97,7 @@ abstract class GetOperation {
     this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     submissionTimeMs = time.milliseconds();
-    blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+    this.blobId = blobId;
     validateTrackerType();
   }
 

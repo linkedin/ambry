@@ -17,6 +17,7 @@ import com.codahale.metrics.Histogram;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -120,8 +121,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
-    accountAndContainerInjector =
-        new AccountAndContainerInjector(accountService, clusterMap, frontendMetrics, frontendConfig);
+    accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
 
@@ -133,7 +133,7 @@ class AmbryBlobStorageService implements BlobStorageService {
     getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getSignedUrlHandler =
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
-            frontendMetrics);
+            frontendMetrics, clusterMap);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -189,27 +189,12 @@ class AmbryBlobStorageService implements BlobStorageService {
         GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
         SecurityProcessRequestCallback securityCallback =
             new SecurityProcessRequestCallback(restRequest, restResponseChannel, routerCallback);
-        RestRequestMetrics requestMetrics =
-            restRequest.getSSLSession() != null ? frontendMetrics.getBlobSSLMetrics : frontendMetrics.getBlobMetrics;
-        if (subresource != null) {
-          logger.trace("Sub-resource requested: {}", subresource);
-          switch (subresource) {
-            case BlobInfo:
-              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getBlobInfoSSLMetrics
-                  : frontendMetrics.getBlobInfoMetrics;
-              break;
-            case UserMetadata:
-              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getUserMetadataSSLMetrics
-                  : frontendMetrics.getUserMetadataMetrics;
-              break;
-            case Replicas:
-              requestMetrics = restRequest.getSSLSession() != null ? frontendMetrics.getReplicasSSLMetrics
-                  : frontendMetrics.getReplicasMetrics;
-              securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
-              break;
-          }
+        if (subresource == SubResource.Replicas) {
+          securityCallback = new SecurityProcessRequestCallback(restRequest, restResponseChannel);
         }
-        restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+        restRequest.getMetricsTracker()
+            .injectMetrics(
+                getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null, false));
         securityService.processRequest(restRequest, securityCallback);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
@@ -225,10 +210,9 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    restRequest.getMetricsTracker().injectMetrics(frontendMetrics.postBlobMetrics);
-    RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? frontendMetrics.postBlobSSLMetrics : frontendMetrics.postBlobMetrics;
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    boolean sslUsed = restRequest.getSSLSession() != null;
+    RestRequestMetrics metrics = frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(sslUsed, false);
+    restRequest.getMetricsTracker().injectMetrics(metrics);
     try {
       logger.trace("Handling POST request - {}", restRequest.getUri());
       checkAvailable();
@@ -241,6 +225,11 @@ class AmbryBlobStorageService implements BlobStorageService {
           blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
         logger.debug("TTL set to very large value in POST request with BlobProperties {}", blobProperties);
         frontendMetrics.ttlTooLargeError.inc();
+      }
+      // inject encryption metrics if applicable
+      if (blobProperties.isEncrypted()) {
+        metrics = frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(sslUsed, true);
+        restRequest.getMetricsTracker().injectMetrics(metrics);
       }
       byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
@@ -298,10 +287,10 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? frontendMetrics.headBlobSSLMetrics : frontendMetrics.headBlobMetrics;
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     try {
+      RestRequestMetrics requestMetrics =
+          frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null, false);
+      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       logger.trace("Handling HEAD request - {}", restRequest.getUri());
       checkAvailable();
       // TODO: make this non blocking once all handling of indiviual methods is moved to their own classes
@@ -389,6 +378,35 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
     }
+  }
+
+  /**
+   * Fetch {@link RestRequestMetrics} for GetRequest based on the {@link SubResource} and {@link RestRequest} params
+   * @param frontendMetrics instance of {@link FrontendMetrics} to use
+   * @param subResource {@link SubResource} corresponding to the GetRequest
+   * @param sslUsed {@code true} if request is sent over ssl, {@code false} otherwise
+   * @param encrypted {@code true} if request is for an encrypted blob. {@code false} otherwise
+   * @return the appropriate {@link RestRequestMetrics} based on the given params
+   */
+  private RestRequestMetrics getRestRequestMetricsForGet(FrontendMetrics frontendMetrics, SubResource subResource,
+      boolean sslUsed, boolean encrypted) {
+    RestRequestMetrics requestMetrics = null;
+    if (subResource == null) {
+      requestMetrics = frontendMetrics.getBlobRequestMetricsGroup.getRestRequestMetrics(sslUsed, encrypted);
+    } else {
+      switch (subResource) {
+        case BlobInfo:
+          requestMetrics = frontendMetrics.getBlobInfoRequestMetricsGroup.getRestRequestMetrics(sslUsed, encrypted);
+          break;
+        case UserMetadata:
+          requestMetrics = frontendMetrics.getUserMetadataRequestMetricsGroup.getRestRequestMetrics(sslUsed, encrypted);
+          break;
+        case Replicas:
+          requestMetrics = sslUsed ? frontendMetrics.getReplicasSSLMetrics : frontendMetrics.getReplicasMetrics;
+          break;
+      }
+    }
+    return requestMetrics;
   }
 
   /**
@@ -492,12 +510,20 @@ class AmbryBlobStorageService implements BlobStorageService {
         try {
           RestMethod restMethod = restRequest.getRestMethod();
           logger.trace("Handling {} of {}", restMethod, result);
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(result, restRequest);
+          BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
+          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
           // TODO use callback when AmbryBlobStorageService gets refactored into handlers.
           securityService.postProcessRequest(restRequest).get();
           switch (restMethod) {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
+              // inject encryption metrics if need be
+              if (blobId.isEncrypted()) {
+                restRequest.getMetricsTracker()
+                    .injectMetrics(
+                        getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null,
+                            true));
+              }
               if (subresource == null) {
                 getCallback.markStartTime();
                 router.getBlob(result, getCallback.options, getCallback);
@@ -516,6 +542,13 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case HEAD:
               GetOption getOption = RestUtils.getGetOption(restRequest);
+              // inject encryption metrics if need be
+              if (blobId.isEncrypted()) {
+                RestRequestMetrics requestMetrics =
+                    frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
+                        true);
+                restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+              }
               headCallback.markStartTime();
               router.getBlob(result, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo)
                   .getOption(getOption)

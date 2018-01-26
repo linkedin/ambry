@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
@@ -650,7 +651,8 @@ public class NonBlockingRouterTest {
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
-    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    String blobIdStr = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
     router.close();
     for (MockServer mockServer : mockServerLayout.getMockServers()) {
       mockServer.setServerErrorForAllRequests(ServerErrorCode.No_Error);
@@ -728,7 +730,7 @@ public class NonBlockingRouterTest {
    *                    the operation managers.
    */
   private void testFailureDetectorNotification(OperationHelper opHelper, NetworkClient networkClient,
-      List<ReplicaId> failedReplicaIds, String blobId, AtomicInteger successfulResponseCount,
+      List<ReplicaId> failedReplicaIds, BlobId blobId, AtomicInteger successfulResponseCount,
       AtomicBoolean invalidResponse, int indexToFail) throws Exception {
     failedReplicaIds.clear();
     successfulResponseCount.set(0);
@@ -798,7 +800,7 @@ public class NonBlockingRouterTest {
    *                                notified.
    * @param invalidResponse the AtomicBoolean that will contain whether an unexpected failure was notified.
    */
-  private void testNoResponseNoNotification(OperationHelper opHelper, List<ReplicaId> failedReplicaIds, String blobId,
+  private void testNoResponseNoNotification(OperationHelper opHelper, List<ReplicaId> failedReplicaIds, BlobId blobId,
       AtomicInteger successfulResponseCount, AtomicBoolean invalidResponse) throws Exception {
     failedReplicaIds.clear();
     successfulResponseCount.set(0);
@@ -826,7 +828,7 @@ public class NonBlockingRouterTest {
    * @param blobId the id of the blob to get/delete. For puts, this will be null.
    * @throws Exception
    */
-  private void testResponseDeserializationError(OperationHelper opHelper, NetworkClient networkClient, String blobId)
+  private void testResponseDeserializationError(OperationHelper opHelper, NetworkClient networkClient, BlobId blobId)
       throws Exception {
     mockSelectorState.set(MockSelectorState.Good);
     FutureResult futureResult = opHelper.submitOperation(blobId);
@@ -934,7 +936,7 @@ public class NonBlockingRouterTest {
      * @param blobId the blobId to get or delete. For puts, this is ignored.
      * @return the {@link FutureResult} associated with the submitted operation.
      */
-    FutureResult submitOperation(String blobId) {
+    FutureResult submitOperation(BlobId blobId) {
       FutureResult futureResult = null;
       switch (opType) {
         case PUT:

@@ -75,10 +75,10 @@ public class GetSignedUrlHandlerTest {
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry());
     FrontendConfig config = new FrontendConfig(new VerifiableProperties(new Properties()));
     AccountAndContainerInjector accountAndContainerInjector =
-        new AccountAndContainerInjector(ACCOUNT_SERVICE, CLUSTER_MAP, metrics, config);
+        new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, config);
     getSignedUrlHandler = new GetSignedUrlHandler(urlSigningServiceFactory.getUrlSigningService(),
         securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(), accountAndContainerInjector,
-        metrics);
+        metrics, CLUSTER_MAP);
   }
 
   /**
