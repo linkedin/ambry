@@ -323,18 +323,18 @@ class NonBlockingRouter implements Router {
    * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
    */
   private void trackGetBlobRateMetrics(GetBlobOptions options, boolean isEncrypted) {
-    Meter blobInfoOperationRate =
-        isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
-    Meter blobOperationRate =
-        isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
-    Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
-        : routerMetrics.getBlobWithRangeOperationRate;
     if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      Meter blobInfoOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
       blobInfoOperationRate.mark();
     } else {
+      Meter blobOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
       blobOperationRate.mark();
     }
     if (options.getRange() != null) {
+      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
+          : routerMetrics.getBlobWithRangeOperationRate;
       blobWithRangeOperationRate.mark();
     }
   }
