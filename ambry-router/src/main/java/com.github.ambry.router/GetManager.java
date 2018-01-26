@@ -116,23 +116,17 @@ class GetManager {
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
   void submitGetBlobOperation(BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback) {
-    try {
-      GetOperation getOperation;
-      if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-        getOperation =
-            new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options,
-                callback, routerCallback, kms, cryptoService, cryptoJobHandler, time);
-      } else {
-        getOperation =
-            new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-                routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
-      }
-      getOperations.add(getOperation);
-    } catch (RouterException e) {
-      routerMetrics.onGetBlobError(e, options, false);
-      routerMetrics.operationDequeuingRate.mark();
-      NonBlockingRouter.completeOperation(null, callback, null, e);
+    GetOperation getOperation;
+    if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      getOperation =
+          new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+              routerCallback, kms, cryptoService, cryptoJobHandler, time);
+    } else {
+      getOperation =
+          new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
     }
+    getOperations.add(getOperation);
   }
 
   /**

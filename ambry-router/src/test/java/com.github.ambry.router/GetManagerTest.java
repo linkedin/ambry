@@ -322,15 +322,10 @@ public class GetManagerTest {
     setOperationParams(chunkSize, new GetBlobOptionsBuilder().build());
     String[] badBlobIds = {"", "abc", "123", "invalid_id", "[],/-"};
     for (String blobId : badBlobIds) {
-      getBlobAndAssertFailure(blobId,
-          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(),
-          RouterErrorCode.InvalidBlobId);
-      getBlobAndAssertFailure(blobId,
-          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.Data).build(),
-          RouterErrorCode.InvalidBlobId);
-      getBlobAndAssertFailure(blobId,
-          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
-          RouterErrorCode.InvalidBlobId);
+      for (GetBlobOptions.OperationType opType : GetBlobOptions.OperationType.values()) {
+        getBlobAndAssertFailure(blobId, new GetBlobOptionsBuilder().operationType(opType).build(),
+            RouterErrorCode.InvalidBlobId);
+      }
     }
     router.close();
   }
@@ -368,11 +363,7 @@ public class GetManagerTest {
       throws Exception {
     try {
       Future future = router.getBlob(blobId, options);
-      while (!future.isDone()) {
-        mockTime.sleep(routerConfig.routerRequestTimeoutMs + 1);
-        Thread.yield();
-      }
-      future.get();
+      future.get(routerConfig.routerRequestTimeoutMs + 1, TimeUnit.MILLISECONDS);
       Assert.fail("operation should have thrown");
     } catch (ExecutionException e) {
       RouterException routerException = (RouterException) e.getCause();

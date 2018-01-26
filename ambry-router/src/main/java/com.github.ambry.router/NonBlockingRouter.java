@@ -149,9 +149,8 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
-    BlobId blobId = null;
     try {
-      blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+      BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
       trackGetBlobRateMetrics(options, blobId.isEncrypted());
       routerMetrics.operationQueuingRate.mark();
       if (isOpen.get()) {
