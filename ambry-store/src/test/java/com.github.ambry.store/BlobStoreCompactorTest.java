@@ -923,7 +923,7 @@ public class BlobStoreCompactorTest {
     if (state != null) {
       state.destroy();
     }
-    StoreTestUtils.cleanDirectory(tempDir, false);
+    assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
   }
 
   /**

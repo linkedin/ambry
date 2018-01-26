@@ -274,7 +274,7 @@ public class StoreMessageReadSetTest {
         }
       } finally {
         log.close();
-        StoreTestUtils.cleanDirectory(tempDir, false);
+        assertTrue(tempDir + " could not be cleaned", StoreTestUtils.cleanDirectory(tempDir, false));
       }
     }
   }

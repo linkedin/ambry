@@ -613,7 +613,8 @@ class CuratedLogIndexState {
         expectedOffset += value.getSize();
       }
       if (prevIndexSegment != null) {
-        assertTrue("Last modified time of an older index segment > newer index segment",
+        assertTrue("Last modified time of an older index segment (" + prevIndexSegment.getLastModifiedTimeMs()
+                + ") > newer index segment (" + indexSegment.getLastModifiedTimeMs() + ")",
             prevIndexSegment.getLastModifiedTimeMs() <= indexSegment.getLastModifiedTimeMs());
       }
       prevIndexSegment = indexSegment;

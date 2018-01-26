@@ -129,6 +129,7 @@ class StoreTestUtils {
    * Cleans up the {@code dir} and deletes it.
    * @param dir the directory to be cleaned up and deleted.
    * @param deleteDirectory if {@code true}, the directory is deleted too.
+   * @return {@code true if the delete was successful}. {@code false} otherwise
    * @throws IOException
    */
   static boolean cleanDirectory(File dir, boolean deleteDirectory) throws IOException {
