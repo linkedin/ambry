@@ -396,7 +396,7 @@ public class ServerMetrics {
     getAuthorizationFailure =
         registry.counter(MetricRegistry.name(AmbryRequests.class, "GetAuthorizationFailure"));
     deleteAuthorizationFailure =
-        registry.counter(MetricRegistry.name(AmbryRequests.class, "DeleteAuthroizationFailure"));
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "DeleteAuthorizationFailure"));
   }
 
   public void markPutBlobRequestRateBySize(long blobSize) {

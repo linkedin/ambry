@@ -63,6 +63,8 @@ public class StoreMetrics {
   public final Histogram segmentSizeForExists;
   public final Histogram segmentsAccessedPerBlobCount;
   public final Counter identicalPutAttemptCount;
+  public final Counter getAuthorizationFailureCount;
+  public final Counter deleteAuthorizationFailureCount;
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -136,6 +138,10 @@ public class StoreMetrics {
         registry.histogram(MetricRegistry.name(IndexSegment.class, name + "SegmentsAccessedPerBlobCount"));
     identicalPutAttemptCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
+    getAuthorizationFailureCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "GetAuthorizationFailureCount"));
+    deleteAuthorizationFailureCount =
+        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "DeleteAuthorizationFailureCount"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =
