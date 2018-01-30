@@ -347,8 +347,8 @@ public class NonBlockingRouterMetrics {
     ageAtDelete = new AgeAtAccessMetrics(metricRegistry, "OnDelete");
 
     // Encrypt/Decrypt job metrics
-    encryptJobMetrics = new CryptoJobMetrics(PutOperation.class, "Encrypt", metricRegistry);
-    decryptJobMetrics = new CryptoJobMetrics(GetOperation.class, "Decrypt", metricRegistry);
+    encryptJobMetrics = new CryptoJobMetrics("Encrypt", metricRegistry);
+    decryptJobMetrics = new CryptoJobMetrics("Decrypt", metricRegistry);
   }
 
   /**
@@ -720,26 +720,25 @@ class CryptoJobMetrics {
   /**
    * Instantiates {@link CryptoJobMetrics} for {@code requestType} and attaches all the metrics related to the
    * cryptoJob to the given {@code ownerClass}. The metrics are also registered in the provided {@code metricRegistry}.
-   * @param ownerClass the {@link Class} that is supposed to own the metrics created by this tracker.
    * @param requestType the type of request for which a tracker is being created.
    * @param metricRegistry the {@link MetricRegistry} to use to register the created metrics.
    */
-  CryptoJobMetrics(Class ownerClass, String requestType, MetricRegistry metricRegistry) {
+  CryptoJobMetrics(String requestType, MetricRegistry metricRegistry) {
     jobQueuingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_QUEUING_TIME_SUFFIX));
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, requestType + JOB_QUEUING_TIME_SUFFIX));
     jobProcessingTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_PROCESSING_TIME_SUFFIX));
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, requestType + JOB_PROCESSING_TIME_SUFFIX));
     jobCallbackProcessingTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_CALLBACK_PROCESSING_TIME_SUFFIX));
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, requestType + JOB_CALLBACK_PROCESSING_TIME_SUFFIX));
     jobResultProcessingWaitTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_RESULT_PROCESSING_WAIT_TIME_SUFFIX));
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, requestType + JOB_RESULT_PROCESSING_WAIT_TIME_SUFFIX));
     jobResultProcessingTimeMs =
-        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + JOB_RESULT_PROCESSING_TIME_SUFFIX));
-    roundTripTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + ROUND_TRIP_TIME_SUFFIX));
+        metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, requestType + JOB_RESULT_PROCESSING_TIME_SUFFIX));
+    roundTripTimeInMs = metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, requestType + ROUND_TRIP_TIME_SUFFIX));
 
-    operationRate = metricRegistry.meter(MetricRegistry.name(ownerClass, requestType + OPERATION_RATE_SUFFIX));
+    operationRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, requestType + OPERATION_RATE_SUFFIX));
     operationErrorRate = metricRegistry.meter(
-        MetricRegistry.name(ownerClass, requestType + OPERATION_ERROR_SUFFIX + OPERATION_RATE_SUFFIX));
+        MetricRegistry.name(NonBlockingRouter.class, requestType + OPERATION_ERROR_SUFFIX + OPERATION_RATE_SUFFIX));
   }
 }
 
