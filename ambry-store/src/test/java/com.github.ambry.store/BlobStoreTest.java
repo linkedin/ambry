@@ -14,8 +14,6 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.StoreConfig;
@@ -572,7 +570,7 @@ public class BlobStoreTest {
    * Tests error cases for {@link BlobStore#delete(MessageWriteSet)}.
    */
   @Test
-  public void deleteErrorCasesTest() throws Exception {
+  public void deleteErrorCasesTest() {
     // ID that is already deleted
     verifyDeleteFailure(deletedKeys.iterator().next(), StoreErrorCodes.ID_Deleted);
     // ID that does not exist
@@ -580,73 +578,82 @@ public class BlobStoreTest {
   }
 
   /**
-   * Test return value for {@link BlobStore#validateAuthorization(short, short, short, short)} )}.
-   * If either one of accountId and containerId in store is unknown, validation is skipped and true is expected.
-   * Otherwise, both of them should match.
+   * Test DELETE authorization success for {@link BlobStore#delete(MessageWriteSet)}.
+   * If either accountId or containerId is -1, validation is skipped.
    */
   @Test
-  public void validationAuthorizationTest() {
-    assertTrue("Should be true if both of accountId and containerId unknown",
-        BlobStore.validateAuthorization(Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM)));
-
-    assertTrue("Should be true if either of accountId and containerId is unknown",
-        BlobStore.validateAuthorization(Account.UNKNOWN_ACCOUNT_ID, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM)));
-
-    assertTrue("Should be true if either of accountId and containerId is unknown",
-        BlobStore.validateAuthorization(Utils.getRandomShort(TestUtils.RANDOM), Container.UNKNOWN_CONTAINER_ID,
-            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM)));
-
-    short accountIdInStore = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerIdInStore = Utils.getRandomShort(TestUtils.RANDOM);
-    assertFalse("Return false if both mismatch.",
-        BlobStore.validateAuthorization(accountIdInStore, containerIdInStore, Utils.getRandomShort(TestUtils.RANDOM),
-            Utils.getRandomShort(TestUtils.RANDOM)));
-    assertTrue("Should return if both match.",
-        BlobStore.validateAuthorization(accountIdInStore, containerIdInStore, accountIdInStore, containerIdInStore));
-    assertFalse("Return false if accountId is mismatch",
-        BlobStore.validateAuthorization(accountIdInStore, containerIdInStore, Utils.getRandomShort(TestUtils.RANDOM),
-            containerIdInStore));
-    assertFalse("Return false if containerId is mismatch",
-        BlobStore.validateAuthorization(accountIdInStore, containerIdInStore, accountIdInStore,
-            Utils.getRandomShort(TestUtils.RANDOM)));
+  public void deleteAuthorizationSuccessTest() throws Exception {
+    short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
+    for (int i = 0; i < accountIds.length; i++) {
+      MockId mockId = putSingleBlob(UtilsTest.getRandomString(10), accountIds[i], containerIds[i]);
+      MessageInfo info = new MessageInfo(mockId, DELETE_RECORD_SIZE, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis());
+      MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
+          Collections.singletonList(ByteBuffer.allocate(DELETE_RECORD_SIZE)));
+      store.delete(writeSet);
+      verifyDeleteFailure(mockId, StoreErrorCodes.ID_Deleted);
+    }
   }
 
   /**
    * Test DELETE authorization failure for {@link BlobStore#delete(MessageWriteSet)}.
-   * Success is covered by other tests.
    */
   @Test
   public void deleteAuthorizationFailureTest() throws Exception {
-    MockId key = deletedKeys.iterator().next();
     if (store.getStoreConfig().storeValidateAuthorization == true) {
-      MessageInfo info = new MessageInfo(key, DELETE_RECORD_SIZE, (short) 0, (short) 0, System.currentTimeMillis());
-      MessageWriteSet writeSet =
-          new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
-      try {
-        store.delete(writeSet);
-        fail("Store DELETE should have failed");
-      } catch (StoreException e) {
-        assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Authorization_Failure, e.getErrorCode());
+      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+      assertNotSame("accountId should not be -1 for added Blob.", -1, mockId.getAccountId());
+      assertNotSame("containerId should not be -1 for added Blob.", -1, mockId.getContainerId());
+      short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(
+          TestUtils.RANDOM)};
+      short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
+          TestUtils.RANDOM), mockId.getContainerId()};
+      for (int i = 0; i < accountIds.length; i++) {
+        verifyDeleteFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
+            StoreErrorCodes.Authorization_Failure);
       }
     }
-    verifyDeleteFailure(key, StoreErrorCodes.ID_Deleted);
+  }
+
+  /**
+   * Test GET authorization success for {@link BlobStore#get(List, EnumSet)}.
+   * If either accountId or containerId is -1, validation is skipped.
+   */
+  @Test
+  public void getAuthorizationSuccessTest() throws Exception {
+    short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
+    for (int i = 0; i < accountIds.length; i++) {
+      MockId mockId = putSingleBlob(UtilsTest.getRandomString(10), accountIds[i], containerIds[i]);
+      store.get(Collections.singletonList(mockId), EnumSet.noneOf(StoreGetOptions.class));
+      store.get(
+          Collections.singletonList(new MockId(mockId.getID(), (short) -1, Utils.getRandomShort(TestUtils.RANDOM))),
+          EnumSet.noneOf(StoreGetOptions.class));
+      store.get(
+          Collections.singletonList(new MockId(mockId.getID(), Utils.getRandomShort(TestUtils.RANDOM), (short) -1)),
+          EnumSet.noneOf(StoreGetOptions.class));
+      store.get(Collections.singletonList(
+          new MockId(mockId.getID(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM))),
+          EnumSet.noneOf(StoreGetOptions.class));
+    }
   }
 
   /**
    * Test GET authorization failure for {@link BlobStore#get(List, EnumSet)}.
-   * Success is covered by other tests.
    */
   @Test
   public void getAuthorizationFailureTest() throws Exception {
-    MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
-    assertNotSame("accountId should not be -1 for added Blob.", -1, addedId.getAccountId());
-    assertNotSame("containerId should not be -1 for added Blob.", -1, addedId.getContainerId());
     if (store.getStoreConfig().storeValidateAuthorization == true) {
+      MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+      assertNotSame("accountId should not be -1 for added Blob.", -1, addedId.getAccountId());
+      assertNotSame("containerId should not be -1 for added Blob.", -1, addedId.getContainerId());
       verifyGetFailure(new MockId(addedId.getID()), StoreErrorCodes.Authorization_Failure);
-    } else {
-      store.get(Collections.singletonList(addedId), EnumSet.noneOf(StoreGetOptions.class));
+      verifyGetFailure(new MockId(addedId.getID(), (short) -1, (short) -1), StoreErrorCodes.Authorization_Failure);
+      verifyGetFailure(new MockId(addedId.getID(), addedId.getAccountId(), (short) -1),
+          StoreErrorCodes.Authorization_Failure);
+      verifyGetFailure(new MockId(addedId.getID(), (short) -1, addedId.getContainerId()),
+          StoreErrorCodes.Authorization_Failure);
     }
   }
 
@@ -876,6 +883,17 @@ public class BlobStoreTest {
     }
     store.put(new MockMessageWriteSet(infos, buffers));
     return ids;
+  }
+
+  private MockId putSingleBlob(String key, short accountId, short containerId) throws StoreException {
+    MockId id = new MockId(key, accountId, containerId);
+    long crc = random.nextLong();
+    MessageInfo info =
+        new MessageInfo(id, PUT_RECORD_SIZE, false, Utils.Infinite_Time, crc, id.getAccountId(), id.getContainerId(),
+            Utils.Infinite_Time);
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) PUT_RECORD_SIZE));
+    store.put(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
+    return id;
   }
 
   /**
@@ -1249,7 +1267,7 @@ public class BlobStoreTest {
    * @param idToDelete the {@link MockId} to DELETE.
    * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
    */
-  private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) throws StoreException {
+  private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
             System.currentTimeMillis());

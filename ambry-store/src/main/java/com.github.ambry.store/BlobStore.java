@@ -616,7 +616,7 @@ class BlobStore implements Store {
    * Check if accountId/containerId from store and request are same.
    * If either one of accountId and containerId in store is unknown, the validation is skipped.
    */
-  public static boolean validateAuthorization(short storeAccountId, short storeContainerId, short requestAccountId,
+  private boolean validateAuthorization(short storeAccountId, short storeContainerId, short requestAccountId,
       short requestContainerId) {
     if (storeAccountId != Account.UNKNOWN_ACCOUNT_ID && storeContainerId != Container.UNKNOWN_CONTAINER_ID) {
       return (storeAccountId == requestAccountId) && (storeContainerId == requestContainerId);

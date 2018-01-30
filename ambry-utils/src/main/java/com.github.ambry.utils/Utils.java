@@ -868,8 +868,6 @@ public class Utils {
     }
   }
 
-
-
   /**
    * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
    * {@link #newScheduler(int, String, boolean)}.

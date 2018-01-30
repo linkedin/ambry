@@ -28,9 +28,13 @@ public class MockId extends StoreKey {
   private static final int Id_Size_In_Bytes = 2;
 
   public MockId(String id) {
+    this(id, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+  }
+
+  public MockId(String id, short accountId, short containerId) {
     this.id = id;
-    this.accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    this.containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    this.accountId = accountId;
+    this.containerId = containerId;
   }
 
   public MockId(DataInputStream stream) throws IOException {
