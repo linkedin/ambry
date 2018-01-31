@@ -119,7 +119,7 @@ public class NonBlockingRouterMetrics {
 
   // Misc metrics.
   public final Meter operationErrorRate;
-  public final Meter encryptedBlobOperationErrorRate;
+  public final Meter encryptedOperationErrorRate;
   public final Counter slippedPutAttemptCount;
   public final Counter slippedPutSuccessCount;
   public final Counter ignoredResponseCount;
@@ -297,8 +297,8 @@ public class NonBlockingRouterMetrics {
 
     // Misc metrics.
     operationErrorRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationErrorRate"));
-    encryptedBlobOperationErrorRate =
-        metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "EncryptedBlobOperationErrorRate"));
+    encryptedOperationErrorRate =
+        metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "EncryptedOperationErrorRate"));
     ignoredResponseCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "IgnoredRequestCount"));
     slippedPutAttemptCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutAttemptCount"));
     slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
@@ -477,7 +477,7 @@ public class NonBlockingRouterMetrics {
     if (RouterUtils.isSystemHealthError(e)) {
       if (encryptionEnabled) {
         putEncryptedBlobErrorCount.inc();
-        encryptedBlobOperationErrorRate.mark();
+        encryptedOperationErrorRate.mark();
       } else {
         putBlobErrorCount.inc();
         operationErrorRate.mark();
@@ -509,7 +509,7 @@ public class NonBlockingRouterMetrics {
     if (RouterUtils.isSystemHealthError(e)) {
       if (encrypted) {
         getEncryptedBlobInfoErrorCount.inc();
-        encryptedBlobOperationErrorRate.mark();
+        encryptedOperationErrorRate.mark();
       } else {
         getBlobInfoErrorCount.inc();
         operationErrorRate.mark();
@@ -527,7 +527,7 @@ public class NonBlockingRouterMetrics {
     onError(e);
     Counter blobErrorCount = encrypted ? getEncryptedBlobErrorCount : getBlobErrorCount;
     Counter blobWithRangeErrorCount = encrypted ? getEncryptedBlobWithRangeErrorCount : getBlobWithRangeErrorCount;
-    Meter operationErrorRateMeter = encrypted ? encryptedBlobOperationErrorRate : operationErrorRate;
+    Meter operationErrorRateMeter = encrypted ? encryptedOperationErrorRate : operationErrorRate;
     if (RouterUtils.isSystemHealthError(e)) {
       blobErrorCount.inc();
       if (options != null && options.getBlobOptions.getRange() != null) {
