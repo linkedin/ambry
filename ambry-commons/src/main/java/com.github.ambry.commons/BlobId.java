@@ -262,6 +262,7 @@ public class BlobId extends StoreKey {
    * blobId was formed, it will return {@link Account#UNKNOWN_ACCOUNT_ID}.
    * @return The id of the {@link Account} who created this blob.
    */
+  @Override
   public short getAccountId() {
     return accountId;
   }
@@ -271,6 +272,7 @@ public class BlobId extends StoreKey {
    * the blobId was formed, it will return {@link Container#UNKNOWN_CONTAINER_ID}.
    * @return The id of the {@link Container} where this blob belongs to.
    */
+  @Override
   public short getContainerId() {
     return containerId;
   }

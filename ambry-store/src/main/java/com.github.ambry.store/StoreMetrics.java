@@ -139,9 +139,9 @@ public class StoreMetrics {
     identicalPutAttemptCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IdenticalPutAttemptCount"));
     getAuthorizationFailureCount =
-        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "GetAuthorizationFailureCount"));
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "GetAuthorizationFailureCount"));
     deleteAuthorizationFailureCount =
-        registry.counter(MetricRegistry.name(PersistentIndex.class, name + "DeleteAuthorizationFailureCount"));
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "DeleteAuthorizationFailureCount"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =

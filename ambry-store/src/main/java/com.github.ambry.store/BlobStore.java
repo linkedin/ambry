@@ -584,10 +584,6 @@ class BlobStore implements Store {
     checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
   }
 
-  public StoreConfig getStoreConfig() {
-    return config;
-  }
-
   /**
    * Resumes a compaction if one is in progress.
    * @throws StoreException if there are any errors during the compaction.
