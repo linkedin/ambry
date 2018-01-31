@@ -13,36 +13,20 @@
  */
 package com.github.ambry.router;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
-
 /**
  * CryptoJob representing the job that needs processing by {@link CryptoJobHandler}
  */
-public abstract class CryptoJob<T> implements Runnable {
-  private Callback<T> callback;
-  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
-
-  CryptoJob(Callback<T> callback) {
-    this.callback = callback;
-  }
+public interface CryptoJob<T> extends Runnable {
 
   /**
    * @return {@code true} if the job is complete. {@code false} otherwise
    */
-  boolean isComplete() {
-    return callbackInvoked.get();
-  }
+  boolean isComplete();
 
   /**
    * Completes the job by invoking the callback with the result or exception
    * @param result the result that needs to be set in the callback. Could be {@code null}
    * @param e {@link Exception} to be set in the callback. Could be {@link null}
    */
-  void completeJob(T result, Exception e) {
-    if (callbackInvoked.compareAndSet(false, true)) {
-      callback.onCompletion(result, e);
-      callback = null;
-    }
-  }
+  void completeJob(T result, Exception e);
 }

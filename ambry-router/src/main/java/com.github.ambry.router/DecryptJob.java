@@ -15,12 +15,13 @@ package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
  * Class representing an decrypt Job.
  */
-class DecryptJob extends CryptoJob<DecryptJob.DecryptJobResult> {
+class DecryptJob implements CryptoJob<DecryptJob.DecryptJobResult> {
   private final BlobId blobId;
   private final ByteBuffer encryptedBlobContent;
   private final ByteBuffer encryptedUserMetadata;
@@ -28,6 +29,8 @@ class DecryptJob extends CryptoJob<DecryptJob.DecryptJobResult> {
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final CryptoJobMetricsTracker decryptJobMetricsTracker;
+  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+  private Callback<DecryptJobResult> callback;
 
   /**
    * Instantiates {@link DecryptJob} with {@link BlobId}, key to be decrypted, content to be decrypted and the
@@ -44,7 +47,7 @@ class DecryptJob extends CryptoJob<DecryptJob.DecryptJobResult> {
   DecryptJob(BlobId blobId, ByteBuffer encryptedPerBlobKey, ByteBuffer encryptedBlobContent,
       ByteBuffer encryptedUserMetadata, CryptoService cryptoService, KeyManagementService kms,
       CryptoJobMetricsTracker decryptJobMetricsTracker, Callback<DecryptJobResult> callback) {
-    super(callback);
+    this.callback = callback;
     this.blobId = blobId;
     this.encryptedBlobContent = encryptedBlobContent;
     this.encryptedUserMetadata = encryptedUserMetadata;
@@ -52,6 +55,25 @@ class DecryptJob extends CryptoJob<DecryptJob.DecryptJobResult> {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.decryptJobMetricsTracker = decryptJobMetricsTracker;
+  }
+
+  /**
+   * @return {@code true} if the job is complete. {@code false} otherwise
+   */
+  public boolean isComplete() {
+    return callbackInvoked.get();
+  }
+
+  /**
+   * Completes the job by invoking the callback with the result or exception
+   * @param result the result that needs to be set in the callback. Could be {@code null}
+   * @param e {@link Exception} to be set in the callback. Could be {@link null}
+   */
+  public void completeJob(DecryptJobResult result, Exception e) {
+    if (callbackInvoked.compareAndSet(false, true)) {
+      callback.onCompletion(result, e);
+      callback = null;
+    }
   }
 
   /**

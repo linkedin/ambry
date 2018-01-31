@@ -14,12 +14,13 @@
 package com.github.ambry.router;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
  * Class representing an Encrypt Job
  */
-public class EncryptJob extends CryptoJob<EncryptJob.EncryptJobResult> {
+public class EncryptJob implements CryptoJob<EncryptJob.EncryptJobResult> {
   private final short accountId;
   private final short containerId;
   private final ByteBuffer blobContentToEncrypt;
@@ -28,6 +29,8 @@ public class EncryptJob extends CryptoJob<EncryptJob.EncryptJobResult> {
   private final CryptoService cryptoService;
   private final KeyManagementService kms;
   private final CryptoJobMetricsTracker encryptJobMetricsTracker;
+  private final AtomicBoolean callbackInvoked = new AtomicBoolean(false);
+  private Callback<EncryptJobResult> callback;
 
   /**
    * Instantiates {@link EncryptJob} for an upload.
@@ -42,7 +45,7 @@ public class EncryptJob extends CryptoJob<EncryptJob.EncryptJobResult> {
   EncryptJob(short accountId, short containerId, ByteBuffer blobContentToEncrypt, ByteBuffer userMetadataToEncrypt,
       Object perBlobKey, CryptoService cryptoService, KeyManagementService kms,
       CryptoJobMetricsTracker encryptJobMetricsTracker, Callback<EncryptJobResult> callback) {
-    super(callback);
+    this.callback = callback;
     this.accountId = accountId;
     this.containerId = containerId;
     this.blobContentToEncrypt = blobContentToEncrypt;
@@ -51,6 +54,25 @@ public class EncryptJob extends CryptoJob<EncryptJob.EncryptJobResult> {
     this.cryptoService = cryptoService;
     this.kms = kms;
     this.encryptJobMetricsTracker = encryptJobMetricsTracker;
+  }
+
+  /**
+   * @return {@code true} if the job is complete. {@code false} otherwise
+   */
+  public boolean isComplete() {
+    return callbackInvoked.get();
+  }
+
+  /**
+   * Completes the job by invoking the callback with the result or exception
+   * @param result the result that needs to be set in the callback. Could be {@code null}
+   * @param e {@link Exception} to be set in the callback. Could be {@link null}
+   */
+  public void completeJob(EncryptJobResult result, Exception e) {
+    if (callbackInvoked.compareAndSet(false, true)) {
+      callback.onCompletion(result, e);
+      callback = null;
+    }
   }
 
   /**
@@ -83,10 +105,10 @@ public class EncryptJob extends CryptoJob<EncryptJob.EncryptJobResult> {
           exception = e;
         } finally {
           encryptJobMetricsTracker.onJobProcessingComplete();
+          completeJob(
+              exception == null ? new EncryptJobResult(encryptedKey, encryptedBlobContent, encryptedUserMetadata)
+                  : null, exception);
         }
-        completeJob(
-            exception == null ? new EncryptJobResult(encryptedKey, encryptedBlobContent, encryptedUserMetadata) : null,
-            exception);
       }
     }
   }

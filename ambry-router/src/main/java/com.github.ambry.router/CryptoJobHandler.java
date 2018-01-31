@@ -13,14 +13,15 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
@@ -40,8 +41,8 @@ class CryptoJobHandler implements Closeable {
       new GeneralSecurityException("CryptoJobHandler closed");
   private static final GeneralSecurityException CRYPTO_JOB_TIMEOUT_EXCEPTION =
       new GeneralSecurityException("CryptoJob timeout", new TimeoutException());
-  private ExecutorService executor;
-  private ConcurrentHashMap<CryptoJob, Long> pendingCryptoJobs = new ConcurrentHashMap<>();
+  private final ExecutorService executor;
+  private final BlockingQueue<Pair<CryptoJob, Long>> pendingCryptoJobs = new LinkedBlockingQueue<>();
   private final Time time;
 
   private static final Logger logger = LoggerFactory.getLogger(CryptoJobHandler.class);
@@ -63,13 +64,19 @@ class CryptoJobHandler implements Closeable {
    * Cleans up expired crypto jobs
    */
   protected void cleanUpExpiredCryptoJobs() {
-    for (Map.Entry<CryptoJob, Long> pendingCryptoJob : pendingCryptoJobs.entrySet()) {
-      if (pendingCryptoJob.getKey().isComplete()) {
-        pendingCryptoJobs.remove(pendingCryptoJob.getKey());
-      } else if (time.milliseconds() - pendingCryptoJob.getValue() > cryptoJobTimeoutMs) {
-        pendingCryptoJobs.remove(pendingCryptoJob.getKey());
-        pendingCryptoJob.getKey().completeJob(null, CRYPTO_JOB_TIMEOUT_EXCEPTION);
+    Pair<CryptoJob, Long> pendingCryptoJob = pendingCryptoJobs.peek();
+    while (pendingCryptoJob != null) {
+      if (pendingCryptoJob.getFirst().isComplete()) {
+        // already completed job
+        pendingCryptoJobs.poll();
+      } else if (time.milliseconds() - pendingCryptoJob.getSecond() > cryptoJobTimeoutMs) {
+        // crypto job timed out
+        pendingCryptoJobs.poll();
+        pendingCryptoJob.getFirst().completeJob(null, CRYPTO_JOB_TIMEOUT_EXCEPTION);
+      } else {
+        break;
       }
+      pendingCryptoJob = pendingCryptoJobs.peek();
     }
   }
 
@@ -81,7 +88,7 @@ class CryptoJobHandler implements Closeable {
   void submitJob(CryptoJob cryptoJob) {
     if (enabled.get()) {
       executor.execute(cryptoJob);
-      pendingCryptoJobs.put(cryptoJob, time.milliseconds());
+      pendingCryptoJobs.add(new Pair(cryptoJob, time.milliseconds()));
     }
   }
 
