@@ -26,7 +26,7 @@ public interface CryptoJob<T> extends Runnable {
   /**
    * Completes the job by invoking the callback with the result or exception
    * @param result the result that needs to be set in the callback. Could be {@code null}
-   * @param e {@link Exception} to be set in the callback. Could be {@link null}
+   * @param e {@link Exception} to be set in the callback. Could be {@code null}
    */
   void completeJob(T result, Exception e);
 }
