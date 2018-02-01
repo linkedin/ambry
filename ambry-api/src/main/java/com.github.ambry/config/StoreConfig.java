@@ -183,6 +183,13 @@ public class StoreConfig {
   public final int storeIndexPersistedEntryMinBytes;
 
   /**
+   * Enables or disables accountId and containerId validation for GET/DELETE request.
+   */
+  @Config("store.validate.authorization")
+  @Default("true")
+  public final boolean storeValidateAuthorization;
+
+  /**
    * Enables or disables dynamic sealing/unsealing
    */
   @Config(storeWriteStatusDelegateEnableName)
@@ -252,6 +259,7 @@ public class StoreConfig {
     storeReadWriteEnableSizeThresholdPercentageDelta =
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
+    storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", true);
   }
 }
 

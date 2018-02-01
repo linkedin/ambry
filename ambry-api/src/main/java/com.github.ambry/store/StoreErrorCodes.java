@@ -30,5 +30,6 @@ public enum StoreErrorCodes {
   Illegal_Index_State,
   Index_Creation_Failure,
   Index_Version_Error,
+  Authorization_Failure,
   Unknown_Error
 }

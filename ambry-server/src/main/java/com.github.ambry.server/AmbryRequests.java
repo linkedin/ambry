@@ -309,22 +309,25 @@ public class AmbryRequests implements RequestAPI {
             messagesToSendList.add(blobsToSend);
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (StoreException e) {
+            boolean logInErrorLevel = false;
             if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
-                  + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
-                  + partitionRequestInfo.getPartition(), e);
               metrics.ttlExpiredError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
-                  + partitionRequestInfo.getPartition(), e);
               metrics.idDeletedError.inc();
+            } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+              metrics.getAuthorizationFailure.inc();
             } else {
-              logger.error("Store exception on a get with error code " + e.getErrorCode() + " for partition "
-                  + partitionRequestInfo.getPartition(), e);
               metrics.unExpectedStoreGetError.inc();
+              logInErrorLevel = true;
+            }
+            if (logInErrorLevel) {
+              logger.error("Store exception on a get with error code {} for partition {}", e.getErrorCode(),
+                  partitionRequestInfo.getPartition(), e);
+            } else {
+              logger.trace("Store exception on a get with error code {} for partition {}", e.getErrorCode(),
+                  partitionRequestInfo.getPartition(), e);
             }
             PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
@@ -404,22 +407,25 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
+      boolean logInErrorLevel = false;
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger.trace(
-            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        logger.trace(
-            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.ttlExpiredError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        logger.trace(
-            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+        metrics.deleteAuthorizationFailure.inc();
       } else {
-        logger.error(
-            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
+        logInErrorLevel = true;
         metrics.unExpectedStoreDeleteError.inc();
+      }
+      if (logInErrorLevel) {
+        logger.error("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
+            e);
+      } else {
+        logger.trace("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
+            e);
       }
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
