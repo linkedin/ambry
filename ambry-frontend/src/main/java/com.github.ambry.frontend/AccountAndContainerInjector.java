@@ -23,6 +23,8 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -37,7 +39,7 @@ import static com.github.ambry.rest.RestUtils.*;
 /**
  * Helper class to resolve and add {@link Account} and {@link Container} details to requests.
  */
-class AccountAndContainerInjector {
+public class AccountAndContainerInjector implements Closeable {
   private static final Set<String> requiredAmbryHeadersForPutWithServiceId = Collections.singleton(Headers.SERVICE_ID);
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
@@ -61,7 +63,7 @@ class AccountAndContainerInjector {
    * @param restRequest The Put {@link RestRequest}.
    * @throws RestServiceException
    */
-  void injectAccountAndContainerForPostRequest(RestRequest restRequest) throws RestServiceException {
+  public void injectAccountAndContainerForPostRequest(RestRequest restRequest) throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
     if (getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false) != null
         || getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false) != null) {
@@ -91,7 +93,8 @@ class AccountAndContainerInjector {
    *                              either {@link Account} or {@link Container} were explicitly specified as
    *                              {@link Account#UNKNOWN_ACCOUNT} or {@link Container#UNKNOWN_CONTAINER}.
    */
-  void injectTargetAccountAndContainerFromBlobId(BlobId blobId, RestRequest restRequest) throws RestServiceException {
+  public void injectTargetAccountAndContainerFromBlobId(BlobId blobId, RestRequest restRequest)
+      throws RestServiceException {
     Account targetAccount = accountService.getAccountById(blobId.getAccountId());
     if (targetAccount == null) {
       frontendMetrics.getHeadDeleteUnrecognizedAccountCount.inc();
@@ -125,7 +128,7 @@ class AccountAndContainerInjector {
    * @param blobProperties The {@link BlobProperties} that contains the service id and blob privacy setting.
    * @throws RestServiceException if no valid account or container cound be identified for re-injection.
    */
-  void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties)
+  public void ensureAccountAndContainerInjected(RestRequest restRequest, BlobProperties blobProperties)
       throws RestServiceException {
     Account targetAccount = (Account) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY);
     Container targetContainer = (Container) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_CONTAINER_KEY);
@@ -228,7 +231,7 @@ class AccountAndContainerInjector {
    * @param targetContainer The target {@link Container} to set.
    */
   private void setTargetAccountAndContainerInRestRequest(RestRequest restRequest, Account targetAccount,
-      Container targetContainer) throws RestServiceException {
+      Container targetContainer) {
     restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, targetAccount);
     restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, targetContainer);
     logger.trace("Setting targetAccount={} and targetContainer={} for restRequest={} ", targetAccount, targetContainer,
@@ -249,5 +252,10 @@ class AccountAndContainerInjector {
               + accountNameFromHeader + "'. Account returned by backend: '" + account.getName() + "'.",
           RestServiceErrorCode.InternalServerError);
     }
+  }
+
+  @Override
+  public void close() throws IOException {
+    accountService.close();
   }
 }

@@ -13,7 +13,7 @@
  */
 package com.github.ambry.frontend;
 
-import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Properties;
 import junit.framework.Assert;
@@ -27,12 +27,12 @@ public class AmbrySecurityServiceFactoryTest {
 
   /**
    * Tests intantiation of {@link AmbrySecurityServiceFactory}.
-   * @throws InstantiationException
+   * @throws Exception
    */
   @Test
-  public void getAmbrySecurityServiceFactoryTest() throws InstantiationException {
+  public void getAmbrySecurityServiceFactoryTest() throws Exception {
     SecurityService securityService =
-        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry(), null,
+        new AmbrySecurityServiceFactory(new VerifiableProperties(new Properties()), new MockClusterMap(), null, null,
             null).getSecurityService();
     Assert.assertNotNull(securityService);
   }
