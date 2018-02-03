@@ -87,11 +87,13 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
           Utils.getObj(frontendConfig.frontendUrlSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry());
       UrlSigningService urlSigningService = urlSigningServiceFactory.getUrlSigningService();
+      AccountAndContainerInjector accountAndContainerInjector =
+          new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       SecurityServiceFactory securityServiceFactory =
-          Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties,
-              clusterMap.getMetricRegistry(), accountService, urlSigningService);
+          Utils.getObj(frontendConfig.frontendSecurityServiceFactory, verifiableProperties, clusterMap, accountService,
+              urlSigningService, accountAndContainerInjector);
       return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-          idConverterFactory, securityServiceFactory, accountService, urlSigningService);
+          idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate AmbryBlobStorageService", e);
     }

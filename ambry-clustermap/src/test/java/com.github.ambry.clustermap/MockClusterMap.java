@@ -239,7 +239,15 @@ public class MockClusterMap implements ClusterMap {
    * Create a {@link MetricRegistry} and ensure that this is the one that is returned by {@link #getMetricRegistry()}
    */
   public void createAndSetPermanentMetricRegistry() {
-    metricRegistry = new MetricRegistry();
+    setPermanentMetricRegistry(new MetricRegistry());
+  }
+
+  /**
+   * Set the registry as {@code toSet} ensure that this is the one that is returned by {@link #getMetricRegistry()}
+   * @param toSet the metric registry to set to.
+   */
+  public void setPermanentMetricRegistry(MetricRegistry toSet) {
+    metricRegistry = toSet;
     createNewRegistry = false;
   }
 

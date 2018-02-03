@@ -89,7 +89,6 @@ class AmbryBlobStorageService implements BlobStorageService {
   private final Logger logger = LoggerFactory.getLogger(AmbryBlobStorageService.class);
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
-  private final AccountService accountService;
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private boolean isUp = false;
@@ -110,8 +109,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
       SecurityServiceFactory securityServiceFactory, AccountService accountService,
-      UrlSigningService urlSigningService) {
-    this.accountService = Objects.requireNonNull(accountService, "accountService cannot be null.");
+      UrlSigningService urlSigningService, AccountAndContainerInjector accountAndContainerInjector) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
@@ -120,8 +118,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     this.idConverterFactory = idConverterFactory;
     this.securityServiceFactory = securityServiceFactory;
     this.urlSigningService = urlSigningService;
+    this.accountAndContainerInjector = accountAndContainerInjector;
     getReplicasHandler = new GetReplicasHandler(frontendMetrics, clusterMap);
-    accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     logger.trace("Instantiated AmbryBlobStorageService");
   }
 
@@ -152,7 +150,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         idConverter.close();
         idConverter = null;
       }
-      accountService.close();
+      accountAndContainerInjector.close();
       logger.info("AmbryBlobStorageService shutdown complete");
     } catch (IOException e) {
       logger.error("Downstream service close failed", e);

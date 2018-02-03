@@ -21,7 +21,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import java.io.IOException;
 import org.junit.Test;

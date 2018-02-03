@@ -109,10 +109,11 @@ public class AmbryBlobStorageServiceTest {
   private final SecurityServiceFactory securityServiceFactory;
   private final FrontendTestResponseHandler responseHandler;
   private final InMemoryRouter router;
-  private final ClusterMap clusterMap;
+  private final MockClusterMap clusterMap;
   private final BlobId referenceBlobId;
   private final String referenceBlobIdStr;
   private final short blobIdVersion;
+  private final UrlSigningService urlSigningService;
   private FrontendConfig frontendConfig;
   private VerifiableProperties verifiableProperties;
   private boolean shouldAllowServiceIdBasedPut = true;
@@ -121,7 +122,7 @@ public class AmbryBlobStorageServiceTest {
   private Container refDefaultPublicContainer;
   private Container refDefaultPrivateContainer;
   private InMemAccountService accountService = new InMemAccountServiceFactory(false, true).getAccountService();
-  private final UrlSigningService urlSigningService;
+  private AccountAndContainerInjector accountAndContainerInjector;
 
   /**
    * Sets up the {@link AmbryBlobStorageService} instance before a test.
@@ -133,15 +134,17 @@ public class AmbryBlobStorageServiceTest {
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));
     verifiableProperties = new VerifiableProperties(configProps);
+    clusterMap = new MockClusterMap();
+    clusterMap.setPermanentMetricRegistry(metricRegistry);
     frontendConfig = new FrontendConfig(verifiableProperties);
+    accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     urlSigningService = new AmbryUrlSigningService(frontendConfig.frontendUrlSignerUploadEndpoint,
         frontendConfig.frontendUrlSignerDownloadEndpoint, frontendConfig.frontendUrlSignerDefaultUrlTtlSecs,
         frontendConfig.frontendUrlSignerDefaultMaxUploadSizeBytes, frontendConfig.frontendUrlSignerMaxUrlTtlSecs,
         SystemTime.getInstance());
     idConverterFactory = new AmbryIdConverterFactory(verifiableProperties, metricRegistry);
-    securityServiceFactory =
-        new AmbrySecurityServiceFactory(verifiableProperties, metricRegistry, null, urlSigningService);
-    clusterMap = new MockClusterMap();
+    securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
+        accountAndContainerInjector);
     accountService.clear();
     refAccount = accountService.createAndAddRandomAccount();
     for (Container container : refAccount.getAllContainers()) {
@@ -572,6 +575,7 @@ public class AmbryBlobStorageServiceTest {
   @Test
   public void accountNameMismatchTest() throws Exception {
     accountService = new InMemAccountServiceFactory(true, false).getAccountService();
+    accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.start();
     postBlobAndVerifyWithAccountAndContainer(refAccount.getName(), refContainer.getName(), "serviceId",
@@ -718,7 +722,7 @@ public class AmbryBlobStorageServiceTest {
     FrontendTestRouter testRouter = new FrontendTestRouter();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, accountService, urlSigningService);
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
     ambryBlobStorageService.start();
     JSONObject headers = new JSONObject();
     String serviceId = "service-id";
@@ -739,7 +743,7 @@ public class AmbryBlobStorageServiceTest {
     TailoredPeersClusterMap clusterMap = new TailoredPeersClusterMap();
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            idConverterFactory, securityServiceFactory, accountService, urlSigningService);
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
     ambryBlobStorageService.start();
     // test good requests
     for (String datanode : TailoredPeersClusterMap.DATANODE_NAMES) {
@@ -1039,7 +1043,7 @@ public class AmbryBlobStorageServiceTest {
    */
   private AmbryBlobStorageService getAmbryBlobStorageService() throws Exception {
     return new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-        idConverterFactory, securityServiceFactory, accountService, urlSigningService);
+        idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
   }
 
   // nullInputsForFunctionsTest() helpers
@@ -1561,7 +1565,7 @@ public class AmbryBlobStorageServiceTest {
       throws InstantiationException, JSONException {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, router, clusterMap,
-            converterFactory, securityServiceFactory, accountService, urlSigningService);
+            converterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
     ambryBlobStorageService.start();
     RestMethod[] restMethods = {RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD};
     doExternalServicesBadInputTest(restMethods, expectedExceptionMsg, false);
@@ -1588,7 +1592,8 @@ public class AmbryBlobStorageServiceTest {
       }
       ambryBlobStorageService =
           new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, new FrontendTestRouter(),
-              clusterMap, idConverterFactory, securityFactory, accountService, urlSigningService);
+              clusterMap, idConverterFactory, securityFactory, accountService, urlSigningService,
+              accountAndContainerInjector);
       ambryBlobStorageService.start();
       doExternalServicesBadInputTest(restMethods, exceptionMsg,
           mode == FrontendTestSecurityServiceFactory.Mode.ProcessResponse);
@@ -1643,7 +1648,7 @@ public class AmbryBlobStorageServiceTest {
   private void doRouterExceptionPipelineTest(FrontendTestRouter testRouter, String exceptionMsg) throws Exception {
     ambryBlobStorageService =
         new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
-            idConverterFactory, securityServiceFactory, accountService, urlSigningService);
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
     ambryBlobStorageService.start();
     for (RestMethod restMethod : RestMethod.values()) {
       switch (restMethod) {
@@ -1854,6 +1859,7 @@ public class AmbryBlobStorageServiceTest {
         String.valueOf(shouldAllowServiceIdBasedPut));
     verifiableProperties = new VerifiableProperties(configProps);
     frontendConfig = new FrontendConfig(verifiableProperties);
+    accountAndContainerInjector = new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
     ambryBlobStorageService = getAmbryBlobStorageService();
     ambryBlobStorageService.start();
     populateAccountService();
