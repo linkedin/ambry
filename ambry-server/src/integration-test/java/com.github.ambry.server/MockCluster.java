@@ -129,9 +129,11 @@ public class MockCluster {
         new Thread(new ServerShutdown(shutdownLatch, server)).start();
       }
       try {
-        shutdownLatch.await();
+        if (!shutdownLatch.await(1, TimeUnit.MINUTES)) {
+          fail("Did not shutdown in 1 minute");
+        }
       } catch (Exception e) {
-        assertTrue(false);
+        throw new IOException(e);
       }
       clusterMap.cleanup();
     }
