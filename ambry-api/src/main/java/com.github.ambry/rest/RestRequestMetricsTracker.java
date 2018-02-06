@@ -100,7 +100,7 @@ public class RestRequestMetricsTracker {
     /**
      * Marks the time at which the first byte of the response is sent.
      */
-    public void markTimeToFirstByte() {
+    public void markFirstByteSent() {
       if (requestReceivedTime == 0) {
         throw new IllegalStateException("First response byte was marked as sent without request being marked received");
       }
