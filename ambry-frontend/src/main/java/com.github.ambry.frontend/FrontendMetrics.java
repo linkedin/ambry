@@ -25,7 +25,7 @@ import com.github.ambry.rest.RestRequestMetrics;
  * <p/>
  * Exports metrics that are triggered by the Ambry frontend to the provided {@link MetricRegistry}.
  */
-class FrontendMetrics {
+public class FrontendMetrics {
   private static final String BLOB = "Blob";
   private static final String BLOB_INFO = "BlobInfo";
   private static final String USER_METADATA = "UserMetadata";

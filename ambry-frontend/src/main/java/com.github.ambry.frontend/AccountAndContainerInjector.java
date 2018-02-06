@@ -49,7 +49,7 @@ public class AccountAndContainerInjector implements Closeable {
   private final FrontendMetrics frontendMetrics;
   private final FrontendConfig frontendConfig;
 
-  protected AccountAndContainerInjector(AccountService accountService, FrontendMetrics frontendMetrics,
+  public AccountAndContainerInjector(AccountService accountService, FrontendMetrics frontendMetrics,
       FrontendConfig frontendConfig) {
     this.accountService = accountService;
     this.frontendMetrics = frontendMetrics;
