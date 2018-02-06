@@ -47,7 +47,6 @@ import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -108,8 +107,8 @@ class AmbryBlobStorageService implements BlobStorageService {
    */
   AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
       RestResponseHandler responseHandler, Router router, ClusterMap clusterMap, IdConverterFactory idConverterFactory,
-      SecurityServiceFactory securityServiceFactory, AccountService accountService,
-      UrlSigningService urlSigningService, AccountAndContainerInjector accountAndContainerInjector) {
+      SecurityServiceFactory securityServiceFactory, AccountService accountService, UrlSigningService urlSigningService,
+      AccountAndContainerInjector accountAndContainerInjector) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
