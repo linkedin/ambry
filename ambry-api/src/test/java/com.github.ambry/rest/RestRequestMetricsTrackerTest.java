@@ -32,7 +32,7 @@ public class RestRequestMetricsTrackerTest {
    * {@link RestRequestMetrics}.
    */
   @Test
-  public void commonCaseTest() {
+  public void commonCaseTest() throws InterruptedException {
     withDefaultsTest(false);
     withDefaultsTest(true);
     withInjectedMetricsTest(false);
@@ -61,7 +61,7 @@ public class RestRequestMetricsTrackerTest {
   public void requestMarkingExceptionsTest() {
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
     try {
-      requestMetrics.nioMetricsTracker.markFirstByteSent();
+      requestMetrics.nioMetricsTracker.markTimeToFirstByte();
       fail("Marking request as complete before marking it received should have thrown exception");
     } catch (IllegalStateException e) {
       // expected. nothing to do.
@@ -88,7 +88,7 @@ public class RestRequestMetricsTrackerTest {
    * Tests recording of metrics without setting a custom {@link RestRequestMetrics}.
    * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  private void withDefaultsTest(boolean induceFailure) {
+  private void withDefaultsTest(boolean induceFailure) throws InterruptedException {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     RestRequestMetricsTracker requestMetrics = new RestRequestMetricsTracker();
@@ -103,7 +103,7 @@ public class RestRequestMetricsTrackerTest {
    * Tests recording of metrics after setting a custom {@link RestRequestMetrics}.
    * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  private void withInjectedMetricsTest(boolean induceFailure) {
+  private void withInjectedMetricsTest(boolean induceFailure) throws InterruptedException {
     MetricRegistry metricRegistry = new MetricRegistry();
     RestRequestMetricsTracker.setDefaults(metricRegistry);
     String testRequestType = "Test";
@@ -122,6 +122,7 @@ public class RestRequestMetricsTrackerTest {
  * provided and then checks for equality once the metrics are recorded.
  */
 class TestMetrics {
+  private static final int REQUEST_SLEEP_TIME = 5;
   private final Random random = new Random();
   private final long nioLayerRequestProcessingTime = random.nextInt(Integer.MAX_VALUE);
   private final long nioLayerResponseProcessingTime = random.nextInt(Integer.MAX_VALUE);
@@ -137,7 +138,7 @@ class TestMetrics {
    * @param requestMetrics the instance of {@link RestRequestMetricsTracker} where metrics have to be updated.
    * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  protected TestMetrics(RestRequestMetricsTracker requestMetrics, boolean induceFailure) {
+  protected TestMetrics(RestRequestMetricsTracker requestMetrics, boolean induceFailure) throws InterruptedException {
     updateMetrics(requestMetrics, induceFailure);
     operationErrorCount = induceFailure ? 1 : 0;
   }
@@ -157,6 +158,15 @@ class TestMetrics {
         histograms.get(metricPrefix + RestRequestMetrics.NIO_RESPONSE_PROCESSING_TIME_SUFFIX)
             .getSnapshot()
             .getValues()[0]);
+
+    long timeToFirstByte =
+        histograms.get(metricPrefix + RestRequestMetrics.NIO_TIME_TO_FIRST_BYTE_SUFFIX).getSnapshot().getValues()[0];
+    assertTrue("NIO time to first byte " + timeToFirstByte + "<" + REQUEST_SLEEP_TIME,
+        timeToFirstByte >= REQUEST_SLEEP_TIME);
+    long roundTripTime =
+        histograms.get(metricPrefix + RestRequestMetrics.NIO_ROUND_TRIP_TIME_SUFFIX).getSnapshot().getValues()[0];
+    assertTrue("NIO round trip time " + roundTripTime + "<" + REQUEST_SLEEP_TIME * 2,
+        roundTripTime >= REQUEST_SLEEP_TIME * 2);
 
     assertEquals("SC request processing time unequal", scRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_TIME_SUFFIX)
@@ -187,9 +197,16 @@ class TestMetrics {
    *                                  updated.
    * @param induceFailure if {@code true}, the request is marked as failed.
    */
-  private void updateMetrics(RestRequestMetricsTracker restRequestMetricsTracker, boolean induceFailure) {
+  private void updateMetrics(RestRequestMetricsTracker restRequestMetricsTracker, boolean induceFailure)
+      throws InterruptedException {
     restRequestMetricsTracker.nioMetricsTracker.addToRequestProcessingTime(nioLayerRequestProcessingTime);
     restRequestMetricsTracker.nioMetricsTracker.addToResponseProcessingTime(nioLayerResponseProcessingTime);
+
+    restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
+    Thread.sleep(REQUEST_SLEEP_TIME);
+    restRequestMetricsTracker.nioMetricsTracker.markTimeToFirstByte();
+    Thread.sleep(REQUEST_SLEEP_TIME);
+    restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
 
     restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingTime(scRequestProcessingTime);
     restRequestMetricsTracker.scalingMetricsTracker.addToResponseProcessingTime(scResponseProcessingTime);

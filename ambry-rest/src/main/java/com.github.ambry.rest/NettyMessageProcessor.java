@@ -13,7 +13,6 @@
  */
 package com.github.ambry.rest;
 
-import com.codahale.metrics.Histogram;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.utils.Utils;
 import io.netty.channel.ChannelHandlerContext;
@@ -226,9 +225,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       long currentTime = System.currentTimeMillis();
       if (firstMessageReceived.compareAndSet(false, true)) {
         if (ctx.pipeline().get(SslHandler.class) != null) {
-          nettyMetrics.sslChannelActiveToMessageReceiveTimeInMs.update(currentTime - channelActiveTimeMs);
+          nettyMetrics.sslChannelActiveToFirstMessageReceiveTimeInMs.update(currentTime - channelActiveTimeMs);
         } else {
-          nettyMetrics.channelActiveToMessageReceiveTimeInMs.update(currentTime - channelActiveTimeMs);
+          nettyMetrics.channelActiveToFirstMessageReceiveTimeInMs.update(currentTime - channelActiveTimeMs);
         }
       }
       boolean recognized = false;

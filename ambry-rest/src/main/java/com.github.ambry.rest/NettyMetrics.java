@@ -47,8 +47,8 @@ public class NettyMetrics {
 
   // Latencies
   // NettyMessageProcessor
-  public final Histogram channelActiveToMessageReceiveTimeInMs;
-  public final Histogram sslChannelActiveToMessageReceiveTimeInMs;
+  public final Histogram channelActiveToFirstMessageReceiveTimeInMs;
+  public final Histogram sslChannelActiveToFirstMessageReceiveTimeInMs;
   public final Histogram requestChunkProcessingTimeInMs;
   // NettyResponseChannel
   public final Histogram channelWriteFailureProcessingTimeInMs;
@@ -168,10 +168,10 @@ public class NettyMetrics {
 
     // Latencies
     // NettyMessageProcessor
-    channelActiveToMessageReceiveTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(NettyMessageProcessor.class, "ChannelActiveToMessageReceiveTimeInMs"));
-    sslChannelActiveToMessageReceiveTimeInMs = metricRegistry.histogram(
-        MetricRegistry.name(NettyMessageProcessor.class, "SslChannelActiveToMessageReceiveTimeInMs"));
+    channelActiveToFirstMessageReceiveTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "ChannelActiveToFirstMessageReceiveTimeInMs"));
+    sslChannelActiveToFirstMessageReceiveTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "SslChannelActiveToFirstMessageReceiveTimeInMs"));
     requestChunkProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "RequestChunkProcessingTimeInMs"));
     // NettyResponseChannel
