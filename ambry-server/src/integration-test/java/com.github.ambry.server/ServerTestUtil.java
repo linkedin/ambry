@@ -449,7 +449,7 @@ public final class ServerTestUtil {
         Thread threadToRun = new Thread(runnable);
         threadToRun.start();
       }
-      latch.await();
+      assertTrue("Did not put all blobs in 2 minutes", latch.await(2, TimeUnit.MINUTES));
 
       // wait till replication can complete
       List<BlobId> blobIds = new ArrayList<BlobId>();
@@ -1055,7 +1055,7 @@ public final class ServerTestUtil {
               cancelTest, portType, connectionPool, notificationSystem));
       thread.start();
     }
-    verifierLatch.await();
+    assertTrue("Did not verify in 2 minutes", verifierLatch.await(2, TimeUnit.MINUTES));
 
     assertEquals(totalRequests.get(), verifiedRequests.get());
     router.close();

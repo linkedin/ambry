@@ -357,12 +357,11 @@ public class NettyMultipartRequestTest {
   @Test
   public void sizeLimitationTest() throws Exception {
     int blobPartSize = 1024;
-    // encoding 1024 bytes of data results in 1209 readable bytes from the encoder.
-    int encodedSize = 1209;
+    byte[] bytes = TestUtils.getRandomBytes(blobPartSize);
+    int encodedSize = getEncodedSize(bytes);
     long[] maxSizesAllowed = {encodedSize + 1, encodedSize, encodedSize - 1, 0};
     for (long maxSizeAllowed : maxSizesAllowed) {
-      InMemoryFile[] files = {new InMemoryFile(RestUtils.MultipartPost.BLOB_PART,
-          ByteBuffer.wrap(TestUtils.getRandomBytes(blobPartSize)))};
+      InMemoryFile[] files = {new InMemoryFile(RestUtils.MultipartPost.BLOB_PART, ByteBuffer.wrap(bytes))};
       HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
       HttpPostRequestEncoder encoder = createEncoder(httpRequest, files);
       NettyMultipartRequest request =
@@ -372,7 +371,6 @@ public class NettyMultipartRequestTest {
       long currentSizeAdded = 0;
       boolean failedToAdd = false;
       while (!encoder.isEndOfInput()) {
-        // Sending null for ctx because the encoder is OK with that.
         HttpContent httpContent = encoder.readChunk(PooledByteBufAllocator.DEFAULT);
         int readableBytes = httpContent.content().readableBytes();
         if (currentSizeAdded + readableBytes <= maxSizeAllowed) {
@@ -513,6 +511,27 @@ public class NettyMultipartRequestTest {
     assertArrayEquals(RestUtils.MultipartPost.BLOB_PART + " content does not match", blobData.array(), readOutput);
     assertArrayEquals("Part by part digest should match digest of whole", wholeDigest, request.getDigest());
     closeRequestAndValidate(request);
+  }
+
+  // sizeLimitationTest() helpers
+
+  /**
+   * Gets the encoded size for a set of bytes
+   * @param bytes the bytes to encode.
+   * @return the encoded size
+   * @throws Exception
+   */
+  private int getEncodedSize(byte[] bytes) throws Exception {
+    int encodedSize = 0;
+    InMemoryFile[] files = {new InMemoryFile(RestUtils.MultipartPost.BLOB_PART, ByteBuffer.wrap(bytes))};
+    HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+    HttpPostRequestEncoder encoder = createEncoder(httpRequest, files);
+    encoder.finalizeRequest();
+    while (!encoder.isEndOfInput()) {
+      HttpContent httpContent = encoder.readChunk(PooledByteBufAllocator.DEFAULT);
+      encodedSize += httpContent.content().readableBytes();
+    }
+    return encodedSize;
   }
 
   /**
