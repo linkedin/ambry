@@ -122,7 +122,7 @@ public class RestRequestMetricsTrackerTest {
  * provided and then checks for equality once the metrics are recorded.
  */
 class TestMetrics {
-  private static final int REQUEST_SLEEP_TIME = 5;
+  private static final int REQUEST_SLEEP_TIME_MS = 5;
   private final Random random = new Random();
   private final long nioLayerRequestProcessingTime = random.nextInt(Integer.MAX_VALUE);
   private final long nioLayerResponseProcessingTime = random.nextInt(Integer.MAX_VALUE);
@@ -161,12 +161,12 @@ class TestMetrics {
 
     long timeToFirstByte =
         histograms.get(metricPrefix + RestRequestMetrics.NIO_TIME_TO_FIRST_BYTE_SUFFIX).getSnapshot().getValues()[0];
-    assertTrue("NIO time to first byte " + timeToFirstByte + "<" + REQUEST_SLEEP_TIME,
-        timeToFirstByte >= REQUEST_SLEEP_TIME);
+    assertTrue("NIO time to first byte " + timeToFirstByte + "<" + REQUEST_SLEEP_TIME_MS,
+        timeToFirstByte >= REQUEST_SLEEP_TIME_MS);
     long roundTripTime =
         histograms.get(metricPrefix + RestRequestMetrics.NIO_ROUND_TRIP_TIME_SUFFIX).getSnapshot().getValues()[0];
-    assertTrue("NIO round trip time " + roundTripTime + "<" + REQUEST_SLEEP_TIME * 2,
-        roundTripTime >= REQUEST_SLEEP_TIME * 2);
+    assertTrue("NIO round trip time " + roundTripTime + "<" + REQUEST_SLEEP_TIME_MS * 2,
+        roundTripTime >= REQUEST_SLEEP_TIME_MS * 2);
 
     assertEquals("SC request processing time unequal", scRequestProcessingTime,
         histograms.get(metricPrefix + RestRequestMetrics.SC_REQUEST_PROCESSING_TIME_SUFFIX)
@@ -203,9 +203,9 @@ class TestMetrics {
     restRequestMetricsTracker.nioMetricsTracker.addToResponseProcessingTime(nioLayerResponseProcessingTime);
 
     restRequestMetricsTracker.nioMetricsTracker.markRequestReceived();
-    Thread.sleep(REQUEST_SLEEP_TIME);
+    Thread.sleep(REQUEST_SLEEP_TIME_MS);
     restRequestMetricsTracker.nioMetricsTracker.markFirstByteSent();
-    Thread.sleep(REQUEST_SLEEP_TIME);
+    Thread.sleep(REQUEST_SLEEP_TIME_MS);
     restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
 
     restRequestMetricsTracker.scalingMetricsTracker.addToRequestProcessingTime(scRequestProcessingTime);
