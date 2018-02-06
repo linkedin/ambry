@@ -67,6 +67,7 @@ public class RestRequestMetricsTracker {
     private final AtomicLong responseProcessingTimeInMs = new AtomicLong(0);
 
     private long requestReceivedTime = 0;
+    private long timeToFirstByteInMs = 0;
     private long roundTripTimeInMs = 0;
 
     /**
@@ -94,6 +95,16 @@ public class RestRequestMetricsTracker {
      */
     public void markRequestReceived() {
       requestReceivedTime = System.currentTimeMillis();
+    }
+
+    /**
+     * Marks the time at which the first byte of the response is sent.
+     */
+    public void markFirstByteSent() {
+      if (requestReceivedTime == 0) {
+        throw new IllegalStateException("First response byte was marked as sent without request being marked received");
+      }
+      timeToFirstByteInMs = System.currentTimeMillis() - requestReceivedTime;
     }
 
     /**
@@ -210,6 +221,7 @@ public class RestRequestMetricsTracker {
         metrics.nioRequestProcessingTimeInMs.update(nioMetricsTracker.requestProcessingTimeInMs.get());
         metrics.nioResponseProcessingTimeInMs.update(nioMetricsTracker.responseProcessingTimeInMs.get());
         metrics.nioRoundTripTimeInMs.update(nioMetricsTracker.roundTripTimeInMs);
+        metrics.nioTimeToFirstByteInMs.update(nioMetricsTracker.timeToFirstByteInMs);
 
         metrics.scRequestProcessingTimeInMs.update(scalingMetricsTracker.requestProcessingTimeInMs.get());
         metrics.scRequestProcessingWaitTimeInMs.update(scalingMetricsTracker.requestProcessingWaitTimeInMs.get());

@@ -29,6 +29,7 @@ public class RestRequestMetrics {
   static final String NIO_REQUEST_PROCESSING_TIME_SUFFIX = "NioRequestProcessingTimeInMs";
   static final String NIO_RESPONSE_PROCESSING_TIME_SUFFIX = "NioResponseProcessingTimeInMs";
   static final String NIO_ROUND_TRIP_TIME_SUFFIX = "NioRoundTripTimeInMs";
+  static final String NIO_TIME_TO_FIRST_BYTE_SUFFIX = "NioTimeToFirstByteInMs";
 
   static final String SC_REQUEST_PROCESSING_TIME_SUFFIX = "ScRequestProcessingTimeInMs";
   static final String SC_REQUEST_PROCESSING_WAIT_TIME_SUFFIX = "ScRequestProcessingWaitTimeInMs";
@@ -42,6 +43,7 @@ public class RestRequestMetrics {
   final Histogram nioRequestProcessingTimeInMs;
   final Histogram nioResponseProcessingTimeInMs;
   final Histogram nioRoundTripTimeInMs;
+  final Histogram nioTimeToFirstByteInMs;
 
   final Histogram scRequestProcessingTimeInMs;
   final Histogram scRequestProcessingWaitTimeInMs;
@@ -72,6 +74,8 @@ public class RestRequestMetrics {
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_RESPONSE_PROCESSING_TIME_SUFFIX));
     nioRoundTripTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_ROUND_TRIP_TIME_SUFFIX));
+    nioTimeToFirstByteInMs =
+        metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + NIO_TIME_TO_FIRST_BYTE_SUFFIX));
 
     scRequestProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(ownerClass, requestType + SC_REQUEST_PROCESSING_TIME_SUFFIX));

@@ -170,7 +170,7 @@ class NettyRequest implements RestRequest {
             RestServiceErrorCode.InvalidArgs);
       }
     } else {
-      size = HttpUtil.getContentLength(request, -1);
+      size = HttpUtil.getContentLength(request, -1L);
     }
 
     // query params.

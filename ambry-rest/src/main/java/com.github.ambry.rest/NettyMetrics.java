@@ -47,6 +47,8 @@ public class NettyMetrics {
 
   // Latencies
   // NettyMessageProcessor
+  public final Histogram channelActiveToFirstMessageReceiveTimeInMs;
+  public final Histogram sslChannelActiveToFirstMessageReceiveTimeInMs;
   public final Histogram requestChunkProcessingTimeInMs;
   // NettyResponseChannel
   public final Histogram channelWriteFailureProcessingTimeInMs;
@@ -133,6 +135,7 @@ public class NettyMetrics {
   // ConnectionStatsHandler
   public final Counter connectionsConnectedCount;
   public final Counter connectionsDisconnectedCount;
+  public final Counter handshakeFailureCount;
 
   // PublicAccessLogHandler
   public final Counter publicAccessLogRequestDisconnectWhileInProgressCount;
@@ -165,6 +168,10 @@ public class NettyMetrics {
 
     // Latencies
     // NettyMessageProcessor
+    channelActiveToFirstMessageReceiveTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "ChannelActiveToFirstMessageReceiveTimeInMs"));
+    sslChannelActiveToFirstMessageReceiveTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(NettyMessageProcessor.class, "SslChannelActiveToFirstMessageReceiveTimeInMs"));
     requestChunkProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NettyMessageProcessor.class, "RequestChunkProcessingTimeInMs"));
     // NettyResponseChannel
@@ -305,6 +312,8 @@ public class NettyMetrics {
         metricRegistry.counter(MetricRegistry.name(ConnectionStatsHandler.class, "ConnectionsConnectedCount"));
     connectionsDisconnectedCount =
         metricRegistry.counter(MetricRegistry.name(ConnectionStatsHandler.class, "ConnectionsDisconnectedCount"));
+    handshakeFailureCount =
+        metricRegistry.counter(MetricRegistry.name(ConnectionStatsHandler.class, "HandshakeFailureCount"));
   }
 
   /**
@@ -312,12 +321,7 @@ public class NettyMetrics {
    * @param openConnectionsCount open connections count to be tracked
    */
   void registerConnectionsStatsHandler(final AtomicLong openConnectionsCount) {
-    Gauge<Long> openConnections = new Gauge<Long>() {
-      @Override
-      public Long getValue() {
-        return openConnectionsCount.get();
-      }
-    };
+    Gauge<Long> openConnections = openConnectionsCount::get;
     metricRegistry.register(MetricRegistry.name(ConnectionStatsHandler.class, "OpenConnections"), openConnections);
   }
 }

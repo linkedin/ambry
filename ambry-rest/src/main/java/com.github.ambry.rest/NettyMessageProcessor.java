@@ -23,6 +23,7 @@ import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.io.IOException;
@@ -68,6 +69,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
   // variables that will live through the life of the channel.
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   private ChannelHandlerContext ctx = null;
+  private final AtomicBoolean firstMessageReceived = new AtomicBoolean(false);
+  private long channelActiveTimeMs;
 
   // variables that will live for the life of a single request.
   private volatile NettyRequest request = null;
@@ -101,6 +104,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    */
   @Override
   public void channelActive(ChannelHandlerContext ctx) {
+    channelActiveTimeMs = System.currentTimeMillis();
     logger.trace("Channel {} active", ctx.channel());
     this.ctx = ctx;
     nettyMetrics.channelCreationRate.mark();
@@ -219,7 +223,13 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
     if (isOpen()) {
       logger.trace("Reading on channel {}", ctx.channel());
       long currentTime = System.currentTimeMillis();
-
+      if (firstMessageReceived.compareAndSet(false, true)) {
+        if (ctx.pipeline().get(SslHandler.class) != null) {
+          nettyMetrics.sslChannelActiveToFirstMessageReceiveTimeInMs.update(currentTime - channelActiveTimeMs);
+        } else {
+          nettyMetrics.channelActiveToFirstMessageReceiveTimeInMs.update(currentTime - channelActiveTimeMs);
+        }
+      }
       boolean recognized = false;
       boolean success = true;
       if (obj instanceof HttpRequest) {
