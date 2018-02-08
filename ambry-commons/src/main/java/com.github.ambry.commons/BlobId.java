@@ -487,6 +487,18 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * Returns the version of a given Blob id.
+   * @param idStr the blobId in string form.
+   * @return the blob ID version.
+   * @throws IOException if the input is not a valid Blob id.
+   */
+  public static short getVersion(String idStr) throws IOException {
+    BlobIdPreamble blobIdPreamble =
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+    return blobIdPreamble.version;
+  }
+
+  /**
    * Returns the account id and container id associated with the given blob. Note that the blob id may not have a valid
    * account and container id associated with it, in which case this will return {@link Account#UNKNOWN_ACCOUNT_ID} and
    * {@link Container#UNKNOWN_CONTAINER_ID} respectively.
