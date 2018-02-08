@@ -462,6 +462,7 @@ public class BlobIdTest {
         (short) accountAndContainer.getFirst());
     assertEquals("Container id from the id string should be the same as the associated container id",
         blobId.getContainerId(), (short) accountAndContainer.getSecond());
+    assertEquals("Unexpected version returned by BlobID.getVersion()", version, BlobId.getVersion(blobId.getID()));
   }
 
   /**
