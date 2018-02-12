@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
@@ -78,7 +79,6 @@ public class DiskReformatter {
   private final ClusterMap clusterMap;
   private final Time time;
   private final ConsistencyCheckerTool consistencyChecker;
-  private final StoreMetrics metrics;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
 
@@ -218,7 +218,6 @@ public class DiskReformatter {
         new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
     consistencyChecker = new ConsistencyCheckerTool(clusterMap, storeKeyFactory, storeConfig, null, null,
         new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
-    metrics = new StoreMetrics(clusterMap.getMetricRegistry());
   }
 
   /**
@@ -303,6 +302,7 @@ public class DiskReformatter {
    */
   private void ensureNotInUse(File srcDir, long storeCapacity) throws StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
+    StoreMetrics metrics = new StoreMetrics(new MetricRegistry());
     Store store = new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler,
         diskSpaceAllocator, metrics, metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null,
         time);
@@ -320,6 +320,11 @@ public class DiskReformatter {
    */
   private void copy(String storeId, File src, File tgt, long capacityInBytes) throws Exception {
     boolean sourceHasProblems;
+    // NOTE: Ideally, we would have liked one MetricRegistry instance to record metrics across all these stores
+    // However, due to the fact that PersistentIndex and HardDeleter initialize gauges inside StoreMetrics, the
+    // MetricRegistry retains references to the PersistentIndex causing a memory leak. If the same instance is to be
+    // used, these gauges have to be removed from the registry on store shutdown. This is being deferred to future work.
+    StoreMetrics metrics = new StoreMetrics(new MetricRegistry());
     try (
         StoreCopier copier = new StoreCopier(storeId, src, tgt, capacityInBytes, fetchSizeInBytes, storeConfig, metrics,
             storeKeyFactory, diskIOScheduler, diskSpaceAllocator, transformers, time)) {

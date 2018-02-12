@@ -354,7 +354,9 @@ public class NettyMultipartRequestTest {
    * Tests to make sure the max allowed size for multipart requests is enforced.
    * @throws Exception
    */
-  @Test
+  // Disabling test because the encoded size is different at different times and it is hard to predict. Need a better
+  // test
+  //@Test
   public void sizeLimitationTest() throws Exception {
     int blobPartSize = 1024;
     byte[] bytes = TestUtils.getRandomBytes(blobPartSize);
