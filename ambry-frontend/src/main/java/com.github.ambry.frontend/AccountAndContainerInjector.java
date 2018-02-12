@@ -107,7 +107,7 @@ public class AccountAndContainerInjector implements Closeable {
         logger.debug(
             "Account cannot be found for blobId={} with accountId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
             blobId.getID(), blobId.getAccountId());
-        targetAccount = Account.UNKNOWN_ACCOUNT;
+        targetAccount = accountService.getAccountById(Account.UNKNOWN_ACCOUNT_ID);
       }
     }
     Container targetContainer = targetAccount.getContainerById(blobId.getContainerId());
@@ -135,7 +135,7 @@ public class AccountAndContainerInjector implements Closeable {
     if (targetAccount == null || targetContainer == null) {
       throw new RestServiceException("Account and container were not injected by BlobStorageService",
           RestServiceErrorCode.InternalServerError);
-    } else if (targetAccount.equals(Account.UNKNOWN_ACCOUNT) && targetContainer.equals(Container.UNKNOWN_CONTAINER)) {
+    } else if (targetAccount.getId() == Account.UNKNOWN_ACCOUNT_ID) {
       // This should only occur for V1 blobs, where the blob ID does not contain the actual account and container IDs.
       String serviceId = blobProperties.getServiceId();
       boolean isPrivate = blobProperties.isPrivate();
@@ -161,7 +161,7 @@ public class AccountAndContainerInjector implements Closeable {
           "Account cannot be found for put request with serviceId={}. Setting targetAccount to UNKNOWN_ACCOUNT",
           serviceId);
       // If a migrated account does not exist fall back to the UNKNOWN_ACCOUNT.
-      targetAccount = Account.UNKNOWN_ACCOUNT;
+      targetAccount = accountService.getAccountById(Account.UNKNOWN_ACCOUNT_ID);
     }
     // Either the UNKNOWN_ACCOUNT, or the migrated account should contain default public/private containers
     Container targetContainer = targetAccount.getContainerById(

@@ -229,7 +229,10 @@ public class Container {
    * A container defined specifically for the blobs put without specifying target account and container. In the
    * pre-containerization world, a put-blob request does not carry any information which account/container to store
    * the blob. These blobs are literally put into this container, because the target container information is unknown.
+   *
+   * DO NOT USE IN PRODUCTION CODE.
    */
+  @Deprecated
   public static final Container UNKNOWN_CONTAINER =
       new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
@@ -239,7 +242,10 @@ public class Container {
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
    * set to {@code false}.
+   *
+   * DO NOT USE IN PRODUCTION CODE.
    */
+  @Deprecated
   public static final Container DEFAULT_PUBLIC_CONTAINER =
       new Container(DEFAULT_PUBLIC_CONTAINER_ID, DEFAULT_PUBLIC_CONTAINER_NAME, DEFAULT_PUBLIC_CONTAINER_STATUS,
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
@@ -249,7 +255,10 @@ public class Container {
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
    * set to {@code true}.
+   * 
+   * DO NOT USE IN PRODUCTION CODE.
    */
+  @Deprecated
   public static final Container DEFAULT_PRIVATE_CONTAINER =
       new Container(DEFAULT_PRIVATE_CONTAINER_ID, DEFAULT_PRIVATE_CONTAINER_NAME, DEFAULT_PRIVATE_CONTAINER_STATUS,
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,

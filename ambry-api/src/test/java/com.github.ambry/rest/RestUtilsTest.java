@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
@@ -801,7 +802,7 @@ public class RestUtilsTest {
     headers.putOpt(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
     headers.putOpt(RestUtils.Headers.OWNER_ID, ownerId);
     if (insertAccount) {
-      headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+      headers.putOpt(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
     }
     if (container != null) {
       headers.putOpt(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, container);
@@ -911,7 +912,7 @@ public class RestUtilsTest {
     String uri = "?" + extraValueHeader + "=extraVal1&" + extraValueHeader + "=extraVal2";
     try {
       RestRequest restRequest = createRestRequest(RestMethod.POST, uri, headers);
-      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+      restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
       restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
       RestUtils.buildBlobProperties(restRequest.getArgs());
       fail("An exception was expected but none were thrown");

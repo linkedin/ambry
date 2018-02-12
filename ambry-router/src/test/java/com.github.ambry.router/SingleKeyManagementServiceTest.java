@@ -91,7 +91,7 @@ public class SingleKeyManagementServiceTest {
         new SingleKeyManagementServiceFactory(verifiableProperties, CLUSTER_NAME, REGISTRY).getKeyManagementService();
     kms.close();
     try {
-      kms.getKey(Account.UNKNOWN_ACCOUNT.getId(), Container.UNKNOWN_CONTAINER.getId());
+      kms.getKey(Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID);
       Assert.fail("getKey() on KMS should have failed as KMS is closed");
     } catch (GeneralSecurityException e) {
     }

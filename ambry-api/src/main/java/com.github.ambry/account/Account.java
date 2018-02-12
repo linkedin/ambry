@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -85,25 +84,14 @@ public class Account {
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
 
   /**
-   * The id of {@link #UNKNOWN_ACCOUNT}.
+   * The id of unknown account.
    */
   public static final short UNKNOWN_ACCOUNT_ID = -1;
 
   /**
-   * The name of {@link #UNKNOWN_ACCOUNT}.
+   * The name of the unknown account.
    */
   public static final String UNKNOWN_ACCOUNT_NAME = "ambry-unknown-account";
-
-  /**
-   * An account defined specifically for the blobs put without specifying target account and container. In the
-   * pre-containerization world, a put-blob request does not carry any information which account/container to store
-   * the blob. These blobs are assigned to this account if their service ID does not match a valid account, because the
-   * target account information is unknown.
-   */
-  public static final Account UNKNOWN_ACCOUNT =
-      new Account(UNKNOWN_ACCOUNT_ID, UNKNOWN_ACCOUNT_NAME, AccountStatus.ACTIVE, SNAPSHOT_VERSION_DEFAULT_VALUE,
-          Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
-              Container.DEFAULT_PRIVATE_CONTAINER));
 
   // account member variables
   private final short id;

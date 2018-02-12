@@ -523,12 +523,12 @@ public class AccountContainerTest {
   }
 
   /**
-   * Tests for {@link Account#UNKNOWN_ACCOUNT}, {@link Container#UNKNOWN_CONTAINER},
+   * Tests for {@link InMemAccountService#UNKNOWN_ACCOUNT}, {@link Container#UNKNOWN_CONTAINER},
    * {@link Container#DEFAULT_PUBLIC_CONTAINER}, and {@link Container#DEFAULT_PRIVATE_CONTAINER}.
    */
   @Test
   public void testUnknownAccountAndContainer() {
-    Account unknownAccount = Account.UNKNOWN_ACCOUNT;
+    Account unknownAccount = InMemAccountService.UNKNOWN_ACCOUNT;
     Container unknownContainer = Container.UNKNOWN_CONTAINER;
     Container unknownPublicContainer = Container.DEFAULT_PUBLIC_CONTAINER;
     Container unknownPrivateContainer = Container.DEFAULT_PRIVATE_CONTAINER;

@@ -49,8 +49,9 @@ public class InMemoryUnknownAccountServiceTest {
   @Test
   public void testAllMethods() throws Exception {
     assertEquals("Wrong account", null, accountService.getAccountById(Utils.getRandomShort(random)));
-    assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT, accountService.getAccountById((short) -1));
-    assertEquals("Wrong account", Account.UNKNOWN_ACCOUNT,
+    assertEquals("Wrong account", InMemoryUnknownAccountService.UNKNOWN_ACCOUNT,
+        accountService.getAccountById((short) -1));
+    assertEquals("Wrong account", InMemoryUnknownAccountService.UNKNOWN_ACCOUNT,
         accountService.getAccountByName(UtilsTest.getRandomString(10)));
     assertEquals("Wrong size of account collection", 1, accountService.getAllAccounts().size());
     // updating the InMemoryUnknownAccountService should fail.
@@ -97,7 +98,7 @@ public class InMemoryUnknownAccountServiceTest {
       updatedAccountsReceivedByConsumers.add(updatedAccounts);
     };
     accountService.addAccountUpdateConsumer(accountUpdateConsumer);
-    Account updatedAccount = new AccountBuilder(Account.UNKNOWN_ACCOUNT).name("newName").build();
+    Account updatedAccount = new AccountBuilder(InMemoryUnknownAccountService.UNKNOWN_ACCOUNT).name("newName").build();
     accountService.updateAccounts(Collections.singletonList(updatedAccount));
     assertEquals("Wrong number of updated accounts received by consumer.", 0,
         updatedAccountsReceivedByConsumers.size());

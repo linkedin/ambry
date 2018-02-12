@@ -13,8 +13,8 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -100,7 +100,7 @@ public class MockBlobStorageService implements BlobStorageService {
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       try {
-        restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, Account.UNKNOWN_ACCOUNT);
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
         restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());

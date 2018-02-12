@@ -89,7 +89,7 @@ public class AmbrySecurityServiceTest {
     DEFAULT_INFO = new BlobInfo(
         new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif", false,
             Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false), null);
-    ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(Account.UNKNOWN_ACCOUNT));
+    ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
   }
 
   /**
