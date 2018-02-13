@@ -559,11 +559,11 @@ public class AmbryBlobStorageServiceTest {
 
     // test response path account injection for V1 blob IDs
     // public blob with service ID that does not correspond to a valid account
-    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", false, InMemAccountService.UNKNOWN_ACCOUNT,
-        Container.DEFAULT_PUBLIC_CONTAINER);
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", false,
+        InMemAccountService.UNKNOWN_ACCOUNT, Container.DEFAULT_PUBLIC_CONTAINER);
     // private blob with service ID that does not correspond to a valid account
-    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", true, InMemAccountService.UNKNOWN_ACCOUNT,
-        Container.DEFAULT_PRIVATE_CONTAINER);
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", true,
+        InMemAccountService.UNKNOWN_ACCOUNT, Container.DEFAULT_PRIVATE_CONTAINER);
     // public blob with service ID that corresponds to a valid account
     verifyResponsePathAccountAndContainerInjection(refAccount.getName(), false, refAccount, refDefaultPublicContainer);
     // private blob with service ID that corresponds to a valid account

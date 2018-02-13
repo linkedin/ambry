@@ -22,13 +22,13 @@ import java.util.function.Consumer;
 
 /**
  * An implementation of {@link AccountService} that always has a single entry which is the unknown account. Any
- * queries by account name to this account service will unconditionally return thje unknown account. This
+ * queries by account name to this account service will unconditionally return the unknown account. This
  * account service is in memory, and does not talk to any persistent storage service.
  */
 class InMemoryUnknownAccountService implements AccountService {
   static final Account UNKNOWN_ACCOUNT =
-      new Account(
-          Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
+      new Account(Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
+          Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER));
   private static final Collection<Account> accounts =

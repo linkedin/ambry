@@ -255,7 +255,7 @@ public class Container {
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
    * set to {@code true}.
-   * 
+   *
    * DO NOT USE IN PRODUCTION CODE.
    */
   @Deprecated

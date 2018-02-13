@@ -40,8 +40,8 @@ public class InMemAccountService implements AccountService {
    * target account information is unknown.
    */
   public static final Account UNKNOWN_ACCOUNT =
-      new Account(
-          Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
+      new Account(Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
+          Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER));
   private final boolean shouldReturnOnlyUnknown;

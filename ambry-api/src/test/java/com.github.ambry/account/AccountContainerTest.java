@@ -287,7 +287,6 @@ public class AccountContainerTest {
     Account account3ByBuilder = new AccountBuilder(account2ByBuilder).containers(null).build();
     assertAccountAgainstReference(account3ByBuilder, false, false);
     assertTrue("Container list should be empty.", account3ByBuilder.getAllContainers().isEmpty());
-
   }
 
   /**
