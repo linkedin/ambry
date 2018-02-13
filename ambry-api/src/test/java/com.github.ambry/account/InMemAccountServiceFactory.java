@@ -29,7 +29,7 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
 
   /**
    * Constructor. If the properties contains a field "in.mem.account.service.only.unknown" set to {@code true}, an
-   * {@link InMemAccountService} that only returns {@link Account#UNKNOWN_ACCOUNT} is returned. Otherwise a fully
+   * {@link InMemAccountService} that only returns {@link InMemAccountService#UNKNOWN_ACCOUNT} is returned. Otherwise a fully
    * functional service is returned. These account services are also static (singleton) so the same instance of these
    * services is returned no matter how many times {@link #getAccountService()} is called or different instances of
    * {@link InMemAccountServiceFactory} are created.
@@ -50,7 +50,7 @@ public class InMemAccountServiceFactory implements AccountServiceFactory {
   /**
    * Constructor. Each different configuration for these parameters has a singleton {@link AccountService}.
    * @param returnOnlyUnknown on {@link #getAccountService()}, returns an {@link AccountService} that will only return
-   *                          {@link Account#UNKNOWN_ACCOUNT}.
+   *                          {@link InMemAccountService#UNKNOWN_ACCOUNT}.
    *
    * @param notifyConsumers if {@code true}, will notify consumers when accounts are updated. This cannot be
    *                        {@code true} if {@code returnOnlyUnknown} is {@code true}.

@@ -146,6 +146,7 @@ public class AmbryBlobStorageServiceTest {
     securityServiceFactory = new AmbrySecurityServiceFactory(verifiableProperties, clusterMap, null, urlSigningService,
         accountAndContainerInjector);
     accountService.clear();
+    accountService.updateAccounts(Collections.singleton(InMemAccountService.UNKNOWN_ACCOUNT));
     refAccount = accountService.createAndAddRandomAccount();
     for (Container container : refAccount.getAllContainers()) {
       if (container.getId() == Container.DEFAULT_PUBLIC_CONTAINER_ID) {
@@ -402,24 +403,26 @@ public class AmbryBlobStorageServiceTest {
     accountService.createAndAddRandomAccount();
     // valid account and container names passed as part of POST
     for (Account testAccount : accountService.getAllAccounts()) {
-      for (Container container : testAccount.getAllContainers()) {
-        doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
-            container);
+      if (testAccount.getId() != Account.UNKNOWN_ACCOUNT_ID) {
+        for (Container container : testAccount.getAllContainers()) {
+          doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
+              container);
+        }
       }
     }
     // valid account and container names but only serviceId passed as part of POST
     doPostGetHeadDeleteTest(null, null, refAccount.getName(), false, refAccount, refDefaultPublicContainer);
     doPostGetHeadDeleteTest(null, null, refAccount.getName(), true, refAccount, refDefaultPrivateContainer);
     // unrecognized serviceId
-    doPostGetHeadDeleteTest(null, null, "unknown_service_id", false, Account.UNKNOWN_ACCOUNT,
+    doPostGetHeadDeleteTest(null, null, "unknown_service_id", false, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PUBLIC_CONTAINER);
-    doPostGetHeadDeleteTest(null, null, "unknown_service_id", true, Account.UNKNOWN_ACCOUNT,
+    doPostGetHeadDeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PRIVATE_CONTAINER);
   }
 
   /**
    * Tests injecting target {@link Account} and {@link Container} for PUT requests. The {@link AccountService} is
-   * prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected behavior should be:
+   * prepopulated with a reference account and {@link InMemAccountService#UNKNOWN_ACCOUNT}. The expected behavior should be:
    *
    * <pre>
    *   accountHeader    containerHeader   serviceIdHeader     expected Error      injected account      injected container
@@ -461,7 +464,7 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE blobId string in {@link BlobId#BLOB_ID_V2}.
-   * The {@link AccountService} is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected
+   * The {@link AccountService} is prepopulated with a reference account and {@link InMemAccountService#UNKNOWN_ACCOUNT}. The expected
    * behavior should be:
    *
    * <pre>
@@ -509,7 +512,7 @@ public class AmbryBlobStorageServiceTest {
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
           Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds().get(0),
           false).getID();
-      verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
+      verifyAccountAndContainerFromBlobId(blobId, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
           RestServiceErrorCode.NotFound);
 
       // aid=unknownAId, cid=nonExistCId
@@ -536,7 +539,7 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Tests injecting target {@link Account} and {@link Container} for GET/HEAD/DELETE blobId string in {@link BlobId#BLOB_ID_V1}.
-   * The {@link AccountService} is prepopulated with a reference account and {@link Account#UNKNOWN_ACCOUNT}. The expected
+   * The {@link AccountService} is prepopulated with a reference account and {@link InMemAccountService#UNKNOWN_ACCOUNT}. The expected
    * behavior should be:
    * <pre>
    *   AId in blobId    CId in blobId     expected Error      injected account      injected container
@@ -551,16 +554,16 @@ public class AmbryBlobStorageServiceTest {
     // expect unknown account and container for v1 blob IDs that went through request processing only.
     String blobId = new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
         refAccount.getId(), refContainer.getId(), clusterMap.getWritablePartitionIds().get(0), false).getID();
-    verifyAccountAndContainerFromBlobId(blobId, Account.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
+    verifyAccountAndContainerFromBlobId(blobId, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
         RestServiceErrorCode.NotFound);
 
     // test response path account injection for V1 blob IDs
     // public blob with service ID that does not correspond to a valid account
-    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", false, Account.UNKNOWN_ACCOUNT,
-        Container.DEFAULT_PUBLIC_CONTAINER);
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", false,
+        InMemAccountService.UNKNOWN_ACCOUNT, Container.DEFAULT_PUBLIC_CONTAINER);
     // private blob with service ID that does not correspond to a valid account
-    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", true, Account.UNKNOWN_ACCOUNT,
-        Container.DEFAULT_PRIVATE_CONTAINER);
+    verifyResponsePathAccountAndContainerInjection(refAccount.getName() + "extra", true,
+        InMemAccountService.UNKNOWN_ACCOUNT, Container.DEFAULT_PRIVATE_CONTAINER);
     // public blob with service ID that corresponds to a valid account
     verifyResponsePathAccountAndContainerInjection(refAccount.getName(), false, refAccount, refDefaultPublicContainer);
     // private blob with service ID that corresponds to a valid account
@@ -1752,7 +1755,7 @@ public class AmbryBlobStorageServiceTest {
           restMethod == RestMethod.DELETE && deserializedId.getAccountId() == Account.UNKNOWN_ACCOUNT_ID
               && deserializedId.getContainerId() == Container.UNKNOWN_CONTAINER_ID;
       assertEquals("Wrong account object in RestRequest's args",
-          alwaysExpectUnknown ? Account.UNKNOWN_ACCOUNT : expectedAccount,
+          alwaysExpectUnknown ? InMemAccountService.UNKNOWN_ACCOUNT : expectedAccount,
           restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY));
       assertEquals("Wrong container object in RestRequest's args",
           alwaysExpectUnknown ? Container.UNKNOWN_CONTAINER : expectedContainer,
@@ -1820,12 +1823,12 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Prepopulates the {@link AccountService} with a reference {@link Account} and {@link Account#UNKNOWN_ACCOUNT}.
+   * Prepopulates the {@link AccountService} with a reference {@link Account} and {@link InMemAccountService#UNKNOWN_ACCOUNT}.
    * @throws Exception
    */
   private void populateAccountService() throws Exception {
     accountService.clear();
-    accountService.updateAccounts(Lists.newArrayList(refAccount, Account.UNKNOWN_ACCOUNT));
+    accountService.updateAccounts(Lists.newArrayList(refAccount, InMemAccountService.UNKNOWN_ACCOUNT));
   }
 
   /**
@@ -1866,7 +1869,7 @@ public class AmbryBlobStorageServiceTest {
 
     // should succeed when serviceId-based PUT requests are allowed.
     postBlobAndVerifyWithAccountAndContainer(null, null, "serviceId", !container.isCacheable(),
-        shouldAllowServiceIdBasedPut ? Account.UNKNOWN_ACCOUNT : null,
+        shouldAllowServiceIdBasedPut ? InMemAccountService.UNKNOWN_ACCOUNT : null,
         shouldAllowServiceIdBasedPut ? (container.isCacheable() ? Container.DEFAULT_PUBLIC_CONTAINER
             : Container.DEFAULT_PRIVATE_CONTAINER) : null,
         shouldAllowServiceIdBasedPut ? null : RestServiceErrorCode.BadRequest);

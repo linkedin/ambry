@@ -18,6 +18,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,6 +33,17 @@ import java.util.function.Consumer;
  * Implementation of {@link AccountService} for test. This implementation synchronizes on all methods.
  */
 public class InMemAccountService implements AccountService {
+  /**
+   * An account defined specifically for the blobs put without specifying target account and container. In the
+   * pre-containerization world, a put-blob request does not carry any information which account/container to store
+   * the blob. These blobs are assigned to this account if their service ID does not match a valid account, because the
+   * target account information is unknown.
+   */
+  public static final Account UNKNOWN_ACCOUNT =
+      new Account(Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
+          Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
+          Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
+              Container.DEFAULT_PRIVATE_CONTAINER));
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
@@ -40,7 +52,7 @@ public class InMemAccountService implements AccountService {
 
   /**
    * Constructor.
-   * @param shouldReturnOnlyUnknown {@code true} if always returns {@link Account#UNKNOWN_ACCOUNT} when queried
+   * @param shouldReturnOnlyUnknown {@code true} if always returns {@link InMemAccountService#UNKNOWN_ACCOUNT} when queried
    *                                                     by account name; {@code false} to do the actual query.
    * @param notifyConsumers {@code true} if consumers should be notified of account changes. {@code false} otherwise.
    */
@@ -51,12 +63,12 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized Account getAccountById(short accountId) {
-    return shouldReturnOnlyUnknown ? Account.UNKNOWN_ACCOUNT : idToAccountMap.get(accountId);
+    return shouldReturnOnlyUnknown ? UNKNOWN_ACCOUNT : idToAccountMap.get(accountId);
   }
 
   @Override
   public synchronized Account getAccountByName(String accountName) {
-    return shouldReturnOnlyUnknown ? Account.UNKNOWN_ACCOUNT : nameToAccountMap.get(accountName);
+    return shouldReturnOnlyUnknown ? UNKNOWN_ACCOUNT : nameToAccountMap.get(accountName);
   }
 
   @Override
