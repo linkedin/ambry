@@ -88,7 +88,17 @@ public enum ResponseStatus {
   /**
    * 500 - Internal server failure resulted in request not being honored.
    */
-  InternalServerError;
+  InternalServerError,
+
+  /**
+   * 503 - Service is unavailable
+   */
+  ServiceUnavailable,
+
+  /**
+   * 507 - Insufficient capacity to complete the request.
+   */
+  InsufficientCapacity;
 
   /**
    * Gets the ResponseStatus that corresponds to the {@code restServiceErrorCode}.
@@ -98,11 +108,11 @@ public enum ResponseStatus {
   public static ResponseStatus getResponseStatus(RestServiceErrorCode restServiceErrorCode) {
     switch (restServiceErrorCode) {
       case RequestTooLarge:
-        return ResponseStatus.RequestTooLarge;
+        return RequestTooLarge;
       case Deleted:
-        return ResponseStatus.Gone;
+        return Gone;
       case NotFound:
-        return ResponseStatus.NotFound;
+        return NotFound;
       case BadRequest:
       case InvalidArgs:
       case InvalidAccount:
@@ -111,24 +121,27 @@ public enum ResponseStatus {
       case MalformedRequest:
       case MissingArgs:
       case UnsupportedHttpMethod:
-        return ResponseStatus.BadRequest;
+        return BadRequest;
       case ResourceDirty:
       case AccessDenied:
-        return ResponseStatus.Forbidden;
+        return Forbidden;
       case Unauthorized:
-        return ResponseStatus.Unauthorized;
+        return Unauthorized;
       case ResourceScanInProgress:
-        return ResponseStatus.ProxyAuthenticationRequired;
+        return ProxyAuthenticationRequired;
       case RangeNotSatisfiable:
-        return ResponseStatus.RangeNotSatisfiable;
+        return RangeNotSatisfiable;
+      case ServiceUnavailable:
+        return ServiceUnavailable;
+      case InsufficientCapacity:
+        return InsufficientCapacity;
       case IdConverterServiceError:
       case InternalServerError:
       case RequestChannelClosed:
       case RequestResponseQueuingFailure:
-      case ServiceUnavailable:
       case UnsupportedRestMethod:
       default:
-        return ResponseStatus.InternalServerError;
+        return InternalServerError;
     }
   }
 }
