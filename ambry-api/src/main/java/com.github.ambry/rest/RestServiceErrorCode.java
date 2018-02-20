@@ -139,7 +139,7 @@ public enum RestServiceErrorCode {
   RequestTooLarge,
 
   /**
-   * Indicates that the service is unavailable either because one of the components is not started, is shutdown, has
+   * Indicates that the service is unavailable because one or more of the components is not started, is shutdown, has
    * crashed or is temporarily unable to respond.
    */
   ServiceUnavailable,
