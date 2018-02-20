@@ -25,7 +25,6 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
@@ -239,7 +238,7 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public void close() throws IOException {
+  public void close() {
     if (routerOpen.compareAndSet(true, false)) {
       shutDownExecutorService(operationPool, 1, TimeUnit.MINUTES);
     }

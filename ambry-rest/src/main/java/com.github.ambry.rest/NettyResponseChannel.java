@@ -481,6 +481,14 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.internalServerErrorCount.inc();
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;
         break;
+      case ServiceUnavailable:
+        nettyMetrics.serviceUnavailableErrorCount.inc();
+        status = HttpResponseStatus.SERVICE_UNAVAILABLE;
+        break;
+      case InsufficientCapacity:
+        nettyMetrics.insufficientCapacityErrorCount.inc();
+        status = HttpResponseStatus.INSUFFICIENT_STORAGE;
+        break;
       default:
         nettyMetrics.unknownResponseStatusCount.inc();
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;

@@ -122,6 +122,8 @@ public class NettyMetrics {
   public final Counter unauthorizedCount;
   public final Counter goneCount;
   public final Counter internalServerErrorCount;
+  public final Counter serviceUnavailableErrorCount;
+  public final Counter insufficientCapacityErrorCount;
   public final Counter notFoundCount;
   public final Counter forbiddenCount;
   public final Counter proxyAuthRequiredCount;
@@ -293,6 +295,10 @@ public class NettyMetrics {
     goneCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "GoneCount"));
     internalServerErrorCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InternalServerErrorCount"));
+    serviceUnavailableErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ServiceUnavailableErrorCount"));
+    insufficientCapacityErrorCount =
+        metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "InsufficientCapacityErrorCount"));
     notFoundCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "NotFoundCount"));
     forbiddenCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ForbiddenCount"));
     proxyAuthRequiredCount =

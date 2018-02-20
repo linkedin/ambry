@@ -51,9 +51,7 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -73,24 +71,6 @@ import static org.junit.Assert.*;
  * {@link MockNettyMessageProcessor#handleContent(HttpContent)}.
  */
 public class NettyResponseChannelTest {
-  private static final Map<RestServiceErrorCode, HttpResponseStatus> REST_ERROR_CODE_TO_HTTP_STATUS = new HashMap<>();
-
-  static {
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.BadRequest, HttpResponseStatus.BAD_REQUEST);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.Unauthorized, HttpResponseStatus.UNAUTHORIZED);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.Deleted, HttpResponseStatus.GONE);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.NotFound, HttpResponseStatus.NOT_FOUND);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.ResourceScanInProgress,
-        HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.ResourceDirty, HttpResponseStatus.FORBIDDEN);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.AccessDenied, HttpResponseStatus.FORBIDDEN);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.InternalServerError,
-        HttpResponseStatus.INTERNAL_SERVER_ERROR);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.RangeNotSatisfiable,
-        HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
-    REST_ERROR_CODE_TO_HTTP_STATUS.put(RestServiceErrorCode.RequestTooLarge,
-        HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE);
-  }
 
   /**
    * Tests the common workflow of the {@link NettyResponseChannel} i.e., add some content to response body via
@@ -428,22 +408,23 @@ public class NettyResponseChannelTest {
   @Test
   public void errorResponseTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
-    for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
+    for (RestServiceErrorCode errorCode : RestServiceErrorCode.values()) {
       HttpHeaders httpHeaders = new DefaultHttpHeaders();
-      httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, entry.getKey());
+      httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, errorCode);
       channel.writeInbound(
           RestTestUtils.createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(),
               httpHeaders));
-      HttpResponse response = (HttpResponse) channel.readOutbound();
-      assertEquals("Unexpected response status", entry.getValue(), response.status());
+      HttpResponse response = channel.readOutbound();
+      HttpResponseStatus expectedStatus = getExpectedHttpResponseStatus(errorCode);
+      assertEquals("Unexpected response status", expectedStatus, response.status());
       boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
-      if (entry.getValue() == HttpResponseStatus.BAD_REQUEST) {
+      if (expectedStatus == HttpResponseStatus.BAD_REQUEST) {
         assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
       } else {
         assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
       }
       if (HttpStatusClass.CLIENT_ERROR.contains(response.status().code())) {
-        assertEquals("Wrong error code", entry.getKey(),
+        assertEquals("Wrong error code", errorCode,
             RestServiceErrorCode.valueOf(response.headers().get(NettyResponseChannel.ERROR_CODE_HEADER)));
       } else {
         assertFalse("Should not have found error code header",
@@ -454,11 +435,11 @@ public class NettyResponseChannelTest {
         assertEquals("The response should not contain content", 0,
             ((FullHttpResponse) response).content().readableBytes());
       } else {
-        HttpContent content = (HttpContent) channel.readOutbound();
+        HttpContent content = channel.readOutbound();
         assertTrue("End marker should be received", content instanceof LastHttpContent);
       }
       assertNull("There should be no more data in the channel", channel.readOutbound());
-      boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(entry.getValue());
+      boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedStatus);
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
           HttpUtil.isKeepAlive(response));
@@ -477,8 +458,8 @@ public class NettyResponseChannelTest {
     HttpMethod[] HTTP_METHODS = {HttpMethod.POST, HttpMethod.PUT, HttpMethod.GET, HttpMethod.HEAD, HttpMethod.DELETE};
     EmbeddedChannel channel = createEmbeddedChannel();
     for (HttpMethod httpMethod : HTTP_METHODS) {
-      for (Map.Entry<RestServiceErrorCode, HttpResponseStatus> entry : REST_ERROR_CODE_TO_HTTP_STATUS.entrySet()) {
-        channel = doKeepAliveTest(channel, httpMethod, entry.getKey(), entry.getValue());
+      for (RestServiceErrorCode errorCode : RestServiceErrorCode.values()) {
+        channel = doKeepAliveTest(channel, httpMethod, errorCode, getExpectedHttpResponseStatus(errorCode));
       }
       channel = doKeepAliveTest(channel, httpMethod, null, HttpResponseStatus.INTERNAL_SERVER_ERROR);
     }
@@ -576,6 +557,51 @@ public class NettyResponseChannelTest {
       if (callback.exception != null) {
         throw callback.exception;
       }
+    }
+  }
+
+  /**
+   * @param code the {@link RestServiceErrorCode} whose {@link HttpResponseStatus} equivalent is required.
+   * @return the {@link HttpResponseStatus} equivalent of {@code code}.
+   */
+  private HttpResponseStatus getExpectedHttpResponseStatus(RestServiceErrorCode code) {
+    switch (code) {
+      case RequestTooLarge:
+        return HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE;
+      case Deleted:
+        return HttpResponseStatus.GONE;
+      case NotFound:
+        return HttpResponseStatus.NOT_FOUND;
+      case BadRequest:
+      case InvalidArgs:
+      case InvalidAccount:
+      case InvalidContainer:
+      case InvalidRequestState:
+      case MalformedRequest:
+      case MissingArgs:
+      case UnsupportedHttpMethod:
+        return HttpResponseStatus.BAD_REQUEST;
+      case ResourceDirty:
+      case AccessDenied:
+        return HttpResponseStatus.FORBIDDEN;
+      case Unauthorized:
+        return HttpResponseStatus.UNAUTHORIZED;
+      case ResourceScanInProgress:
+        return HttpResponseStatus.PROXY_AUTHENTICATION_REQUIRED;
+      case RangeNotSatisfiable:
+        return HttpResponseStatus.REQUESTED_RANGE_NOT_SATISFIABLE;
+      case ServiceUnavailable:
+        return HttpResponseStatus.SERVICE_UNAVAILABLE;
+      case InsufficientCapacity:
+        return HttpResponseStatus.INSUFFICIENT_STORAGE;
+      case IdConverterServiceError:
+      case InternalServerError:
+      case RequestChannelClosed:
+      case RequestResponseQueuingFailure:
+      case UnsupportedRestMethod:
+        return HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      default:
+        throw new IllegalArgumentException("Unrecognized RestServiceErrorCode - " + code);
     }
   }
 

@@ -139,7 +139,8 @@ public enum RestServiceErrorCode {
   RequestTooLarge,
 
   /**
-   * Indicates that an internal service is unavailable either because it is not started, is shutdown or has crashed.
+   * Indicates that the service is unavailable because one or more of the components is not started, is shutdown, has
+   * crashed or is temporarily unable to respond.
    */
   ServiceUnavailable,
 
@@ -147,7 +148,12 @@ public enum RestServiceErrorCode {
    * Indicates a {@link RestMethod} is not supported (May also indicate a bug where behaviour for a new
    * {@link RestMethod} has not been defined in the implementation).
    */
-  UnsupportedRestMethod;
+  UnsupportedRestMethod,
+
+  /**
+   * There is insufficient capacity to service the request.
+   */
+  InsufficientCapacity;
 
   /**
    * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.
@@ -168,10 +174,12 @@ public enum RestServiceErrorCode {
         return NotFound;
       case RangeNotSatisfiable:
         return RangeNotSatisfiable;
-      case AmbryUnavailable:
-      case InsufficientCapacity:
       case OperationTimedOut:
+      case AmbryUnavailable:
       case RouterClosed:
+        return ServiceUnavailable;
+      case InsufficientCapacity:
+        return InsufficientCapacity;
       case UnexpectedInternalError:
       case ChannelClosed:
       default:
