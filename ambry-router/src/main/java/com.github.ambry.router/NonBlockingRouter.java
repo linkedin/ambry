@@ -151,6 +151,9 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+      if (blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+        routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
+      }
       trackGetBlobRateMetrics(options, blobId.isEncrypted());
       routerMetrics.operationQueuingRate.mark();
       if (isOpen.get()) {
@@ -549,6 +552,9 @@ class NonBlockingRouter implements Router {
         final Callback<Void> callback, boolean attemptChunkDeletes) {
       try {
         final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+        if (blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+          routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
+        }
         deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, (Void result, Exception exception) -> {
           if (exception == null && attemptChunkDeletes) {
             initiateChunkDeletesIfAny(blobId, serviceId);
