@@ -47,6 +47,8 @@ public class NonBlockingRouterMetrics {
   public final Meter getEncryptedBlobWithRangeOperationRate;
   public final Meter operationQueuingRate;
   public final Meter operationDequeuingRate;
+  public final Meter getBlobNotOriginateLocalOperationRate;
+  public final Meter deleteBlobNotOriginateLocalOperationRate;
 
   // Latency.
   public final Histogram putBlobOperationLatencyMs;
@@ -183,6 +185,10 @@ public class NonBlockingRouterMetrics {
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
     operationDequeuingRate =
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationDequeuingRate"));
+    getBlobNotOriginateLocalOperationRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobNotOriginateLocalOperationRate"));
+    deleteBlobNotOriginateLocalOperationRate =
+        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobNotOriginateLocalOperationRate"));
 
     // Latency.
     putBlobOperationLatencyMs =
