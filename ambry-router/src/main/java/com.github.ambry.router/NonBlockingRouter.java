@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
@@ -151,6 +152,10 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+      if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
+          && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+        routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
+      }
       trackGetBlobRateMetrics(options, blobId.isEncrypted());
       routerMetrics.operationQueuingRate.mark();
       if (isOpen.get()) {
@@ -549,6 +554,10 @@ class NonBlockingRouter implements Router {
         final Callback<Void> callback, boolean attemptChunkDeletes) {
       try {
         final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+        if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
+            && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+          routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
+        }
         deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, (Void result, Exception exception) -> {
           if (exception == null && attemptChunkDeletes) {
             initiateChunkDeletesIfAny(blobId, serviceId);
