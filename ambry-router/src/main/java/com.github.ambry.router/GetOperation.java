@@ -170,21 +170,53 @@ abstract class GetOperation {
 
   /**
    * Set the exception associated with this operation.
-   * A {@link ServerErrorCode#Blob_Deleted} or {@link ServerErrorCode#Blob_Expired} error overrides any other
-   * previously received exception.
+   * First, if current operationException is null, directly set operationException as exception;
+   * Second, if operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
+   * level. Update the operationException if necessary.
    * @param exception the {@link RouterException} to possibly set.
    */
   void setOperationException(Exception exception) {
     if (exception instanceof RouterException) {
       RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
-      if (operationException.get() == null || routerErrorCode == RouterErrorCode.BlobDeleted
-          || routerErrorCode == RouterErrorCode.BlobExpired) {
+      if (operationException.get() == null) {
         operationException.set(exception);
+      } else {
+        if (getPrecedenceLevel(routerErrorCode) < getPrecedenceLevel(
+            ((RouterException) operationException.get()).getErrorCode())) {
+          operationException.set(exception);
+        }
       }
     } else {
       if (operationException.get() == null) {
         operationException.set(exception);
       }
+    }
+  }
+
+  /**
+   * Gets the precedence level for a {@link RouterErrorCode}. A precedence level is a relative priority assigned
+   * to a {@link RouterErrorCode}. If a {@link RouterErrorCode} has not been assigned a precedence level, a
+   * {@code Integer.MIN_VALUE} will be returned.
+   * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
+   * @return The precedence level of the {@link RouterErrorCode}.
+   */
+  private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
+    switch (routerErrorCode) {
+      case BlobDeleted:
+        return 1;
+      case BlobExpired:
+        return 2;
+      case AmbryUnavailable:
+        return 3;
+      case UnexpectedInternalError:
+        return 4;
+      case OperationTimedOut:
+        return 5;
+      case BlobDoesNotExist:
+        return 6;
+      default:
+        return Integer.MIN_VALUE;
     }
   }
 

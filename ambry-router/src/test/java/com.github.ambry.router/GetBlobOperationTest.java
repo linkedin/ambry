@@ -670,6 +670,54 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test the Errors {@link RouterErrorCode} received by Get Operation. The operation exception is set
+   * based on the priority of these errors.
+   * @throws Exception
+   */
+  @Test
+  public void testSetOperationException() throws Exception {
+    doPut();
+    GetBlobOperation op = createOperation(null);
+    RouterErrorCode[] routerErrorCodes = new RouterErrorCode[6];
+    routerErrorCodes[0] = RouterErrorCode.BlobDoesNotExist;
+    routerErrorCodes[1] = RouterErrorCode.OperationTimedOut;
+    routerErrorCodes[2] = RouterErrorCode.UnexpectedInternalError;
+    routerErrorCodes[3] = RouterErrorCode.AmbryUnavailable;
+    routerErrorCodes[4] = RouterErrorCode.BlobExpired;
+    routerErrorCodes[5] = RouterErrorCode.BlobDeleted;
+
+    for (int i = 0; i < routerErrorCodes.length; ++i) {
+      op.setOperationException(new RouterException("RouterError", routerErrorCodes[i]));
+      op.poll(requestRegistrationCallback);
+      while (!op.isOperationComplete()) {
+        time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+        op.poll(requestRegistrationCallback);
+      }
+      Assert.assertEquals(((RouterException) op.operationException.get()).getErrorCode(), routerErrorCodes[i]);
+    }
+    for (int i = routerErrorCodes.length - 1; i >= 0; --i) {
+      op.setOperationException(new RouterException("RouterError", routerErrorCodes[i]));
+      op.poll(requestRegistrationCallback);
+      while (!op.isOperationComplete()) {
+        time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+        op.poll(requestRegistrationCallback);
+      }
+      Assert.assertEquals(((RouterException) op.operationException.get()).getErrorCode(),
+          routerErrorCodes[routerErrorCodes.length - 1]);
+    }
+
+    op.operationException.set(null);  // set null to test non RouterException
+    Exception nonRouterException = new Exception();
+    op.setOperationException(nonRouterException);
+    op.poll(requestRegistrationCallback);
+    while (!op.isOperationComplete()) {
+      time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+      op.poll(requestRegistrationCallback);
+    }
+    Assert.assertEquals(nonRouterException, op.operationException.get());
+  }
+
+  /**
    * Test that the operation is completed and an exception with the error code {@link RouterErrorCode#ChannelClosed} is
    * set when the {@link ReadableStreamChannel} is closed before all chunks are read for a specific blob size and
    * number of chunks to read.
