@@ -182,8 +182,14 @@ abstract class GetOperation {
       if (operationException.get() == null) {
         operationException.set(exception);
       } else {
-        if (getPrecedenceLevel(routerErrorCode) < getPrecedenceLevel(
-            ((RouterException) operationException.get()).getErrorCode())) {
+        Integer currentOperationExceptionLevel = null;
+        if (operationException.get() instanceof RouterException) {
+          currentOperationExceptionLevel =
+              getPrecedenceLevel(((RouterException) operationException.get()).getErrorCode());
+        } else {
+          currentOperationExceptionLevel = getPrecedenceLevel(RouterErrorCode.UnexpectedInternalError);
+        }
+        if (getPrecedenceLevel(routerErrorCode) < currentOperationExceptionLevel) {
           operationException.set(exception);
         }
       }
@@ -207,14 +213,16 @@ abstract class GetOperation {
         return 1;
       case BlobExpired:
         return 2;
-      case AmbryUnavailable:
+      case RangeNotSatisfiable:
         return 3;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 4;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 5;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 6;
+      case BlobDoesNotExist:
+        return 7;
       default:
         return Integer.MIN_VALUE;
     }

@@ -214,11 +214,13 @@ public class PutOperationTest {
             userMetadata, channel, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
             time, blobProperties);
-    RouterErrorCode[] routerErrorCodes = new RouterErrorCode[4];
+    RouterErrorCode[] routerErrorCodes = new RouterErrorCode[5];
     routerErrorCodes[0] = RouterErrorCode.OperationTimedOut;
     routerErrorCodes[1] = RouterErrorCode.UnexpectedInternalError;
     routerErrorCodes[2] = RouterErrorCode.AmbryUnavailable;
     routerErrorCodes[3] = RouterErrorCode.InsufficientCapacity;
+    routerErrorCodes[4] = RouterErrorCode.InvalidBlobId;
+
     for (int i = 0; i < routerErrorCodes.length; ++i) {
       op.setOperationExceptionAndComplete(new RouterException("RouterError", routerErrorCodes[i]));
       Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(), routerErrorCodes[i]);
@@ -232,6 +234,11 @@ public class PutOperationTest {
     Exception nonRouterException = new Exception();
     op.setOperationExceptionAndComplete(nonRouterException);
     Assert.assertEquals(nonRouterException, op.getOperationException());
+
+    // test edge case where current operationException is non RouterException
+    op.setOperationExceptionAndComplete(new RouterException("RouterError", RouterErrorCode.InsufficientCapacity));
+    Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(),
+        RouterErrorCode.InsufficientCapacity);
   }
 
   /**

@@ -627,8 +627,14 @@ class PutOperation {
       if (operationException.get() == null) {
         operationException.set(exception);
       } else {
-        if (getPrecedenceLevel(routerErrorCode) < getPrecedenceLevel(
-            ((RouterException) operationException.get()).getErrorCode())) {
+        Integer currentOperationExceptionLevel = null;
+        if (operationException.get() instanceof RouterException) {
+          currentOperationExceptionLevel = getPrecedenceLevel(
+              ((RouterException) operationException.get()).getErrorCode());
+        } else {
+          currentOperationExceptionLevel = getPrecedenceLevel(RouterErrorCode.UnexpectedInternalError);
+        }
+        if (getPrecedenceLevel(routerErrorCode) < currentOperationExceptionLevel) {
           operationException.set(exception);
         }
       }

@@ -678,13 +678,15 @@ public class GetBlobOperationTest {
   public void testSetOperationException() throws Exception {
     doPut();
     GetBlobOperation op = createOperation(null);
-    RouterErrorCode[] routerErrorCodes = new RouterErrorCode[6];
+    RouterErrorCode[] routerErrorCodes = new RouterErrorCode[8];
     routerErrorCodes[0] = RouterErrorCode.BlobDoesNotExist;
     routerErrorCodes[1] = RouterErrorCode.OperationTimedOut;
     routerErrorCodes[2] = RouterErrorCode.UnexpectedInternalError;
     routerErrorCodes[3] = RouterErrorCode.AmbryUnavailable;
-    routerErrorCodes[4] = RouterErrorCode.BlobExpired;
-    routerErrorCodes[5] = RouterErrorCode.BlobDeleted;
+    routerErrorCodes[4] = RouterErrorCode.RangeNotSatisfiable;
+    routerErrorCodes[5] = RouterErrorCode.BlobExpired;
+    routerErrorCodes[6] = RouterErrorCode.BlobDeleted;
+    routerErrorCodes[7] = RouterErrorCode.InvalidBlobId;
 
     for (int i = 0; i < routerErrorCodes.length; ++i) {
       op.setOperationException(new RouterException("RouterError", routerErrorCodes[i]));
@@ -706,7 +708,8 @@ public class GetBlobOperationTest {
           routerErrorCodes[routerErrorCodes.length - 1]);
     }
 
-    op.operationException.set(null);  // set null to test non RouterException
+    // set null to test non RouterException
+    op.operationException.set(null);
     Exception nonRouterException = new Exception();
     op.setOperationException(nonRouterException);
     op.poll(requestRegistrationCallback);
@@ -715,6 +718,15 @@ public class GetBlobOperationTest {
       op.poll(requestRegistrationCallback);
     }
     Assert.assertEquals(nonRouterException, op.operationException.get());
+
+    // test the edge case where current operationException is non RouterException
+    op.setOperationException(new RouterException("RouterError", RouterErrorCode.BlobDeleted));
+    op.poll(requestRegistrationCallback);
+    while (!op.isOperationComplete()) {
+      time.sleep(routerConfig.routerRequestTimeoutMs + 1);
+      op.poll(requestRegistrationCallback);
+    }
+    Assert.assertEquals(((RouterException) op.operationException.get()).getErrorCode(), RouterErrorCode.BlobDeleted);
   }
 
   /**
