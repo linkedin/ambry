@@ -384,7 +384,7 @@ class NettyResponseChannel implements RestResponseChannel {
       restServiceErrorCode = ((RestServiceException) cause).getErrorCode();
       errorResponseStatus = ResponseStatus.getResponseStatus(restServiceErrorCode);
       status = getHttpResponseStatus(errorResponseStatus);
-      if (status == HttpResponseStatus.BAD_REQUEST) {
+      if (HttpStatusClass.CLIENT_ERROR.contains(status.code())) {
         errReason = new String(
             Utils.getRootCause(cause).getMessage().replaceAll("[\n\t\r]", " ").getBytes(StandardCharsets.US_ASCII),
             StandardCharsets.US_ASCII);

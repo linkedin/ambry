@@ -418,17 +418,14 @@ public class NettyResponseChannelTest {
       HttpResponseStatus expectedStatus = getExpectedHttpResponseStatus(errorCode);
       assertEquals("Unexpected response status", expectedStatus, response.status());
       boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
-      if (expectedStatus == HttpResponseStatus.BAD_REQUEST) {
-        assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
-      } else {
-        assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
-      }
       if (HttpStatusClass.CLIENT_ERROR.contains(response.status().code())) {
         assertEquals("Wrong error code", errorCode,
             RestServiceErrorCode.valueOf(response.headers().get(NettyResponseChannel.ERROR_CODE_HEADER)));
+        assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
       } else {
         assertFalse("Should not have found error code header",
             response.headers().contains(NettyResponseChannel.ERROR_CODE_HEADER));
+        assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
       }
       if (response instanceof FullHttpResponse) {
         // assert that there is no content
