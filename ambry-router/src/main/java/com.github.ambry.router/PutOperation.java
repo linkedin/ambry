@@ -614,12 +614,56 @@ class PutOperation {
   }
 
   /**
-   * Set the irrecoverable exception associated with this operation. When this is called, the operation has failed.
-   * @param exception the irrecoverable exception associated with this operation.
+   * Set the exception associated with this operation.
+   * First, if current operationException is null, directly set operationException as exception;
+   * Second, if operationException exists, compare ErrorCodes of exception and existing operation Exception depending
+   * on precedence level. An ErrorCode with a smaller precedence level overrides an ErrorCode with a larger precedence
+   * level. Update the operationException if necessary.
+   * @param exception the {@link RouterException} to possibly set.
    */
   void setOperationExceptionAndComplete(Exception exception) {
-    operationException.set(exception);
+    if (exception instanceof RouterException) {
+      RouterErrorCode routerErrorCode = ((RouterException) exception).getErrorCode();
+      if (operationException.get() == null) {
+        operationException.set(exception);
+      } else {
+        Integer currentOperationExceptionLevel = null;
+        if (operationException.get() instanceof RouterException) {
+          currentOperationExceptionLevel = getPrecedenceLevel(
+              ((RouterException) operationException.get()).getErrorCode());
+        } else {
+          currentOperationExceptionLevel = getPrecedenceLevel(RouterErrorCode.UnexpectedInternalError);
+        }
+        if (getPrecedenceLevel(routerErrorCode) < currentOperationExceptionLevel) {
+          operationException.set(exception);
+        }
+      }
+    } else {
+      operationException.set(exception);
+    }
     operationCompleted = true;
+  }
+
+  /**
+   * Gets the precedence level for a {@link RouterErrorCode}. A precedence level is a relative priority assigned
+   * to a {@link RouterErrorCode}. If a {@link RouterErrorCode} has not been assigned a precedence level, a
+   * {@code Integer.MIN_VALUE} will be returned.
+   * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
+   * @return The precedence level of the {@link RouterErrorCode}.
+   */
+  private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
+    switch (routerErrorCode) {
+      case InsufficientCapacity:
+        return 1;
+      case AmbryUnavailable:
+        return 2;
+      case UnexpectedInternalError:
+        return 3;
+      case OperationTimedOut:
+        return 4;
+      default:
+        return Integer.MIN_VALUE;
+    }
   }
 
   /**

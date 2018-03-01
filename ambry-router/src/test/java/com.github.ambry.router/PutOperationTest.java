@@ -193,6 +193,55 @@ public class PutOperationTest {
   }
 
   /**
+   * Test the Errors {@link RouterErrorCode} received by Put Operation. The operation exception is set
+   * based on the priority of these errors.
+   * @throws Exception
+   */
+  @Test
+  public void testSetOperationExceptionAndComplete() throws Exception {
+    int numChunks = NonBlockingRouter.MAX_IN_MEM_CHUNKS + 1;
+    BlobProperties blobProperties =
+        new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false);
+    byte[] userMetadata = new byte[10];
+    byte[] content = new byte[chunkSize * numChunks];
+    random.nextBytes(content);
+    ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+    FutureResult<String> future = new FutureResult<>();
+    MockNetworkClient mockNetworkClient = new MockNetworkClient();
+    PutOperation op =
+        new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
+            userMetadata, channel, future, null,
+            new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
+            time, blobProperties);
+    RouterErrorCode[] routerErrorCodes = new RouterErrorCode[5];
+    routerErrorCodes[0] = RouterErrorCode.OperationTimedOut;
+    routerErrorCodes[1] = RouterErrorCode.UnexpectedInternalError;
+    routerErrorCodes[2] = RouterErrorCode.AmbryUnavailable;
+    routerErrorCodes[3] = RouterErrorCode.InsufficientCapacity;
+    routerErrorCodes[4] = RouterErrorCode.InvalidBlobId;
+
+    for (int i = 0; i < routerErrorCodes.length; ++i) {
+      op.setOperationExceptionAndComplete(new RouterException("RouterError", routerErrorCodes[i]));
+      Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(), routerErrorCodes[i]);
+    }
+    for (int i = routerErrorCodes.length - 1; i >= 0; --i) {
+      op.setOperationExceptionAndComplete(new RouterException("RouterError", routerErrorCodes[i]));
+      Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(),
+          routerErrorCodes[routerErrorCodes.length - 1]);
+    }
+
+    Exception nonRouterException = new Exception();
+    op.setOperationExceptionAndComplete(nonRouterException);
+    Assert.assertEquals(nonRouterException, op.getOperationException());
+
+    // test edge case where current operationException is non RouterException
+    op.setOperationExceptionAndComplete(new RouterException("RouterError", RouterErrorCode.InsufficientCapacity));
+    Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(),
+        RouterErrorCode.InsufficientCapacity);
+  }
+
+  /**
    *  Reset the correlation id field of a {@link PutRequest} to 0.
    */
   private void resetCorrelationId(byte[] request) {
