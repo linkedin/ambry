@@ -141,9 +141,9 @@ class CompactionManager {
   }
 
   /**
-   * Disable the given {@code store} for compaction next.
-   * @param store the {@link BlobStore} to compact.
-   * @return {@code true} if the scheduling was successful. {@code false} if not.
+   * Disable the given {@code store} for compaction.
+   * @param store the {@link BlobStore} to be disabled.
+   * @return {@code true} if the disable was successful. {@code false} if not.
    */
   boolean disableCompactionForBlobStore(BlobStore store) {
     if (compactionExecutor == null) {
