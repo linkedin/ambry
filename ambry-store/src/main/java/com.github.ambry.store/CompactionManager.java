@@ -131,13 +131,26 @@ class CompactionManager {
     return compactionExecutor != null && compactionExecutor.isRunning;
   }
 
-  /*
+  /**
    * Schedules the given {@code store} for compaction next.
    * @param store the {@link BlobStore} to compact.
    * @return {@code true} if the scheduling was successful. {@code false} if not.
    */
   boolean scheduleNextForCompaction(BlobStore store) {
     return compactionExecutor != null && compactionExecutor.scheduleNextForCompaction(store);
+  }
+
+  /**
+   * Disable the given {@code store} for compaction next.
+   * @param store the {@link BlobStore} to compact.
+   * @return {@code true} if the scheduling was successful. {@code false} if not.
+   */
+  boolean disableCompactionForBlobStore(BlobStore store) {
+    if (compactionExecutor == null) {
+      return false;
+    }
+    compactionExecutor.disableCompactionForBlobStore(store);
+    return true;
   }
 
   /**
@@ -300,6 +313,16 @@ class CompactionManager {
         lock.unlock();
       }
       return true;
+    }
+
+    /**
+     * Disable the compaction on given blobstore
+     * @param store the {@link BlobStore} on which the compaction is disabled.
+     */
+    void disableCompactionForBlobStore(BlobStore store) {
+      if (store.isStarted()) {
+        storesToSkip.add(store);
+      }
     }
   }
 }

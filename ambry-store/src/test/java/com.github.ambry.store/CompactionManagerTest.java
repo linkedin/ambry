@@ -325,6 +325,29 @@ public class CompactionManagerTest {
     doTestTrigger(Arrays.asList(adminEnabledChecker, periodicDisabledChecker));
   }
 
+  /**
+   * Tests for cases where compaction is disabled on a given BlobStore
+   */
+  @Test
+  public void testDisableCompactionForBlobStore() {
+    // without compaction enabled.
+    compactionManager.enable();
+    assertFalse("Disable compaction on BlobStore is not allowed when compaction executor is not instantiated",
+        compactionManager.disableCompactionForBlobStore(blobStore));
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+    // with compaction enabled.
+    properties.setProperty("store.compaction.triggers", ALL_COMPACTION_TRIGGERS);
+    config = new StoreConfig(new VerifiableProperties(properties));
+    StorageManagerMetrics metrics = new StorageManagerMetrics(new MetricRegistry());
+    compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
+    compactionManager.enable();
+    assertTrue("Disable compaction on given BlobStore should succeed",
+        compactionManager.disableCompactionForBlobStore(blobStore));
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+  }
+
   // helper methods
 
   // general
