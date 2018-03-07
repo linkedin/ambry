@@ -173,7 +173,7 @@ class CompactionManager {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
     private final Set<BlobStore> storesToSkip = new HashSet<>();
-    private final Set<BlobStore> storesDisabledCompaction = (new ConcurrentHashMap<>()).newKeySet();
+    private final Set<BlobStore> storesDisabledCompaction = ConcurrentHashMap.newKeySet();
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
 
