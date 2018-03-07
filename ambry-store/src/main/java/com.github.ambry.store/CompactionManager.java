@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -143,19 +144,16 @@ class CompactionManager {
   /**
    * Disable the given {@code store} for compaction.
    * @param store the {@link BlobStore} to be disabled.
-   * @return {@code true} if the disable was successful. {@code false} if not.
+   * @return {@code true} if the disabling was successful. {@code false} if not.
    */
   boolean disableCompactionForBlobStore(BlobStore store) {
     if (compactionExecutor == null) {
-      return false;
+      return true;
     }
-    compactionExecutor.disableCompactionForBlobStore(store);
-    return true;
+    return compactionExecutor.disableCompactionForBlobStore(store);
   }
 
   /**
-
-   /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compation details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
@@ -175,6 +173,7 @@ class CompactionManager {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition waitCondition = lock.newCondition();
     private final Set<BlobStore> storesToSkip = new HashSet<>();
+    private final Set<BlobStore> storesDisabledCompaction = (new ConcurrentHashMap<>()).newKeySet();
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
 
@@ -227,7 +226,7 @@ class CompactionManager {
               logger.trace("{} being checked for compaction", store);
               boolean compactionStarted = false;
               try {
-                if (store.isStarted() && !storesToSkip.contains(store)) {
+                if (store.isStarted() && !storesToSkip.contains(store) && !storesDisabledCompaction.contains(store)) {
                   logger.info("{} is started and is being checked for compaction eligibility", store);
                   CompactionDetails details = getCompactionDetails(store);
                   if (details != null) {
@@ -301,7 +300,8 @@ class CompactionManager {
      * @return {@code true} if the scheduling was successful. {@code false} if not.
      */
     boolean scheduleNextForCompaction(BlobStore store) {
-      if (!enabled || !triggers.contains(Trigger.ADMIN) || !store.isStarted() || storesToSkip.contains(store)) {
+      if (!enabled || !triggers.contains(Trigger.ADMIN) || !store.isStarted() || storesToSkip.contains(store)
+          || storesDisabledCompaction.contains(store)) {
         return false;
       }
       lock.lock();
@@ -318,11 +318,11 @@ class CompactionManager {
     /**
      * Disable the compaction on given blobstore
      * @param store the {@link BlobStore} on which the compaction is disabled.
+     * @return {@code true} if the disabling was successful. {@code false} if not.
      */
-    void disableCompactionForBlobStore(BlobStore store) {
-      if (store.isStarted()) {
-        storesToSkip.add(store);
-      }
+    boolean disableCompactionForBlobStore(BlobStore store) {
+      storesDisabledCompaction.add(store);
+      return true;
     }
   }
 }

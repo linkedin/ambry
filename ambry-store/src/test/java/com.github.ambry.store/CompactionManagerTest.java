@@ -332,7 +332,7 @@ public class CompactionManagerTest {
   public void testDisableCompactionForBlobStore() {
     // without compaction enabled.
     compactionManager.enable();
-    assertFalse("Disable compaction on BlobStore is not allowed when compaction executor is not instantiated",
+    assertTrue("Disable compaction on BlobStore should be true when compaction executor is not instantiated",
         compactionManager.disableCompactionForBlobStore(blobStore));
     compactionManager.disable();
     compactionManager.awaitTermination();
