@@ -147,10 +147,7 @@ class CompactionManager {
    * @return {@code true} if the disabling was successful. {@code false} if not.
    */
   boolean disableCompactionForBlobStore(BlobStore store) {
-    if (compactionExecutor == null) {
-      return true;
-    }
-    return compactionExecutor.disableCompactionForBlobStore(store);
+    return compactionExecutor == null || compactionExecutor.disableCompactionForBlobStore(store);
   }
 
   /**

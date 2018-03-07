@@ -83,6 +83,10 @@ public class CompactionManagerTest {
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    assertTrue("Disable compaction on given BlobStore should succeed",
+        compactionManager.disableCompactionForBlobStore(blobStore));
+    assertFalse("BlobStore should not be scheduled after compaction is disabled on it",
+        compactionManager.scheduleNextForCompaction(blobStore));
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
@@ -344,6 +348,8 @@ public class CompactionManagerTest {
     compactionManager.enable();
     assertTrue("Disable compaction on given BlobStore should succeed",
         compactionManager.disableCompactionForBlobStore(blobStore));
+    assertFalse("BlobStore should not be scheduled after compaction is disabled on it",
+        compactionManager.scheduleNextForCompaction(blobStore));
     compactionManager.disable();
     compactionManager.awaitTermination();
   }
