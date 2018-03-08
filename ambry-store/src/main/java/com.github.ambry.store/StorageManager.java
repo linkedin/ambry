@@ -155,6 +155,16 @@ public class StorageManager {
   }
 
   /**
+   * Disable compaction on the {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link Store} on which compaction is disabled.
+   * @return {@code true} if disabling was successful. {@code false} if not.
+   */
+  public boolean disableCompactionForBlobStore(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.disableCompactionForBlobStore(id);
+  }
+
+  /**
    * Shutdown the {@link DiskManager}s for the disks on this node.
    * @throws StoreException
    * @throws InterruptedException
