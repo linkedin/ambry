@@ -257,7 +257,7 @@ public class CompactionManagerTest {
         store.compactCallsCountdown = new CountDownLatch(1);
         assertFalse("compactCalled should be reset", store.compactCalled);
         // Compaction call should be time out because blob is added into storesDisabledCompaction set
-        assertFalse("Compaction on store should be disabled", store.compactCallsCountdown.await(1, TimeUnit.SECONDS));
+        assertFalse("Compaction on store should be disabled", store.compactCallsCountdown.await(10, TimeUnit.SECONDS));
         assertFalse("compact() should not have been called", store.compactCalled);
       } else {
         store.compactCallsCountdown = new CountDownLatch(1);
