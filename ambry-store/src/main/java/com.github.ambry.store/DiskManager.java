@@ -235,7 +235,7 @@ class DiskManager {
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
   boolean disableCompactionForBlobStore(PartitionId id) {
-    BlobStore store = (BlobStore) getStore(id);
+    BlobStore store = stores.get(id);
     return store != null && compactionManager.disableCompactionForBlobStore(store);
   }
 
