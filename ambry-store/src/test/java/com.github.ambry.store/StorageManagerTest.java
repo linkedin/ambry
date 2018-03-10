@@ -29,6 +29,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -110,6 +111,42 @@ public class StorageManagerTest {
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
     assertEquals(downReplicaCount,
         getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
+  }
+
+  /**
+   * Tests that schedule compaction and disable compaction in StorageManager
+   * @throws Exception
+   */
+  @Test
+  public void testScheduleAndDisableCompaction() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<MockDataNodeId> dataNodes = new ArrayList<>();
+    dataNodes.add(dataNode);
+    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
+    List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    storageManager.start();
+    // add invalid replica id
+    replicas.add(invalidPartitionReplicas.get(0));
+    for (int i = 0; i < replicas.size() - 1; i++) {
+      ReplicaId replica = replicas.get(i);
+      PartitionId id = replica.getPartitionId();
+      assertTrue("Schedule compaction should succeed", storageManager.scheduleNextForCompaction(id));
+      if (i == replicas.size() - 1) {
+        assertFalse("Schedule compaction should fail", storageManager.scheduleNextForCompaction(id));
+        assertFalse("Disable compaction should fail", storageManager.disableCompactionForBlobStore(id));
+      }
+    }
+    ReplicaId replica = replicas.get(0);
+    PartitionId id = replica.getPartitionId();
+    assertTrue("Disable compaction should succeed", storageManager.disableCompactionForBlobStore(id));
+    assertFalse("Schedule compaction should fail", storageManager.scheduleNextForCompaction(id));
+    replica = replicas.get(1);
+    id = replica.getPartitionId();
+    assertTrue("Schedule compaction should succeed", storageManager.scheduleNextForCompaction(id));
+    replicas.remove(replicas.size() - 1);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   /**

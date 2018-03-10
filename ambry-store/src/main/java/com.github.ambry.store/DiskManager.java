@@ -230,6 +230,16 @@ class DiskManager {
   }
 
   /**
+   * Disable compaction on the {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link BlobStore} on which compaction is disabled.
+   * @return {@code true} if disabling was successful. {@code false} if not.
+   */
+  boolean disableCompactionForBlobStore(PartitionId id) {
+    BlobStore store = stores.get(id);
+    return store != null && compactionManager.disableCompactionForBlobStore(store);
+  }
+
+  /**
    * Gets all the throttlers that the {@link DiskIOScheduler} will be constructed with.
    * @param config the {@link StoreConfig} with configuration values.
    * @param time the {@link Time} instance to use in the throttlers
