@@ -124,11 +124,11 @@ public class StorageManagerTest {
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
-    List<? extends ReplicaId> replicaIds = invalidPartition.getReplicaIds();
+    List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
     // add invalid replica id
-    replicas.add(replicaIds.get(0));
+    replicas.add(invalidPartitionReplicas.get(0));
     for (int i = 0; i < replicas.size() - 1; i++) {
       ReplicaId replica = replicas.get(i);
       PartitionId id = replica.getPartitionId();
