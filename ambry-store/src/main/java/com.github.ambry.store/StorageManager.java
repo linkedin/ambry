@@ -195,6 +195,13 @@ public class StorageManager {
     }
   }
 
+  public void shutdownBlobStore(PartitionId id){
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    if(diskManager != null){
+      diskManager.shutdownBlobStore(id);
+    }
+  }
+
   /**
    * @return the number of compaction threads running.
    */

@@ -57,6 +57,7 @@ import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
+import com.github.ambry.protocol.StopBlobStoreAdminRequest;
 import com.github.ambry.replication.MockFindTokenFactory;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
@@ -330,6 +331,88 @@ public class AmbryRequestsTest {
     doCatchupStatusTest(null, 0, Short.MAX_VALUE, ServerErrorCode.Unknown_Error, false);
   }
 
+  /**
+   * Tests for the response received on a {@link StopBlobStoreAdminRequest} for successful case
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void stopBlobStoreSuccessTest() throws InterruptedException, IOException {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    assertTrue("This test needs more than one partition to work", partitionIds.size() > 1);
+    PartitionId id = partitionIds.get(0);
+    List<? extends ReplicaId> replicaIds = id.getReplicaIds();
+    assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    long acceptableLagInBytes = 0;
+    short numReplicasCaughtUpPerPartition = 3;
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = true;
+    generateLagOverrides(0, acceptableLagInBytes);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    StopBlobStoreAdminRequest stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+  }
+
+  /**
+   * Tests for the response received on a {@link StopBlobStoreAdminRequest} for different failure cases
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void stopBlobStoreFailureTest() throws InterruptedException, IOException {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    assertTrue("This test needs more than one partition to work", partitionIds.size() > 1);
+    PartitionId id = partitionIds.get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    long acceptableLagInBytes = -1;
+    short numReplicasCaughtUpPerPartition = 3;
+    // test invalid acceptableLagInBytes
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    StopBlobStoreAdminRequest stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test invalid numReplicasCaughtUpPerPartition
+    acceptableLagInBytes = 0;
+    numReplicasCaughtUpPerPartition = -1;
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test partition unknown
+    acceptableLagInBytes = 0;
+    numReplicasCaughtUpPerPartition = 3;
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, null, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Partition_Unknown);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test disable compaction failure
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    storageManager.returnValueOfDisablingCompaction = false;
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    storageManager.returnValueOfDisablingCompaction = true;
+    // test disable replication failure
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = false;
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test peers catchup failure
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = true;
+    // all replicas of this partition > acceptableLag
+    generateLagOverrides(acceptableLagInBytes + 1, acceptableLagInBytes + 1);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Catchup_Unfinished);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+  }
   // helpers
 
   // general
@@ -802,9 +885,17 @@ public class AmbryRequestsTest {
      */
     RuntimeException exceptionToThrowOnSchedulingCompaction = null;
     /**
+     * If non-null, the given exception is thrown when {@link #disableCompactionForBlobStore(PartitionId)} is called.
+     */
+    RuntimeException exceptionToThrowOnDisablingCompaction = null;
+    /**
      * The return value for a call to {@link #scheduleNextForCompaction(PartitionId)}.
      */
     boolean returnValueOfSchedulingCompaction = true;
+    /**
+     * The return value for a call to {@link #disableCompactionForBlobStore(PartitionId)}.
+     */
+    boolean returnValueOfDisablingCompaction = true;
     /**
      * The {@link PartitionId} that was provided in the call to {@link #scheduleNextForCompaction(PartitionId)}
      */
@@ -827,6 +918,15 @@ public class AmbryRequestsTest {
       }
       compactionScheduledPartitionId = id;
       return returnValueOfSchedulingCompaction;
+    }
+
+    @Override
+    public boolean disableCompactionForBlobStore(PartitionId id) {
+      if (exceptionToThrowOnDisablingCompaction != null) {
+        throw exceptionToThrowOnDisablingCompaction;
+      }
+      compactionScheduledPartitionId = id;
+      return returnValueOfDisablingCompaction;
     }
 
     void resetStore() {

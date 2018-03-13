@@ -32,5 +32,6 @@ public enum ServerErrorCode {
   Partition_ReadOnly,
   Unknown_Error,
   Temporarily_Disabled,
-  Bad_Request
+  Bad_Request,
+  Catchup_Unfinished
 }

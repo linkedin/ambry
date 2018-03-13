@@ -57,6 +57,7 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
+import com.github.ambry.protocol.StopBlobStoreAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
@@ -617,6 +618,9 @@ public class AmbryRequests implements RequestAPI {
           requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
           response = handleCatchupStatusRequest(requestStream, adminRequest);
           break;
+        case StopBlobStore:
+          response = handleStopBlobStoreRequest(requestStream, adminRequest);
+          break;
       }
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
@@ -632,7 +636,9 @@ public class AmbryRequests implements RequestAPI {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", adminRequest, response, processingTime);
-      processingTimeHistogram.update(processingTime);
+      if (processingTimeHistogram != null) {
+        processingTimeHistogram.update(processingTime);
+      }
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
@@ -755,6 +761,59 @@ public class AmbryRequests implements RequestAPI {
     }
     AdminResponse adminResponse = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     return new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
+  }
+
+  private AdminResponse handleStopBlobStoreRequest(DataInputStream requestStream, AdminRequest adminRequest)
+      throws IOException {
+    ServerErrorCode error = ServerErrorCode.No_Error;
+    StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
+        StopBlobStoreAdminRequest.readFrom(requestStream, adminRequest);
+    if (stopBlobStoreAdminRequest.getAcceptableLagInBytes() < 0) {
+      error = ServerErrorCode.Bad_Request;
+    } else if (stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition() <= 0) {
+      error = ServerErrorCode.Bad_Request;
+    } else {
+      PartitionId partitionId = stopBlobStoreAdminRequest.getPartitionId();
+      if (partitionId != null) {
+        error = validateRequest(partitionId, RequestOrResponseType.AdminRequest);
+        if (error.equals(ServerErrorCode.No_Error)) {
+          Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+          if (storageManager.disableCompactionForBlobStore(partitionId)) {
+            controlRequestForPartitions(RequestOrResponseType.PutRequest, partitionIds, false);
+            controlRequestForPartitions(RequestOrResponseType.DeleteRequest, partitionIds, false);
+          } else {
+            error = ServerErrorCode.Unknown_Error;
+            logger.error("Disable compaction on given BlobStore failed for {}.", adminRequest);
+          }
+          if (error.equals(ServerErrorCode.No_Error)) {
+            if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
+                false)) {
+              error = ServerErrorCode.No_Error;
+            } else {
+              logger.error("Could not disable replication on {}", partitionIds);
+              error = ServerErrorCode.Bad_Request;
+            }
+            if (error.equals(ServerErrorCode.No_Error)) {
+              boolean isCaughtUp = false;
+              isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, stopBlobStoreAdminRequest.getAcceptableLagInBytes(),
+                  stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition());
+              if (!isCaughtUp) {
+                error = ServerErrorCode.Catchup_Unfinished;
+              }
+              if (error.equals(ServerErrorCode.No_Error)) {
+                controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, false);
+                controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, false);
+                // Shutdown the BlobStore completely
+                storageManager.shutdownBlobStore(partitionId);
+              }
+            }
+          }
+        }
+      } else {
+        error = ServerErrorCode.Partition_Unknown;
+      }
+    }
+    return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,

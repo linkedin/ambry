@@ -240,6 +240,29 @@ class DiskManager {
   }
 
   /**
+   * Shutdown the {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
+   */
+  void shutdownBlobStore(PartitionId id) {
+    BlobStore store = (BlobStore) getStore(id);
+    if (store != null) {
+      try {
+        Thread shutdownThread = Utils.newThread("store-shutdown-" + id, () -> {
+          try {
+            store.shutdown();
+          } catch (Exception e) {
+            logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
+          }
+        }, false);
+        shutdownThread.start();
+        shutdownThread.join();
+      } catch (Exception e) {
+        logger.error("Could not shut down the store {} on disk {}", id, disk, e);
+      }
+    }
+  }
+
+  /**
    * Gets all the throttlers that the {@link DiskIOScheduler} will be constructed with.
    * @param config the {@link StoreConfig} with configuration values.
    * @param time the {@link Time} instance to use in the throttlers
