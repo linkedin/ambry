@@ -351,7 +351,8 @@ public class AmbryRequestsTest {
     replicationManager.controlReplicationReturnVal = true;
     generateLagOverrides(0, acceptableLagInBytes);
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    StopBlobStoreAdminRequest stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
+        new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
     Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
   }
@@ -368,16 +369,11 @@ public class AmbryRequestsTest {
     PartitionId id = partitionIds.get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
-    short numReplicasCaughtUpPerPartition = 3;
-    // test invalid acceptableLagInBytes
-    //AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    //StopBlobStoreAdminRequest stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    //Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
-    //assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    short numReplicasCaughtUpPerPartition = -1;
     // test invalid numReplicasCaughtUpPerPartition
-    numReplicasCaughtUpPerPartition = -1;
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    StopBlobStoreAdminRequest stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
+        new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
     Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test partition unknown
@@ -404,7 +400,7 @@ public class AmbryRequestsTest {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     // all replicas of this partition > acceptableLag
-    generateLagOverrides(1,  1);
+    generateLagOverrides(1, 1);
     adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
     response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Catchup_Unfinished);

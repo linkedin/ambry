@@ -106,7 +106,6 @@ class InvalidVersionPutRequest extends PutRequest {
 
 class OtherVersionStopStoreRequest extends AdminRequest {
   private final short version;
-  //  private final long acceptableLagInBytes = 0;
   private final short numReplicasCaughtUpPerPartition;
   private final long sizeInBytes;
 
@@ -122,7 +121,6 @@ class OtherVersionStopStoreRequest extends AdminRequest {
   protected void serializeIntoBuffer() {
     super.serializeIntoBuffer();
     bufferToSend.putShort(version);
-    //bufferToSend.putLong(acceptableLagInBytes);
     bufferToSend.putShort(numReplicasCaughtUpPerPartition);
   }
 
