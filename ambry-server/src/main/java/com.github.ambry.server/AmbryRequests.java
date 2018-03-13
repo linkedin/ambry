@@ -619,6 +619,12 @@ public class AmbryRequests implements RequestAPI {
           response = handleCatchupStatusRequest(requestStream, adminRequest);
           break;
         case StopBlobStore:
+          metrics.stopBlobStoreRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.stopBlobStoreRequestRate.mark();
+          processingTimeHistogram = metrics.stopBlobStoreRequestQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.stopBlobStoreRequestQueueTimeInMs;
+          responseSendTimeHistogram = metrics.stopBlobStoreResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.stopBlobStoreRequestTotalTimeInMs;
           response = handleStopBlobStoreRequest(requestStream, adminRequest);
           break;
       }
@@ -636,9 +642,7 @@ public class AmbryRequests implements RequestAPI {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", adminRequest, response, processingTime);
-      if (processingTimeHistogram != null) {
-        processingTimeHistogram.update(processingTime);
-      }
+      processingTimeHistogram.update(processingTime);
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
@@ -763,14 +767,19 @@ public class AmbryRequests implements RequestAPI {
     return new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
   }
 
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#StopBlobStore}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   * @throws IOException if there is any I/O error reading from the {@code requestStream}.
+   */
   private AdminResponse handleStopBlobStoreRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
     ServerErrorCode error = ServerErrorCode.No_Error;
     StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
         StopBlobStoreAdminRequest.readFrom(requestStream, adminRequest);
-    if (stopBlobStoreAdminRequest.getAcceptableLagInBytes() < 0) {
-      error = ServerErrorCode.Bad_Request;
-    } else if (stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition() <= 0) {
+    if (stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition() <= 0) {
       error = ServerErrorCode.Bad_Request;
     } else {
       PartitionId partitionId = stopBlobStoreAdminRequest.getPartitionId();
@@ -795,7 +804,7 @@ public class AmbryRequests implements RequestAPI {
             }
             if (error.equals(ServerErrorCode.No_Error)) {
               boolean isCaughtUp = false;
-              isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, stopBlobStoreAdminRequest.getAcceptableLagInBytes(),
+              isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, 0,
                   stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition());
               if (!isCaughtUp) {
                 error = ServerErrorCode.Catchup_Unfinished;

@@ -106,16 +106,14 @@ class InvalidVersionPutRequest extends PutRequest {
 
 class OtherVersionStopStoreRequest extends AdminRequest {
   private final short version;
-  private final long acceptableLagInBytes;
+  //  private final long acceptableLagInBytes = 0;
   private final short numReplicasCaughtUpPerPartition;
   private final long sizeInBytes;
 
-  OtherVersionStopStoreRequest(AdminRequest adminRequest, short version, long acceptableLagInBytes,
-      short numReplicasCaughtUpPerPartition) {
+  OtherVersionStopStoreRequest(AdminRequest adminRequest, short version, short numReplicasCaughtUpPerPartition) {
     super(AdminRequestOrResponseType.StopBlobStore, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.version = version;
-    this.acceptableLagInBytes = acceptableLagInBytes;
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
     sizeInBytes = super.sizeInBytes() + Short.BYTES + Long.BYTES + Short.BYTES;
   }
@@ -124,7 +122,7 @@ class OtherVersionStopStoreRequest extends AdminRequest {
   protected void serializeIntoBuffer() {
     super.serializeIntoBuffer();
     bufferToSend.putShort(version);
-    bufferToSend.putLong(acceptableLagInBytes);
+    //bufferToSend.putLong(acceptableLagInBytes);
     bufferToSend.putShort(numReplicasCaughtUpPerPartition);
   }
 
@@ -579,45 +577,28 @@ public class RequestResponseTest {
     PartitionId id = clusterMap.getWritablePartitionIds().get(0);
     int correlationId = 1234;
     String clientId = "client";
-    // stop BlobStore request
-    long acceptableLag = Utils.getRandomLong(TestUtils.RANDOM, 10000);
+    // test stop BlobStore request
     short numCaughtUpPerPartition = Utils.getRandomShort(TestUtils.RANDOM);
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
-        new StopBlobStoreAdminRequest(acceptableLag, numCaughtUpPerPartition, adminRequest);
+        new StopBlobStoreAdminRequest(numCaughtUpPerPartition, adminRequest);
     DataInputStream requestStream = serAndPrepForRead(stopBlobStoreAdminRequest, -1, true);
     AdminRequest deserializedAdminRequest =
         deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
             AdminRequestOrResponseType.StopBlobStore, id);
     StopBlobStoreAdminRequest deserializedStopBlobStoreRequest =
         StopBlobStoreAdminRequest.readFrom(requestStream, deserializedAdminRequest);
-    Assert.assertEquals("Acceptable lag not as set", acceptableLag,
-        deserializedStopBlobStoreRequest.getAcceptableLagInBytes());
     Assert.assertEquals("Num caught up per partition not as set", numCaughtUpPerPartition,
         deserializedStopBlobStoreRequest.getNumReplicasCaughtUpPerPartition());
     // test toString method
     String correctString = "StopBlobStoreAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", AcceptableLagInBytes=" + deserializedStopBlobStoreRequest.getAcceptableLagInBytes() + ", PartitionId="
-        + deserializedStopBlobStoreRequest.getPartitionId() + "]";
+        + ", NumReplicasCaughtUpPerPartition=" + deserializedStopBlobStoreRequest.getNumReplicasCaughtUpPerPartition()
+        + ", PartitionId=" + deserializedStopBlobStoreRequest.getPartitionId() + "]";
     Assert.assertEquals("The test of toString method fails", correctString, "" + deserializedStopBlobStoreRequest);
-
-    // test V1 version  of StopBlobStoreAdminRequest
-    acceptableLag = Utils.getRandomLong(TestUtils.RANDOM, 10000);
-    numCaughtUpPerPartition = Utils.getRandomShort(TestUtils.RANDOM);
-    OtherVersionStopStoreRequest versionOneStopStoreRequest =
-        new OtherVersionStopStoreRequest(adminRequest, (short) 1, acceptableLag, numCaughtUpPerPartition);
-    requestStream = serAndPrepForRead(versionOneStopStoreRequest, -1, true);
-    deserializedAdminRequest = deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
-        AdminRequestOrResponseType.StopBlobStore, id);
-    deserializedStopBlobStoreRequest = StopBlobStoreAdminRequest.readFrom(requestStream, deserializedAdminRequest);
-    Assert.assertEquals("Acceptable lag not as set", acceptableLag,
-        deserializedStopBlobStoreRequest.getAcceptableLagInBytes());
-    Assert.assertEquals("Num caught up per partition not as pre-defined", Short.MAX_VALUE,
-        deserializedStopBlobStoreRequest.getNumReplicasCaughtUpPerPartition());
-
     // test invalid version of StopBlobStoreAdminRequest
+    short invalidVersion = 2;
     OtherVersionStopStoreRequest invalidVersionStopStoreRequest =
-        new OtherVersionStopStoreRequest(adminRequest, (short) 0, acceptableLag, numCaughtUpPerPartition);
+        new OtherVersionStopStoreRequest(adminRequest, invalidVersion, numCaughtUpPerPartition);
     requestStream = serAndPrepForRead(invalidVersionStopStoreRequest, -1, true);
     try {
       deserializedAdminRequest = deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,

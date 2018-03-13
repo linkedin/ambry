@@ -247,17 +247,9 @@ class DiskManager {
     BlobStore store = (BlobStore) getStore(id);
     if (store != null) {
       try {
-        Thread shutdownThread = Utils.newThread("store-shutdown-" + id, () -> {
-          try {
-            store.shutdown();
-          } catch (Exception e) {
-            logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
-          }
-        }, false);
-        shutdownThread.start();
-        shutdownThread.join();
+        store.shutdown();
       } catch (Exception e) {
-        logger.error("Could not shut down the store {} on disk {}", id, disk, e);
+        logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
       }
     }
   }

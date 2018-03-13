@@ -195,6 +195,10 @@ public class StorageManager {
     }
   }
 
+  /**
+   * Shutdown blobstore with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
+   */
   public void shutdownBlobStore(PartitionId id){
     DiskManager diskManager = partitionToDiskManager.get(id);
     if(diskManager != null){

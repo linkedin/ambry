@@ -16,13 +16,12 @@ package com.github.ambry.protocol;
 import java.io.DataInputStream;
 import java.io.IOException;
 
+
 /**
  *  An admin request used to stop a BlobStore safely.
  */
 public class StopBlobStoreAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;
-  private static final short VERSION_V2 = 2;
-  private final long acceptableLagInBytes;
   private final short numReplicasCaughtUpPerPartition;
   private final long sizeInBytes;
 
@@ -36,41 +35,23 @@ public class StopBlobStoreAdminRequest extends AdminRequest {
   public static StopBlobStoreAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)
       throws IOException {
     Short versionId = stream.readShort();
-    long acceptableLagInBytes;
-    short numReplicasCaughtUpPerPartition = Short.MAX_VALUE;
-    switch (versionId) {
-      case VERSION_V1:
-        acceptableLagInBytes = stream.readLong();
-        break;
-      case VERSION_V2:
-        acceptableLagInBytes = stream.readLong();
-        numReplicasCaughtUpPerPartition = stream.readShort();
-        break;
-      default:
-        throw new IllegalStateException("Unrecognized version for StopBlobStoreAdminRequest: " + versionId);
+    if (!versionId.equals(VERSION_V1)) {
+      throw new IllegalStateException("Unrecognized version for StopBlobStoreAdminRequest: " + versionId);
     }
-    return new StopBlobStoreAdminRequest(acceptableLagInBytes, numReplicasCaughtUpPerPartition, adminRequest);
+    short numReplicasCaughtUpPerPartition = stream.readShort();
+    return new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
   }
 
-  public StopBlobStoreAdminRequest(long acceptableLagInBytes, short numReplicasCaughtUpPerPartition,
-      AdminRequest adminRequest) {
+  public StopBlobStoreAdminRequest(short numReplicasCaughtUpPerPartition, AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.StopBlobStore, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
-    this.acceptableLagInBytes = acceptableLagInBytes;
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
-    // parent size + version size + acceptableLagInBytes size + numReplicasCaughtUpPerPartition size
-    sizeInBytes = super.sizeInBytes() + Short.BYTES + Long.BYTES + Short.BYTES;
+    // parent size + version size + numReplicasCaughtUpPerPartition size
+    sizeInBytes = super.sizeInBytes() + Short.BYTES + +Short.BYTES;
   }
 
   /**
-   * @return the number of bytes that the remote can lag by which is considered OK.
-   */
-  public long getAcceptableLagInBytes() {
-    return acceptableLagInBytes;
-  }
-
-  /**
-   * @return the least number of replicas that have to be within {@link #getAcceptableLagInBytes()} for each partition.
+   * @return the least number of replicas that have to be within 0 byte for each partition.
    */
   public short getNumReplicasCaughtUpPerPartition() {
     return numReplicasCaughtUpPerPartition;
@@ -84,14 +65,14 @@ public class StopBlobStoreAdminRequest extends AdminRequest {
   @Override
   public String toString() {
     return "StopBlobStoreAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", AcceptableLagInBytes=" + acceptableLagInBytes + ", PartitionId=" + getPartitionId() + "]";
+        + ", NumReplicasCaughtUpPerPartition=" + numReplicasCaughtUpPerPartition + ", PartitionId=" + getPartitionId()
+        + "]";
   }
 
   @Override
   protected void serializeIntoBuffer() {
     super.serializeIntoBuffer();
-    bufferToSend.putShort(VERSION_V2);
-    bufferToSend.putLong(acceptableLagInBytes);
+    bufferToSend.putShort(VERSION_V1);
     bufferToSend.putShort(numReplicasCaughtUpPerPartition);
   }
 }
