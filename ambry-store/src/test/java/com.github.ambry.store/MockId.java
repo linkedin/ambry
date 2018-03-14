@@ -23,16 +23,18 @@ import java.nio.ByteBuffer;
 public class MockId extends StoreKey {
 
   private String id;
+  private short version = 3;
   private final short accountId;
   private final short containerId;
   private static final int Id_Size_In_Bytes = 2;
 
   public MockId(String id) {
-    this(id, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+    this(id, (short) 3, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
   }
 
-  public MockId(String id, short accountId, short containerId) {
+  public MockId(String id, short version, short accountId, short containerId) {
     this.id = id;
+    this.version = version;
     this.accountId = accountId;
     this.containerId = containerId;
   }
@@ -68,14 +70,20 @@ public class MockId extends StoreKey {
     return (short) (Id_Size_In_Bytes + id.length() + Short.BYTES + Short.BYTES);
   }
 
-  @Override
   public short getAccountId() {
     return accountId;
   }
 
-  @Override
   public short getContainerId() {
     return containerId;
+  }
+
+  @Override
+  public boolean isAccountContainerMatch(short accountId, short containerId) {
+    if (version == 1) {
+      return true;
+    }
+    return accountId == this.accountId && containerId == this.containerId;
   }
 
   @Override
