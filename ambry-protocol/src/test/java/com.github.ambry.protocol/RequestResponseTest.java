@@ -567,18 +567,6 @@ public class RequestResponseTest {
         + ", NumReplicasCaughtUpPerPartition=" + deserializedStopBlobStoreRequest.getNumReplicasCaughtUpPerPartition()
         + ", PartitionId=" + deserializedStopBlobStoreRequest.getPartitionId() + "]";
     Assert.assertEquals("The test of toString method fails", correctString, "" + deserializedStopBlobStoreRequest);
-//    // test invalid version of StopBlobStoreAdminRequest
-//    short invalidVersion = 2;
-//    OtherVersionStopStoreRequest invalidVersionStopStoreRequest =
-//        new OtherVersionStopStoreRequest(adminRequest, invalidVersion, numCaughtUpPerPartition);
-//    requestStream = serAndPrepForRead(invalidVersionStopStoreRequest, -1, true);
-//    try {
-//      deserializedAdminRequest = deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
-//          AdminRequestOrResponseType.StopBlobStore, id);
-//      StopBlobStoreAdminRequest.readFrom(requestStream, deserializedAdminRequest);
-//      Assert.fail("Deserialization of StopStoreRequest with invalid version should have thrown an exception.");
-//    } catch (IllegalStateException e) {
-//    }
   }
 
   /**
