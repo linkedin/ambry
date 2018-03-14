@@ -243,15 +243,18 @@ class DiskManager {
    * Shutdown the {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
    */
-  void shutdownBlobStore(PartitionId id) {
+  boolean shutdownBlobStore(PartitionId id) {
     BlobStore store = (BlobStore) getStore(id);
-    if (store != null) {
-      try {
-        store.shutdown();
-      } catch (Exception e) {
-        logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
-      }
+    if (store == null) {
+      return false;
     }
+    try {
+      store.shutdown();
+    } catch (Exception e) {
+      logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
+      return false;
+    }
+    return true;
   }
 
   /**

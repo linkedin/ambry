@@ -104,32 +104,6 @@ class InvalidVersionPutRequest extends PutRequest {
   }
 }
 
-class OtherVersionStopStoreRequest extends AdminRequest {
-  private final short version;
-  private final short numReplicasCaughtUpPerPartition;
-  private final long sizeInBytes;
-
-  OtherVersionStopStoreRequest(AdminRequest adminRequest, short version, short numReplicasCaughtUpPerPartition) {
-    super(AdminRequestOrResponseType.StopBlobStore, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
-        adminRequest.getClientId());
-    this.version = version;
-    this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
-    sizeInBytes = super.sizeInBytes() + Short.BYTES + Long.BYTES + Short.BYTES;
-  }
-
-  @Override
-  protected void serializeIntoBuffer() {
-    super.serializeIntoBuffer();
-    bufferToSend.putShort(version);
-    bufferToSend.putShort(numReplicasCaughtUpPerPartition);
-  }
-
-  @Override
-  public long sizeInBytes() {
-    return sizeInBytes;
-  }
-}
-
 /**
  * Tests for different requests and responses in the protocol.
  */
@@ -593,18 +567,18 @@ public class RequestResponseTest {
         + ", NumReplicasCaughtUpPerPartition=" + deserializedStopBlobStoreRequest.getNumReplicasCaughtUpPerPartition()
         + ", PartitionId=" + deserializedStopBlobStoreRequest.getPartitionId() + "]";
     Assert.assertEquals("The test of toString method fails", correctString, "" + deserializedStopBlobStoreRequest);
-    // test invalid version of StopBlobStoreAdminRequest
-    short invalidVersion = 2;
-    OtherVersionStopStoreRequest invalidVersionStopStoreRequest =
-        new OtherVersionStopStoreRequest(adminRequest, invalidVersion, numCaughtUpPerPartition);
-    requestStream = serAndPrepForRead(invalidVersionStopStoreRequest, -1, true);
-    try {
-      deserializedAdminRequest = deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
-          AdminRequestOrResponseType.StopBlobStore, id);
-      StopBlobStoreAdminRequest.readFrom(requestStream, deserializedAdminRequest);
-      Assert.fail("Deserialization of StopStoreRequest with invalid version should have thrown an exception.");
-    } catch (IllegalStateException e) {
-    }
+//    // test invalid version of StopBlobStoreAdminRequest
+//    short invalidVersion = 2;
+//    OtherVersionStopStoreRequest invalidVersionStopStoreRequest =
+//        new OtherVersionStopStoreRequest(adminRequest, invalidVersion, numCaughtUpPerPartition);
+//    requestStream = serAndPrepForRead(invalidVersionStopStoreRequest, -1, true);
+//    try {
+//      deserializedAdminRequest = deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+//          AdminRequestOrResponseType.StopBlobStore, id);
+//      StopBlobStoreAdminRequest.readFrom(requestStream, deserializedAdminRequest);
+//      Assert.fail("Deserialization of StopStoreRequest with invalid version should have thrown an exception.");
+//    } catch (IllegalStateException e) {
+//    }
   }
 
   /**

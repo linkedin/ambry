@@ -350,11 +350,17 @@ public class AmbryRequestsTest {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     generateLagOverrides(0, acceptableLagInBytes);
+    // stop BlobStore
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
         new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
     Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test APIs are called in the process of stopping BlobStore
+    assertEquals("Partition disabled for compaction not as expected", id, storageManager.compactionDisabledPartitionId);
+    assertEquals("Origins list should be empty", true, replicationManager.originsVal.isEmpty());
+    assertEquals("Replication on given BlobStore should be disabled", false, replicationManager.enableVal);
+    assertEquals("Partition shutdown not as expected", id, storageManager.shutdownPartitionId);
   }
 
   /**
@@ -404,6 +410,15 @@ public class AmbryRequestsTest {
     adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
     response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Catchup_Unfinished);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test shutdown BlobStore failure
+    replicationManager.reset();
+    replicationManager.controlReplicationReturnVal = true;
+    storageManager.returnValueOfShutdownBlobStore = false;
+    generateLagOverrides(0, 0);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
   }
   // helpers
@@ -890,9 +905,21 @@ public class AmbryRequestsTest {
      */
     boolean returnValueOfDisablingCompaction = true;
     /**
+     * The return value for a call to {@link #shutdownBlobStore(PartitionId)}.
+     */
+    boolean returnValueOfShutdownBlobStore = true;
+    /**
      * The {@link PartitionId} that was provided in the call to {@link #scheduleNextForCompaction(PartitionId)}
      */
     PartitionId compactionScheduledPartitionId = null;
+    /**
+     * The {@link PartitionId} that was provided in the call to {@link #disableCompactionForBlobStore(PartitionId)}
+     */
+    PartitionId compactionDisabledPartitionId = null;
+    /**
+     * The {@link PartitionId} that was provided in the call to {@link #shutdownBlobStore(PartitionId)}
+     */
+    PartitionId shutdownPartitionId = null;
 
     MockStorageManager() throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
@@ -918,8 +945,14 @@ public class AmbryRequestsTest {
       if (exceptionToThrowOnDisablingCompaction != null) {
         throw exceptionToThrowOnDisablingCompaction;
       }
-      compactionScheduledPartitionId = id;
+      compactionDisabledPartitionId = id;
       return returnValueOfDisablingCompaction;
+    }
+
+    @Override
+    public boolean shutdownBlobStore(PartitionId id) {
+      shutdownPartitionId = id;
+      return returnValueOfShutdownBlobStore;
     }
 
     void resetStore() {

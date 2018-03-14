@@ -813,7 +813,10 @@ public class AmbryRequests implements RequestAPI {
                 controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, false);
                 controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, false);
                 // Shutdown the BlobStore completely
-                storageManager.shutdownBlobStore(partitionId);
+                if (!storageManager.shutdownBlobStore(partitionId)) {
+                  logger.error("Shutting down BlobStore fails on {}", partitionId);
+                  error = ServerErrorCode.Unknown_Error;
+                }
               }
             }
           }
