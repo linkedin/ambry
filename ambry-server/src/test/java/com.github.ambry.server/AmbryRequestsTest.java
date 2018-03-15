@@ -370,7 +370,6 @@ public class AmbryRequestsTest {
   @Test
   public void stopBlobStoreFailureTest() throws InterruptedException, IOException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
-    assertTrue("This test needs more than one partition to work", partitionIds.size() > 1);
     PartitionId id = partitionIds.get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
