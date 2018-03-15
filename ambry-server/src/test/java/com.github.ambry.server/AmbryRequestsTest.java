@@ -39,6 +39,7 @@ import com.github.ambry.network.SocketRequestResponseChannel;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
@@ -57,7 +58,6 @@ import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
-import com.github.ambry.protocol.StopBlobStoreAdminRequest;
 import com.github.ambry.replication.MockFindTokenFactory;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
@@ -332,7 +332,7 @@ public class AmbryRequestsTest {
   }
 
   /**
-   * Tests for the response received on a {@link StopBlobStoreAdminRequest} for successful case
+   * Tests for the response received on a {@link BlobStoreControlAdminRequest} for successful case
    * @throws InterruptedException
    * @throws IOException
    */
@@ -350,9 +350,9 @@ public class AmbryRequestsTest {
     replicationManager.controlReplicationReturnVal = true;
     generateLagOverrides(0, acceptableLagInBytes);
     // stop BlobStore
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
-        new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    BlobStoreControlAdminRequest stopBlobStoreAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test APIs are called in the process of stopping BlobStore
@@ -363,7 +363,7 @@ public class AmbryRequestsTest {
   }
 
   /**
-   * Tests for the response received on a {@link StopBlobStoreAdminRequest} for different failure cases
+   * Tests for the response received on a {@link BlobStoreControlAdminRequest} for different failure cases
    * @throws InterruptedException
    * @throws IOException
    */
@@ -375,68 +375,68 @@ public class AmbryRequestsTest {
     String clientId = UtilsTest.getRandomString(10);
     short numReplicasCaughtUpPerPartition = -1;
     // test invalid numReplicasCaughtUpPerPartition
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
-        new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    BlobStoreControlAdminRequest blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Bad_Request);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test partition unknown
     numReplicasCaughtUpPerPartition = 3;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, null, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Partition_Unknown);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, null, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Partition_Unknown);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test validate request failure
     storageManager.returnNullStore = true;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Disk_Unavailable);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Disk_Unavailable);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.returnNullStore = false;
     // test disable compaction failure
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     storageManager.returnValueOfDisablingCompaction = false;
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.returnValueOfDisablingCompaction = true;
     // test disable compaction with runtime exception
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     storageManager.exceptionToThrowOnDisablingCompaction = new IllegalStateException();
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.exceptionToThrowOnDisablingCompaction = null;
     // test disable replication failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test peers catchup failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     // all replicas of this partition > acceptableLag
     generateLagOverrides(1, 1);
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Retry_After_Backoff);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Retry_After_Backoff);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test shutdown BlobStore failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = true;
     storageManager.returnValueOfShutdownBlobStore = false;
     generateLagOverrides(0, 0);
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test shutdown BlobStore with runtime exception
     storageManager.exceptionToThrowOnShuttingdownBlobStore = new IllegalStateException();
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
-    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest = new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.exceptionToThrowOnShuttingdownBlobStore = null;
   }

@@ -20,5 +20,5 @@ package com.github.ambry.protocol;
  * requests/responses
  */
 public enum AdminRequestOrResponseType {
-  TriggerCompaction, RequestControl, ReplicationControl, CatchupStatus, StopBlobStore
+  TriggerCompaction, RequestControl, ReplicationControl, CatchupStatus, BlobStoreControl
 }

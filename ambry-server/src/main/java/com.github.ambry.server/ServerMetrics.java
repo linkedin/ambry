@@ -130,11 +130,11 @@ public class ServerMetrics {
   public final Histogram catchupStatusResponseSendTimeInMs;
   public final Histogram catchupStatusRequestTotalTimeInMs;
 
-  public final Histogram stopBlobStoreRequestQueueTimeInMs;
-  public final Histogram stopBlobStoreRequestProcessingTimeInMs;
-  public final Histogram stopBlobStoreResponseQueueTimeInMs;
-  public final Histogram stopBlobStoreResponseSendTimeInMs;
-  public final Histogram stopBlobStoreRequestTotalTimeInMs;
+  public final Histogram blobStoreControlRequestQueueTimeInMs;
+  public final Histogram blobStoreControlRequestProcessingTimeInMs;
+  public final Histogram blobStoreControlResponseQueueTimeInMs;
+  public final Histogram blobStoreControlResponseSendTimeInMs;
+  public final Histogram blobStoreControlRequestTotalTimeInMs;
 
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
@@ -155,7 +155,7 @@ public class ServerMetrics {
   public final Meter requestControlRequestRate;
   public final Meter replicationControlRequestRate;
   public final Meter catchupStatusRequestRate;
-  public final Meter stopBlobStoreRequestRate;
+  public final Meter blobStoreControlRequestRate;
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
@@ -346,16 +346,16 @@ public class ServerMetrics {
     catchupStatusRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestTotalTimeInMs"));
 
-    stopBlobStoreRequestQueueTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "StopBlobStoreRequestQueueTimeInMs"));
-    stopBlobStoreRequestProcessingTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "StopBlobStoreRequestProcessingTimeInMs"));
-    stopBlobStoreResponseQueueTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "StopBlobStoreResponseQueueTimeInMs"));
-    stopBlobStoreResponseSendTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "StopBlobStoreResponseSendTimeInMs"));
-    stopBlobStoreRequestTotalTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "StopBlobStoreRequestTotalTimeInMs"));
+    blobStoreControlRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlRequestQueueTimeInMs"));
+    blobStoreControlRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlRequestProcessingTimeInMs"));
+    blobStoreControlResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlResponseQueueTimeInMs"));
+    blobStoreControlResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlResponseSendTimeInMs"));
+    blobStoreControlRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlRequestTotalTimeInMs"));
 
     blobSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(AmbryRequests.class, "BlobUserMetadataSize"));
@@ -380,7 +380,7 @@ public class ServerMetrics {
     replicationControlRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestRate"));
     catchupStatusRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestRate"));
-    stopBlobStoreRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "StopBlobStoreRequestRate"));
+    blobStoreControlRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobRequestRate"));

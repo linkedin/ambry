@@ -18,36 +18,39 @@ import java.io.IOException;
 
 
 /**
- *  An admin request used to stop a BlobStore safely.
+ *  An admin request used to start or stop a BlobStore properly.
  */
-public class StopBlobStoreAdminRequest extends AdminRequest {
+public class BlobStoreControlAdminRequest extends AdminRequest {
   private static final short VERSION_V1 = 1;
   private final short numReplicasCaughtUpPerPartition;
+  private final boolean enable;
   private final long sizeInBytes;
 
   /**
-   * Reads from a stream and constructs a {@link StopBlobStoreAdminRequest}.
+   * Reads from a stream and constructs a {@link BlobStoreControlAdminRequest}.
    * @param stream the stream to read from
    * @param adminRequest the {@link AdminRequest} that contains some necessary headers.
-   * @return the {@link StopBlobStoreAdminRequest} constructed from the {@code stream}.
+   * @return the {@link BlobStoreControlAdminRequest} constructed from the {@code stream}.
    * @throws IOException if there is any problem reading from the stream
    */
-  public static StopBlobStoreAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)
+  public static BlobStoreControlAdminRequest readFrom(DataInputStream stream, AdminRequest adminRequest)
       throws IOException {
     Short versionId = stream.readShort();
     if (!versionId.equals(VERSION_V1)) {
-      throw new IllegalStateException("Unrecognized version for StopBlobStoreAdminRequest: " + versionId);
+      throw new IllegalStateException("Unrecognized version for BlobStoreControlAdminRequest: " + versionId);
     }
     short numReplicasCaughtUpPerPartition = stream.readShort();
-    return new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    boolean enable = stream.readByte() == 1;
+    return new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
   }
 
-  public StopBlobStoreAdminRequest(short numReplicasCaughtUpPerPartition, AdminRequest adminRequest) {
-    super(AdminRequestOrResponseType.StopBlobStore, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
+  public BlobStoreControlAdminRequest(short numReplicasCaughtUpPerPartition, boolean enable, AdminRequest adminRequest) {
+    super(AdminRequestOrResponseType.BlobStoreControl, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
+    this.enable = enable;
     // parent size + version size + numReplicasCaughtUpPerPartition size
-    sizeInBytes = super.sizeInBytes() + Short.BYTES + Short.BYTES;
+    sizeInBytes = super.sizeInBytes() + Short.BYTES + Short.BYTES + Byte.BYTES;
   }
 
   /**
@@ -57,6 +60,13 @@ public class StopBlobStoreAdminRequest extends AdminRequest {
     return numReplicasCaughtUpPerPartition;
   }
 
+  /**
+   * @return if BlobStore needs to enabled/started ({@code true}) or disabled/stopped ({@code false}).
+   */
+  public boolean shouldEnable() {
+    return enable;
+  }
+
   @Override
   public long sizeInBytes() {
     return sizeInBytes;
@@ -64,7 +74,7 @@ public class StopBlobStoreAdminRequest extends AdminRequest {
 
   @Override
   public String toString() {
-    return "StopBlobStoreAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
+    return "BlobStoreControlAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
         + ", NumReplicasCaughtUpPerPartition=" + numReplicasCaughtUpPerPartition + ", PartitionId=" + getPartitionId()
         + "]";
   }
@@ -74,5 +84,6 @@ public class StopBlobStoreAdminRequest extends AdminRequest {
     super.serializeIntoBuffer();
     bufferToSend.putShort(VERSION_V1);
     bufferToSend.putShort(numReplicasCaughtUpPerPartition);
+    bufferToSend.put(enable ? (byte) 1 : 0);
   }
 }
