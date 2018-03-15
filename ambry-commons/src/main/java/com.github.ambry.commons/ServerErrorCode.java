@@ -33,5 +33,5 @@ public enum ServerErrorCode {
   Unknown_Error,
   Temporarily_Disabled,
   Bad_Request,
-  Operation_In_Progress
+  Retry_After_Backoff
 }

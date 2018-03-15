@@ -797,32 +797,33 @@ public class AmbryRequests implements RequestAPI {
                 // Shutdown the BlobStore completely
                 if (storageManager.shutdownBlobStore(partitionId)) {
                   error = ServerErrorCode.No_Error;
+                  logger.info("store shutdown for partition: {}", partitionId);
                 } else {
-                  logger.error("Shutting down BlobStore fails on {}", partitionId);
                   error = ServerErrorCode.Unknown_Error;
+                  logger.error("Shutting down BlobStore fails on {}", partitionId);
                 }
               } else {
-                error = ServerErrorCode.Operation_In_Progress;
+                error = ServerErrorCode.Retry_After_Backoff;
                 logger.debug("Catchup not done on {}", partitionIds);
               }
             } else {
-              logger.error("Could not disable replication on {}", partitionIds);
               error = ServerErrorCode.Unknown_Error;
+              logger.error("Could not disable replication on {}", partitionIds);
             }
           } else {
             error = ServerErrorCode.Unknown_Error;
             logger.error("Disable compaction on given BlobStore failed for {}", partitionId);
           }
         } else {
-          logger.error("Validate request fails for {}", partitionId);
+          logger.debug("Validate request fails for {} with error code {}", partitionId, error);
         }
       } else {
         error = ServerErrorCode.Partition_Unknown;
-        logger.error("The partition Id should not be null.");
+        logger.debug("The partition Id should not be null.");
       }
     } else {
       error = ServerErrorCode.Bad_Request;
-      logger.error("The number of replicas to catch up should not be less or equal to zero {}",
+      logger.debug("The number of replicas to catch up should not be less or equal to zero {}",
           stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition());
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
