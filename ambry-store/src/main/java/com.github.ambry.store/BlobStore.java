@@ -14,8 +14,6 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
-import com.github.ambry.account.Account;
-import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.StoreConfig;
@@ -605,17 +603,5 @@ class BlobStore implements Store {
   @Override
   public String toString() {
     return "StoreId: " + storeId + ". DataDir: " + dataDir + ". Capacity: " + capacityInBytes;
-  }
-
-  /**
-   * Check if accountId/containerId from store and request are same.
-   * If either one of accountId and containerId in store is unknown, the validation is skipped.
-   */
-  private boolean validateAuthorization(short storeAccountId, short storeContainerId, short requestAccountId,
-      short requestContainerId) {
-    if (storeAccountId != Account.UNKNOWN_ACCOUNT_ID && storeContainerId != Container.UNKNOWN_CONTAINER_ID) {
-      return (storeAccountId == requestAccountId) && (storeContainerId == requestContainerId);
-    }
-    return true;
   }
 }
