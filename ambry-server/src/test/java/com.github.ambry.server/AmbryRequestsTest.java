@@ -339,7 +339,6 @@ public class AmbryRequestsTest {
   @Test
   public void stopBlobStoreSuccessTest() throws InterruptedException, IOException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
-    assertTrue("This test needs more than one partition to work", partitionIds.size() > 1);
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
     assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
@@ -388,6 +387,13 @@ public class AmbryRequestsTest {
     stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
     response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Partition_Unknown);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // test validate request failure
+    storageManager.returnNullStore = true;
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
+    stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Disk_Unavailable);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    storageManager.returnNullStore = false;
     // test disable compaction failure
     adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
@@ -400,7 +406,7 @@ public class AmbryRequestsTest {
     replicationManager.controlReplicationReturnVal = false;
     adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Bad_Request);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test peers catchup failure
     replicationManager.reset();
@@ -409,7 +415,7 @@ public class AmbryRequestsTest {
     generateLagOverrides(1, 1);
     adminRequest = new AdminRequest(AdminRequestOrResponseType.StopBlobStore, id, correlationId, clientId);
     stopBlobStoreAdminRequest = new StopBlobStoreAdminRequest(numReplicasCaughtUpPerPartition, adminRequest);
-    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Catchup_Unfinished);
+    response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.Operation_In_Progress);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test shutdown BlobStore failure
     replicationManager.reset();

@@ -776,12 +776,10 @@ public class AmbryRequests implements RequestAPI {
    */
   private AdminResponse handleStopBlobStoreRequest(DataInputStream requestStream, AdminRequest adminRequest)
       throws IOException {
-    ServerErrorCode error = ServerErrorCode.No_Error;
+    ServerErrorCode error;
     StopBlobStoreAdminRequest stopBlobStoreAdminRequest =
         StopBlobStoreAdminRequest.readFrom(requestStream, adminRequest);
-    if (stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition() <= 0) {
-      error = ServerErrorCode.Bad_Request;
-    } else {
+    if (stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition() > 0) {
       PartitionId partitionId = stopBlobStoreAdminRequest.getPartitionId();
       if (partitionId != null) {
         error = validateRequest(partitionId, RequestOrResponseType.AdminRequest);
@@ -790,40 +788,42 @@ public class AmbryRequests implements RequestAPI {
           if (storageManager.disableCompactionForBlobStore(partitionId)) {
             controlRequestForPartitions(RequestOrResponseType.PutRequest, partitionIds, false);
             controlRequestForPartitions(RequestOrResponseType.DeleteRequest, partitionIds, false);
-          } else {
-            error = ServerErrorCode.Unknown_Error;
-            logger.error("Disable compaction on given BlobStore failed for {}.", adminRequest);
-          }
-          if (error.equals(ServerErrorCode.No_Error)) {
             if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                 false)) {
-              error = ServerErrorCode.No_Error;
-            } else {
-              logger.error("Could not disable replication on {}", partitionIds);
-              error = ServerErrorCode.Bad_Request;
-            }
-            if (error.equals(ServerErrorCode.No_Error)) {
-              boolean isCaughtUp = false;
-              isCaughtUp = isRemoteLagLesserOrEqual(partitionIds, 0,
-                  stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition());
-              if (!isCaughtUp) {
-                error = ServerErrorCode.Catchup_Unfinished;
-              }
-              if (error.equals(ServerErrorCode.No_Error)) {
+              if (isRemoteLagLesserOrEqual(partitionIds, 0,
+                  stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition())) {
                 controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, false);
                 controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, false);
                 // Shutdown the BlobStore completely
-                if (!storageManager.shutdownBlobStore(partitionId)) {
+                if (storageManager.shutdownBlobStore(partitionId)) {
+                  error = ServerErrorCode.No_Error;
+                } else {
                   logger.error("Shutting down BlobStore fails on {}", partitionId);
                   error = ServerErrorCode.Unknown_Error;
                 }
+              } else {
+                error = ServerErrorCode.Operation_In_Progress;
+                logger.debug("Catchup not done on {}", partitionIds);
               }
+            } else {
+              logger.error("Could not disable replication on {}", partitionIds);
+              error = ServerErrorCode.Unknown_Error;
             }
+          } else {
+            error = ServerErrorCode.Unknown_Error;
+            logger.error("Disable compaction on given BlobStore failed for {}", partitionId);
           }
+        } else {
+          logger.error("Validate request fails for {}", partitionId);
         }
       } else {
         error = ServerErrorCode.Partition_Unknown;
+        logger.error("The partition Id should not be null.");
       }
+    } else {
+      error = ServerErrorCode.Bad_Request;
+      logger.error("The number of replicas to catch up should not be less or equal to zero {}",
+          stopBlobStoreAdminRequest.getNumReplicasCaughtUpPerPartition());
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
   }

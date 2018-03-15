@@ -47,7 +47,7 @@ public class StopBlobStoreAdminRequest extends AdminRequest {
         adminRequest.getClientId());
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
     // parent size + version size + numReplicasCaughtUpPerPartition size
-    sizeInBytes = super.sizeInBytes() + Short.BYTES + +Short.BYTES;
+    sizeInBytes = super.sizeInBytes() + Short.BYTES + Short.BYTES;
   }
 
   /**
