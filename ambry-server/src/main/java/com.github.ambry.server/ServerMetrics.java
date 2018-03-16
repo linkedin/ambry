@@ -380,7 +380,8 @@ public class ServerMetrics {
     replicationControlRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicationControlRequestRate"));
     catchupStatusRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "CatchupStatusRequestRate"));
-    blobStoreControlRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlRequestRate"));
+    blobStoreControlRequestRate =
+        registry.meter(MetricRegistry.name(AmbryRequests.class, "BlobStoreControlRequestRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetSmallBlobRequestRate"));

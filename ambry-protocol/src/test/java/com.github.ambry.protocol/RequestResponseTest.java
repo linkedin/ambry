@@ -555,15 +555,15 @@ public class RequestResponseTest {
    * @param enable the value for the enable field in {@link BlobStoreControlAdminRequest}.
    * @throws IOException
    */
-  private void doBlobStoreControlAdminRequestTest(boolean enable)
-      throws IOException {
+  private void doBlobStoreControlAdminRequestTest(boolean enable) throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     PartitionId id = clusterMap.getWritablePartitionIds().get(0);
     int correlationId = 1234;
     String clientId = "client";
     // test BlobStore Control request
     short numCaughtUpPerPartition = Utils.getRandomShort(TestUtils.RANDOM);
-    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numCaughtUpPerPartition, enable, adminRequest);
     DataInputStream requestStream = serAndPrepForRead(blobStoreControlAdminRequest, -1, true);
@@ -574,12 +574,12 @@ public class RequestResponseTest {
         BlobStoreControlAdminRequest.readFrom(requestStream, deserializedAdminRequest);
     Assert.assertEquals("Num caught up per partition not as set", numCaughtUpPerPartition,
         deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition());
-    Assert.assertEquals("Enable variable not as set", enable,
-        deserializedBlobStoreControlRequest.shouldEnable());
+    Assert.assertEquals("Enable variable not as set", enable, deserializedBlobStoreControlRequest.shouldEnable());
     // test toString method
     String correctString = "BlobStoreControlAdminRequest[ClientId=" + clientId + ", CorrelationId=" + correlationId
-        + ", NumReplicasCaughtUpPerPartition=" + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition()
-        + ", PartitionId=" + deserializedBlobStoreControlRequest.getPartitionId() + "]";
+        + ", NumReplicasCaughtUpPerPartition="
+        + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition() + ", PartitionId="
+        + deserializedBlobStoreControlRequest.getPartitionId() + "]";
     Assert.assertEquals("The test of toString method fails", correctString, "" + deserializedBlobStoreControlRequest);
   }
 

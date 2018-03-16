@@ -44,7 +44,8 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
     return new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
   }
 
-  public BlobStoreControlAdminRequest(short numReplicasCaughtUpPerPartition, boolean enable, AdminRequest adminRequest) {
+  public BlobStoreControlAdminRequest(short numReplicasCaughtUpPerPartition, boolean enable,
+      AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.BlobStoreControl, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
@@ -61,7 +62,7 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
   }
 
   /**
-   * @return if BlobStore needs to enabled/started ({@code true}) or disabled/stopped ({@code false}).
+   * @return if BlobStore needs to be enabled/started ({@code true}) or disabled/stopped ({@code false}).
    */
   public boolean shouldEnable() {
     return enable;
