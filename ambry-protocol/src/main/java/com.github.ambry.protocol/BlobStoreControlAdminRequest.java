@@ -50,7 +50,7 @@ public class BlobStoreControlAdminRequest extends AdminRequest {
         adminRequest.getClientId());
     this.numReplicasCaughtUpPerPartition = numReplicasCaughtUpPerPartition;
     this.enable = enable;
-    // parent size + version size + numReplicasCaughtUpPerPartition size
+    // parent size + version size + numReplicasCaughtUpPerPartition size + enable flag size
     sizeInBytes = super.sizeInBytes() + Short.BYTES + Short.BYTES + Byte.BYTES;
   }
 
