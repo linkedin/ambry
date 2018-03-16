@@ -786,6 +786,7 @@ public class AmbryRequests implements RequestAPI {
         if (error.equals(ServerErrorCode.No_Error)) {
           if (blobStoreControlAdminRequest.shouldEnable()) {
             // TODO: start BlobStore properly
+            error = ServerErrorCode.Temporarily_Disabled;
           } else {
             Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
             if (storageManager.disableCompactionForBlobStore(partitionId)) {
