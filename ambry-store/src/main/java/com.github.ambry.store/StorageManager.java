@@ -196,6 +196,15 @@ public class StorageManager {
   }
 
   /**
+   * Shutdown blobstore with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
+   */
+  public boolean shutdownBlobStore(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.shutdownBlobStore(id);
+  }
+
+  /**
    * @return the number of compaction threads running.
    */
   int getCompactionThreadCount() {

@@ -118,7 +118,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void testScheduleAndDisableCompaction() throws Exception {
+  public void scheduleAndDisableCompactionTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
@@ -129,13 +129,14 @@ public class StorageManagerTest {
     storageManager.start();
     // add invalid replica id
     replicas.add(invalidPartitionReplicas.get(0));
-    for (int i = 0; i < replicas.size() - 1; i++) {
+    for (int i = 0; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
       PartitionId id = replica.getPartitionId();
-      assertTrue("Schedule compaction should succeed", storageManager.scheduleNextForCompaction(id));
       if (i == replicas.size() - 1) {
         assertFalse("Schedule compaction should fail", storageManager.scheduleNextForCompaction(id));
         assertFalse("Disable compaction should fail", storageManager.disableCompactionForBlobStore(id));
+      } else {
+        assertTrue("Schedule compaction should succeed", storageManager.scheduleNextForCompaction(id));
       }
     }
     ReplicaId replica = replicas.get(0);
@@ -146,6 +147,37 @@ public class StorageManagerTest {
     id = replica.getPartitionId();
     assertTrue("Schedule compaction should succeed", storageManager.scheduleNextForCompaction(id));
     replicas.remove(replicas.size() - 1);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  /**
+   * Test shutdown blobstore with given {@link PartitionId} {@code id}.
+   */
+  @Test
+  public void shutdownBlobStoreTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<MockDataNodeId> dataNodes = new ArrayList<>();
+    dataNodes.add(dataNode);
+    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
+    List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    storageManager.start();
+    for (int i = 0; i < replicas.size() - 1; i++) {
+      ReplicaId replica = replicas.get(i);
+      PartitionId id = replica.getPartitionId();
+      assertTrue("Shutdown should succeed on given store", storageManager.shutdownBlobStore(id));
+    }
+    // test shutdown the store which is not started
+    ReplicaId replica = replicas.get(replicas.size() - 1);
+    PartitionId id = replica.getPartitionId();
+    Store store = storageManager.getStore(id);
+    store.shutdown();
+    assertFalse("Shutdown should fail on given store", storageManager.shutdownBlobStore(id));
+    // test invalid partition
+    replica = invalidPartitionReplicas.get(0);
+    id = replica.getPartitionId();
+    assertFalse("Shutdown should fail on given invalid replica", storageManager.shutdownBlobStore(id));
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 

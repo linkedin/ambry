@@ -40,6 +40,7 @@ import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.DeleteRequest;
@@ -617,6 +618,15 @@ public class AmbryRequests implements RequestAPI {
           requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
           response = handleCatchupStatusRequest(requestStream, adminRequest);
           break;
+        case BlobStoreControl:
+          metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.blobStoreControlRequestRate.mark();
+          processingTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
+          responseQueueTimeHistogram = metrics.blobStoreControlRequestQueueTimeInMs;
+          responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
+          response = handleBlobStoreControlRequest(requestStream, adminRequest);
+          break;
       }
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
@@ -755,6 +765,73 @@ public class AmbryRequests implements RequestAPI {
     }
     AdminResponse adminResponse = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
     return new CatchupStatusAdminResponse(isCaughtUp, adminResponse);
+  }
+
+  /**
+   * Handles {@link com.github.ambry.protocol.AdminRequestOrResponseType#BlobStoreControl}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   * @throws IOException if there is any I/O error reading from the {@code requestStream}.
+   */
+  private AdminResponse handleBlobStoreControlRequest(DataInputStream requestStream, AdminRequest adminRequest)
+      throws IOException {
+    ServerErrorCode error;
+    BlobStoreControlAdminRequest blobStoreControlAdminRequest =
+        BlobStoreControlAdminRequest.readFrom(requestStream, adminRequest);
+    if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() > 0) {
+      PartitionId partitionId = blobStoreControlAdminRequest.getPartitionId();
+      if (partitionId != null) {
+        error = validateRequest(partitionId, RequestOrResponseType.AdminRequest);
+        if (error.equals(ServerErrorCode.No_Error)) {
+          if (blobStoreControlAdminRequest.shouldEnable()) {
+            // TODO: start BlobStore properly
+            error = ServerErrorCode.Temporarily_Disabled;
+          } else {
+            Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+            if (storageManager.disableCompactionForBlobStore(partitionId)) {
+              controlRequestForPartitions(RequestOrResponseType.PutRequest, partitionIds, false);
+              controlRequestForPartitions(RequestOrResponseType.DeleteRequest, partitionIds, false);
+              if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
+                  false)) {
+                if (isRemoteLagLesserOrEqual(partitionIds, 0,
+                    blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition())) {
+                  controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, false);
+                  controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, false);
+                  // Shutdown the BlobStore completely
+                  if (storageManager.shutdownBlobStore(partitionId)) {
+                    error = ServerErrorCode.No_Error;
+                    logger.info("store shutdown for partition: {}", partitionId);
+                  } else {
+                    error = ServerErrorCode.Unknown_Error;
+                    logger.error("Shutting down BlobStore fails on {}", partitionId);
+                  }
+                } else {
+                  error = ServerErrorCode.Retry_After_Backoff;
+                  logger.debug("Catchup not done on {}", partitionIds);
+                }
+              } else {
+                error = ServerErrorCode.Unknown_Error;
+                logger.error("Could not disable replication on {}", partitionIds);
+              }
+            } else {
+              error = ServerErrorCode.Unknown_Error;
+              logger.error("Disable compaction on given BlobStore failed for {}", partitionId);
+            }
+          }
+        } else {
+          logger.debug("Validate request fails for {} with error code {}", partitionId, error);
+        }
+      } else {
+        error = ServerErrorCode.Partition_Unknown;
+        logger.debug("The partition Id should not be null.");
+      }
+    } else {
+      error = ServerErrorCode.Bad_Request;
+      logger.debug("The number of replicas to catch up should not be less or equal to zero {}",
+          blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition());
+    }
+    return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
