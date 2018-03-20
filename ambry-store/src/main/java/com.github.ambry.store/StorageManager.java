@@ -149,7 +149,7 @@ public class StorageManager {
    * @return the {@link DiskManager} corresponding to the given {@link PartitionId}, or {@code null} if no DiskManager was found for
    *         that partition
    */
-  public DiskManager getDiskManager(PartitionId id) {
+  DiskManager getDiskManager(PartitionId id) {
     return partitionToDiskManager.get(id);
   }
 

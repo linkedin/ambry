@@ -246,16 +246,19 @@ class DiskManager {
    */
   boolean startBlobStore(PartitionId id) {
     BlobStore store = stores.get(id);
-    if (store == null || store.isStarted() || !running) {
+    if (store == null || !running) {
       return false;
+    } else if (store.isStarted()) {
+      return true;
+    } else {
+      try {
+        store.start();
+      } catch (Exception e) {
+        logger.error("Exception while starting store {} on disk {}", id, disk, e);
+        return false;
+      }
+      return true;
     }
-    try {
-      store.start();
-    } catch (Exception e) {
-      logger.error("Exception while starting store {} on disk {}", id, disk, e);
-      return false;
-    }
-    return true;
   }
 
   /**
@@ -263,17 +266,20 @@ class DiskManager {
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
    */
   boolean shutdownBlobStore(PartitionId id) {
-    BlobStore store = (BlobStore) getStore(id);
-    if (store == null) {
+    BlobStore store = stores.get(id);//(BlobStore) getStore(id);
+    if (store == null || !running) {
       return false;
+    } else if (!store.isStarted()) {
+      return true;
+    } else {
+      try {
+        store.shutdown();
+      } catch (Exception e) {
+        logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
+        return false;
+      }
+      return true;
     }
-    try {
-      store.shutdown();
-    } catch (Exception e) {
-      logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
-      return false;
-    }
-    return true;
   }
 
   /**

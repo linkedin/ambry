@@ -550,16 +550,18 @@ public class AmbryRequests implements RequestAPI {
 
   /**
    * Enables/disables {@code requestOrResponseType} on the given {@code ids}.
-   * @param requestType the {@link RequestOrResponseType} to enable/disable.
+   * @param requestTypes the {@link RequestOrResponseType} to enable/disable.
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable
    */
-  private void controlRequestForPartitions(RequestOrResponseType requestType, Collection<PartitionId> ids,
+  private void controlRequestForPartitions(EnumSet<RequestOrResponseType> requestTypes, Collection<PartitionId> ids,
       boolean enable) {
-    if (enable) {
-      requestsDisableInfo.get(requestType).removeAll(ids);
-    } else {
-      requestsDisableInfo.get(requestType).addAll(ids);
+    for (RequestOrResponseType requestType : requestTypes) {
+      if (enable) {
+        requestsDisableInfo.get(requestType).removeAll(ids);
+      } else {
+        requestsDisableInfo.get(requestType).addAll(ids);
+      }
     }
   }
 
@@ -691,7 +693,7 @@ public class AmbryRequests implements RequestAPI {
         partitionIds = partitionsInCurrentNode;
       }
       if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-        controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
+        controlRequestForPartitions(EnumSet.of(toControl), partitionIds, controlRequest.shouldEnable());
         for (PartitionId partitionId : partitionIds) {
           logger.info("Enable state for {} on {} is {}", toControl, partitionId,
               isRequestEnabled(toControl, partitionId));
@@ -787,15 +789,14 @@ public class AmbryRequests implements RequestAPI {
           // start BlobStore properly
           if (storageManager.startBlobStore(partitionId)) {
             Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
-            controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, true);
-            controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, true);
-            controlRequestForPartitions(RequestOrResponseType.PutRequest, partitionIds, true);
-            controlRequestForPartitions(RequestOrResponseType.DeleteRequest, partitionIds, true);
+            controlRequestForPartitions(
+                EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
+                    RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds, true);
             if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                 true)) {
               if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
                 error = ServerErrorCode.No_Error;
-                logger.info("Compaction is successfully enabled for partition: {}", partitionId);
+                logger.info("store started and functional for partition: {}", partitionId);
               } else {
                 error = ServerErrorCode.Unknown_Error;
                 logger.error("Enable compaction fails on given BlobStore {}", partitionId);
@@ -813,14 +814,16 @@ public class AmbryRequests implements RequestAPI {
           if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() > 0) {
             if (storageManager.controlCompactionForBlobStore(partitionId, false)) {
               Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
-              controlRequestForPartitions(RequestOrResponseType.PutRequest, partitionIds, false);
-              controlRequestForPartitions(RequestOrResponseType.DeleteRequest, partitionIds, false);
+              controlRequestForPartitions(
+                  EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds,
+                  false);
               if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                   false)) {
                 if (isRemoteLagLesserOrEqual(partitionIds, 0,
                     blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition())) {
-                  controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, false);
-                  controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, false);
+                  controlRequestForPartitions(
+                      EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest),
+                      partitionIds, false);
                   // Shutdown the BlobStore completely
                   if (storageManager.shutdownBlobStore(partitionId)) {
                     error = ServerErrorCode.No_Error;

@@ -176,7 +176,12 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"), currentSegmentCount);
   }
 
-  boolean deregisterIndexGauges(String storeId) {
+  /**
+   * Deregister the IndexGauges for given {@code store}.
+   * @param storeId the {@link BlobStore} for which the IndexGauges should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  private boolean deregisterIndexGauges(String storeId) {
     String prefix = storeId + SEPERATOR;
     return registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed")) && registry.remove(
         MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity")) && registry.remove(
@@ -202,7 +207,12 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
   }
 
-  boolean deregisterHardDeleteMetric(String storeId) {
+  /**
+   * Deregister the HardDeleteMetric for given {@code store}.
+   * @param storeId the {@link BlobStore} for which the HardDeleteMetric should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  private boolean deregisterHardDeleteMetric(String storeId) {
     String prefix = storeId + SEPERATOR;
     return registry.remove(MetricRegistry.name(PersistentIndex.class, prefix + "CurrentHardDeleteProgress")) && registry
         .remove(MetricRegistry.name(Log.class, prefix + "PercentageHardDeleteCompleted")) && registry.remove(
@@ -217,11 +227,21 @@ public class StoreMetrics {
         compactionInProgressGauge);
   }
 
-  boolean deregisterCompactorGauges(String storeId) {
+  /**
+   * Deregister the CompactorGauges for given {@code store}.
+   * @param storeId the {@link BlobStore} for which the CompactorGauges should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  private boolean deregisterCompactorGauges(String storeId) {
     String prefix = storeId + SEPERATOR;
     return registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
   }
 
+  /**
+   * Deregister the Metrics related to the given {@code store}.
+   * @param storeId the {@link BlobStore} for which some Metrics should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
   boolean deregisterMetrics(String storeId) {
     return deregisterIndexGauges(storeId) && deregisterHardDeleteMetric(storeId) && deregisterCompactorGauges(storeId);
   }

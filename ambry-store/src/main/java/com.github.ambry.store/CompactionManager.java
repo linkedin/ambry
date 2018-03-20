@@ -321,9 +321,7 @@ class CompactionManager {
      */
     boolean controlCompactionForBlobStore(BlobStore store, boolean enabled) {
       if (enabled) {
-        if (storesDisabledCompaction.contains(store)) {
-          storesDisabledCompaction.remove(store);
-        }
+        storesDisabledCompaction.remove(store);
       } else {
         storesDisabledCompaction.add(store);
       }

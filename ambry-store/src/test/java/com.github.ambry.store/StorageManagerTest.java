@@ -182,7 +182,7 @@ public class StorageManagerTest {
     // test start a store successfully
     assertTrue("Start should succeed on given store", storageManager.startBlobStore(id));
     // test start the store which is already started
-    assertFalse("Start should fail on the store which is already started", storageManager.startBlobStore(id));
+    assertTrue("Start should succeed on the store which is already started", storageManager.startBlobStore(id));
     // test invalid partition
     replica = invalidPartitionReplicas.get(0);
     id = replica.getPartitionId();
@@ -191,7 +191,7 @@ public class StorageManagerTest {
     replica = replicas.get(replicas.size() - 1);
     id = replica.getPartitionId();
     storageManager.getDiskManager(id).shutdown();
-    assertFalse("Start should fail on given store", storageManager.startBlobStore(id));
+    assertFalse("Start should fail on given store whose DiskManager is not running", storageManager.startBlobStore(id));
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
@@ -210,7 +210,6 @@ public class StorageManagerTest {
     ReplicaId replica = null;
     PartitionId id = null;
     storageManager.start();
-    //
     for (int i = 0; i < replicas.size(); i++) {
       replica = replicas.get(i);
       id = replica.getPartitionId();
@@ -236,7 +235,7 @@ public class StorageManagerTest {
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
-    for (int i = 0; i < replicas.size() - 1; i++) {
+    for (int i = 1; i < replicas.size() - 1; i++) {
       ReplicaId replica = replicas.get(i);
       PartitionId id = replica.getPartitionId();
       assertTrue("Shutdown should succeed on given store", storageManager.shutdownBlobStore(id));
@@ -246,7 +245,13 @@ public class StorageManagerTest {
     PartitionId id = replica.getPartitionId();
     Store store = storageManager.getStore(id);
     store.shutdown();
-    assertFalse("Shutdown should fail on given store", storageManager.shutdownBlobStore(id));
+    assertTrue("Shutdown should succeed on the store which is not started", storageManager.shutdownBlobStore(id));
+    // test start the store whose DiskManager is not running
+    replica = replicas.get(0);
+    id = replica.getPartitionId();
+    storageManager.getDiskManager(id).shutdown();
+    assertFalse("Shutdown should fail on given store whose DiskManager is not running",
+        storageManager.shutdownBlobStore(id));
     // test invalid partition
     replica = invalidPartitionReplicas.get(0);
     id = replica.getPartitionId();
