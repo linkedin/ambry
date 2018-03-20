@@ -266,7 +266,7 @@ class DiskManager {
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
    */
   boolean shutdownBlobStore(PartitionId id) {
-    BlobStore store = stores.get(id);//(BlobStore) getStore(id);
+    BlobStore store = stores.get(id);
     if (store == null || !running) {
       return false;
     } else if (!store.isStarted()) {

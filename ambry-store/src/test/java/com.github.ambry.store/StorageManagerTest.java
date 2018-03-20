@@ -167,17 +167,14 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
-    ReplicaId replica = null;
     PartitionId id = null;
     storageManager.start();
     // shutdown all the replicas first
-    for (int i = 0; i < replicas.size(); i++) {
-      replica = replicas.get(i);
+    for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
       assertTrue("Shutdown should succeed on given store", storageManager.shutdownBlobStore(id));
     }
-
-    replica = replicas.get(0);
+    ReplicaId replica = replicas.get(0);
     id = replica.getPartitionId();
     // test start a store successfully
     assertTrue("Start should succeed on given store", storageManager.startBlobStore(id));
@@ -207,16 +204,14 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
-    ReplicaId replica = null;
     PartitionId id = null;
     storageManager.start();
-    for (int i = 0; i < replicas.size(); i++) {
-      replica = replicas.get(i);
+    for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
       assertNotNull("DiskManager should not be for valid replica", storageManager.getDiskManager(id));
     }
     // test invalid partition
-    replica = invalidPartitionReplicas.get(0);
+    ReplicaId replica = invalidPartitionReplicas.get(0);
     id = replica.getPartitionId();
     assertNull("DiskManager should be null for invalid replica", storageManager.getDiskManager(id));
     shutdownAndAssertStoresInaccessible(storageManager, replicas);

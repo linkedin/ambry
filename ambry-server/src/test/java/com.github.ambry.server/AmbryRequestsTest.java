@@ -397,8 +397,7 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.returnValueOfStartingBlobStore = true;
     // test start BlobStore with runtime exception
-    adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     storageManager.exceptionToThrowOnStartingBlobStore = new IllegalStateException();
@@ -406,8 +405,7 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.exceptionToThrowOnStartingBlobStore = null;
     // test enable replication failure
-    adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     replicationManager.controlReplicationReturnVal = false;
@@ -415,8 +413,7 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     replicationManager.controlReplicationReturnVal = true;
     // test enable compaction failure
-    adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
     storageManager.returnValueOfControllingCompaction = false;
