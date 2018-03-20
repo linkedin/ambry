@@ -337,7 +337,7 @@ public class AmbryRequestsTest {
    * @throws IOException
    */
   @Test
-  public void stopBlobStoreSuccessTest() throws InterruptedException, IOException {
+  public void controlBlobStoreSuccessTest() throws InterruptedException, IOException {
     List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
@@ -356,15 +356,85 @@ public class AmbryRequestsTest {
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    // test APIs are called in the process of stopping BlobStore
-    assertEquals("Partition disabled for compaction not as expected", id, storageManager.compactionDisabledPartitionId);
+    // verify APIs are called in the process of stopping BlobStore
+    assertEquals("Partition disabled for compaction not as expected", id,
+        storageManager.compactionControlledPartitionId);
     assertEquals("Origins list should be empty", true, replicationManager.originsVal.isEmpty());
     assertEquals("Replication on given BlobStore should be disabled", false, replicationManager.enableVal);
     assertEquals("Partition shutdown not as expected", id, storageManager.shutdownPartitionId);
+    // start BlobStore
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    BlobStoreControlAdminRequest startBlobStoreAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
+    response = sendRequestGetResponse(startBlobStoreAdminRequest, ServerErrorCode.No_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    // verify APIs are called in the process of starting BlobStore
+    assertEquals("Partition started not as expected", id, storageManager.startedPartitionId);
+    assertEquals("Replication on given BlobStore should be enabled", true, replicationManager.enableVal);
+    assertEquals("Partition enabled for compaction not as expected", id,
+        storageManager.compactionControlledPartitionId);
   }
 
   /**
-   * Tests for the response received on a {@link BlobStoreControlAdminRequest} for different failure cases
+   * Tests for the startBlobStore response received on a {@link BlobStoreControlAdminRequest} for different failure cases
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void startBlobStoreFailureTest() throws InterruptedException, IOException {
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    PartitionId id = partitionIds.get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = UtilsTest.getRandomString(10);
+    short numReplicasCaughtUpPerPartition = 3;
+    // test start BlobStore failure
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    BlobStoreControlAdminRequest blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
+    storageManager.returnValueOfStartingBlobStore = false;
+    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    storageManager.returnValueOfStartingBlobStore = true;
+    // test start BlobStore with runtime exception
+    adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
+    storageManager.exceptionToThrowOnStartingBlobStore = new IllegalStateException();
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    storageManager.exceptionToThrowOnStartingBlobStore = null;
+    // test enable replication failure
+    adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
+    replicationManager.controlReplicationReturnVal = false;
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    replicationManager.controlReplicationReturnVal = true;
+    // test enable compaction failure
+    adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
+    storageManager.returnValueOfControllingCompaction = false;
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    storageManager.returnValueOfControllingCompaction = true;
+    // test enable compaction with runtime exception
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, true, adminRequest);
+    storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    storageManager.exceptionToThrowOnControllingCompaction = null;
+  }
+
+  /**
+   * Tests for the stopBlobStore response received on a {@link BlobStoreControlAdminRequest} for different failure cases
    * @throws InterruptedException
    * @throws IOException
    */
@@ -374,20 +444,13 @@ public class AmbryRequestsTest {
     PartitionId id = partitionIds.get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
-    short numReplicasCaughtUpPerPartition = -1;
-    // test invalid numReplicasCaughtUpPerPartition
+    short numReplicasCaughtUpPerPartition = 3;
+    // test partition unknown
     AdminRequest adminRequest =
-        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, null, correlationId, clientId);
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Bad_Request);
-    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    // test partition unknown
-    numReplicasCaughtUpPerPartition = 3;
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, null, correlationId, clientId);
-    blobStoreControlAdminRequest =
-        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Partition_Unknown);
+    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Partition_Unknown);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test validate request failure
     storageManager.returnNullStore = true;
@@ -397,22 +460,30 @@ public class AmbryRequestsTest {
     response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Disk_Unavailable);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.returnNullStore = false;
+    // test invalid numReplicasCaughtUpPerPartition
+    numReplicasCaughtUpPerPartition = -1;
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
+    blobStoreControlAdminRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
+    response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Bad_Request);
+    assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
+    numReplicasCaughtUpPerPartition = 3;
     // test disable compaction failure
     adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    storageManager.returnValueOfDisablingCompaction = false;
+    storageManager.returnValueOfControllingCompaction = false;
     response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    storageManager.returnValueOfDisablingCompaction = true;
+    storageManager.returnValueOfControllingCompaction = true;
     // test disable compaction with runtime exception
     adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    storageManager.exceptionToThrowOnDisablingCompaction = new IllegalStateException();
+    storageManager.exceptionToThrowOnControllingCompaction = new IllegalStateException();
     response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    storageManager.exceptionToThrowOnDisablingCompaction = null;
+    storageManager.exceptionToThrowOnControllingCompaction = null;
     // test disable replication failure
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
@@ -442,13 +513,13 @@ public class AmbryRequestsTest {
     response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test shutdown BlobStore with runtime exception
-    storageManager.exceptionToThrowOnShuttingdownBlobStore = new IllegalStateException();
+    storageManager.exceptionToThrowOnShuttingDownBlobStore = new IllegalStateException();
     adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, id, correlationId, clientId);
     blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
     response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Unknown_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
-    storageManager.exceptionToThrowOnShuttingdownBlobStore = null;
+    storageManager.exceptionToThrowOnShuttingDownBlobStore = null;
   }
   // helpers
 
@@ -922,37 +993,49 @@ public class AmbryRequestsTest {
      */
     RuntimeException exceptionToThrowOnSchedulingCompaction = null;
     /**
-     * If non-null, the given exception is thrown when {@link #disableCompactionForBlobStore(PartitionId)} is called.
+     * If non-null, the given exception is thrown when {@link #controlCompactionForBlobStore(PartitionId, boolean)} is called.
      */
-    RuntimeException exceptionToThrowOnDisablingCompaction = null;
+    RuntimeException exceptionToThrowOnControllingCompaction = null;
     /**
      * If non-null, the given exception is thrown when {@link #shutdownBlobStore(PartitionId)} is called.
      */
-    RuntimeException exceptionToThrowOnShuttingdownBlobStore = null;
+    RuntimeException exceptionToThrowOnShuttingDownBlobStore = null;
+    /**
+     * If non-null, the given exception is thrown when {@link #startBlobStore(PartitionId)} is called.
+     */
+    RuntimeException exceptionToThrowOnStartingBlobStore = null;
     /**
      * The return value for a call to {@link #scheduleNextForCompaction(PartitionId)}.
      */
     boolean returnValueOfSchedulingCompaction = true;
     /**
-     * The return value for a call to {@link #disableCompactionForBlobStore(PartitionId)}.
+     * The return value for a call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}.
      */
-    boolean returnValueOfDisablingCompaction = true;
+    boolean returnValueOfControllingCompaction = true;
     /**
      * The return value for a call to {@link #shutdownBlobStore(PartitionId)}.
      */
     boolean returnValueOfShutdownBlobStore = true;
     /**
+     * The return value for a call to {@link #startBlobStore(PartitionId)}.
+     */
+    boolean returnValueOfStartingBlobStore = true;
+    /**
      * The {@link PartitionId} that was provided in the call to {@link #scheduleNextForCompaction(PartitionId)}
      */
     PartitionId compactionScheduledPartitionId = null;
     /**
-     * The {@link PartitionId} that was provided in the call to {@link #disableCompactionForBlobStore(PartitionId)}
+     * The {@link PartitionId} that was provided in the call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}
      */
-    PartitionId compactionDisabledPartitionId = null;
+    PartitionId compactionControlledPartitionId = null;
     /**
      * The {@link PartitionId} that was provided in the call to {@link #shutdownBlobStore(PartitionId)}
      */
     PartitionId shutdownPartitionId = null;
+    /**
+     * The {@link PartitionId} that was provided in the call to {@link #startBlobStore(PartitionId)}
+     */
+    PartitionId startedPartitionId = null;
 
     MockStorageManager() throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
@@ -974,21 +1057,30 @@ public class AmbryRequestsTest {
     }
 
     @Override
-    public boolean disableCompactionForBlobStore(PartitionId id) {
-      if (exceptionToThrowOnDisablingCompaction != null) {
-        throw exceptionToThrowOnDisablingCompaction;
+    public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
+      if (exceptionToThrowOnControllingCompaction != null) {
+        throw exceptionToThrowOnControllingCompaction;
       }
-      compactionDisabledPartitionId = id;
-      return returnValueOfDisablingCompaction;
+      compactionControlledPartitionId = id;
+      return returnValueOfControllingCompaction;
     }
 
     @Override
     public boolean shutdownBlobStore(PartitionId id) {
-      if (exceptionToThrowOnShuttingdownBlobStore != null) {
-        throw exceptionToThrowOnShuttingdownBlobStore;
+      if (exceptionToThrowOnShuttingDownBlobStore != null) {
+        throw exceptionToThrowOnShuttingDownBlobStore;
       }
       shutdownPartitionId = id;
       return returnValueOfShutdownBlobStore;
+    }
+
+    @Override
+    public boolean startBlobStore(PartitionId id) {
+      if (exceptionToThrowOnStartingBlobStore != null) {
+        throw exceptionToThrowOnStartingBlobStore;
+      }
+      startedPartitionId = id;
+      return returnValueOfStartingBlobStore;
     }
 
     void resetStore() {

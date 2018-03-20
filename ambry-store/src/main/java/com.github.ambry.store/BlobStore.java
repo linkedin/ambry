@@ -532,6 +532,7 @@ class BlobStore implements Store {
       try {
         logger.info("Store : " + dataDir + " shutting down");
         blobStoreStats.close();
+        metrics.deregisterMetrics(storeId);
         compactor.close(30);
         index.close();
         log.close();

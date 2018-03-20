@@ -176,6 +176,13 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"), currentSegmentCount);
   }
 
+  boolean deregisterIndexGauges(String storeId) {
+    String prefix = storeId + SEPERATOR;
+    return registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed")) && registry.remove(
+        MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity")) && registry.remove(
+        MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"));
+  }
+
   void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
     String prefix = storeId + SEPERATOR;
     Gauge<Long> currentHardDeleteProgress = hardDeleter::getProgress;
@@ -195,10 +202,27 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
   }
 
+  boolean deregisterHardDeleteMetric(String storeId) {
+    String prefix = storeId + SEPERATOR;
+    return registry.remove(MetricRegistry.name(PersistentIndex.class, prefix + "CurrentHardDeleteProgress")) && registry
+        .remove(MetricRegistry.name(Log.class, prefix + "PercentageHardDeleteCompleted")) && registry.remove(
+        MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteThreadRunning")) && registry.remove(
+        MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"));
+  }
+
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress) {
     String prefix = storeId + SEPERATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
         compactionInProgressGauge);
+  }
+
+  boolean deregisterCompactorGauges(String storeId) {
+    String prefix = storeId + SEPERATOR;
+    return registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
+  }
+
+  boolean deregisterMetrics(String storeId) {
+    return deregisterIndexGauges(storeId) && deregisterHardDeleteMetric(storeId) && deregisterCompactorGauges(storeId);
   }
 }
