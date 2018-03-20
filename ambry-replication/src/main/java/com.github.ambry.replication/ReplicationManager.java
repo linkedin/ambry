@@ -508,10 +508,7 @@ public class ReplicationManager {
    * Partitions the list of data nodes between given set of replica threads for the given DC
    */
   private void assignReplicasToThreadPool() {
-    Iterator<Map.Entry<String, DataNodeRemoteReplicaInfos>> mapIterator =
-        dataNodeRemoteReplicaInfosPerDC.entrySet().iterator();
-    while (mapIterator.hasNext()) {
-      Map.Entry<String, DataNodeRemoteReplicaInfos> mapEntry = mapIterator.next();
+    for (Map.Entry<String, DataNodeRemoteReplicaInfos> mapEntry : dataNodeRemoteReplicaInfosPerDC.entrySet()) {
       String datacenter = mapEntry.getKey();
       DataNodeRemoteReplicaInfos dataNodeRemoteReplicaInfos = mapEntry.getValue();
       Set<DataNodeId> dataNodesToReplicate = dataNodeRemoteReplicaInfos.getDataNodeIds();
@@ -520,10 +517,10 @@ public class ReplicationManager {
       if (replicaThreadCount <= 0) {
         logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {} ",
             datacenter);
-        return;
+        continue;
       } else if (dataNodesCount == 0) {
         logger.warn("Number of nodes to replicate from is 0, not starting any replica threads for {} ", datacenter);
-        return;
+        continue;
       }
 
       // Divide the nodes between the replica threads if the number of replica threads is less than or equal to the
