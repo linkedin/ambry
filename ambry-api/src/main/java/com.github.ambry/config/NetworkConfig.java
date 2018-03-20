@@ -19,13 +19,6 @@ package com.github.ambry.config;
 public class NetworkConfig {
 
   /**
-   * The number of network threads that the server uses for handling network requests
-   */
-  @Config("num.network.threads")
-  @Default("3")
-  public final int numNetworkThreads;
-
-  /**
    * The number of io threads that the server uses for carrying out network requests
    */
   @Config("num.io.threads")
@@ -77,7 +70,6 @@ public class NetworkConfig {
 
   public NetworkConfig(VerifiableProperties verifiableProperties) {
 
-    numNetworkThreads = verifiableProperties.getIntInRange("num.network.threads", 3, 1, Integer.MAX_VALUE);
     numIoThreads = verifiableProperties.getIntInRange("num.io.threads", 8, 1, Integer.MAX_VALUE);
     port = verifiableProperties.getInt("port", 6667);
     hostName = verifiableProperties.getString("host.name", "localhost");
