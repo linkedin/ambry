@@ -885,8 +885,8 @@ public class RestUtilsTest {
           RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
       assertTrue("Key " + keyInOutputMap + " not found in input user metadata",
           userMetadataMap.containsKey(keyInOutputMap));
-      assertTrue("Values didn't match for key " + key,
-          inputUserMetadata.get(key).equals(userMetadataMap.get(keyInOutputMap)));
+      assertEquals("Values didn't match for key " + key, inputUserMetadata.get(key),
+          userMetadataMap.get(keyInOutputMap));
     }
   }
 
