@@ -317,7 +317,7 @@ public class RestUtils {
       int sizeToAllocate = 0;
       for (Map.Entry<String, Object> entry : args.entrySet()) {
         String key = entry.getKey();
-        if (key.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
+        if (key.toLowerCase().startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
           // key size
           sizeToAllocate += 4;
           String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
