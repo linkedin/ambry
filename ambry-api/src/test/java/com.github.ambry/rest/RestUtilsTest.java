@@ -29,6 +29,7 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
@@ -240,7 +241,7 @@ public class RestUtilsTest {
    */
   @Test
   public void getUserMetadataTest() throws Exception {
-    byte[] usermetadata = RestUtils.buildUsermetadata(new HashMap<String, Object>());
+    byte[] usermetadata = RestUtils.buildUsermetadata(new HashMap<>());
     assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
   }
 
@@ -256,6 +257,9 @@ public class RestUtilsTest {
     Map<String, String> userMetadata = new HashMap<String, String>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+    // changed cases
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toUpperCase() + "KeY3", "value3");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy4", "value4");
     setUserMetadataHeaders(headers, userMetadata);
     verifyUserMetadataConstructionSuccess(headers, userMetadata);
   }
@@ -286,31 +290,39 @@ public class RestUtilsTest {
     setAmbryHeadersForPut(headers, Long.toString(RANDOM.nextInt(10000)), generateRandomString(10),
         Container.DEFAULT_PUBLIC_CONTAINER, "image/gif", generateRandomString(10));
     Map<String, String> userMetadata = new HashMap<String, String>();
-    String key1 = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1";
-    userMetadata.put(key1, "value1");
+    List<String> keysToCheck = new ArrayList<>();
+    String key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1";
+    userMetadata.put(key, "value1");
+    keysToCheck.add(key);
     // no valid prefix
     userMetadata.put("key2", "value2_1");
     // valid prefix as suffix
     userMetadata.put("key3" + RestUtils.Headers.USER_META_DATA_HEADER_PREFIX, "value3");
     // empty value
-    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key4", "");
+    key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key4";
+    userMetadata.put(key, "");
+    keysToCheck.add(key);
+    // different casing
+    key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toUpperCase() + "KeY5";
+    userMetadata.put(key, "value5");
+    keysToCheck.add(key);
+    key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.toLowerCase() + "kEy6";
+    userMetadata.put(key, "value6");
+    keysToCheck.add(key);
     setUserMetadataHeaders(headers, userMetadata);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
     byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
 
-    // key1, output should be same as input
-    String key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1";
-    assertTrue(key + " not found in user metadata map ", userMetadataMap.containsKey(key));
-    assertEquals("Value for " + key + " didnt match input value ", userMetadata.get(key), userMetadataMap.get(key));
-
-    // key4 should match
-    key = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key4";
-    assertTrue(key + " not found in user metadata map ", userMetadataMap.containsKey(key));
-    assertEquals("Value for " + key + " didnt match input value ", userMetadata.get(key), userMetadataMap.get(key));
-
-    assertEquals("Size of map unexpected ", 2, userMetadataMap.size());
+    assertEquals("Size of map unexpected ", keysToCheck.size(), userMetadataMap.size());
+    for (String keyToCheck : keysToCheck) {
+      String keyInOutputMap = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + keyToCheck.substring(
+          RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
+      assertTrue(keyInOutputMap + " not found in user metadata map", userMetadataMap.containsKey(keyInOutputMap));
+      assertEquals("Value for " + keyToCheck + " didnt match input value", userMetadata.get(keyToCheck),
+          userMetadataMap.get(keyInOutputMap));
+    }
   }
 
   /**
@@ -868,12 +880,13 @@ public class RestUtilsTest {
     byte[] userMetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadata);
     assertEquals("Total number of entries doesnt match ", inputUserMetadata.size(), userMetadataMap.size());
-    for (String key : userMetadataMap.keySet()) {
-      boolean keyFromInputMap = inputUserMetadata.containsKey(key);
-      assertTrue("Key " + key + " not found in input user metadata", keyFromInputMap);
-      assertTrue("Values didn't match for key " + key + ", value from input map value " + inputUserMetadata.get(key)
-              + ", and output map value " + userMetadataMap.get(key),
-          inputUserMetadata.get(key).equals(userMetadataMap.get(key)));
+    for (String key : inputUserMetadata.keySet()) {
+      String keyInOutputMap = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + key.substring(
+          RestUtils.Headers.USER_META_DATA_HEADER_PREFIX.length());
+      assertTrue("Key " + keyInOutputMap + " not found in input user metadata",
+          userMetadataMap.containsKey(keyInOutputMap));
+      assertEquals("Values didn't match for key " + key, inputUserMetadata.get(key),
+          userMetadataMap.get(keyInOutputMap));
     }
   }
 
