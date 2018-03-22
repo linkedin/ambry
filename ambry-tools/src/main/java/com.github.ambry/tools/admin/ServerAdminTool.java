@@ -118,7 +118,7 @@ public class ServerAdminTool implements Closeable {
     /**
      * The type of operation.
      * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl,ReplicationControl,
-     * CatchupStatus
+     * CatchupStatus,BlobStoreControl
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
@@ -172,8 +172,8 @@ public class ServerAdminTool implements Closeable {
     /**
      * Comma separated list of the string representations of the partitions to operate on (if applicable).
      * Some requests (TriggerCompaction) will not work with an empty list but some requests treat empty lists as "all
-     * partitions" (RequestControl,ReplicationControl,CatchupStatus).
-     * Applicable for: TriggerCompaction,RequestControl,ReplicationControl,CatchupStatus
+     * partitions" (RequestControl,ReplicationControl,CatchupStatus,BlobStoreControl).
+     * Applicable for: TriggerCompaction,RequestControl,ReplicationControl,CatchupStatus,BlobStoreControl
      */
     @Config("partition.ids")
     @Default("")
@@ -214,7 +214,7 @@ public class ServerAdminTool implements Closeable {
     /**
      * The number of replicas of each partition that have to be within "acceptable.lag.in.bytes" in case of catchup
      * status requests. The min of this value or the total count of replicas -1 is considered.
-     * Applicable for: CatchupStatus
+     * Applicable for: CatchupStatus,BlobStoreControl
      */
     @Config("num.replicas.caught.up.per.partition")
     @Default("Short.MAX_VALUE")
@@ -689,7 +689,7 @@ public class ServerAdminTool implements Closeable {
    * @throws IOException
    * @throws TimeoutException
    */
-  public ServerErrorCode controlBlobStore(DataNodeId dataNodeId, PartitionId partitionId,
+  private ServerErrorCode controlBlobStore(DataNodeId dataNodeId, PartitionId partitionId,
       short numReplicasCaughtUpPerPartition, boolean enable) throws IOException, TimeoutException {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, correlationId.incrementAndGet(),
