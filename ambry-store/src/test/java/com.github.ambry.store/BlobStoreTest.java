@@ -578,25 +578,15 @@ public class BlobStoreTest {
   }
 
   /**
-   * Test DELETE with right accountId and containerId.
-   * If BlobId version is 1, accountId and containerId validation is skipped.
+   * Test DELETE with valid accountId and containerId.
    */
   @Test
   public void deleteAuthorizationSuccessTest() throws Exception {
     short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1};
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
     for (int i = 0; i < accountIds.length; i++) {
-      // put and get version 1 blobId, acoountId and containerId check is skipped.
-      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short) 1, accountIds[i], containerIds[i]).get(0);
-      delete(new MockId(mockId.getID(), (short) 1, Utils.getRandomShort(TestUtils.RANDOM),
-          Utils.getRandomShort(TestUtils.RANDOM)));
-      verifyDeleteFailure(mockId, StoreErrorCodes.ID_Deleted);
-    }
-
-    for (int i = 0; i < accountIds.length; i++) {
-      // put and get version 3 blobId, accountId and containerId check is skipped.
-      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short) 3, accountIds[i], containerIds[i]).get(0);
-      delete(new MockId(mockId.getID(), (short) 3, accountIds[i], containerIds[i]));
+      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
+      delete(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId()));
       verifyDeleteFailure(mockId, StoreErrorCodes.ID_Deleted);
     }
   }
@@ -606,39 +596,29 @@ public class BlobStoreTest {
    */
   @Test
   public void deleteAuthorizationFailureTest() throws Exception {
-    // put and get a version 3 blobId, accountId and contaienrId match are required.
     MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     short[] accountIds =
         {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
         TestUtils.RANDOM), mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
-      verifyDeleteFailure(new MockId(mockId.getID(), (short) 3, accountIds[i], containerIds[i]),
+      verifyDeleteFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
           StoreErrorCodes.Authorization_Failure);
     }
   }
 
   /**
-   * Test GET with right accountId and containerId.
-   * If BlobId version is 1, accountId and containerId validation is skipped.
+   * Test GET with valid accountId and containerId.
    */
   @Test
   public void getAuthorizationSuccessTest() throws Exception {
     short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1};
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
     for (int i = 0; i < accountIds.length; i++) {
-      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short) 3, accountIds[i], containerIds[i]).get(0);
+      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
       StoreInfo storeinfo =
-          store.get(Collections.singletonList(new MockId(mockId.getID(), (short) 3, accountIds[i], containerIds[i])),
+          store.get(Collections.singletonList(new MockId(mockId.getID(), accountIds[i], containerIds[i])),
               EnumSet.noneOf(StoreGetOptions.class));
-      checkStoreInfo(storeinfo, Collections.singleton(mockId));
-    }
-    for (int i = 0; i < accountIds.length; i++) {
-      MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, (short) 1, accountIds[i], containerIds[i]).get(0);
-      StoreInfo storeinfo = store.get(Collections.singletonList(
-          new MockId(mockId.getID(), (short) 1, Utils.getRandomShort(TestUtils.RANDOM),
-              Utils.getRandomShort(TestUtils.RANDOM))), EnumSet.noneOf(StoreGetOptions.class));
-
       checkStoreInfo(storeinfo, Collections.singleton(mockId));
     }
   }
@@ -648,14 +628,13 @@ public class BlobStoreTest {
    */
   @Test
   public void getAuthorizationFailureTest() throws Exception {
-    // put and get a version 3 blobId
     MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     short[] accountIds =
         {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
         TestUtils.RANDOM), mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
-      verifyGetFailure(new MockId(mockId.getID(), (short) 3, accountIds[i], containerIds[i]),
+      verifyGetFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
           StoreErrorCodes.Authorization_Failure);
     }
   }
@@ -845,20 +824,19 @@ public class BlobStoreTest {
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
   private MockId getUniqueId() {
-    return getUniqueId((short) 3, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
+    return getUniqueId(Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM));
   }
 
   /**
    * Get a unique MockId with specified accountId and containerId.
-   * @param version the version of {@link MockId}.
    * @param accountId the accountId of the MockId.
    * @param containerId the containerId of the MockId.
    * @return a {@link MockId} that is unique and has not been generated before in this run.
    */
-  private MockId getUniqueId(short version, short accountId, short containerId) {
+  private MockId getUniqueId(short accountId, short containerId) {
     MockId id;
     do {
-      id = new MockId(UtilsTest.getRandomString(10), version, accountId, containerId);
+      id = new MockId(UtilsTest.getRandomString(10), accountId, containerId);
     } while (generatedKeys.contains(id));
     generatedKeys.add(id);
     return id;
@@ -873,7 +851,7 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private List<MockId> put(int count, long size, long expiresAtMs) throws StoreException {
-    return put(count, size, expiresAtMs, (short) 3, Utils.getRandomShort(TestUtils.RANDOM),
+    return put(count, size, expiresAtMs, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM));
   }
 
@@ -882,13 +860,12 @@ public class BlobStoreTest {
    * @param count the number of blobs to PUT.
    * @param size the size of each blob.
    * @param expiresAtMs the expiry time (in ms) of each blob.
-   * @param version the version of {@link MockId}.
    * @param accountId the accountId of each blob.
    * @param containerId the containerId of each blob.
    * @return the {@link MockId}s of the blobs created.
    * @throws StoreException
    */
-  private List<MockId> put(int count, long size, long expiresAtMs, short version, short accountId, short containerId)
+  private List<MockId> put(int count, long size, long expiresAtMs, short accountId, short containerId)
       throws StoreException {
     if (count <= 0) {
       throw new IllegalArgumentException("Number of put entries to add cannot be <= 0");
@@ -897,7 +874,7 @@ public class BlobStoreTest {
     List<MessageInfo> infos = new ArrayList<>(count);
     List<ByteBuffer> buffers = new ArrayList<>(count);
     for (int i = 0; i < count; i++) {
-      MockId id = getUniqueId(version, accountId, containerId);
+      MockId id = getUniqueId(accountId, containerId);
       long crc = random.nextLong();
       MessageInfo info = new MessageInfo(id, size, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
           Utils.Infinite_Time);

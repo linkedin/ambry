@@ -66,14 +66,6 @@ class MockId extends StoreKey {
     return getID();
   }
 
-  public short getAccountId() {
-    return -1;
-  }
-
-  public short getContainerId() {
-    return -1;
-  }
-
   @Override
   public boolean isAccountContainerMatch(short accountId, short containerId) {
     return true;
