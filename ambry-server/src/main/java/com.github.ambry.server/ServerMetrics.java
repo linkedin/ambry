@@ -418,4 +418,24 @@ public class ServerMetrics {
       getLargeBlobRequestRate.mark();
     }
   }
+
+  public void updateGetBlobProcessingTimeBySize(long blobSize, long processingTime) {
+    if (blobSize <= ServerMetrics.smallBlob) {
+      getSmallBlobProcessingTimeInMs.update(processingTime);
+    } else if (blobSize <= ServerMetrics.mediumBlob) {
+      getMediumBlobProcessingTimeInMs.update(processingTime);
+    } else {
+      getLargeBlobProcessingTimeInMs.update(processingTime);
+    }
+  }
+
+  public void updatePutBlobProcessingTimeBySize(long blobSize, long processingTime) {
+    if (blobSize <= ServerMetrics.smallBlob) {
+      putSmallBlobProcessingTimeInMs.update(processingTime);
+    } else if (blobSize <= ServerMetrics.mediumBlob) {
+      putMediumBlobProcessingTimeInMs.update(processingTime);
+    } else {
+      putLargeBlobProcessingTimeInMs.update(processingTime);
+    }
+  }
 }
