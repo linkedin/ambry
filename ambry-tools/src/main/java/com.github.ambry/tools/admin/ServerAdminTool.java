@@ -476,7 +476,7 @@ public class ServerAdminTool implements Closeable {
    * @param dataNodeId the {@link DataNodeId} to send the request to.
    * @param partitionId the partition id  on which the operation will take place. Can be {@code null}.
    * @param origins the names of the datacenters from which replication should be controlled.
-   * @param enable the enable (or disable) status required for {@code toControl}.
+   * @param enable the enable (or disable) status required for replication control.
    * @throws IOException
    * @throws TimeoutException
    */
@@ -501,7 +501,7 @@ public class ServerAdminTool implements Closeable {
    * @param dataNodeId the {@link DataNodeId} to send the request to.
    * @param partitionId the partition id  on which the operation will take place. Can be {@code null}.
    * @param numReplicasCaughtUpPerPartition the minimum number of peers should catch up with the partition.
-   * @param enable the enable (or disable) status required for {@code toControl}.
+   * @param enable the enable (or disable) status required for BlobStore control.
    * @throws IOException
    * @throws TimeoutException
    */
@@ -511,9 +511,11 @@ public class ServerAdminTool implements Closeable {
     ServerErrorCode errorCode =
         serverAdminTool.controlBlobStore(dataNodeId, partitionId, numReplicasCaughtUpPerPartition, enable);
     if (errorCode == ServerErrorCode.No_Error) {
-      LOGGER.info("Enable state of replication from ");
+      LOGGER.info("Enable state of controlling BlobStore from has been set to {} for {} on {}", enable, partitionId,
+          dataNodeId);
     } else {
-      LOGGER.error("From {}, received server error code {} for request to set enable state {} for replication for {}",
+      LOGGER.error(
+          "From {}, received server error code {} for request to set enable state {} for controlling BlobStore for {}",
           dataNodeId, errorCode, enable, partitionId);
     }
   }
@@ -679,12 +681,13 @@ public class ServerAdminTool implements Closeable {
   }
 
   /**
-   * Sends a {@link BlobStoreControlAdminRequest} to start or stop a partition from {@code partitionIdStr}
-   * in {@code dataNodeId}.
+   * Sends a {@link BlobStoreControlAdminRequest} to start or stop a store associated with {@code partitionId}
+   * on {@code dataNodeId}.
    * @param dataNodeId the {@link DataNodeId} to contact.
    * @param partitionId the {@link PartitionId} to start or stop.
-   * @param numReplicasCaughtUpPerPartition the minimum number of peers should catch up with partition.
-   * @param enable the enable (or disable) status required for .
+   * @param numReplicasCaughtUpPerPartition the minimum number of peers should catch up with partition if the store is
+   *                                        being stopped
+   * @param enable the enable (or disable) status required for BlobStore control.
    * @return the {@link ServerErrorCode} that is returned.
    * @throws IOException
    * @throws TimeoutException
