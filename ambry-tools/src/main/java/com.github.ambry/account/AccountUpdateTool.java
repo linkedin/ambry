@@ -23,6 +23,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -105,6 +106,13 @@ public class AccountUpdateTool {
   private static final int ZK_CLIENT_SESSION_TIMEOUT_MS = 20000;
 
   /**
+   * The different operations supported by AccountUpdateTool.
+   */
+  private enum Operation {
+    UpdateEntireJson, UpdateEncryptionFlag, UpdateCacheability
+  }
+
+  /**
    * @param args takes in three mandatory arguments: the path of the json file for the accounts to create/update,
    *             the address of the {@code ZooKeeper} server, and the root path for the {@link org.apache.helix.store.HelixPropertyStore}
    *             that will be used for storing account metadata and notifications.
@@ -116,10 +124,23 @@ public class AccountUpdateTool {
   public static void main(String args[]) throws Exception {
     OptionParser parser = new OptionParser();
 
+    ArgumentAcceptingOptionSpec<String> typeOfOperationOpt =
+        parser.accepts("typeOfOperation", "Type of operation. Supported operations: UpdateEntireJson, EnableEncryption")
+            .withRequiredArg()
+            .describedAs("typeOfOperation")
+            .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> propertyKeyValueInfoOpt = parser.accepts("propertyKeyValueInfo",
+        "Update Account and container property key value "
+            + "Format \"accountName1:containerName1:[value],accountName2:containerName2:[value]\"")
+        .withOptionalArg()
+        .describedAs("propertyKeyValueInfo")
+        .ofType(String.class);
+
     ArgumentAcceptingOptionSpec<String> accountJsonFilePathOpt = parser.accepts("accountJsonPath",
         "The path to the account json file. The json file must be in the form of a json array, with each"
             + "entry to be an account in its json form.")
-        .withRequiredArg()
+        .withOptionalArg()
         .describedAs("account_json_file_path")
         .ofType(String.class);
 
@@ -168,23 +189,120 @@ public class AccountUpdateTool {
       parser.printHelpOn(System.out);
       System.exit(0);
     }
+    Operation typeOfOperation = Operation.valueOf(options.valueOf(typeOfOperationOpt));
     String accountJsonFilePath = options.valueOf(accountJsonFilePathOpt);
+    String propertyKeyValueInfo = options.valueOf(propertyKeyValueInfoOpt);
     String storePath = options.valueOf(storePathOpt);
     String zkServer = options.valueOf(zkServerOpt);
     Integer zkConnectionTimeoutMs = options.valueOf(zkConnectionTimeoutMsOpt);
     Integer zkSessionTimeoutMs = options.valueOf(zkSessionTimeoutMsOpt);
     Short containerJsonVersion = options.valueOf(containerJsonVersionOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
-    listOpt.add(accountJsonFilePathOpt);
     listOpt.add(zkServerOpt);
     ToolUtils.ensureOrExit(listOpt, options, parser);
     try {
-      updateAccount(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs,
-          containerJsonVersion);
+      switch (typeOfOperation) {
+        case UpdateEntireJson:
+          updateAccount(accountJsonFilePath, zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs,
+              containerJsonVersion);
+          break;
+        case UpdateEncryptionFlag:
+          updateAccountForEncryption(propertyKeyValueInfo, zkServer, storePath, zkConnectionTimeoutMs,
+              zkSessionTimeoutMs, containerJsonVersion);
+          break;
+        case UpdateCacheability:
+          updateAccountForCacheability(propertyKeyValueInfo, zkServer, storePath, zkConnectionTimeoutMs,
+              zkSessionTimeoutMs, containerJsonVersion);
+          break;
+      }
     } catch (Exception e) {
       System.err.println("Updating accounts failed with exception: " + e);
       e.printStackTrace();
     }
+  }
+
+  /**
+   * Performs the updating accounts operation.
+   * @param enableEncryptionFor String representation of list of triplets of {accountName:ContainerName:EncryptFlagValue}
+   *                            for which encryption needs to be update
+   * @param zkServer The {@code ZooKeeper} server address to connect.
+   * @param storePath The root path on the {@code ZooKeeper} for account data.
+   * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param containerJsonVersion The {@link Container} JSON version to write in.
+   * @throws Exception
+   */
+  private static void updateAccountForEncryption(String enableEncryptionFor, String zkServer, String storePath,
+      int zkConnectionTimeoutMs, int zkSessionTimeoutMs, short containerJsonVersion) throws Exception {
+    Container.setCurrentJsonVersion(containerJsonVersion);
+    long startTime = System.currentTimeMillis();
+    AccountService accountService =
+        getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
+    String[] accountContainerPairs = enableEncryptionFor.split(",");
+    for (String accountContainerPair : accountContainerPairs) {
+      String[] accountAndContainerName = accountContainerPair.split(":");
+      Account account = accountService.getAccountByName(accountAndContainerName[0]);
+      if (account != null && account.getContainerByName(accountAndContainerName[1]) != null) {
+        Container container = account.getContainerByName(accountAndContainerName[1]);
+        System.out.println(account.getName() + ":" + container.getName() + " to be updated for encryption");
+        System.out.println("Old account value : " + accountService.getAccountByName(account.getName()).toString());
+        Container updatedContainer =
+            new ContainerBuilder(container).setEncrypted(Boolean.valueOf(accountAndContainerName[2])).build();
+        Account updatedAccount = new AccountBuilder(account).addOrUpdateContainer(updatedContainer).build();
+        System.out.println("To be updated account value : " + updatedAccount.toString());
+        List<Account> accountsToUpdate = new ArrayList<>();
+        accountsToUpdate.add(updatedAccount);
+        if (accountService.updateAccounts(accountsToUpdate)) {
+          System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
+              System.currentTimeMillis() - startTime) + " ms");
+        } else {
+          throw new Exception("Updating accounts failed with unknown reason.");
+        }
+      }
+    }
+    accountService.close();
+  }
+
+  /**
+   * Performs the updating accounts operation.
+   * @param setCacheabilityFor String representation of list of triplets of {accountName:ContainerName:EncryptFlagValue}
+   *                            for which encryption needs to be update
+   * @param zkServer The {@code ZooKeeper} server address to connect.
+   * @param storePath The root path on the {@code ZooKeeper} for account data.
+   * @param zkConnectionTimeoutMs The connection timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param zkSessionTimeoutMs The session timeout in millisecond for connecting {@code ZooKeeper} server.
+   * @param containerJsonVersion The {@link Container} JSON version to write in.
+   * @throws Exception
+   */
+  private static void updateAccountForCacheability(String setCacheabilityFor, String zkServer, String storePath,
+      int zkConnectionTimeoutMs, int zkSessionTimeoutMs, short containerJsonVersion) throws Exception {
+    Container.setCurrentJsonVersion(containerJsonVersion);
+    long startTime = System.currentTimeMillis();
+    AccountService accountService =
+        getHelixAccountService(zkServer, storePath, zkConnectionTimeoutMs, zkSessionTimeoutMs);
+    String[] accountContainerPairs = setCacheabilityFor.split(",");
+    for (String accountContainerPair : accountContainerPairs) {
+      String[] accountAndContainerName = accountContainerPair.split(":");
+      Account account = accountService.getAccountByName(accountAndContainerName[0]);
+      if (account != null && account.getContainerByName(accountAndContainerName[1]) != null) {
+        Container container = account.getContainerByName(accountAndContainerName[1]);
+        System.out.println(account.getName() + ":" + container.getName() + " to be updated for encryption");
+        System.out.println("Old account value : " + accountService.getAccountByName(account.getName()).toString());
+        Container updatedContainer =
+            new ContainerBuilder(container).setCacheable(Boolean.valueOf(accountAndContainerName[2])).build();
+        Account updatedAccount = new AccountBuilder(account).addOrUpdateContainer(updatedContainer).build();
+        System.out.println("To be updated account value : " + updatedAccount.toString());
+        List<Account> accountsToUpdate = new ArrayList<>();
+        accountsToUpdate.add(updatedAccount);
+        if (accountService.updateAccounts(accountsToUpdate)) {
+          System.out.println(accountsToUpdate.size() + " accounts have been successfully created or updated, took " + (
+              System.currentTimeMillis() - startTime) + " ms");
+        } else {
+          throw new Exception("Updating accounts failed with unknown reason.");
+        }
+      }
+    }
+    accountService.close();
   }
 
   /**
