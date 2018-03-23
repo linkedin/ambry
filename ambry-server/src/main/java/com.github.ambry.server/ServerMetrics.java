@@ -399,6 +399,9 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(AmbryRequests.class, "DeleteAuthorizationFailure"));
   }
 
+  /**
+   * Update put blob request rate based on blob size.
+   */
   public void markPutBlobRequestRateBySize(long blobSize) {
     if (blobSize <= smallBlob) {
       putSmallBlobRequestRate.mark();
@@ -409,6 +412,9 @@ public class ServerMetrics {
     }
   }
 
+  /**
+   * Update get blob request rate based on blob size.
+   */
   public void markGetBlobRequestRateBySize(long blobSize) {
     if (blobSize <= smallBlob) {
       getSmallBlobRequestRate.mark();
@@ -419,6 +425,9 @@ public class ServerMetrics {
     }
   }
 
+  /**
+   * Update get blob processing time based on blob size.
+   */
   public void updateGetBlobProcessingTimeBySize(long blobSize, long processingTime) {
     if (blobSize <= ServerMetrics.smallBlob) {
       getSmallBlobProcessingTimeInMs.update(processingTime);
@@ -429,6 +438,9 @@ public class ServerMetrics {
     }
   }
 
+  /**
+   * Update put blob processing time based on blob size.
+   */
   public void updatePutBlobProcessingTimeBySize(long blobSize, long processingTime) {
     if (blobSize <= ServerMetrics.smallBlob) {
       putSmallBlobProcessingTimeInMs.update(processingTime);
