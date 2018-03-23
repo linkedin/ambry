@@ -371,6 +371,7 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobInfoProcessingTimeInMs.update(processingTime);
       } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
         metrics.getBlobAllProcessingTimeInMs.update(processingTime);
+        metrics.updateGetBlobProcessingTimeBySize(response.sizeInBytes(), processingTime);
       }
     }
     sendGetResponse(requestResponseChannel, response, request, responseQueueTime, responseSendTime, responseTotalTime,
@@ -790,7 +791,7 @@ public class AmbryRequests implements RequestAPI {
       long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
     if (blobSize <= ServerMetrics.smallBlob) {
-      if (flags == MessageFormatFlags.Blob) {
+      if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
@@ -807,7 +808,7 @@ public class AmbryRequests implements RequestAPI {
                 totalTimeSpent));
       }
     } else if (blobSize <= ServerMetrics.mediumBlob) {
-      if (flags == MessageFormatFlags.Blob) {
+      if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
@@ -824,7 +825,7 @@ public class AmbryRequests implements RequestAPI {
                 totalTimeSpent));
       }
     } else {
-      if (flags == MessageFormatFlags.Blob) {
+      if (flags == MessageFormatFlags.Blob || flags == MessageFormatFlags.All) {
         if (response.getError() == ServerErrorCode.No_Error) {
           metrics.markGetBlobRequestRateBySize(blobSize);
           requestResponseChannel.sendResponse(response, request,
