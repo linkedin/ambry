@@ -790,8 +790,7 @@ public class AmbryRequests implements RequestAPI {
           if (storageManager.startBlobStore(partitionId)) {
             Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
             controlRequestForPartitions(
-                EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
-                    RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds, true);
+                EnumSet.allOf(RequestOrResponseType.class), partitionIds, true);
             if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                 true)) {
               if (storageManager.controlCompactionForBlobStore(partitionId, true)) {

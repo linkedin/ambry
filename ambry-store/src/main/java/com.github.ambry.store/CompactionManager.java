@@ -144,11 +144,11 @@ class CompactionManager {
   /**
    * Disable the given {@code store} for compaction.
    * @param store the {@link BlobStore} to be disabled or enabled.
-   * @param enabled whether to enable ({@code true}) or disable.
+   * @param enable whether to enable ({@code true}) or disable.
    * @return {@code true} if the disabling was successful. {@code false} if not.
    */
-  boolean controlCompactionForBlobStore(BlobStore store, boolean enabled) {
-    return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, enabled);
+  boolean controlCompactionForBlobStore(BlobStore store, boolean enable) {
+    return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, enable);
   }
 
   /**
@@ -316,11 +316,11 @@ class CompactionManager {
     /**
      * Disable the compaction on given blobstore
      * @param store the {@link BlobStore} on which the compaction is enabled or disabled.
-     * @param enabled whether to enable ({@code true}) or disable.
+     * @param enable whether to enable ({@code true}) or disable.
      * @return {@code true} if the disabling was successful. {@code false} if not.
      */
-    boolean controlCompactionForBlobStore(BlobStore store, boolean enabled) {
-      if (enabled) {
+    boolean controlCompactionForBlobStore(BlobStore store, boolean enable) {
+      if (enable) {
         storesDisabledCompaction.remove(store);
       } else {
         storesDisabledCompaction.add(store);
