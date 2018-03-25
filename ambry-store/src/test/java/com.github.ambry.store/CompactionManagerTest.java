@@ -20,6 +20,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_OUTPeer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -221,8 +222,8 @@ public class CompactionManagerTest {
     compactionManager = new CompactionManager(MOUNT_PATH, config, stores, new StorageManagerMetrics(metricRegistry),
         SystemTime.getInstance());
     // disable the third blobstore for compaction before starting the CompactionExecutor thread
-    MockBlobStore compactionDisabledStore = (MockBlobStore) stores.get(2);
-    compactionManager.controlCompactionForBlobStore(compactionDisabledStore, false);
+    MockBlobStore controlCompactionTestStore = (MockBlobStore) stores.get(2);
+    compactionManager.controlCompactionForBlobStore(controlCompactionTestStore, false);
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -264,6 +265,41 @@ public class CompactionManagerTest {
           throw store.callOrderException;
         }
         assertTrue("compact() should have been called", store.compactCalled);
+      }
+    }
+
+    // disable Compaction Manager for restart
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+    assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
+    compactCallsCountdown = new CountDownLatch(1);
+    // set all compact called to false
+    for (BlobStore store : stores) {
+      ((MockBlobStore) store).compactCalled = false;
+      ((MockBlobStore) store).resumeCompactionCalled = false;
+      ((MockBlobStore) store).compactCallsCountdown = compactCallsCountdown;
+    }
+    compactionManager.controlCompactionForBlobStore(controlCompactionTestStore, true);
+    // restart Compaction Manager to trigger Periodic Compaction
+    compactionManager.enable();
+    assertNotNull("Compaction thread should be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    assertTrue("Compaction calls did not come within the expected time",
+        compactCallsCountdown.await(5, TimeUnit.SECONDS));
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = (MockBlobStore) stores.get(i);
+      if (store.callOrderException != null) {
+        throw store.callOrderException;
+      }
+      //System.out.println("i == " + i + " result: " + store.compactCalled);
+      if (i == 2 || i == 4) {
+        //System.out.println("i == " + i);
+        assertTrue("Compact was not called", store.compactCalled);
+      } else {
+        // should not call for i == 0 because store has not been started.
+        // should not call for i == 1 because resumeCompaction() would have marked this as a misbehaving store.
+        // should not call for i == 3 because it encountered exception during last compaction.
+        assertFalse("Compact should not have been called", store.compactCalled);
       }
     }
     compactionManager.disable();

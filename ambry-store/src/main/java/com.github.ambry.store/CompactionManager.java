@@ -98,6 +98,7 @@ class CompactionManager {
           logger.error("Thread {} threw exception", t, e);
         }
       });
+      compactionExecutor.enable();
       compactionThread.start();
     }
   }
@@ -275,6 +276,18 @@ class CompactionManager {
       } finally {
         isRunning = false;
         logger.info("Stopping compaction thread for {}", mountPath);
+      }
+    }
+
+    /**
+     * Enables the executor by allowing scheduling of new compaction jobs.
+     */
+    void enable() {
+      lock.lock();
+      try {
+        enabled = true;
+      } finally {
+        lock.unlock();
       }
     }
 
