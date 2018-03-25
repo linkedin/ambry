@@ -129,7 +129,7 @@ public class MockCluster {
         new Thread(new ServerShutdown(shutdownLatch, server)).start();
       }
       try {
-        if (!shutdownLatch.await(1, TimeUnit.HOURS)) {
+        if (!shutdownLatch.await(1, TimeUnit.MINUTES)) {
           fail("Did not shutdown in 1 minute");
         }
       } catch (Exception e) {
