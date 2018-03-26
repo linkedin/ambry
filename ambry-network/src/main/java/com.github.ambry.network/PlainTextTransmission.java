@@ -87,11 +87,11 @@ public class PlainTextTransmission extends Transmission {
     long startTimeMs = SystemTime.getInstance().milliseconds();
     long bytesWritten = send.writeTo(socketChannel);
     long writeTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
-    // update metric
     logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
       metrics.plaintextSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
+      metrics.plaintextSendTime.update(writeTimeMs);
     }
     return send.isSendComplete();
   }

@@ -573,7 +573,7 @@ public class HardDeleter implements Runnable {
 
       List<LogWriteInfo> logWriteInfoList = new ArrayList<LogWriteInfo>();
 
-      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList, true);
+      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList, false);
       Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 

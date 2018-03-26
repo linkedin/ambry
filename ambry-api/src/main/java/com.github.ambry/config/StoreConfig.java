@@ -217,7 +217,7 @@ public class StoreConfig {
       "store.read.write.enable.size.threshold.percentage.delta";
 
   /**
-   * No zero copy and do data preFetch from disk if true.
+   * Don't do zero copy but pre-fetch data from disk if true.
    */
   @Config(storeEnableDataPreFetchName)
   @Default("true")

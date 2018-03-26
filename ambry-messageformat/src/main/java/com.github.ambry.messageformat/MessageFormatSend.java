@@ -105,7 +105,6 @@ public class MessageFormatSend implements Send {
           sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
           messageMetadataList.add(i, null);
           totalSizeToWrite += readSet.sizeInBytes(i);
-          // do simlart thing
         } else {
           // read header version
           long startTime = SystemTime.getInstance().milliseconds();
