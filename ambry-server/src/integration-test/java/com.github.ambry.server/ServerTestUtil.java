@@ -355,13 +355,12 @@ public final class ServerTestUtil {
       // stop the store via AdminRequest
       AdminRequest adminRequest =
           new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
-      BlobStoreControlAdminRequest controlRequest = new BlobStoreControlAdminRequest((short) 3, false, adminRequest);
+      BlobStoreControlAdminRequest controlRequest = new BlobStoreControlAdminRequest((short) 0, false, adminRequest);
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
       if (adminResponse.getError() == ServerErrorCode.Retry_After_Backoff) {
         System.out.println("Have a second try to stop BlobStore");
-        Thread.sleep(500);
         adminRequest =
             new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
         controlRequest = new BlobStoreControlAdminRequest((short) 3, false, adminRequest);
@@ -414,7 +413,6 @@ public final class ServerTestUtil {
       stream = channel.receive().getInputStream();
       adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
       assertEquals("Start store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
-      Thread.sleep(200);
 
       // put a blob on a restarted store , which should succeed
       PutRequest putRequest5 =

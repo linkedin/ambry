@@ -979,7 +979,6 @@ public class AmbryRequests implements RequestAPI {
       // 2. check if partition exists on this node and that the store for this partition has been started
       if (storageManager.getStore(partition) == null) {
         if (partitionsInCurrentNode.contains(partition)) {
-          System.out.println("DEBUG1 " + requestType);
           metrics.diskUnavailableError.inc();
           return ServerErrorCode.Disk_Unavailable;
         } else {
