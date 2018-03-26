@@ -216,6 +216,14 @@ public class StoreConfig {
   public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
       "store.read.write.enable.size.threshold.percentage.delta";
 
+  /**
+   * No zero copy and do data preFetch from disk if true.
+   */
+  @Config(storeEnableDataPreFetchName)
+  @Default("true")
+  public final boolean storeEnableDataPreFetch;
+  public static final String storeEnableDataPreFetchName = "store.enable.data.pre.fetch";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -260,6 +268,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
+    storeEnableDataPreFetch = verifiableProperties.getBoolean("store.enable.data.pre.fetch", true);
   }
 }
 

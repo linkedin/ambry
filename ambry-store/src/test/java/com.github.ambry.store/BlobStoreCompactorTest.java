@@ -1497,7 +1497,7 @@ public class BlobStoreCompactorTest {
    * @throws IOException
    */
   private void checkRecord(MockId id, BlobReadOptions options) throws IOException {
-    MessageReadSet readSet = new StoreMessageReadSet(Arrays.asList(options));
+    MessageReadSet readSet = new StoreMessageReadSet(Arrays.asList(options), true);
     IndexValue value = state.getExpectedValue(id, true);
     assertEquals("Unexpected key in BlobReadOptions", id, options.getMessageInfo().getStoreKey());
     assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getMessageInfo().getSize());

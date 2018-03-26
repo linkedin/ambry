@@ -129,7 +129,7 @@ public class StoreMessageReadSetTest {
           new MessageInfo(mockId, availableSegCapacity / 6, 1, Utils.getRandomShort(TestUtils.RANDOM),
               Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       List<BlobReadOptions> options = new ArrayList<>(Arrays.asList(ro1, ro2, ro3, ro4, ro5));
-      MessageReadSet readSet = new StoreMessageReadSet(options);
+      MessageReadSet readSet = new StoreMessageReadSet(options, true);
 
       assertEquals(readSet.count(), options.size());
       // options should get sorted by offsets in the constructor

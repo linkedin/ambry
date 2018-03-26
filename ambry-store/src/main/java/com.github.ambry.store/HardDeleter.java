@@ -208,7 +208,7 @@ public class HardDeleter implements Runnable {
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
            currently in it are being hard deleted as part of recovery. */
-      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList);
+      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList, true);
       Iterator<HardDeleteInfo> hardDeleteIterator =
           hardDelete.getHardDeleteMessages(readSet, factory, hardDeleteRecoveryRange.getMessageStoreRecoveryInfoList());
 
@@ -573,7 +573,7 @@ public class HardDeleter implements Runnable {
 
       List<LogWriteInfo> logWriteInfoList = new ArrayList<LogWriteInfo>();
 
-      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList);
+      StoreMessageReadSet readSet = new StoreMessageReadSet(readOptionsList, true);
       Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 

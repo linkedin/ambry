@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
@@ -41,6 +42,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private ByteBuffer preFetchedData;
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
@@ -146,6 +148,20 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
       segment.closeView();
     }
   }
+
+  public void preFetch() {
+    preFetchedData = ByteBuffer.allocate((int)this.info.getSize());
+    try {
+      getChannel().position(offset.getOffset());
+      getChannel().read(preFetchedData);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  public ByteBuffer getPreFetchedData() {
+    return preFetchedData;
+  }
 }
 
 /**
@@ -156,10 +172,17 @@ class StoreMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final boolean doDataPreFetch;
 
-  StoreMessageReadSet(List<BlobReadOptions> readOptions) {
+  StoreMessageReadSet(List<BlobReadOptions> readOptions, boolean doDataPreFetch) {
     Collections.sort(readOptions);
     this.readOptions = readOptions;
+    this.doDataPreFetch = doDataPreFetch;
+    if (doDataPreFetch == true) {
+      for (BlobReadOptions options : readOptions) {
+        options.preFetch();
+      }
+    }
   }
 
   @Override
@@ -167,12 +190,27 @@ class StoreMessageReadSet implements MessageReadSet {
     if (index >= readOptions.size()) {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
+
     BlobReadOptions options = readOptions.get(index);
     long startOffset = options.getOffset() + relativeOffset;
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
-    long written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
-    logger.trace("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
+    long written = 0;
+    System.out.println("offsets:::" + options.getOffset());
+    System.out.println(relativeOffset);
+    System.out.println(sizeToRead);
+    if (doDataPreFetch == true) {
+      ByteBuffer buf = options.getPreFetchedData();
+      buf.flip();
+      buf.limit((int)(relativeOffset + sizeToRead));
+      buf.position((int)relativeOffset);
+      while (buf.hasRemaining()) {
+        written  += channel.write(buf);
+      }
+    } else {
+      written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
+    }
+    logger.info("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
     return written;
   }
 
