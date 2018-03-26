@@ -272,7 +272,7 @@ public class CompactionManagerTest {
     compactionManager.disable();
     compactionManager.awaitTermination();
     assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
-    compactCallsCountdown = new CountDownLatch(1);
+    compactCallsCountdown = new CountDownLatch(2);
     // set all compact called to false
     for (BlobStore store : stores) {
       ((MockBlobStore) store).compactCalled = false;
@@ -285,7 +285,7 @@ public class CompactionManagerTest {
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
     assertTrue("Compaction calls did not come within the expected time",
-        compactCallsCountdown.await(5, TimeUnit.SECONDS));
+        compactCallsCountdown.await(1, TimeUnit.SECONDS));
     for (int i = 0; i < numStores; i++) {
       MockBlobStore store = (MockBlobStore) stores.get(i);
       if (store.callOrderException != null) {
