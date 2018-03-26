@@ -1000,6 +1000,14 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Sets headers for conditional delete.
+   * @param headers the {@link JSONObject} where the headers should be set.
+   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
+   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
+   * @throws IllegalArgumentException if {@code headers} is null.
+   * @throws JSONException
+   */
   private void setAmbryHeadersForDelete(JSONObject headers, String targetAccountName, String targetContainerName)
       throws JSONException {
     if (headers != null) {
@@ -1045,7 +1053,7 @@ public class AmbryBlobStorageServiceTest {
       default:
         fail("RestMethod not supported: " + restRequest.getRestMethod());
     }
-    if (responseHandler.awaitResponseSubmission(1, TimeUnit.HOURS)) {
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
       if (responseHandler.getException() != null) {
         throw responseHandler.getException();
       }
