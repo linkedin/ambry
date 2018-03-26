@@ -153,7 +153,12 @@ public enum RestServiceErrorCode {
   /**
    * There is insufficient capacity to service the request.
    */
-  InsufficientCapacity;
+  InsufficientCapacity,
+
+  /**
+   * The conditions given in the request header fields evaluated to false.
+   */
+  PreconditionFailed;
 
   /**
    * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.

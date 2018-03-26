@@ -34,6 +34,8 @@ import com.github.ambry.utils.Utils;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 /**
  * Default implementation of {@link SecurityService} for Ambry that doesn't do any validations, but just
@@ -97,6 +99,14 @@ class AmbrySecurityService implements SecurityService {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
+    }
+    // check preconditions for DELETE request
+    if (restRequest.getRestMethod() == RestMethod.DELETE) {
+      try {
+        checkForConditionalDelete(restRequest);
+      } catch (Exception e) {
+        exception = e;
+      }
     }
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
@@ -318,5 +328,40 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, container.getName());
     }
     restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, !container.isCacheable());
+  }
+
+  /**
+   * Check precondtions for conditional delete if the {@code restRequest} contains the target
+   * account and container and they are not generic unknowns.
+   * @param restRequest the {@link RestRequest} that contains the {@link Account} and {@link Container} details.
+   * @throws RestServiceException if preconditions check failed.
+   */
+  private void checkForConditionalDelete(RestRequest restRequest) throws RestServiceException {
+    String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
+    String containerNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
+    if (accountNameFromHeader != null) {
+      Account targetAccount = (Account) restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY);
+      if (targetAccount == null) {
+        throw new RestServiceException("Account cannot be found", RestServiceErrorCode.InvalidAccount);
+      }
+      String accountNameFromBlobId = targetAccount.getName();
+      if (!accountNameFromHeader.equals(accountNameFromBlobId)) {
+        throw new RestServiceException("Account name: " + accountNameFromHeader
+            + " from delete request doesn't match the account name from Blob id : " + accountNameFromBlobId,
+            RestServiceErrorCode.PreconditionFailed);
+      }
+      if (containerNameFromHeader != null) {
+        Container targetContainer = (Container) restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY);
+        if (targetContainer == null) {
+          throw new RestServiceException("Container cannot be found", RestServiceErrorCode.InvalidContainer);
+        }
+        String containerNameFromBlobId = targetContainer.getName();
+        if (!containerNameFromHeader.equals(containerNameFromBlobId)) {
+          throw new RestServiceException("Container name: " + containerNameFromHeader
+              + "from delete request doesn't match the container name from Blob id : " + containerNameFromBlobId,
+              RestServiceErrorCode.PreconditionFailed);
+        }
+      }
+    }
   }
 }
