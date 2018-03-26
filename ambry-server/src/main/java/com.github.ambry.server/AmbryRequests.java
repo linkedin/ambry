@@ -833,7 +833,7 @@ public class AmbryRequests implements RequestAPI {
                   // Disable metadata request from peers
                   replicaMetadataRequestDisabledStores.add(partitionId.toString());
                   controlRequestForPartitions(
-                      EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest),
+                      EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest),
                       partitionIds, false);
                   // Shutdown the BlobStore completely
                   if (storageManager.shutdownBlobStore(partitionId)) {
@@ -992,7 +992,6 @@ public class AmbryRequests implements RequestAPI {
         if (replica.getDataNodeId().getHostname().equals(currentNode.getHostname())
             && replica.getDataNodeId().getPort() == currentNode.getPort()) {
           if (replica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
-            System.out.println("DEBUG2 " + requestType);
             metrics.diskUnavailableError.inc();
             return ServerErrorCode.Disk_Unavailable;
           }

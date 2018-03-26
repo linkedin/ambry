@@ -291,9 +291,7 @@ public class CompactionManagerTest {
       if (store.callOrderException != null) {
         throw store.callOrderException;
       }
-      //System.out.println("i == " + i + " result: " + store.compactCalled);
       if (i == 2 || i == 4) {
-        //System.out.println("i == " + i);
         assertTrue("Compact was not called", store.compactCalled);
       } else {
         // should not call for i == 0 because store has not been started.
