@@ -42,7 +42,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private ByteBuffer preFetchedData;
-  private boolean isPreFetchedDataReady;
+  private long preFetchedDataRelativeOffset = -1;
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
@@ -149,25 +149,33 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     }
   }
 
-  public void preFetch() {
-    preFetchedData = ByteBuffer.allocate((int) this.info.getSize());
+  /**
+   * Do data preFetch: from disk to memory buffer.
+   * @param relativeOffset the relativeOffset to start.
+   * @param size The size requested to preFetch.
+   */
+  public void preFetch(long relativeOffset, long size) {
+    long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
+    preFetchedData = ByteBuffer.allocate((int) sizeToRead);
     try {
-      getChannel().position(offset.getOffset());
+      getChannel().position(offset.getOffset() + relativeOffset);
       getChannel().read(preFetchedData);
-      isPreFetchedDataReady = true;
+      preFetchedDataRelativeOffset = relativeOffset;
     } catch (Exception e) {
-      isPreFetchedDataReady = false;
       logger.error("Data preFetch failed", e);
+      preFetchedDataRelativeOffset = -1;
     }
   }
 
-  public ByteBuffer getPreFetchedData() {
+  public ByteBuffer getPreFetchedData()
+  {
     return preFetchedData;
   }
 
-  public boolean isPreFetchedDataReady() {
-    return isPreFetchedDataReady;
+  public long getPreFetchedDataRelativeOffset() {
+    return preFetchedDataRelativeOffset;
   }
+
 }
 
 /**
@@ -178,17 +186,10 @@ class StoreMessageReadSet implements MessageReadSet {
 
   private final List<BlobReadOptions> readOptions;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final boolean doDataPreFetch;
 
-  StoreMessageReadSet(List<BlobReadOptions> readOptions, boolean doDataPreFetch) {
+  StoreMessageReadSet(List<BlobReadOptions> readOptions) {
     Collections.sort(readOptions);
     this.readOptions = readOptions;
-    this.doDataPreFetch = doDataPreFetch;
-    if (doDataPreFetch == true) {
-      for (BlobReadOptions options : readOptions) {
-        options.preFetch();
-      }
-    }
   }
 
   @Override
@@ -201,11 +202,12 @@ class StoreMessageReadSet implements MessageReadSet {
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = 0;
-    if (doDataPreFetch == true && options.isPreFetchedDataReady()) {
+    if (options.getPreFetchedDataRelativeOffset() != -1) {
       ByteBuffer buf = options.getPreFetchedData();
       buf.flip();
-      buf.limit((int) (relativeOffset + sizeToRead));
-      buf.position((int) relativeOffset);
+      long bufStartOffset = relativeOffset - options.getPreFetchedDataRelativeOffset();
+      buf.limit((int)(bufStartOffset + sizeToRead));
+      buf.position((int)(bufStartOffset));
       while (buf.hasRemaining()) {
         written += channel.write(buf);
       }
@@ -235,5 +237,10 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
     return readOptions.get(index).getMessageInfo().getStoreKey();
+  }
+
+  @Override
+  public void preFetch(int index, long relativeOffset, long size) {
+    readOptions.get(index).preFetch(relativeOffset, size);
   }
 }

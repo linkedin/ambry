@@ -253,7 +253,7 @@ class BlobStore implements Store {
         }
       }
 
-      MessageReadSet readSet = new StoreMessageReadSet(readOptions, config.storeEnableDataPreFetch);
+      MessageReadSet readSet = new StoreMessageReadSet(readOptions);
       // We ensure that the metadata list is ordered with the order of the message read set view that the
       // log provides. This ensures ordering of all messages across the log and metadata from the index.
       List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>(readSet.count());

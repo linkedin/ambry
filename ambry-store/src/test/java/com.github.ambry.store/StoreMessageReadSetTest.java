@@ -35,6 +35,8 @@ import java.util.Arrays;
 import java.util.List;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -42,7 +44,16 @@ import static org.junit.Assert.*;
 /**
  * Tests for {@link StoreMessageReadSet} and {@link BlobReadOptions}.
  */
+@RunWith(Parameterized.class)
 public class StoreMessageReadSetTest {
+  /**
+   * Running for both no data preFetch and do data preFetch
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
   static {
@@ -55,15 +66,17 @@ public class StoreMessageReadSetTest {
 
   private final File tempDir;
   private final StoreMetrics metrics;
+  private final boolean doDataPreFetch;
 
   /**
    * Creates a temporary directory.
    * @throws IOException
    */
-  public StoreMessageReadSetTest() throws IOException {
+  public StoreMessageReadSetTest(boolean doDataPreFetch) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
+    this.doDataPreFetch = doDataPreFetch;
   }
 
   /**
@@ -129,7 +142,7 @@ public class StoreMessageReadSetTest {
           new MessageInfo(mockId, availableSegCapacity / 6, 1, Utils.getRandomShort(TestUtils.RANDOM),
               Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis() + TestUtils.RANDOM.nextInt(10000)));
       List<BlobReadOptions> options = new ArrayList<>(Arrays.asList(ro1, ro2, ro3, ro4, ro5));
-      MessageReadSet readSet = new StoreMessageReadSet(options, true);
+      MessageReadSet readSet = new StoreMessageReadSet(options);
 
       assertEquals(readSet.count(), options.size());
       // options should get sorted by offsets in the constructor
@@ -148,6 +161,9 @@ public class StoreMessageReadSetTest {
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
 
       // read the first one all at once
+      if (doDataPreFetch) {
+        readSet.preFetch(0, 0, Long.MAX_VALUE);
+      }
       long written = readSet.writeTo(0, Channels.newChannel(stream), 0, Long.MAX_VALUE);
       assertEquals("Return value from writeTo() is incorrect", availableSegCapacity / 5, written);
       assertArrayEquals(readBuf.array(), Arrays.copyOfRange(srcOfTruth, 0, availableSegCapacity / 5));
@@ -157,6 +173,9 @@ public class StoreMessageReadSetTest {
       stream = new ByteBufferOutputStream(readBuf);
       WritableByteChannel channel = Channels.newChannel(stream);
       long currentReadOffset = 0;
+      if (doDataPreFetch) {
+        readSet.preFetch(1, currentReadOffset, availableSegCapacity / 3);
+      }
       while (currentReadOffset < availableSegCapacity / 3) {
         written = readSet.writeTo(1, channel, currentReadOffset, 1);
         assertEquals("Return value from writeTo() is incorrect", 1, written);
@@ -171,6 +190,9 @@ public class StoreMessageReadSetTest {
       stream = new ByteBufferOutputStream(readBuf);
       channel = Channels.newChannel(stream);
       currentReadOffset = 0;
+      if (doDataPreFetch) {
+        readSet.preFetch(4, currentReadOffset, availableSegCapacity / 2);
+      }
       while (currentReadOffset < availableSegCapacity / 2) {
         written = readSet.writeTo(4, channel, currentReadOffset, availableSegCapacity / 6);
         long expectedWritten = Math.min(availableSegCapacity / 2 - currentReadOffset, availableSegCapacity / 6);

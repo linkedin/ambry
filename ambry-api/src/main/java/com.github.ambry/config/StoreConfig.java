@@ -220,7 +220,7 @@ public class StoreConfig {
    * Don't do zero copy but pre-fetch data from disk if true.
    */
   @Config(storeEnableDataPreFetchName)
-  @Default("true")
+  @Default("false")
   public final boolean storeEnableDataPreFetch;
   public static final String storeEnableDataPreFetchName = "store.enable.data.pre.fetch";
 
@@ -268,7 +268,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
-    storeEnableDataPreFetch = verifiableProperties.getBoolean("store.enable.data.pre.fetch", true);
+    storeEnableDataPreFetch = verifiableProperties.getBoolean("store.enable.data.pre.fetch", false);
   }
 }
 
