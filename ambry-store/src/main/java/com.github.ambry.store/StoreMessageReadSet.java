@@ -199,9 +199,13 @@ class StoreMessageReadSet implements MessageReadSet {
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = 0;
-    if (options.getPreFetchedDataRelativeOffset() != -1) {
+    long bufStartOffset = relativeOffset - options.getPreFetchedDataRelativeOffset();
+    if (options.getPreFetchedDataRelativeOffset() != -1 && bufStartOffset < 0) {
+      logger.error("RelativeOffset out of boundary.", relativeOffset, options.getPreFetchedDataRelativeOffset());
+    }
+    if (options.getPreFetchedDataRelativeOffset() != -1 && bufStartOffset >= 0 && bufStartOffset <= Integer.MAX_VALUE
+        && bufStartOffset + sizeToRead <= Integer.MAX_VALUE) {
       ByteBuffer buf = options.getPreFetchedData();
-      long bufStartOffset = relativeOffset - options.getPreFetchedDataRelativeOffset();
       buf.limit((int) (bufStartOffset + sizeToRead));
       buf.position((int) (bufStartOffset));
       written = channel.write(buf);
