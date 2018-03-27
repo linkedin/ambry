@@ -261,6 +261,43 @@ public class BlobIdTest {
   }
 
   /**
+   * Test for {@link BlobId#isAccountContainerMatch}.
+   * For BLOB_ID_V1, {@link BlobId#isAccountContainerMatch} should always return true.
+   * For BLOB_ID_V2 and BLOB_ID_V3, return true only when both account and container match.
+   */
+  @Test
+  public void testIsAccountContainerMatch() throws Exception {
+    BlobId blobIdV1 = getRandomBlobId(BLOB_ID_V1);
+    BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
+    BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
+    // test v1
+    assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
+        blobIdV1.isAccountContainerMatch(blobIdV1.getAccountId(), blobIdV1.getContainerId()));
+    assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
+        blobIdV1.isAccountContainerMatch((short) -1, (short) -1));
+    assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
+        blobIdV1.isAccountContainerMatch(getRandomShort(random), getRandomShort(random)));
+    // test v2 and v3
+    BlobId[] blobIds = {blobIdV2, blobIdV3};
+    for (BlobId blobId : blobIds) {
+      assertTrue("isAccountContainerMatch() should return true because account and container match.",
+          blobId.isAccountContainerMatch(blobId.getAccountId(), blobId.getContainerId()));
+      assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
+          blobId.isAccountContainerMatch(blobId.getAccountId(), (short) -1));
+      assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
+          blobId.isAccountContainerMatch(blobId.getAccountId(), getRandomShort(random)));
+      assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
+          blobId.isAccountContainerMatch((short) -1, blobId.getContainerId()));
+      assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
+          blobId.isAccountContainerMatch(getRandomShort(random), blobId.getContainerId()));
+      assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
+          blobId.isAccountContainerMatch((short) -1, (short) -1));
+      assertFalse("isAccountContainerMatch() should return false because account or container mismatch.",
+          blobId.isAccountContainerMatch(getRandomShort(random), getRandomShort(random)));
+    }
+  }
+
+  /**
    * Assert that the given crafted ids constituent fields except for version, type, account, container, match those of
    * the given input id.
    * Also assert the version and type of the crafted id.

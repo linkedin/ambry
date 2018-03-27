@@ -262,7 +262,6 @@ public class BlobId extends StoreKey {
    * blobId was formed, it will return {@link Account#UNKNOWN_ACCOUNT_ID}.
    * @return The id of the {@link Account} who created this blob.
    */
-  @Override
   public short getAccountId() {
     return accountId;
   }
@@ -272,9 +271,20 @@ public class BlobId extends StoreKey {
    * the blobId was formed, it will return {@link Container#UNKNOWN_CONTAINER_ID}.
    * @return The id of the {@link Container} where this blob belongs to.
    */
-  @Override
   public short getContainerId() {
     return containerId;
+  }
+
+  /**
+   * @return true if accountId and containerId in key match given accountId and containerId from store.
+   * Always return true if BlobId version is {@link #BLOB_ID_V1}.
+   */
+  @Override
+  public boolean isAccountContainerMatch(short accountId, short containerId) {
+    if (getVersion() == BLOB_ID_V1) {
+      return true;
+    }
+    return (this.accountId == accountId) && (this.containerId == containerId);
   }
 
   /**

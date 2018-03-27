@@ -38,16 +38,9 @@ public abstract class StoreKey implements Comparable<StoreKey> {
   public abstract String getID();
 
   /**
-   * Get accountId of StoreKey, return -1 if unknown.
-   * @return accountId
+   * @return true if accountId and containerId in key match given accountId and containerId from store.
    */
-  public abstract short getAccountId();
-
-  /**
-   * Get containerId of StoreKey, return -1 if unknown.
-   * @return containerId
-   */
-  public abstract short getContainerId();
+  public abstract boolean isAccountContainerMatch(short accountId, short containerId);
 
   /**
    * Get a long form of the key for printing.

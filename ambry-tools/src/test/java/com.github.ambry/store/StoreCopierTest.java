@@ -160,16 +160,15 @@ public class StoreCopierTest {
             metrics, metrics, srcDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time);
     src.start();
     try {
-      deletedId = new MockId("deletedId");
-      addMessage(src, deletedId, Utils.Infinite_Time, false, deletedId.getAccountId(), deletedId.getContainerId(),
-          time.milliseconds());
-      putId = new MockId("putId");
-      putData = addMessage(src, putId, Utils.Infinite_Time, false, putId.getAccountId(), putId.getContainerId(),
-          time.milliseconds());
-      addMessage(src, deletedId, Utils.Infinite_Time, true, deletedId.getAccountId(), deletedId.getContainerId(),
-          time.milliseconds());
-      expiredId = new MockId("expiredId");
-      addMessage(src, expiredId, 0, false, expiredId.getAccountId(), expiredId.getContainerId(), time.milliseconds());
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      deletedId = new MockId("deletedId", accountId, containerId);
+      addMessage(src, deletedId, Utils.Infinite_Time, false, accountId, containerId, time.milliseconds());
+      putId = new MockId("putId", accountId, containerId);
+      putData = addMessage(src, putId, Utils.Infinite_Time, false, accountId, containerId, time.milliseconds());
+      addMessage(src, deletedId, Utils.Infinite_Time, true, accountId, containerId, time.milliseconds());
+      expiredId = new MockId("expiredId", accountId, containerId);
+      addMessage(src, expiredId, 0, false, accountId, containerId, time.milliseconds());
     } finally {
       src.shutdown();
     }

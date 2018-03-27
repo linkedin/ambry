@@ -578,8 +578,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Test DELETE authorization success for {@link BlobStore#delete(MessageWriteSet)}.
-   * If either accountId or containerId is -1, validation is skipped.
+   * Test DELETE with valid accountId and containerId.
    */
   @Test
   public void deleteAuthorizationSuccessTest() throws Exception {
@@ -587,20 +586,17 @@ public class BlobStoreTest {
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
     for (int i = 0; i < accountIds.length; i++) {
       MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
-      delete(
-          new MockId(mockId.getID(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM)));
+      delete(new MockId(mockId.getID(), mockId.getAccountId(), mockId.getContainerId()));
       verifyDeleteFailure(mockId, StoreErrorCodes.ID_Deleted);
     }
   }
 
   /**
-   * Test DELETE authorization failure for {@link BlobStore#delete(MessageWriteSet)}.
+   * Test DELETE with invalid accountId/containerId. Failure is expected.
    */
   @Test
   public void deleteAuthorizationFailureTest() throws Exception {
     MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
-    assertNotSame("accountId should not be -1 for added Blob.", -1, mockId.getAccountId());
-    assertNotSame("containerId should not be -1 for added Blob.", -1, mockId.getContainerId());
     short[] accountIds =
         {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
@@ -612,8 +608,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Test GET authorization success for {@link BlobStore#get(List, EnumSet)}.
-   * If either accountId or containerId is -1, validation is skipped.
+   * Test GET with valid accountId and containerId.
    */
   @Test
   public void getAuthorizationSuccessTest() throws Exception {
@@ -621,27 +616,26 @@ public class BlobStoreTest {
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
     for (int i = 0; i < accountIds.length; i++) {
       MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time, accountIds[i], containerIds[i]).get(0);
-      StoreInfo storeinfo = store.get(Collections.singletonList(
-          new MockId(mockId.getID(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM))),
-          EnumSet.noneOf(StoreGetOptions.class));
+      StoreInfo storeinfo =
+          store.get(Collections.singletonList(new MockId(mockId.getID(), accountIds[i], containerIds[i])),
+              EnumSet.noneOf(StoreGetOptions.class));
       checkStoreInfo(storeinfo, Collections.singleton(mockId));
     }
   }
 
   /**
-   * Test GET authorization failure for {@link BlobStore#get(List, EnumSet)}.
+   * Test GET with invalid accountId/containerId. Failure is expected.
    */
   @Test
   public void getAuthorizationFailureTest() throws Exception {
     MockId mockId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
-    assertNotSame("accountId should not be -1 for added Blob.", -1, mockId.getAccountId());
-    assertNotSame("containerId should not be -1 for added Blob.", -1, mockId.getContainerId());
     short[] accountIds =
         {-1, Utils.getRandomShort(TestUtils.RANDOM), -1, mockId.getAccountId(), Utils.getRandomShort(TestUtils.RANDOM)};
     short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(
         TestUtils.RANDOM), mockId.getContainerId()};
     for (int i = 0; i < accountIds.length; i++) {
-      verifyGetFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]), StoreErrorCodes.Authorization_Failure);
+      verifyGetFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
+          StoreErrorCodes.Authorization_Failure);
     }
   }
 
