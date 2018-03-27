@@ -170,7 +170,7 @@ public final class ServerTestUtil {
       PutResponse response4 = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals(ServerErrorCode.No_Error, response4.getError());
 
-      //get blob properties
+      // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
       MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       ids.add(blobId1);
@@ -373,7 +373,7 @@ public final class ServerTestUtil {
         assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
       }
 
-      // put a blob on a store which is stopped, which should fail
+      // put a blob on a stopped store, which should fail
       putRequest =
           new PutRequest(1, "client1", blobId5, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
               properties.getBlobSize(), BlobType.DataBlob, testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -382,7 +382,7 @@ public final class ServerTestUtil {
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
       assertEquals("Put blob on stopped store should fail", ServerErrorCode.Disk_Unavailable, response.getError());
 
-      // get a blob properties on a store which is stopped, which should fail
+      // get a blob properties on a stopped store, which should fail
       ids = new ArrayList<BlobId>();
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
       ids.add(blobId1);
@@ -397,7 +397,7 @@ public final class ServerTestUtil {
       assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Disk_Unavailable,
           resp1.getPartitionResponseInfoList().get(0).getErrorCode());
 
-      // delete a blob on a store which is stopped, which should fail
+      // delete a blob on a stopped store, which should fail
       DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
       channel.send(deleteRequest);
       stream = channel.receive().getInputStream();
