@@ -268,7 +268,7 @@ public class BlobStoreHardDeleteTest {
       }
 
       @Override
-      public void preFetch(int index, long relativeOffset, long size) {
+      public void doPrefetch(int index, long relativeOffset, long size) {
         return;
       }
     }

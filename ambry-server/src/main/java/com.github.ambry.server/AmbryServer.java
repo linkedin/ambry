@@ -159,7 +159,7 @@ public class AmbryServer {
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory,
-              storeConfig.storeEnableDataPreFetch);
+              storeConfig.storeEnableDataPrefetch);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();

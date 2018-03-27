@@ -34,7 +34,7 @@ import org.junit.runners.Parameterized;
 
 
 @RunWith(Parameterized.class)
-public class ServerStorePreFetchTest {
+public class ServerStorePrefetchTest {
   private static Properties routerProps;
   private static MockNotificationSystem notificationSystem;
   private static MockCluster plaintextCluster;
@@ -58,7 +58,7 @@ public class ServerStorePreFetchTest {
     return Arrays.asList(new Object[][]{{true}});
   }
 
-  public ServerStorePreFetchTest(boolean testEncryption) throws Exception {
+  public ServerStorePrefetchTest(boolean testEncryption) throws Exception {
     this.testEncryption = testEncryption;
   }
 

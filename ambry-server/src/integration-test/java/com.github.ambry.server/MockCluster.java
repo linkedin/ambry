@@ -60,7 +60,7 @@ public class MockCluster {
   }
 
   public MockCluster(NotificationSystem notificationSystem, Properties sslProps, boolean enableHardDeletes,
-      boolean storeDoPreFetch, Time time)
+      boolean storeDoPrefetch, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     String sslEnabledDataCentersStr = sslProps.getProperty("clustermap.ssl.enabled.datacenters");
@@ -78,7 +78,7 @@ public class MockCluster {
         if (sslEnabledDataCentersStr != null) {
           dataNodeId.setSslEnabledDataCenters(sslEnabledDataCenterList);
         }
-        initializeServer(dataNodeId, sslProps, enableHardDeletes, storeDoPreFetch, time);
+        initializeServer(dataNodeId, sslProps, enableHardDeletes, storeDoPrefetch, time);
       }
     } catch (InstantiationException e) {
       // clean up other servers which was started already
@@ -96,7 +96,7 @@ public class MockCluster {
   }
 
   private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
-      boolean storeDoPreFetch, Time time)
+      boolean storeDoPrefetch, Time time)
       throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
@@ -111,8 +111,8 @@ public class MockCluster {
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
-    if (storeDoPreFetch) {
-      props.setProperty("store.enable.data.pre.fetch", "true");
+    if (storeDoPrefetch) {
+      props.setProperty("store.enable.data.prefetch", "true");
     }
     props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);

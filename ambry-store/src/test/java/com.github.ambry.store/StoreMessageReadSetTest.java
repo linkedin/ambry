@@ -47,7 +47,7 @@ import static org.junit.Assert.*;
 @RunWith(Parameterized.class)
 public class StoreMessageReadSetTest {
   /**
-   * Running for both no data preFetch and do data preFetch
+   * Running for both no data doPrefetch and do data doPrefetch
    * @return an array with both {@code false} and {@code true}.
    */
   @Parameterized.Parameters
@@ -66,17 +66,17 @@ public class StoreMessageReadSetTest {
 
   private final File tempDir;
   private final StoreMetrics metrics;
-  private final boolean doDataPreFetch;
+  private final boolean doDataPrefetch;
 
   /**
    * Creates a temporary directory.
    * @throws IOException
    */
-  public StoreMessageReadSetTest(boolean doDataPreFetch) throws IOException {
+  public StoreMessageReadSetTest(boolean doDataPrefetch) throws IOException {
     tempDir = StoreTestUtils.createTempDirectory("storeMessageReadSetDir-" + UtilsTest.getRandomString(10));
     MetricRegistry metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
-    this.doDataPreFetch = doDataPreFetch;
+    this.doDataPrefetch = doDataPrefetch;
   }
 
   /**
@@ -161,8 +161,8 @@ public class StoreMessageReadSetTest {
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
 
       // read the first one all at once
-      if (doDataPreFetch) {
-        readSet.preFetch(0, 0, Long.MAX_VALUE);
+      if (doDataPrefetch) {
+        readSet.doPrefetch(0, 0, Long.MAX_VALUE);
       }
       long written = readSet.writeTo(0, Channels.newChannel(stream), 0, Long.MAX_VALUE);
       assertEquals("Return value from writeTo() is incorrect", availableSegCapacity / 5, written);
@@ -173,8 +173,8 @@ public class StoreMessageReadSetTest {
       stream = new ByteBufferOutputStream(readBuf);
       WritableByteChannel channel = Channels.newChannel(stream);
       long currentReadOffset = 0;
-      if (doDataPreFetch) {
-        readSet.preFetch(1, currentReadOffset, availableSegCapacity / 3);
+      if (doDataPrefetch) {
+        readSet.doPrefetch(1, currentReadOffset, availableSegCapacity / 3);
       }
       while (currentReadOffset < availableSegCapacity / 3) {
         written = readSet.writeTo(1, channel, currentReadOffset, 1);
@@ -190,8 +190,8 @@ public class StoreMessageReadSetTest {
       stream = new ByteBufferOutputStream(readBuf);
       channel = Channels.newChannel(stream);
       currentReadOffset = 0;
-      if (doDataPreFetch) {
-        readSet.preFetch(4, currentReadOffset, availableSegCapacity / 2);
+      if (doDataPrefetch) {
+        readSet.doPrefetch(4, currentReadOffset, availableSegCapacity / 2);
       }
       while (currentReadOffset < availableSegCapacity / 2) {
         written = readSet.writeTo(4, channel, currentReadOffset, availableSegCapacity / 6);

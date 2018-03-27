@@ -41,8 +41,8 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private ByteBuffer preFetchedData;
-  private long preFetchedDataRelativeOffset = -1;
+  private ByteBuffer prefetchedData;
+  private long prefetchedDataRelativeOffset = -1;
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
@@ -150,28 +150,28 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   /**
-   * Do data preFetch: from disk to memory buffer.
+   * Do data doPrefetch: from disk to memory buffer.
    * @param relativeOffset the relativeOffset to start.
-   * @param size The size requested to preFetch.
+   * @param size The size requested to doPrefetch.
    */
-  void preFetch(long relativeOffset, long size) throws IOException, IndexOutOfBoundsException {
+  void doPrefetch(long relativeOffset, long size) throws IOException, IndexOutOfBoundsException {
     if (size > getMessageInfo().getSize() - relativeOffset) {
       throw new IndexOutOfBoundsException(
-          "PreFetch range is out of messageInfo Boundary: " + relativeOffset + " " + size + " "
+          "Prefetch range is out of messageInfo Boundary: " + relativeOffset + " " + size + " "
               + getMessageInfo().getSize());
     }
-    preFetchedData = ByteBuffer.allocate((int) size);
+    prefetchedData = ByteBuffer.allocate((int) size);
     getChannel().position(offset.getOffset() + relativeOffset);
-    getChannel().read(preFetchedData);
-    preFetchedDataRelativeOffset = relativeOffset;
+    getChannel().read(prefetchedData);
+    prefetchedDataRelativeOffset = relativeOffset;
   }
 
-  ByteBuffer getPreFetchedData() {
-    return preFetchedData;
+  ByteBuffer getPrefetchedData() {
+    return prefetchedData;
   }
 
-  long getPreFetchedDataRelativeOffset() {
-    return preFetchedDataRelativeOffset;
+  long getPrefetchedDataRelativeOffset() {
+    return prefetchedDataRelativeOffset;
   }
 }
 
@@ -199,13 +199,13 @@ class StoreMessageReadSet implements MessageReadSet {
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = 0;
-    long bufStartOffset = relativeOffset - options.getPreFetchedDataRelativeOffset();
-    if (options.getPreFetchedDataRelativeOffset() != -1 && bufStartOffset < 0) {
-      logger.error("RelativeOffset out of boundary.", relativeOffset, options.getPreFetchedDataRelativeOffset());
+    long bufStartOffset = relativeOffset - options.getPrefetchedDataRelativeOffset();
+    if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset < 0) {
+      logger.error("RelativeOffset out of boundary.", relativeOffset, options.getPrefetchedDataRelativeOffset());
     }
-    if (options.getPreFetchedDataRelativeOffset() != -1 && bufStartOffset >= 0 && bufStartOffset <= Integer.MAX_VALUE
+    if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset >= 0 && bufStartOffset <= Integer.MAX_VALUE
         && bufStartOffset + sizeToRead <= Integer.MAX_VALUE) {
-      ByteBuffer buf = options.getPreFetchedData();
+      ByteBuffer buf = options.getPrefetchedData();
       buf.limit((int) (bufStartOffset + sizeToRead));
       buf.position((int) (bufStartOffset));
       written = channel.write(buf);
@@ -238,9 +238,9 @@ class StoreMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public void preFetch(int index, long relativeOffset, long size) {
+  public void doPrefetch(int index, long relativeOffset, long size) {
     try {
-      readOptions.get(index).preFetch(relativeOffset, size);
+      readOptions.get(index).doPrefetch(relativeOffset, size);
     } catch (Exception e) {
       logger.error("Data Prefetch failed", e);
     }

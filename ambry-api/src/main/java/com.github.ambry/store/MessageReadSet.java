@@ -59,7 +59,7 @@ public interface MessageReadSet {
    * Do data pre-fetch from store.
    * @param index The index into the message set
    * @param relativeOffset The relativeOffset to start with
-   * @param size The size requested to preFetch.
+   * @param size The size requested to doPrefetch.
    */
-  void preFetch(int index, long relativeOffset, long size);
+  void doPrefetch(int index, long relativeOffset, long size);
 }

@@ -867,7 +867,7 @@ public class AmbryRequestsTest {
           }
 
           @Override
-          public void preFetch(int index, long relativeOffset, long size) {
+          public void doPrefetch(int index, long relativeOffset, long size) {
             return;
           }
         }, Collections.EMPTY_LIST);
