@@ -78,7 +78,7 @@ public class RouterServerSSLTest {
     TestSSLUtils.addSSLProperties(routerProps, sslEnabledDataCentersStr, SSLFactory.Mode.CLIENT, trustStoreFile,
         "router-client");
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
-    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, false, SystemTime.getInstance());
     sslCluster.startServers();
     MockClusterMap routerClusterMap = sslCluster.getClusterMap();
     // MockClusterMap returns a new registry by default. This is to ensure that each node (server, router and so on,
