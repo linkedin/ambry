@@ -154,7 +154,7 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
    * @param relativeOffset the relativeOffset to start.
    * @param size The size requested to doPrefetch.
    */
-  void doPrefetch(long relativeOffset, long size) throws IOException, IndexOutOfBoundsException {
+  void doPrefetch(long relativeOffset, long size) throws IOException {
     if (size > getMessageInfo().getSize() - relativeOffset) {
       throw new IndexOutOfBoundsException(
           "Prefetch range is out of messageInfo Boundary: " + relativeOffset + " " + size + " "
@@ -201,9 +201,10 @@ class StoreMessageReadSet implements MessageReadSet {
     long written = 0;
     long bufStartOffset = relativeOffset - options.getPrefetchedDataRelativeOffset();
     if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset < 0) {
-      logger.error("RelativeOffset out of boundary.", relativeOffset, options.getPrefetchedDataRelativeOffset());
+      logger.warn("Store prefetch: RelativeOffset out of boundary.", relativeOffset,
+          options.getPrefetchedDataRelativeOffset());
     }
-    if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset >= 0 && bufStartOffset <= Integer.MAX_VALUE
+    if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset >= 0
         && bufStartOffset + sizeToRead <= Integer.MAX_VALUE) {
       ByteBuffer buf = options.getPrefetchedData();
       buf.limit((int) (bufStartOffset + sizeToRead));
@@ -240,7 +241,6 @@ class StoreMessageReadSet implements MessageReadSet {
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) {
     try {
-      System.out.println("zzzzzzzzzzzzzzzzzzzzz");
       readOptions.get(index).doPrefetch(relativeOffset, size);
     } catch (Exception e) {
       logger.error("Data Prefetch failed", e);
