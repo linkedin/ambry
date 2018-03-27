@@ -69,7 +69,7 @@ public class ServerSSLTest {
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
     notificationSystem = new MockNotificationSystem(9);
-    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
     sslFactory = new SSLFactory(clientSSLConfig1);
@@ -116,6 +116,17 @@ public class ServerSSLTest {
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
+        clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
+  }
+
+  /**
+   * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
+   */
+  @Test
+  public void endToEndSSLTestWithPrefetch()
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(8);
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
         clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
   }

@@ -240,6 +240,7 @@ class StoreMessageReadSet implements MessageReadSet {
   @Override
   public void doPrefetch(int index, long relativeOffset, long size) {
     try {
+      System.out.println("zzzzzzzzzzzzzzzzzzzzz");
       readOptions.get(index).doPrefetch(relativeOffset, size);
     } catch (Exception e) {
       logger.error("Data Prefetch failed", e);

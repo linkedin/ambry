@@ -56,11 +56,10 @@ public class MockCluster {
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, new Properties(), enableHardDeletes, false, time);
+    this(notificationSystem, new Properties(), enableHardDeletes, time);
   }
 
-  public MockCluster(NotificationSystem notificationSystem, Properties sslProps, boolean enableHardDeletes,
-      boolean storeDoPrefetch, Time time)
+  public MockCluster(NotificationSystem notificationSystem, Properties sslProps, boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     String sslEnabledDataCentersStr = sslProps.getProperty("clustermap.ssl.enabled.datacenters");
@@ -74,12 +73,18 @@ public class MockCluster {
     serverList = new ArrayList<AmbryServer>();
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
-      for (MockDataNodeId dataNodeId : dataNodes) {
+      // initialize first of 8 servers with storeDoPrefetch disabled.
+      for (int i = 0; i < dataNodes.size() - 1; i++) {
         if (sslEnabledDataCentersStr != null) {
-          dataNodeId.setSslEnabledDataCenters(sslEnabledDataCenterList);
+          dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
         }
-        initializeServer(dataNodeId, sslProps, enableHardDeletes, storeDoPrefetch, time);
+        initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, false, time);
       }
+      // initialize the last server with storeDoPrefetch enabled for prefetch test.
+      if (sslEnabledDataCentersStr != null) {
+        dataNodes.get(dataNodes.size() - 1).setSslEnabledDataCenters(sslEnabledDataCenterList);
+      }
+      initializeServer(dataNodes.get(dataNodes.size() - 1), sslProps, enableHardDeletes, true, time);
     } catch (InstantiationException e) {
       // clean up other servers which was started already
       cleanup();
@@ -96,8 +101,7 @@ public class MockCluster {
   }
 
   private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
-      boolean storeDoPrefetch, Time time)
-      throws IOException, InstantiationException, URISyntaxException {
+      boolean storeDoPrefetch, Time time) throws IOException, InstantiationException, URISyntaxException {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -111,9 +115,7 @@ public class MockCluster {
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
-    if (storeDoPrefetch) {
-      props.setProperty("store.enable.data.prefetch", "true");
-    }
+    props.setProperty("store.enable.data.prefetch", Boolean.toString(storeDoPrefetch));
     props.putAll(sslProperties);
     VerifiableProperties propverify = new VerifiableProperties(props);
     AmbryServer server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);

@@ -78,7 +78,7 @@ public class ServerSSLTokenTest {
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
     notificationSystem = new MockNotificationSystem(9);
-    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
     sslFactory = new SSLFactory(clientSSLConfig);

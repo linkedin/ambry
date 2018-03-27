@@ -86,6 +86,19 @@ public class ServerPlaintextTest {
         null, routerProps, testEncryption);
   }
 
+  /**
+   * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
+   */
+  @Test
+  public void endToEndTestWithPrefetch()
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+    DataNodeId dataNodeId = plaintextCluster.getClusterMap()
+        .getDataNodeIds()
+        .get(plaintextCluster.getClusterMap().getDataNodeIds().size() - 1);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
+        null, routerProps, testEncryption);
+  }
+
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
