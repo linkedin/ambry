@@ -48,11 +48,11 @@ public class NetworkMetrics {
   public final Meter plaintextReceiveBytesRate;
   // the bytes rate to send the entire response
   public final Meter plaintextSendBytesRate;
-  // the time to receive 1KB data in one read call
+  // the time(microsecond) to receive 1KB data in one read call
   public final Histogram plaintextReceiveTimePerKB;
-  // the time to send 1KB data in one write call
+  // the time(microsecond) to send 1KB data in one write call
   public final Histogram plaintextSendTimePerKB;
-  // the time to send data in one write call
+  // the time(microsecond) to send data in one write call
   public final Histogram plaintextSendTime;
 
   // SSL metrics
@@ -67,13 +67,13 @@ public class NetworkMetrics {
   public final Meter sslReceiveBytesRate;
   // the bytes rate to send the entire response
   public final Meter sslSendBytesRate;
-  // the time to receive 1KB data in one read call
+  // the time(microsecond) to receive 1KB data in one read call
   public final Histogram sslReceiveTimePerKB;
-  // the time to send 1KB data in one write call
+  // the time(microsecond) to send 1KB data in one write call
   public final Histogram sslSendTimePerKB;
   public final Histogram sslEncryptionTimePerKB;
   public final Histogram sslDecryptionTimePerKB;
-  // the time to send data in one write call
+  // the time(microsecond) to send data in one write call
   public final Histogram sslSendTime;
   // the count of renegotiation after initial handshake done
   public final Counter sslRenegotiationCount;
