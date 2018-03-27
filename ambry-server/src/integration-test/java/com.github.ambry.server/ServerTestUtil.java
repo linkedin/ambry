@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
@@ -413,6 +414,10 @@ public final class ServerTestUtil {
       stream = channel.receive().getInputStream();
       adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
       assertEquals("Start store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
+      List<? extends ReplicaId> replicaIds = partitionIds.get(0).getReplicaIds();
+      for (ReplicaId replicaId : replicaIds) {
+        ((MockReplicaId) replicaId).markReplicaDownStatus(false);
+      }
 
       // put a blob on a restarted store , which should succeed
       PutRequest putRequest5 =

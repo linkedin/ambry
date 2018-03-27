@@ -176,7 +176,7 @@ class CompactionManager {
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
 
-    private volatile boolean enabled = true;
+    private volatile boolean enabled = false;
 
     volatile boolean isRunning = false;
 

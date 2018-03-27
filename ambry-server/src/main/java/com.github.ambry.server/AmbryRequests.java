@@ -109,7 +109,6 @@ public class AmbryRequests implements RequestAPI {
   private final StoreKeyFactory storeKeyFactory;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
-  private final Set<String> replicaMetadataRequestDisabledStores = ConcurrentHashMap.newKeySet();
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
@@ -798,7 +797,6 @@ public class AmbryRequests implements RequestAPI {
                 true)) {
               if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
                 error = ServerErrorCode.No_Error;
-                replicaMetadataRequestDisabledStores.remove(partitionId.toString());
                 logger.info("Store is successfully started and functional for partition: {}", partitionId);
               } else {
                 error = ServerErrorCode.Unknown_Error;
@@ -830,8 +828,6 @@ public class AmbryRequests implements RequestAPI {
                   false)) {
                 if (isRemoteLagLesserOrEqual(partitionIds, 0,
                     blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition())) {
-                  // Disable metadata request from peers
-                  replicaMetadataRequestDisabledStores.add(partitionId.toString());
                   controlRequestForPartitions(
                       EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest),
                       partitionIds, false);
@@ -959,23 +955,19 @@ public class AmbryRequests implements RequestAPI {
    * Check that the provided partition is valid, on the disk, and can be written to.
    * @param partition the partition to validate.
    * @param requestType the {@link RequestOrResponseType} being validated.
-   * @param skipConditionsCheck whether to skip ({@code true}) or perform conditions check.
+   * @param skipPartitionAndDiskAvailableCheck whether to skip ({@code true}) conditions check for the availability of
+   *                                           partition and disk.
    * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
    *         if it cannot.
    */
   private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
-      boolean skipConditionsCheck) {
+      boolean skipPartitionAndDiskAvailableCheck) {
     // 1. Check partition is null
     if (partition == null) {
       metrics.badRequestError.inc();
       return ServerErrorCode.Bad_Request;
     }
-    if (requestType == RequestOrResponseType.ReplicaMetadataRequest && replicaMetadataRequestDisabledStores.contains(
-        partition.toString())) {
-      metrics.temporarilyDisabledError.inc();
-      return ServerErrorCode.Temporarily_Disabled;
-    }
-    if (!skipConditionsCheck) {
+    if (!skipPartitionAndDiskAvailableCheck) {
       // 2. check if partition exists on this node and that the store for this partition has been started
       if (storageManager.getStore(partition) == null) {
         if (partitionsInCurrentNode.contains(partition)) {

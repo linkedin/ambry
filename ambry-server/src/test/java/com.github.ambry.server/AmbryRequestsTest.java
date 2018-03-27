@@ -357,6 +357,8 @@ public class AmbryRequestsTest {
     Response response = sendRequestGetResponse(stopBlobStoreAdminRequest, ServerErrorCode.No_Error);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // verify APIs are called in the process of stopping BlobStore
+    assertEquals("Compaction on store should be disabled after stopping the BlobStore", false,
+        storageManager.enableVal);
     assertEquals("Partition disabled for compaction not as expected", id,
         storageManager.compactionControlledPartitionId);
     assertEquals("Origins list should be empty", true, replicationManager.originsVal.isEmpty());
@@ -371,8 +373,9 @@ public class AmbryRequestsTest {
     // verify APIs are called in the process of starting BlobStore
     assertEquals("Partition started not as expected", id, storageManager.startedPartitionId);
     assertEquals("Replication on given BlobStore should be enabled", true, replicationManager.enableVal);
-    assertEquals("Partition enabled for compaction not as expected", id,
+    assertEquals("Partition controlled for compaction not as expected", id,
         storageManager.compactionControlledPartitionId);
+    assertEquals("Compaction on store should be enabled after starting the BlobStore", true, storageManager.enableVal);
   }
 
   /**
@@ -1026,6 +1029,10 @@ public class AmbryRequestsTest {
      */
     PartitionId compactionControlledPartitionId = null;
     /**
+     * The {@link boolean} that was provided in the call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}
+     */
+    Boolean enableVal = null;
+    /**
      * The {@link PartitionId} that was provided in the call to {@link #shutdownBlobStore(PartitionId)}
      */
     PartitionId shutdownPartitionId = null;
@@ -1059,6 +1066,7 @@ public class AmbryRequestsTest {
         throw exceptionToThrowOnControllingCompaction;
       }
       compactionControlledPartitionId = id;
+      enableVal = enabled;
       return returnValueOfControllingCompaction;
     }
 
