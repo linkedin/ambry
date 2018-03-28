@@ -340,10 +340,7 @@ class AmbrySecurityService implements SecurityService {
     String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
     String containerNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
     if (accountNameFromHeader != null) {
-      Account targetAccount = (Account) restRequest.getArgs().get(InternalKeys.TARGET_ACCOUNT_KEY);
-      if (targetAccount == null) {
-        throw new RestServiceException("Account cannot be found", RestServiceErrorCode.InvalidAccount);
-      }
+      Account targetAccount = getAccountFromArgs(restRequest.getArgs());
       String accountNameFromBlobId = targetAccount.getName();
       if (!accountNameFromHeader.equals(accountNameFromBlobId)) {
         throw new RestServiceException("Account name: " + accountNameFromHeader
@@ -351,10 +348,7 @@ class AmbrySecurityService implements SecurityService {
             RestServiceErrorCode.PreconditionFailed);
       }
       if (containerNameFromHeader != null) {
-        Container targetContainer = (Container) restRequest.getArgs().get(InternalKeys.TARGET_CONTAINER_KEY);
-        if (targetContainer == null) {
-          throw new RestServiceException("Container cannot be found", RestServiceErrorCode.InvalidContainer);
-        }
+        Container targetContainer = getContainerFromArgs(restRequest.getArgs());
         String containerNameFromBlobId = targetContainer.getName();
         if (!containerNameFromHeader.equals(containerNameFromBlobId)) {
           throw new RestServiceException("Container name: " + containerNameFromHeader
