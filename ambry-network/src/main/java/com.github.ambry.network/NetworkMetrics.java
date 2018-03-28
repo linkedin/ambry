@@ -48,12 +48,12 @@ public class NetworkMetrics {
   public final Meter plaintextReceiveBytesRate;
   // the bytes rate to send the entire response
   public final Meter plaintextSendBytesRate;
-  // the time(microsecond) to receive 1KB data in one read call
-  public final Histogram plaintextReceiveTimePerKB;
-  // the time(microsecond) to send 1KB data in one write call
-  public final Histogram plaintextSendTimePerKB;
-  // the time(microsecond) to send data in one write call
-  public final Histogram plaintextSendTime;
+  // the time to receive 1KB data in one read call
+  public final Histogram plaintextReceiveTimeInUsPerKB;
+  // the time to send 1KB data in one write call
+  public final Histogram plaintextSendTimeInUsPerKB;
+  // the time to send data in one write call
+  public final Histogram plaintextSendTimeInUs;
 
   // SSL metrics
   public final Counter sslFactoryInitializationCount;
@@ -67,14 +67,14 @@ public class NetworkMetrics {
   public final Meter sslReceiveBytesRate;
   // the bytes rate to send the entire response
   public final Meter sslSendBytesRate;
-  // the time(microsecond) to receive 1KB data in one read call
-  public final Histogram sslReceiveTimePerKB;
-  // the time(microsecond) to send 1KB data in one write call
-  public final Histogram sslSendTimePerKB;
-  public final Histogram sslEncryptionTimePerKB;
-  public final Histogram sslDecryptionTimePerKB;
-  // the time(microsecond) to send data in one write call
-  public final Histogram sslSendTime;
+  // the time to receive 1KB data in one read call
+  public final Histogram sslReceiveTimeInUsPerKB;
+  // the time to send 1KB data in one write call
+  public final Histogram sslSendTimeInUsPerKB;
+  public final Histogram sslEncryptionTimeInUsPerKB;
+  public final Histogram sslDecryptionTimeInUsPerKB;
+  // the time to send data in one write call
+  public final Histogram sslSendTimeInUs;
   // the count of renegotiation after initial handshake done
   public final Counter sslRenegotiationCount;
 
@@ -110,16 +110,17 @@ public class NetworkMetrics {
         registry.counter(MetricRegistry.name(Selector.class, "SelectorCloseSocketErrorCount"));
     plaintextReceiveBytesRate = registry.meter(MetricRegistry.name(Selector.class, "PlaintextReceiveBytesRate"));
     plaintextSendBytesRate = registry.meter(MetricRegistry.name(Selector.class, "PlaintextSendBytesRate"));
-    plaintextReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveTimePerKB"));
-    plaintextSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTimePerKB"));
-    plaintextSendTime = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTime"));
+    plaintextReceiveTimeInUsPerKB =
+        registry.histogram(MetricRegistry.name(Selector.class, "PlaintextReceiveTimeInUsPerKB"));
+    plaintextSendTimeInUsPerKB = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTimeInUsPerKB"));
+    plaintextSendTimeInUs = registry.histogram(MetricRegistry.name(Selector.class, "PlaintextSendTimeInUs"));
     sslReceiveBytesRate = registry.meter(MetricRegistry.name(Selector.class, "SslReceiveBytesRate"));
     sslSendBytesRate = registry.meter(MetricRegistry.name(Selector.class, "SslSendBytesRate"));
-    sslEncryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimePerKB"));
-    sslDecryptionTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimePerKB"));
-    sslReceiveTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimePerKB"));
-    sslSendTimePerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTimePerKB"));
-    sslSendTime = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTime"));
+    sslEncryptionTimeInUsPerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslEncryptionTimeInUsPerKB"));
+    sslDecryptionTimeInUsPerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslDecryptionTimeInUsPerKB"));
+    sslReceiveTimeInUsPerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslReceiveTimeInUsPerKB"));
+    sslSendTimeInUsPerKB = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTimeInUsPerKB"));
+    sslSendTimeInUs = registry.histogram(MetricRegistry.name(Selector.class, "SslSendTimeInUs"));
     sslFactoryInitializationCount =
         registry.counter(MetricRegistry.name(Selector.class, "SslFactoryInitializationCount"));
     sslFactoryInitializationErrorCount =

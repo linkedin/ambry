@@ -67,7 +67,7 @@ public class PlainTextTransmission extends Transmission {
     logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
     if (bytesRead > 0) {
-      metrics.plaintextReceiveTimePerKB.update(readTimeMs * 1024000 / bytesRead);
+      metrics.plaintextReceiveTimeInUsPerKB.update(readTimeMs * 1024000 / bytesRead);
     }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
@@ -90,8 +90,8 @@ public class PlainTextTransmission extends Transmission {
     logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
-      metrics.plaintextSendTimePerKB.update(writeTimeMs * 1024000 / bytesWritten);
-      metrics.plaintextSendTime.update(writeTimeMs * 1000);
+      metrics.plaintextSendTimeInUsPerKB.update(writeTimeMs * 1024000 / bytesWritten);
+      metrics.plaintextSendTimeInUs.update(writeTimeMs * 1000);
     }
     return send.isSendComplete();
   }
