@@ -109,12 +109,12 @@ public class AmbryRequests implements RequestAPI {
   private final StoreKeyFactory storeKeyFactory;
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
-  private final boolean storeEnableDataPrefetch;
+  private final boolean enableDataPrefetch;
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
       NotificationSystem operationNotification, ReplicationManager replicationManager,
-      StoreKeyFactory storeKeyFactory, boolean storeEnableDataPrefetch) {
+      StoreKeyFactory storeKeyFactory, boolean enableDataPrefetch) {
     this.storageManager = storageManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -125,7 +125,7 @@ public class AmbryRequests implements RequestAPI {
     this.notification = operationNotification;
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
-    this.storeEnableDataPrefetch = storeEnableDataPrefetch;
+    this.enableDataPrefetch = enableDataPrefetch;
 
     requestsDisableInfo.put(RequestOrResponseType.PutRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     requestsDisableInfo.put(RequestOrResponseType.GetRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
@@ -307,7 +307,7 @@ public class AmbryRequests implements RequestAPI {
             StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
-                    storeKeyFactory, storeEnableDataPrefetch);
+                    storeKeyFactory, enableDataPrefetch);
             PartitionResponseInfo partitionResponseInfo =
                 new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
                     blobsToSend.getMessageMetadataList());

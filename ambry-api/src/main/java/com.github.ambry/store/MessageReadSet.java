@@ -60,6 +60,7 @@ public interface MessageReadSet {
    * @param index The index into the message set
    * @param relativeOffset The relativeOffset to start with
    * @param size The size requested to doPrefetch.
+   * @throws IOException
    */
-  void doPrefetch(int index, long relativeOffset, long size);
+  void doPrefetch(int index, long relativeOffset, long size) throws IOException;
 }

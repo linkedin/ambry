@@ -155,12 +155,8 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
    * @param size The size requested to doPrefetch.
    */
   void doPrefetch(long relativeOffset, long size) throws IOException {
-    if (size > getMessageInfo().getSize() - relativeOffset) {
-      throw new IndexOutOfBoundsException(
-          "Prefetch range is out of messageInfo Boundary: " + relativeOffset + " " + size + " "
-              + getMessageInfo().getSize());
-    }
-    prefetchedData = ByteBuffer.allocate((int) size);
+    long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
+    prefetchedData = ByteBuffer.allocate((int) sizeToRead);
     getChannel().position(offset.getOffset() + relativeOffset);
     getChannel().read(prefetchedData);
     prefetchedDataRelativeOffset = relativeOffset;
@@ -199,19 +195,14 @@ class StoreMessageReadSet implements MessageReadSet {
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
     logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = 0;
-    long bufStartOffset = relativeOffset - options.getPrefetchedDataRelativeOffset();
-    if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset < 0) {
-      logger.warn("Store prefetch: RelativeOffset out of boundary.", relativeOffset,
-          options.getPrefetchedDataRelativeOffset());
-    }
-    if (options.getPrefetchedDataRelativeOffset() != -1 && bufStartOffset >= 0
-        && bufStartOffset + sizeToRead <= Integer.MAX_VALUE) {
+    if (options.getPrefetchedDataRelativeOffset() == -1) {
+      written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
+    } else {
       ByteBuffer buf = options.getPrefetchedData();
+      long bufStartOffset = relativeOffset - options.getPrefetchedDataRelativeOffset();
       buf.limit((int) (bufStartOffset + sizeToRead));
       buf.position((int) (bufStartOffset));
       written = channel.write(buf);
-    } else {
-      written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
     }
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
     return written;
@@ -239,11 +230,7 @@ class StoreMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public void doPrefetch(int index, long relativeOffset, long size) {
-    try {
-      readOptions.get(index).doPrefetch(relativeOffset, size);
-    } catch (Exception e) {
-      logger.error("Data Prefetch failed", e);
-    }
+  public void doPrefetch(int index, long relativeOffset, long size) throws IOException{
+    readOptions.get(index).doPrefetch(relativeOffset, size);
   }
 }

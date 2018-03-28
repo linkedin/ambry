@@ -18,6 +18,7 @@ import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +68,7 @@ public class PlainTextTransmission extends Transmission {
     logger.trace("Bytes read " + bytesRead + " from {} using key {} Time: {}",
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
     if (bytesRead > 0) {
-      metrics.plaintextReceiveTimeInUsPerKB.update(readTimeMs * 1024000 / bytesRead);
+      metrics.plaintextReceiveTimeInUsPerKB.update(TimeUnit.MILLISECONDS.toMicros(readTimeMs) * 1024 / bytesRead);
     }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
@@ -90,8 +91,8 @@ public class PlainTextTransmission extends Transmission {
     logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
-      metrics.plaintextSendTimeInUsPerKB.update(writeTimeMs * 1024000 / bytesWritten);
-      metrics.plaintextSendTimeInUs.update(writeTimeMs * 1000);
+      metrics.plaintextSendTimeInUsPerKB.update(TimeUnit.MILLISECONDS.toMicros(writeTimeMs) * 1024 / bytesWritten);
+      metrics.plaintextSendTime.update(writeTimeMs);
     }
     return send.isSendComplete();
   }

@@ -164,19 +164,17 @@ public class MessageFormatSendTest {
     MessageFormatInputStream putStream;
     MessageFormatRecord.MessageHeader_Format header;
     if (putFormat.equals(PutMessageFormatInputStream.class.getSimpleName())) {
+      header = getHeader(
+          new PutMessageFormatInputStream(storeKey, encryptionKey == null ? null : encryptionKey.duplicate(),
+              properties, ByteBuffer.wrap(userMetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), blob.length,
+              BlobType.DataBlob));
       putStream = new PutMessageFormatInputStream(storeKey, encryptionKey, properties, ByteBuffer.wrap(userMetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(blob)), blob.length, BlobType.DataBlob);
-      if (encryptionKey != null) {
-        encryptionKey.flip();
-      }
-      header = getHeader(
-          new PutMessageFormatInputStream(storeKey, encryptionKey, properties, ByteBuffer.wrap(userMetadata),
-              new ByteBufferInputStream(ByteBuffer.wrap(blob)), blob.length, BlobType.DataBlob));
     } else {
-      putStream = new PutMessageFormatBlobV1InputStream(storeKey, properties, ByteBuffer.wrap(userMetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(blob)), blob.length, BlobType.DataBlob);
       header = getHeader(new PutMessageFormatBlobV1InputStream(storeKey, properties, ByteBuffer.wrap(userMetadata),
           new ByteBufferInputStream(ByteBuffer.wrap(blob)), blob.length, BlobType.DataBlob));
+      putStream = new PutMessageFormatBlobV1InputStream(storeKey, properties, ByteBuffer.wrap(userMetadata),
+          new ByteBufferInputStream(ByteBuffer.wrap(blob)), blob.length, BlobType.DataBlob);
     }
 
     ByteBuffer buf1 = ByteBuffer.allocate((int) putStream.getSize());
@@ -257,7 +255,8 @@ public class MessageFormatSendTest {
       Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
     }
     if (enableDataPrefetch) {
-      readSet.isPrefetchInfoCorrect(header.getUserMetadataRecordRelativeOffset(), header.getUserMetadataRecordSize());
+      Assert.assertTrue(readSet.isPrefetchInfoCorrect(header.getUserMetadataRecordRelativeOffset(),
+          header.getUserMetadataRecordSize()));
     }
 
     // get blob properties
@@ -316,8 +315,8 @@ public class MessageFormatSendTest {
       Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
     }
     if (enableDataPrefetch) {
-      readSet.isPrefetchInfoCorrect(header.getBlobPropertiesRecordRelativeOffset(),
-          header.getBlobPropertiesRecordSize() + header.getUserMetadataRecordSize());
+      Assert.assertTrue(readSet.isPrefetchInfoCorrect(header.getBlobPropertiesRecordRelativeOffset(),
+          header.getBlobPropertiesRecordSize() + header.getUserMetadataRecordSize()));
     }
   }
 

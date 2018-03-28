@@ -81,7 +81,7 @@ public class ServerPlaintextTest {
   @Test
   public void endToEndTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
+    DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
         null, routerProps, testEncryption);
   }
@@ -92,9 +92,7 @@ public class ServerPlaintextTest {
   @Test
   public void endToEndTestWithPrefetch()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    DataNodeId dataNodeId = plaintextCluster.getClusterMap()
-        .getDataNodeIds()
-        .get(plaintextCluster.getClusterMap().getDataNodeIds().size() - 1);
+    DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
         null, routerProps, testEncryption);
   }
