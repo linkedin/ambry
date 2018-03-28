@@ -29,11 +29,15 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - - -
  * |       blob key            |
  *  - - - - - - - - - - - - - -
+ * |     Encryption key        |
+ *  - - - - - - - - - - - - - -
  * |  Blob Properties Record   |
  *  - - - - - - - - - - - - - -
  * |  User metadata Record     |
  *  - - - - - - - - - - - - - -
  * |       Blob Record         |
+ *  - - - - - - - - - - - - - -
+ * |            CRC            |
  *  - - - - - - - - - - - - - -
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
