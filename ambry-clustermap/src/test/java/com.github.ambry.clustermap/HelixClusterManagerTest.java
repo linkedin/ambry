@@ -65,6 +65,7 @@ public class HelixClusterManagerTest {
   private Map<String, Gauge> gauges;
   private Map<String, Counter> counters;
   private final boolean useComposite;
+  private final String hardwareLayoutPath;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -88,7 +89,7 @@ public class HelixClusterManagerTest {
     for (String dcName : dcs) {
       dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, false));
     }
-    String hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    this.hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
@@ -321,6 +322,23 @@ public class HelixClusterManagerTest {
     assertEquals("If no replica is SEALED, the whole partition should be Writable", PartitionState.READ_WRITE,
         partition.getPartitionState());
     assertStateEquivalency();
+  }
+
+  /**
+   * Tests that if an InstanceConfig change notification is triggered with new instances, it is handled gracefully (no
+   * exceptions). When we introduce support for dynamically adding them to the cluster map, this test should be enhanced
+   * to actually verify that the new nodes are added.
+   * @throws Exception
+   */
+  @Test
+  public void dynamicNodeAdditionsTest() throws Exception {
+    if (useComposite) {
+      return;
+    }
+    testHardwareLayout.addNewDataNodes(1);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    // this triggers a notification.
+    helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
   }
 
   /**
