@@ -1053,7 +1053,7 @@ public class AmbryBlobStorageServiceTest {
       default:
         fail("RestMethod not supported: " + restRequest.getRestMethod());
     }
-    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.HOURS)) {
       if (responseHandler.getException() != null) {
         throw responseHandler.getException();
       }
@@ -1226,11 +1226,22 @@ public class AmbryBlobStorageServiceTest {
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
-
-    // test Conditional Delete failure because of incorrect account name
+    // test Conditional Delete failure because of only container name is set
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    JSONObject headers2 = new JSONObject();
+    setAccountAndContainerHeaders(headers2, null, containerNameInPost);
+    RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, headers2, null);
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed because only container name is set");
+    } catch (RestServiceException e) {
+      assertEquals("AmbryBlobStorageService should have thrown a BadRequest exception", RestServiceErrorCode.BadRequest,
+          e.getErrorCode());
+    }
+    // test Conditional Delete failure because of incorrect account name
+    restResponseChannel = new MockRestResponseChannel();
     setAccountAndContainerHeaders(headers, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
-    RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
+    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
     try {
       doOperation(restRequest, restResponseChannel);
       fail("Operation should have failed because incorrect account name");

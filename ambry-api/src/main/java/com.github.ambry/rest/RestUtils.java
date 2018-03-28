@@ -723,6 +723,10 @@ public class RestUtils {
               RestServiceErrorCode.PreconditionFailed);
         }
       }
+    } else if (containerNameFromHeader != null) {
+      throw new RestServiceException(
+          "Only container name is set in request with no corresponding account name is not allowed.",
+          RestServiceErrorCode.BadRequest);
     }
   }
 
