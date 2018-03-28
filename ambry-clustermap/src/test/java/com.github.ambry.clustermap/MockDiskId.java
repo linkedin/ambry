@@ -17,6 +17,7 @@ public class MockDiskId implements DiskId {
   String mountPath;
   MockDataNodeId dataNode;
   HardwareState state = HardwareState.AVAILABLE;
+  private boolean allowChangesThroughClustermap = true;
 
   public MockDiskId(MockDataNodeId dataNode, String mountPath) {
     this.mountPath = mountPath;
@@ -39,11 +40,20 @@ public class MockDiskId implements DiskId {
   }
 
   public void onDiskError() {
-    state = HardwareState.UNAVAILABLE;
+    if (allowChangesThroughClustermap) {
+      state = HardwareState.UNAVAILABLE;
+    }
   }
 
   public void onDiskOk() {
-    state = HardwareState.AVAILABLE;
+    if (allowChangesThroughClustermap) {
+      state = HardwareState.AVAILABLE;
+    }
+  }
+
+  public void setDiskState(HardwareState state, boolean allowChangesThroughClusterMap) {
+    this.allowChangesThroughClustermap = allowChangesThroughClusterMap;
+    this.state = state;
   }
 
   @Override

@@ -818,7 +818,7 @@ public class AmbryRequests implements RequestAPI {
         // stop BlobStore properly
         error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, false);
         if (error.equals(ServerErrorCode.No_Error)) {
-          if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() > 0) {
+          if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() >= 0) {
             if (storageManager.controlCompactionForBlobStore(partitionId, false)) {
               Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
               controlRequestForPartitions(

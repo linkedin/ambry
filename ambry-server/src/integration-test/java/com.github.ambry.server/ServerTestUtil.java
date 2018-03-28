@@ -15,8 +15,10 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockDiskId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
@@ -360,19 +362,7 @@ public final class ServerTestUtil {
       channel.send(controlRequest);
       stream = channel.receive().getInputStream();
       AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
-      if (adminResponse.getError() == ServerErrorCode.Retry_After_Backoff) {
-        System.out.println("Have a second try to stop BlobStore");
-        adminRequest =
-            new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
-        controlRequest = new BlobStoreControlAdminRequest((short) 3, false, adminRequest);
-        channel.send(controlRequest);
-        stream = channel.receive().getInputStream();
-        adminResponse = AdminResponse.readFrom(new DataInputStream(stream));
-        assertEquals("Stop store admin request should succeed after second try", ServerErrorCode.No_Error,
-            adminResponse.getError());
-      } else {
-        assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
-      }
+      assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
 
       // put a blob on a stopped store, which should fail
       putRequest =
@@ -416,7 +406,10 @@ public final class ServerTestUtil {
       assertEquals("Start store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
       List<? extends ReplicaId> replicaIds = partitionIds.get(0).getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
-        ((MockReplicaId) replicaId).markReplicaDownStatus(false);
+        // forcibly mark replicas and disks as up.
+        MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+        mockReplicaId.markReplicaDownStatus(false);
+        ((MockDiskId) mockReplicaId.getDiskId()).setDiskState(HardwareState.AVAILABLE, false);
       }
 
       // put a blob on a restarted store , which should succeed
@@ -457,6 +450,12 @@ public final class ServerTestUtil {
     } catch (Exception e) {
       e.printStackTrace();
       Assert.fail();
+    } finally {
+      List<? extends ReplicaId> replicaIds = cluster.getClusterMap().getWritablePartitionIds().get(0).getReplicaIds();
+      for (ReplicaId replicaId : replicaIds) {
+        MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+        ((MockDiskId) mockReplicaId.getDiskId()).setDiskState(HardwareState.AVAILABLE, true);
+      }
     }
   }
 
