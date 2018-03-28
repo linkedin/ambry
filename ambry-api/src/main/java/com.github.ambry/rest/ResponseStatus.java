@@ -75,6 +75,11 @@ public enum ResponseStatus {
   Gone,
 
   /**
+   * 412 Precondition Failed - The conditions given in the request header fields evaluated to false
+   */
+  PreconditionFailed,
+
+  /**
    * 413 Request Entity Too Large - The request is larger than what the server is willing to accept
    */
   RequestTooLarge,
@@ -135,6 +140,8 @@ public enum ResponseStatus {
         return ServiceUnavailable;
       case InsufficientCapacity:
         return InsufficientCapacity;
+      case PreconditionFailed:
+        return PreconditionFailed;
       case IdConverterServiceError:
       case InternalServerError:
       case RequestChannelClosed:

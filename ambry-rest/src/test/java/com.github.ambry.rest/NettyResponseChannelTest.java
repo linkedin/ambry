@@ -600,6 +600,8 @@ public class NettyResponseChannelTest {
       case RequestResponseQueuingFailure:
       case UnsupportedRestMethod:
         return HttpResponseStatus.INTERNAL_SERVER_ERROR;
+      case PreconditionFailed:
+        return HttpResponseStatus.PRECONDITION_FAILED;
       default:
         throw new IllegalArgumentException("Unrecognized RestServiceErrorCode - " + code);
     }

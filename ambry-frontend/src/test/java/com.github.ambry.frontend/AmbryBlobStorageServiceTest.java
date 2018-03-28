@@ -407,6 +407,8 @@ public class AmbryBlobStorageServiceTest {
         for (Container container : testAccount.getAllContainers()) {
           doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
               container);
+          doConditionalDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
+              container);
         }
       }
     }
@@ -999,6 +1001,28 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
+   * Sets account name and container name in headers.
+   * @param headers the {@link JSONObject} where the headers should be set.
+   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
+   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
+   * @throws IllegalArgumentException if {@code headers} is null.
+   * @throws JSONException
+   */
+  private void setAccountAndContainerHeaders(JSONObject headers, String targetAccountName, String targetContainerName)
+      throws JSONException {
+    if (headers != null) {
+      if (targetAccountName != null) {
+        headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
+      }
+      if (targetContainerName != null) {
+        headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+      }
+    } else {
+      throw new IllegalArgumentException("Some required arguments are null. Cannot set ambry headers");
+    }
+  }
+
+  /**
    * Does an operation in {@link AmbryBlobStorageService} as dictated by the {@link RestMethod} in {@code restRequest}
    * and returns the result, if any. If an exception occurs during the operation, throws the exception.
    * @param restRequest the {@link RestRequest} that needs to be submitted to the {@link AmbryBlobStorageService}.
@@ -1168,6 +1192,78 @@ public class AmbryBlobStorageServiceTest {
     getBlobInfoAndVerify(blobId, null, headers, expectedAccount, expectedContainer);
     deleteBlobAndVerify(blobId);
 
+    // check GET, HEAD and DELETE after delete.
+    verifyOperationsAfterDelete(blobId, headers, content, expectedAccount, expectedContainer);
+  }
+
+  /**
+   * Tests blob conditional DELETE operations on the given {@code container}.
+   * @param toPostAccount the {@link Account} to use in post headers. Can be {@code null} if only using service ID.
+   * @param toPostContainer the {@link Container} to use in post headers. Can be {@code null} if only using service ID.
+   * @param serviceId the serviceId to use for the POST
+   * @param isPrivate the isPrivate flag to pass as part of the POST
+   * @param expectedAccount the {@link Account} details that are eventually expected to be populated.
+   * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
+   * @throws Exception
+   */
+  private void doConditionalDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
+      boolean isPrivate, Account expectedAccount, Container expectedContainer) throws Exception {
+    final int CONTENT_LENGTH = 1024;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
+    String contentType = "application/octet-stream";
+    String ownerId = "postGetHeadDeleteOwnerID";
+    JSONObject headers = new JSONObject();
+    String accountNameInPost = toPostAccount != null ? toPostAccount.getName() : null;
+    String containerNameInPost = toPostContainer != null ? toPostContainer.getName() : null;
+    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
+        containerNameInPost);
+    Map<String, String> userMetadata = new HashMap<>();
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
+    userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
+    RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
+    // perform POST, GET, HEAD successfully before DELETE
+    String blobId = postBlobAndVerify(headers, content, expectedAccount, expectedContainer);
+    headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
+    getBlobAndVerify(blobId, null, null, headers, content, expectedAccount, expectedContainer);
+    getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
+    // test Conditional Delete failure because only container name is set
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    JSONObject headers2 = new JSONObject();
+    setAccountAndContainerHeaders(headers2, null, containerNameInPost);
+    RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, headers2, null);
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed because only container name is set");
+    } catch (RestServiceException e) {
+      assertEquals("AmbryBlobStorageService should have thrown a BadRequest exception", RestServiceErrorCode.BadRequest,
+          e.getErrorCode());
+    }
+    // test Conditional Delete failure because of incorrect account name
+    restResponseChannel = new MockRestResponseChannel();
+    setAccountAndContainerHeaders(headers, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
+    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed because incorrect account name");
+    } catch (RestServiceException e) {
+      assertEquals("AmbryBlobStorageService should have thrown a PreconditionFailed exception",
+          RestServiceErrorCode.PreconditionFailed, e.getErrorCode());
+    }
+    // test Conditional Delete failure because of incorrect container name
+    restResponseChannel = new MockRestResponseChannel();
+    setAccountAndContainerHeaders(headers, accountNameInPost, "INCORRECT_CONTAINER_NAME");
+    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed because incorrect container name");
+    } catch (RestServiceException e) {
+      assertEquals("AmbryBlobStorageService should have thrown a PreconditionFailed exception",
+          RestServiceErrorCode.PreconditionFailed, e.getErrorCode());
+    }
+    // test Conditional Delete succeeds
+    setAccountAndContainerHeaders(headers, accountNameInPost, containerNameInPost);
+    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
+    verifyDeleteAccepted(restRequest);
     // check GET, HEAD and DELETE after delete.
     verifyOperationsAfterDelete(blobId, headers, content, expectedAccount, expectedContainer);
   }

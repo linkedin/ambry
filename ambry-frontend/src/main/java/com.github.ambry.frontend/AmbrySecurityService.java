@@ -34,6 +34,8 @@ import com.github.ambry.utils.Utils;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
+import static com.github.ambry.rest.RestUtils.*;
+
 
 /**
  * Default implementation of {@link SecurityService} for Ambry that doesn't do any validations, but just
@@ -97,6 +99,14 @@ class AmbrySecurityService implements SecurityService {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
+    }
+    // check preconditions for DELETE request
+    if (restRequest.getRestMethod() == RestMethod.DELETE) {
+      try {
+        accountAndContainerNamePreconditionCheck(restRequest);
+      } catch (Exception e) {
+        exception = e;
+      }
     }
     frontendMetrics.securityServicePostProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
     callback.onCompletion(null, exception);
