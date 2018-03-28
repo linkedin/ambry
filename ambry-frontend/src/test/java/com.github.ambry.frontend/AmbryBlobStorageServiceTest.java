@@ -1053,7 +1053,7 @@ public class AmbryBlobStorageServiceTest {
       default:
         fail("RestMethod not supported: " + restRequest.getRestMethod());
     }
-    if (responseHandler.awaitResponseSubmission(1, TimeUnit.HOURS)) {
+    if (responseHandler.awaitResponseSubmission(1, TimeUnit.SECONDS)) {
       if (responseHandler.getException() != null) {
         throw responseHandler.getException();
       }
@@ -1226,7 +1226,7 @@ public class AmbryBlobStorageServiceTest {
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
-    // test Conditional Delete failure because of only container name is set
+    // test Conditional Delete failure because only container name is set
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers2 = new JSONObject();
     setAccountAndContainerHeaders(headers2, null, containerNameInPost);
