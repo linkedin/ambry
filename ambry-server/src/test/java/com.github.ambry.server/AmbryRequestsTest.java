@@ -358,7 +358,7 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // verify APIs are called in the process of stopping BlobStore
     assertEquals("Compaction on store should be disabled after stopping the BlobStore", false,
-        storageManager.enableVal);
+        storageManager.compactionEnableVal);
     assertEquals("Partition disabled for compaction not as expected", id,
         storageManager.compactionControlledPartitionId);
     assertEquals("Origins list should be empty", true, replicationManager.originsVal.isEmpty());
@@ -375,7 +375,8 @@ public class AmbryRequestsTest {
     assertEquals("Replication on given BlobStore should be enabled", true, replicationManager.enableVal);
     assertEquals("Partition controlled for compaction not as expected", id,
         storageManager.compactionControlledPartitionId);
-    assertEquals("Compaction on store should be enabled after starting the BlobStore", true, storageManager.enableVal);
+    assertEquals("Compaction on store should be enabled after starting the BlobStore", true,
+        storageManager.compactionEnableVal);
   }
 
   /**
@@ -1031,7 +1032,7 @@ public class AmbryRequestsTest {
     /**
      * The {@link boolean} that was provided in the call to {@link #controlCompactionForBlobStore(PartitionId, boolean)}
      */
-    Boolean enableVal = null;
+    Boolean compactionEnableVal = null;
     /**
      * The {@link PartitionId} that was provided in the call to {@link #shutdownBlobStore(PartitionId)}
      */
@@ -1066,7 +1067,7 @@ public class AmbryRequestsTest {
         throw exceptionToThrowOnControllingCompaction;
       }
       compactionControlledPartitionId = id;
-      enableVal = enabled;
+      compactionEnableVal = enabled;
       return returnValueOfControllingCompaction;
     }
 
