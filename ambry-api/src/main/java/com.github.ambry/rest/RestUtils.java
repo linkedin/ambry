@@ -699,8 +699,7 @@ public class RestUtils {
   }
 
   /**
-   * Check preconditions for request if the {@code restRequest} contains the target
-   * account and container and they are not generic unknowns.
+   * Check preconditions for request if the {@code restRequest} contains the target account and container.
    * @param restRequest the {@link RestRequest} that contains the {@link Account} and {@link Container} details.
    * @throws RestServiceException if preconditions check failed.
    */
@@ -711,9 +710,9 @@ public class RestUtils {
       Account targetAccount = getAccountFromArgs(restRequest.getArgs());
       String accountNameFromBlobId = targetAccount.getName();
       if (!accountNameFromHeader.equals(accountNameFromBlobId)) {
-        throw new RestServiceException("Account name: " + accountNameFromHeader
-            + " from request doesn't match the account name from Blob id : " + accountNameFromBlobId,
-            RestServiceErrorCode.PreconditionFailed);
+        throw new RestServiceException(
+            "Account name: " + accountNameFromHeader + " from request doesn't match the account name from Blob id : "
+                + accountNameFromBlobId, RestServiceErrorCode.PreconditionFailed);
       }
       if (containerNameFromHeader != null) {
         Container targetContainer = getContainerFromArgs(restRequest.getArgs());
