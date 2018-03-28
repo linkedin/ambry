@@ -374,17 +374,13 @@ public class StaticClusterManagerTest {
    */
   private static void checkRackUsage(List<PartitionId> allocatedPartitions) {
     for (PartitionId partition : allocatedPartitions) {
-      Map<String, Set<Long>> rackSetByDatacenter = new HashMap<>();
+      Map<String, Set<String>> rackSetByDatacenter = new HashMap<>();
       for (ReplicaId replica : partition.getReplicaIds()) {
         String datacenter = replica.getDataNodeId().getDatacenterName();
-        Set<Long> rackSet = rackSetByDatacenter.get(datacenter);
-        if (rackSet == null) {
-          rackSet = new HashSet<>();
-          rackSetByDatacenter.put(datacenter, rackSet);
-        }
+        Set<String> rackSet = rackSetByDatacenter.computeIfAbsent(datacenter, k -> new HashSet<>());
 
-        long rackId = replica.getDataNodeId().getRackId();
-        if (rackId >= 0) {
+        String rackId = replica.getDataNodeId().getRackId();
+        if (rackId != null) {
           assertFalse("Allocation was not on unique racks", rackSet.contains(rackId));
           rackSet.add(rackId);
         }

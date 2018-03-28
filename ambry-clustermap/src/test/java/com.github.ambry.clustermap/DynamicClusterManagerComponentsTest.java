@@ -35,7 +35,7 @@ import static org.junit.Assert.*;
 public class DynamicClusterManagerComponentsTest {
   private static final int PORT_NUM1 = 2000;
   private static final int PORT_NUM2 = 2001;
-  private static final long RACK_ID = 1;
+  private static final String RACK_ID = "1";
   private static final int SSL_PORT_NUM = 3000;
   private static final String HOST_NAME = TestUtils.getLocalHost();
   private final ClusterMapConfig clusterMapConfig1;

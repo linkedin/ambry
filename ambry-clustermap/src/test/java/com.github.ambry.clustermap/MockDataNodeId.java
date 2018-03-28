@@ -115,8 +115,8 @@ public class MockDataNodeId extends DataNodeId {
   }
 
   @Override
-  public long getRackId() {
-    return -1;
+  public String getRackId() {
+    return null;
   }
 
   public List<String> getMountPaths() {
