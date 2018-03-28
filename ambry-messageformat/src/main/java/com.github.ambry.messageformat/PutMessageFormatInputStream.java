@@ -37,8 +37,6 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - - -
  * |       Blob Record         |
  *  - - - - - - - - - - - - - -
- * |            CRC            |
- *  - - - - - - - - - - - - - -
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
