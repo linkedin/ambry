@@ -1001,14 +1001,14 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Sets headers for conditional delete.
+   * Sets account name and container name in headers.
    * @param headers the {@link JSONObject} where the headers should be set.
    * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
    * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
    * @throws IllegalArgumentException if {@code headers} is null.
    * @throws JSONException
    */
-  private void setAmbryHeadersForDelete(JSONObject headers, String targetAccountName, String targetContainerName)
+  private void setAccountAndContainerHeaders(JSONObject headers, String targetAccountName, String targetContainerName)
       throws JSONException {
     if (headers != null) {
       if (targetAccountName != null) {
@@ -1229,7 +1229,7 @@ public class AmbryBlobStorageServiceTest {
 
     // test Conditional Delete failure because of incorrect account name
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    setAmbryHeadersForDelete(headers, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
+    setAccountAndContainerHeaders(headers, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
     RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
     try {
       doOperation(restRequest, restResponseChannel);
@@ -1240,7 +1240,7 @@ public class AmbryBlobStorageServiceTest {
     }
     // test Conditional Delete failure because of incorrect container name
     restResponseChannel = new MockRestResponseChannel();
-    setAmbryHeadersForDelete(headers, accountNameInPost, "INCORRECT_CONTAINER_NAME");
+    setAccountAndContainerHeaders(headers, accountNameInPost, "INCORRECT_CONTAINER_NAME");
     restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
     try {
       doOperation(restRequest, restResponseChannel);
@@ -1250,7 +1250,7 @@ public class AmbryBlobStorageServiceTest {
           RestServiceErrorCode.PreconditionFailed, e.getErrorCode());
     }
     // test Conditional Delete succeeds
-    setAmbryHeadersForDelete(headers, accountNameInPost, containerNameInPost);
+    setAccountAndContainerHeaders(headers, accountNameInPost, containerNameInPost);
     restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
     verifyDeleteAccepted(restRequest);
     // check GET, HEAD and DELETE after delete.

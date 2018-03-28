@@ -103,7 +103,7 @@ class AmbrySecurityService implements SecurityService {
     // check preconditions for DELETE request
     if (restRequest.getRestMethod() == RestMethod.DELETE) {
       try {
-        checkForConditionalDelete(restRequest);
+        accountAndContainerNamePreconditionCheck(restRequest);
       } catch (Exception e) {
         exception = e;
       }
@@ -328,34 +328,5 @@ class AmbrySecurityService implements SecurityService {
       restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, container.getName());
     }
     restResponseChannel.setHeader(RestUtils.Headers.PRIVATE, !container.isCacheable());
-  }
-
-  /**
-   * Check precondtions for conditional delete if the {@code restRequest} contains the target
-   * account and container and they are not generic unknowns.
-   * @param restRequest the {@link RestRequest} that contains the {@link Account} and {@link Container} details.
-   * @throws RestServiceException if preconditions check failed.
-   */
-  private void checkForConditionalDelete(RestRequest restRequest) throws RestServiceException {
-    String accountNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false);
-    String containerNameFromHeader = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (accountNameFromHeader != null) {
-      Account targetAccount = getAccountFromArgs(restRequest.getArgs());
-      String accountNameFromBlobId = targetAccount.getName();
-      if (!accountNameFromHeader.equals(accountNameFromBlobId)) {
-        throw new RestServiceException("Account name: " + accountNameFromHeader
-            + " from delete request doesn't match the account name from Blob id : " + accountNameFromBlobId,
-            RestServiceErrorCode.PreconditionFailed);
-      }
-      if (containerNameFromHeader != null) {
-        Container targetContainer = getContainerFromArgs(restRequest.getArgs());
-        String containerNameFromBlobId = targetContainer.getName();
-        if (!containerNameFromHeader.equals(containerNameFromBlobId)) {
-          throw new RestServiceException("Container name: " + containerNameFromHeader
-              + "from delete request doesn't match the container name from Blob id : " + containerNameFromBlobId,
-              RestServiceErrorCode.PreconditionFailed);
-        }
-      }
-    }
   }
 }
