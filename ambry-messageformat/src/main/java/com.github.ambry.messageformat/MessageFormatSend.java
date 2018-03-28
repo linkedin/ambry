@@ -87,7 +87,7 @@ public class MessageFormatSend implements Send {
   /**
    * Calculates the offsets from the MessageReadSet that needs to be sent over the network
    * based on the type of data requested as indicated by the flags
-   * @param enableDataPrefetch do data doPrefetch is this is true.
+   * @param enableDataPrefetch do data prefetch is this is true.
    */
   private void calculateOffsets(boolean enableDataPrefetch) throws IOException, MessageFormatException {
     try {
