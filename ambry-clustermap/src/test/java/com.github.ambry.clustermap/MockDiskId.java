@@ -51,6 +51,11 @@ public class MockDiskId implements DiskId {
     }
   }
 
+  /**
+   * Forcibly set disk state {@link HardwareState} and specify whether ClusterMap is allowed to change disk state.
+   * @param state the hardware state of disk
+   * @param allowChangesThroughClusterMap whether the ClusterMap is allowed to change disk state
+   */
   public void setDiskState(HardwareState state, boolean allowChangesThroughClusterMap) {
     this.allowChangesThroughClustermap = allowChangesThroughClusterMap;
     this.state = state;

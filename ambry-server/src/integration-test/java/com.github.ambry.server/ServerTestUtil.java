@@ -355,8 +355,8 @@ public final class ServerTestUtil {
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
       assertEquals(ServerErrorCode.Blob_Not_Found, resp5.getPartitionResponseInfoList().get(0).getErrorCode());
 
-      System.out.println("Begin to stop a BlobStore");
       // stop the store via AdminRequest
+      System.out.println("Begin to stop a BlobStore");
       AdminRequest adminRequest =
           new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
       BlobStoreControlAdminRequest controlRequest = new BlobStoreControlAdminRequest((short) 0, false, adminRequest);
@@ -397,8 +397,8 @@ public final class ServerTestUtil {
       assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Disk_Unavailable,
           deleteResponse.getError());
 
-      System.out.println("Begin to restart the BlobStore");
       // start the store via AdminRequest
+      System.out.println("Begin to restart the BlobStore");
       adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionIds.get(0), 1, "clientid2");
       controlRequest = new BlobStoreControlAdminRequest((short) 0, true, adminRequest);
       channel.send(controlRequest);
@@ -1254,7 +1254,7 @@ public final class ServerTestUtil {
     putResponseStream = channel.receive().getInputStream();
     PutResponse response5 = PutResponse.readFrom(new DataInputStream(putResponseStream));
     assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response5.getError());
-    // check the put blob has been replicated successfully.
+    // verify the put blob has been replicated successfully.
     notificationSystem.awaitBlobCreations(blobId2.getID());
 
     // get a blob on a restarted store , which should succeed
