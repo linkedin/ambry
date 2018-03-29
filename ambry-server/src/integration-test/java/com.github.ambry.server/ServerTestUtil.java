@@ -1176,13 +1176,7 @@ public final class ServerTestUtil {
     MockDataNodeId dataNodeId = clusterMap.getDataNodes().get(0);
     Port port = new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
     ConnectedChannel channel = connectionPool.checkOutConnection("localhost", port, 10000);
-    ArrayList<BlobId> ids = new ArrayList<BlobId>();
-    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-    ids.add(blobId1);
-    PartitionId partitionId = ids.get(0).getPartition();
-    partitionRequestInfoList.clear();
-    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
-    partitionRequestInfoList.add(partitionRequestInfo);
+    PartitionId partitionId = blobId1.getPartition();
 
     // stop the store via AdminRequest
     System.out.println("Begin to stop a BlobStore");
@@ -1200,22 +1194,22 @@ public final class ServerTestUtil {
     BlobProperties properties = new BlobProperties(3187, "serviceid1", accountId, containerId, false);
     BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false);
-    PutRequest putRequest =
-        new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+    PutRequest putRequest2 =
+        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
-    channel.send(putRequest);
+    channel.send(putRequest2);
     InputStream putResponseStream = channel.receive().getInputStream();
-    PutResponse response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-    assertEquals("Put blob on stopped store should fail", ServerErrorCode.Disk_Unavailable, response.getError());
+    PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+    assertEquals("Put blob on stopped store should fail", ServerErrorCode.Disk_Unavailable, response2.getError());
 
     // get a blob properties on a stopped store, which should fail
-    ids = new ArrayList<BlobId>();
+    ArrayList<BlobId> ids = new ArrayList<BlobId>();
     ids.add(blobId1);
-    partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-    partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
+    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
     partitionRequestInfoList.add(partitionRequestInfo);
     GetRequest getRequest1 =
-        new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
+        new GetRequest(1, "clientId1", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
     channel.send(getRequest1);
     stream = channel.receive().getInputStream();
     GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1223,7 +1217,7 @@ public final class ServerTestUtil {
         resp1.getPartitionResponseInfoList().get(0).getErrorCode());
 
     // delete a blob on a stopped store, which should fail
-    DeleteRequest deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
+    DeleteRequest deleteRequest = new DeleteRequest(1, "clientId1", blobId1, System.currentTimeMillis());
     channel.send(deleteRequest);
     stream = channel.receive().getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(stream));
@@ -1232,7 +1226,7 @@ public final class ServerTestUtil {
 
     // start the store via AdminRequest
     System.out.println("Begin to restart the BlobStore");
-    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientid2");
+    adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientId");
     controlRequest = new BlobStoreControlAdminRequest((short) 0, true, adminRequest);
     channel.send(controlRequest);
     stream = channel.receive().getInputStream();
@@ -1247,13 +1241,13 @@ public final class ServerTestUtil {
     }
 
     // put a blob on a restarted store , which should succeed
-    PutRequest putRequest5 =
-        new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
+    putRequest2 =
+        new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
-    channel.send(putRequest5);
+    channel.send(putRequest2);
     putResponseStream = channel.receive().getInputStream();
-    PutResponse response5 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-    assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response5.getError());
+    response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
+    assertEquals("Put blob on restarted store should succeed", ServerErrorCode.No_Error, response2.getError());
     // verify the put blob has been replicated successfully.
     notificationSystem.awaitBlobCreations(blobId2.getID());
 
@@ -1263,18 +1257,19 @@ public final class ServerTestUtil {
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
     partitionRequestInfoList.add(partitionRequestInfo);
-    getRequest1 = new GetRequest(1, "clientid1", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
-    channel.send(getRequest1);
+    GetRequest getRequest2 =
+        new GetRequest(1, "clientId2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+    channel.send(getRequest2);
     stream = channel.receive().getInputStream();
-    resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-    InputStream responseStream = resp1.getInputStream();
+    GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
+    InputStream responseStream = resp2.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
     byte[] actualBlobData = new byte[(int) blobAll.getBlobData().getSize()];
     blobAll.getBlobData().getStream().getByteBuffer().get(actualBlobData);
     Assert.assertArrayEquals("Content mismatch", data, actualBlobData);
 
     // delete a blob on a restarted store , which should succeed
-    deleteRequest = new DeleteRequest(1, "deleteClient", blobId1, System.currentTimeMillis());
+    deleteRequest = new DeleteRequest(1, "clientId2", blobId2, System.currentTimeMillis());
     channel.send(deleteRequest);
     stream = channel.receive().getInputStream();
     deleteResponse = DeleteResponse.readFrom(new DataInputStream(stream));
