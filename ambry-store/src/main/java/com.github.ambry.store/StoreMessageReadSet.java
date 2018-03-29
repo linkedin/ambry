@@ -153,12 +153,12 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
    * Do data doPrefetch: from disk to memory buffer.
    * @param relativeOffset the relativeOffset to start.
    * @param size The size requested to doPrefetch.
+   * @throws IOException
    */
   void doPrefetch(long relativeOffset, long size) throws IOException {
     long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
     prefetchedData = ByteBuffer.allocate((int) sizeToRead);
-    getChannel().position(offset.getOffset() + relativeOffset);
-    getChannel().read(prefetchedData);
+    getChannel().read(prefetchedData, offset.getOffset() + relativeOffset);
     prefetchedDataRelativeOffset = relativeOffset;
   }
 
@@ -191,11 +191,11 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
     BlobReadOptions options = readOptions.get(index);
-    long startOffset = options.getOffset() + relativeOffset;
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
-    logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
     long written = 0;
     if (options.getPrefetchedDataRelativeOffset() == -1) {
+      long startOffset = options.getOffset() + relativeOffset;
+      logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
       written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
     } else {
       ByteBuffer buf = options.getPrefetchedData();
@@ -230,7 +230,7 @@ class StoreMessageReadSet implements MessageReadSet {
   }
 
   @Override
-  public void doPrefetch(int index, long relativeOffset, long size) throws IOException{
+  public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
     readOptions.get(index).doPrefetch(relativeOffset, size);
   }
 }
