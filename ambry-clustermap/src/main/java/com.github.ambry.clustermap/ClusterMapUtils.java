@@ -45,6 +45,7 @@ public class ClusterMapUtils {
   static final String ZKINFO_STR = "zkInfo";
   static final String DATACENTER_STR = "datacenter";
   static final String DATACENTER_ID_STR = "id";
+  static final String SCHEMA_VERSION_STR = "schemaVersion";
   static final int UNKNOWN_RACK_ID = -1;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
@@ -116,6 +117,17 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Get the schema version associated with the given instance (if any).
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the schema version of the information stored. If the field is absent in the InstanceConfig, the version
+   *         is assumed to be 0, and 0 is returned.
+   */
+  static int getSchemaVersion(InstanceConfig instanceConfig) {
+    String schemaVersionStr = instanceConfig.getRecord().getSimpleField(SCHEMA_VERSION_STR);
+    return schemaVersionStr == null ? 0 : Integer.valueOf(schemaVersionStr);
+  }
+
+  /**
    * Get the list of sealed replicas on a given instance.
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the list of sealed replicas.
@@ -130,7 +142,8 @@ public class ClusterMapUtils {
    * @return the rack id associated with the given instance.
    */
   static Long getRackId(InstanceConfig instanceConfig) {
-    return Long.valueOf(instanceConfig.getRecord().getSimpleField(RACKID_STR));
+    String rackIdStr = instanceConfig.getRecord().getSimpleField(RACKID_STR);
+    return rackIdStr == null ? null : Long.valueOf(rackIdStr);
   }
 
   /**

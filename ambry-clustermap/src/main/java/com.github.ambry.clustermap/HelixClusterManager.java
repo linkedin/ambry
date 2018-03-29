@@ -344,14 +344,19 @@ class HelixClusterManager implements ClusterMap {
     private void initializeInstances(List<InstanceConfig> instanceConfigs) throws Exception {
       logger.info("Initializing cluster information from {}", dcName);
       for (InstanceConfig instanceConfig : instanceConfigs) {
-        String instanceName = instanceConfig.getInstanceName();
-        logger.info("Adding node {} and its disks and replicas", instanceName);
-        AmbryDataNode datanode =
-            new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
-                Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
-        initializeDisksAndReplicasOnNode(datanode, instanceConfig);
-        instanceNameToAmbryDataNode.put(instanceName, datanode);
-        allInstances.add(instanceName);
+        int schemaVersion = getSchemaVersion(instanceConfig);
+        if (schemaVersion == 0) {
+          String instanceName = instanceConfig.getInstanceName();
+          logger.info("Adding node {} and its disks and replicas", instanceName);
+          AmbryDataNode datanode =
+              new AmbryDataNode(getDcName(instanceConfig), clusterMapConfig, instanceConfig.getHostName(),
+                  Integer.valueOf(instanceConfig.getPort()), getRackId(instanceConfig), getSslPortStr(instanceConfig));
+          initializeDisksAndReplicasOnNode(datanode, instanceConfig);
+          instanceNameToAmbryDataNode.put(instanceName, datanode);
+          allInstances.add(instanceName);
+        } else {
+          logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
+        }
       }
       logger.info("Initialized cluster information from {}", dcName);
     }
@@ -363,10 +368,20 @@ class HelixClusterManager implements ClusterMap {
      */
     private void updateSealedStateOfReplicas(List<InstanceConfig> instanceConfigs) {
       for (InstanceConfig instanceConfig : instanceConfigs) {
-        AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName());
-        HashSet<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
-        for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
-          replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+        int schemaVersion = getSchemaVersion(instanceConfig);
+        if (schemaVersion == 0) {
+          AmbryDataNode node = instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName());
+          if (node == null) {
+            logger.info("Dynamic addition of new nodes is not yet supported, ignoring InstanceConfig {}",
+                instanceConfig);
+          } else {
+            HashSet<String> sealedReplicas = new HashSet<>(getSealedReplicas(instanceConfig));
+            for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(node)) {
+              replica.setSealedState(sealedReplicas.contains(replica.getPartitionId().toPathString()));
+            }
+          }
+        } else {
+          logger.error("Unknown InstanceConfig schema version: {}, ignoring.", schemaVersion);
         }
       }
     }

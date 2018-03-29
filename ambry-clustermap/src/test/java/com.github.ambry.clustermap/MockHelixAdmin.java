@@ -227,7 +227,7 @@ public class MockHelixAdmin implements HelixAdmin {
    * @param tagAsInit whether the InstanceConfig notification should be tagged with
    *                  {@link org.apache.helix.NotificationContext.Type#INIT}
    */
-  private void triggerInstanceConfigChangeNotification(boolean tagAsInit) {
+  void triggerInstanceConfigChangeNotification(boolean tagAsInit) {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
       helixManager.triggerConfigChangeNotification(tagAsInit);
     }
