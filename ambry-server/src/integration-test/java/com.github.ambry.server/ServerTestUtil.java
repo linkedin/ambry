@@ -1143,6 +1143,11 @@ public final class ServerTestUtil {
     if (exceptionRef.get() != null) {
       throw exceptionRef.get();
     }
+    // put away for future use
+    Payload payload1 = payloadQueue.peek();
+    MockClusterMap clusterMap = cluster.getClusterMap();
+    BlobId blobId1 = new BlobId(payload1.blobId, clusterMap);
+
     assertEquals("Did not put expected number of blobs", numberOfRequestsToSend, payloadQueue.size());
     Properties sslProps = new Properties();
     sslProps.putAll(routerProps);
@@ -1167,15 +1172,12 @@ public final class ServerTestUtil {
     assertTrue("Did not verify in 2 minutes", verifierLatch.await(2, TimeUnit.MINUTES));
     assertEquals(totalRequests.get(), verifiedRequests.get());
 
-    MockClusterMap clusterMap = cluster.getClusterMap();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     MockDataNodeId dataNodeId = clusterMap.getDataNodes().get(0);
     Port port = new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
     ConnectedChannel channel = connectionPool.checkOutConnection("localhost", port, 10000);
     ArrayList<BlobId> ids = new ArrayList<BlobId>();
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
-    Payload payload1 = payloadQueue.poll(1000, TimeUnit.MILLISECONDS);
-    BlobId blobId1 = new BlobId(payload1.blobId, clusterMap);
     ids.add(blobId1);
     PartitionId partitionId = ids.get(0).getPartition();
     partitionRequestInfoList.clear();
@@ -1257,7 +1259,7 @@ public final class ServerTestUtil {
 
     // get a blob on a restarted store , which should succeed
     ids = new ArrayList<BlobId>();
-    ids.add(blobId1);
+    ids.add(blobId2);
     partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
     partitionRequestInfoList.add(partitionRequestInfo);
