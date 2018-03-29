@@ -1170,8 +1170,7 @@ public final class ServerTestUtil {
     MockClusterMap clusterMap = cluster.getClusterMap();
     BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
     MockDataNodeId dataNodeId = clusterMap.getDataNodes().get(0);
-    Port port =
-        new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
+    Port port = new Port(portType == PortType.PLAINTEXT ? dataNodeId.getPort() : dataNodeId.getSSLPort(), portType);
     ConnectedChannel channel = connectionPool.checkOutConnection("localhost", port, 10000);
     ArrayList<BlobId> ids = new ArrayList<BlobId>();
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
@@ -1179,12 +1178,6 @@ public final class ServerTestUtil {
     BlobId blobId1 = new BlobId(payload1.blobId, clusterMap);
     ids.add(blobId1);
     PartitionId partitionId = ids.get(0).getPartition();
-    byte[] usermetadata = new byte[1000];
-    byte[] data = new byte[3187];
-    BlobProperties properties = new BlobProperties(3187, "serviceid1", accountId, containerId, false);
-
-    BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-        accountId, containerId, partitionId, false);
     partitionRequestInfoList.clear();
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
     partitionRequestInfoList.add(partitionRequestInfo);
@@ -1200,6 +1193,11 @@ public final class ServerTestUtil {
     assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
 
     // put a blob on a stopped store, which should fail
+    byte[] usermetadata = new byte[1000];
+    byte[] data = new byte[3187];
+    BlobProperties properties = new BlobProperties(3187, "serviceid1", accountId, containerId, false);
+    BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false);
     PutRequest putRequest =
         new PutRequest(1, "client1", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
@@ -1278,8 +1276,7 @@ public final class ServerTestUtil {
     channel.send(deleteRequest);
     stream = channel.receive().getInputStream();
     deleteResponse = DeleteResponse.readFrom(new DataInputStream(stream));
-    assertEquals("Delete blob on restarted store should succeed", ServerErrorCode.No_Error,
-        deleteResponse.getError());
+    assertEquals("Delete blob on restarted store should succeed", ServerErrorCode.No_Error, deleteResponse.getError());
 
     router.close();
     connectionPool.shutdown();
