@@ -24,6 +24,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
+import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
@@ -392,7 +393,7 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     logger.trace("Bytes read {} from {} using key {} Time: {}", bytesRead,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), readTimeMs);
     if (bytesRead > 0) {
-      metrics.sslReceiveTimePerKB.update(readTimeMs * 1024 / bytesRead);
+      metrics.sslReceiveTimeInUsPerKB.update(TimeUnit.MILLISECONDS.toMicros(readTimeMs) * 1024 / bytesRead);
     }
     return networkReceive.getReceivedBytes().isReadComplete();
   }
@@ -438,7 +439,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
         long decryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
         logger.trace("SSL decryption time: {} ms for {} bytes", decryptionTimeMs, unwrapResult.bytesProduced());
         if (unwrapResult.bytesProduced() > 0) {
-          metrics.sslDecryptionTimePerKB.update(decryptionTimeMs * 1024 / unwrapResult.bytesProduced());
+          metrics.sslDecryptionTimeInUsPerKB.update(
+              TimeUnit.MILLISECONDS.toMicros(decryptionTimeMs) * 1024 / unwrapResult.bytesProduced());
         }
         netReadBuffer.compact();
         // handle ssl renegotiation.
@@ -503,7 +505,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     logger.trace("Bytes written {} to {} using key {} Time: {}", bytesWritten,
         socketChannel.socket().getRemoteSocketAddress(), getConnectionId(), writeTimeMs);
     if (bytesWritten > 0) {
-      metrics.sslSendTimePerKB.update(writeTimeMs * 1024 / bytesWritten);
+      metrics.sslSendTimeInUsPerKB.update(TimeUnit.MILLISECONDS.toMicros(writeTimeMs) * 1024 / bytesWritten);
+      metrics.sslSendTime.update(writeTimeMs);
     }
     return (send.isSendComplete() && netWriteBuffer.remaining() == 0);
   }
@@ -537,7 +540,8 @@ public class SSLTransmission extends Transmission implements ReadableByteChannel
     long encryptionTimeMs = SystemTime.getInstance().milliseconds() - startTimeMs;
     logger.trace("SSL encryption time: {} ms for {} bytes", encryptionTimeMs, wrapResult.bytesConsumed());
     if (wrapResult.bytesConsumed() > 0) {
-      metrics.sslEncryptionTimePerKB.update(encryptionTimeMs * 1024 / wrapResult.bytesConsumed());
+      metrics.sslEncryptionTimeInUsPerKB.update(
+          TimeUnit.MILLISECONDS.toMicros(encryptionTimeMs) * 1024 / wrapResult.bytesConsumed());
     }
     netWriteBuffer.flip();
 

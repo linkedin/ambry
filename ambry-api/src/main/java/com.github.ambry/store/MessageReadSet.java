@@ -54,4 +54,13 @@ public interface MessageReadSet {
    * @return The key of the message represented by the index
    */
   StoreKey getKeyAt(int index);
+
+  /**
+   * Do data prefetch from store.
+   * @param index The index into the message set
+   * @param relativeOffset The relativeOffset to start with
+   * @param size The size requested to doPrefetch.
+   * @throws IOException
+   */
+  void doPrefetch(int index, long relativeOffset, long size) throws IOException;
 }

@@ -266,6 +266,11 @@ public class BlobStoreHardDeleteTest {
       public StoreKey getKeyAt(int index) {
         return messageList.get(index).key;
       }
+
+      @Override
+      public void doPrefetch(int index, long relativeOffset, long size) {
+        return;
+      }
     }
   }
 

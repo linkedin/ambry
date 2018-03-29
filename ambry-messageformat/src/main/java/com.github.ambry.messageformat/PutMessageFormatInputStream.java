@@ -29,6 +29,8 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - - -
  * |       blob key            |
  *  - - - - - - - - - - - - - -
+ * |     Encryption key        |
+ *  - - - - - - - - - - - - - -
  * |  Blob Properties Record   |
  *  - - - - - - - - - - - - - -
  * |  User metadata Record     |

@@ -41,6 +41,8 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   private final MessageInfo info;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private ByteBuffer prefetchedData;
+  private long prefetchedDataRelativeOffset = -1;
 
   static final short VERSION_0 = 0;
   static final short VERSION_1 = 1;
@@ -146,6 +148,27 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
       segment.closeView();
     }
   }
+
+  /**
+   * Do data doPrefetch: from disk to memory buffer.
+   * @param relativeOffset the relativeOffset to start.
+   * @param size The size requested to doPrefetch.
+   * @throws IOException
+   */
+  void doPrefetch(long relativeOffset, long size) throws IOException {
+    long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
+    prefetchedData = ByteBuffer.allocate((int) sizeToRead);
+    getChannel().read(prefetchedData, offset.getOffset() + relativeOffset);
+    prefetchedDataRelativeOffset = relativeOffset;
+  }
+
+  ByteBuffer getPrefetchedData() {
+    return prefetchedData;
+  }
+
+  long getPrefetchedDataRelativeOffset() {
+    return prefetchedDataRelativeOffset;
+  }
 }
 
 /**
@@ -168,10 +191,19 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index " + index + " out of the messageset size " + readOptions.size());
     }
     BlobReadOptions options = readOptions.get(index);
-    long startOffset = options.getOffset() + relativeOffset;
     long sizeToRead = Math.min(maxSize, options.getMessageInfo().getSize() - relativeOffset);
-    logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
-    long written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
+    long written = 0;
+    if (options.getPrefetchedDataRelativeOffset() == -1) {
+      long startOffset = options.getOffset() + relativeOffset;
+      logger.trace("Blob Message Read Set position {} count {}", startOffset, sizeToRead);
+      written = options.getChannel().transferTo(startOffset, sizeToRead, channel);
+    } else {
+      ByteBuffer buf = options.getPrefetchedData();
+      long bufStartOffset = relativeOffset - options.getPrefetchedDataRelativeOffset();
+      buf.limit((int) (bufStartOffset + sizeToRead));
+      buf.position((int) (bufStartOffset));
+      written = channel.write(buf);
+    }
     logger.trace("Written {} bytes to the write channel from the file channel : {}", written, options.getFile());
     return written;
   }
@@ -195,5 +227,10 @@ class StoreMessageReadSet implements MessageReadSet {
       throw new IndexOutOfBoundsException("index [" + index + "] out of the messageset");
     }
     return readOptions.get(index).getMessageInfo().getStoreKey();
+  }
+
+  @Override
+  public void doPrefetch(int index, long relativeOffset, long size) throws IOException {
+    readOptions.get(index).doPrefetch(relativeOffset, size);
   }
 }

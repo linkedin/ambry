@@ -158,7 +158,8 @@ public class AmbryServer {
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
-              findTokenFactory, notificationSystem, replicationManager, storeKeyFactory);
+              findTokenFactory, notificationSystem, replicationManager, storeKeyFactory,
+              serverConfig.serverEnableStoreDataPrefetch);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();

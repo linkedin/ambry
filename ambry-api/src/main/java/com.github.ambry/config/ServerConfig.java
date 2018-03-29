@@ -54,6 +54,13 @@ public class ServerConfig {
   @Default("60")
   public final long serverQuotaStatsAggregateIntervalInMinutes;
 
+  /**
+   * The option to enable data prefetch for GET request and don't do zero copy.
+   */
+  @Config("server.enable.store.data.prefetch")
+  @Default("false")
+  public final boolean serverEnableStoreDataPrefetch;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -62,5 +69,7 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.stats.publish.health.report.enabled", false);
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
+    serverEnableStoreDataPrefetch =
+        verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
   }
 }

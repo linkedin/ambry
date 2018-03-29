@@ -126,7 +126,7 @@ public class AmbryRequestsTest {
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null);
+        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false);
   }
 
   /**
@@ -864,6 +864,11 @@ public class AmbryRequestsTest {
           @Override
           public StoreKey getKeyAt(int index) {
             return null;
+          }
+
+          @Override
+          public void doPrefetch(int index, long relativeOffset, long size) {
+            return;
           }
         }, Collections.EMPTY_LIST);
       }

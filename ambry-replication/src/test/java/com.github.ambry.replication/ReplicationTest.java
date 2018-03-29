@@ -856,6 +856,11 @@ public class ReplicationTest {
       public StoreKey getKeyAt(int index) {
         return storeKeys.get(index);
       }
+
+      @Override
+      public void doPrefetch(int index, long relativeOffset, long size) {
+        return;
+      }
     }
 
     /**

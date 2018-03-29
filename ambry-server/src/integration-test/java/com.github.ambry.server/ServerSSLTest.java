@@ -115,7 +115,18 @@ public class ServerSSLTest {
   @Test
   public void endToEndSSLTest()
       throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    DataNodeId dataNodeId = sslCluster.getClusterMap().getDataNodeIds().get(3);
+    DataNodeId dataNodeId = sslCluster.getGeneralDataNode();
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
+        clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
+  }
+
+  /**
+   * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
+   */
+  @Test
+  public void endToEndSSLTestWithPrefetch()
+      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+    DataNodeId dataNodeId = sslCluster.getPrefetchDataNode();
     ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
         clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
   }
