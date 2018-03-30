@@ -209,7 +209,7 @@ public class MessageSievingInputStream extends InputStream {
             header.getVersion(), header.getMessageSize(), currentOffset,
             header.getBlobEncryptionKeyRecordRelativeOffset(), header.getBlobPropertiesRecordRelativeOffset(),
             header.getUserMetadataRecordRelativeOffset(), header.getBlobRecordRelativeOffset(),
-            header.getDeleteRecordRelativeOffset(), header.getCrc());
+            header.getUpdateRecordRelativeOffset(), header.getCrc());
         logger.trace("Id {} Encryption Key -size {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ",
             storeKey.getID(), encryptionKey == null ? 0 : encryptionKey.capacity(), props.getBlobSize(),
             metadata.capacity(), blobData.getSize());

@@ -17,28 +17,10 @@ package com.github.ambry.messageformat;
  * Contains the delete record info
  */
 public class DeleteRecord {
-  private final short accountId;
-  private final short containerId;
-  private final long deletionTimeInMs;
 
   /**
    * Constructs Delete Record
    */
-  DeleteRecord(short accountId, short containerId, long deletionTimeInMs) {
-    this.accountId = accountId;
-    this.containerId = containerId;
-    this.deletionTimeInMs = deletionTimeInMs;
-  }
-
-  public short getAccountId() {
-    return accountId;
-  }
-
-  public short getContainerId() {
-    return containerId;
-  }
-
-  public long getDeletionTimeInMs() {
-    return deletionTimeInMs;
+  DeleteRecord() {
   }
 }

@@ -34,7 +34,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
   public DeleteMessageFormatInputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    int deleteRecordSize = MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
+    int deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
     if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
       MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, deleteRecordSize,
@@ -50,8 +50,8 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
     }
     buffer.put(key.toBytes());
     // set the message as deleted
-    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(buffer,
-        new DeleteRecord(accountId, containerId, deletionTimeMs));
+    MessageFormatRecord.Update_Format_V2.serialize(buffer,
+        new UpdateRecord(accountId, containerId, deletionTimeMs, new DeleteRecord()));
     messageLength = buffer.capacity();
     buffer.flip();
   }

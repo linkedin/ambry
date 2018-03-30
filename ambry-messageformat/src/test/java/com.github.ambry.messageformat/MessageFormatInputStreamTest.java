@@ -237,7 +237,7 @@ public class MessageFormatInputStreamTest {
    */
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
-    short[] versions = {MessageFormatRecord.Delete_Version_V1, MessageFormatRecord.Delete_Version_V2};
+    short[] versions = {MessageFormatRecord.Update_Version_V1, MessageFormatRecord.Update_Version_V2};
     for (short version : versions) {
       StoreKey key = new MockId("id1");
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -245,7 +245,7 @@ public class MessageFormatInputStreamTest {
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
       MessageFormatInputStream messageFormatStream;
       boolean useV2Header;
-      if (version == MessageFormatRecord.Delete_Version_V1) {
+      if (version == MessageFormatRecord.Update_Version_V1) {
         messageFormatStream = new DeleteMessageFormatV1InputStream(key, accountId, containerId, deletionTimeMs);
         useV2Header = false;
       } else {
@@ -255,8 +255,8 @@ public class MessageFormatInputStreamTest {
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
           useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
       int deleteRecordSize =
-          version == MessageFormatRecord.Delete_Version_V1 ? MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize()
-              : MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
+          version == MessageFormatRecord.Update_Version_V1 ? MessageFormatRecord.Update_Format_V1.getRecordSize()
+              : MessageFormatRecord.Update_Format_V2.getRecordSize();
       Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
       // check header
@@ -296,7 +296,7 @@ public class MessageFormatInputStreamTest {
       ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
       messageFormatStream.read(deleteRecordOutput);
       Assert.assertEquals(deleteRecordBuf.getShort(), version);
-      if (version == MessageFormatRecord.Delete_Version_V1) {
+      if (version == MessageFormatRecord.Update_Version_V1) {
         Assert.assertEquals(true, deleteRecordBuf.get() == 1 ? true : false);
       } else {
         Assert.assertEquals("AccountId mismatch", accountId, deleteRecordBuf.getShort());
