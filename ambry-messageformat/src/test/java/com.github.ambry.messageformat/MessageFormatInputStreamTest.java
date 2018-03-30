@@ -13,6 +13,8 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -237,7 +239,8 @@ public class MessageFormatInputStreamTest {
    */
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
-    short[] versions = {MessageFormatRecord.Update_Version_V1, MessageFormatRecord.Update_Version_V2};
+    short[] versions =
+        {MessageFormatRecord.Update_Version_V1, MessageFormatRecord.Update_Version_V2, MessageFormatRecord.Update_Version_V3};
     for (short version : versions) {
       StoreKey key = new MockId("id1");
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -245,18 +248,26 @@ public class MessageFormatInputStreamTest {
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
       MessageFormatInputStream messageFormatStream;
       boolean useV2Header;
+      int deleteRecordSize;
       if (version == MessageFormatRecord.Update_Version_V1) {
         messageFormatStream = new DeleteMessageFormatV1InputStream(key, accountId, containerId, deletionTimeMs);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V1.getRecordSize();
         useV2Header = false;
-      } else {
+        // reset account, container ids and time
+        accountId = Account.UNKNOWN_ACCOUNT_ID;
+        containerId = Container.UNKNOWN_CONTAINER_ID;
+        deletionTimeMs = Utils.Infinite_Time;
+      } else if (version == MessageFormatRecord.Update_Version_V2) {
         messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
+        useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
+      } else {
+        messageFormatStream = new DeleteMessageFormatV3InputStream(key, accountId, containerId, deletionTimeMs);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
           useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
-      int deleteRecordSize =
-          version == MessageFormatRecord.Update_Version_V1 ? MessageFormatRecord.Update_Format_V1.getRecordSize()
-              : MessageFormatRecord.Update_Format_V2.getRecordSize();
       Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
       // check header
@@ -285,27 +296,16 @@ public class MessageFormatInputStreamTest {
 
       // verify handle
       byte[] handleOutput = new byte[key.sizeInBytes()];
-      ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
       messageFormatStream.read(handleOutput);
-      byte[] dest = new byte[key.sizeInBytes()];
-      handleOutputBuf.get(dest);
-      Assert.assertArrayEquals(dest, key.toBytes());
+      Assert.assertArrayEquals(handleOutput, key.toBytes());
 
       // check delete record
-      byte[] deleteRecordOutput = new byte[deleteRecordSize];
-      ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
-      messageFormatStream.read(deleteRecordOutput);
-      Assert.assertEquals(deleteRecordBuf.getShort(), version);
-      if (version == MessageFormatRecord.Update_Version_V1) {
-        Assert.assertEquals(true, deleteRecordBuf.get() == 1 ? true : false);
-      } else {
-        Assert.assertEquals("AccountId mismatch", accountId, deleteRecordBuf.getShort());
-        Assert.assertEquals("ContainerId mismatch", containerId, deleteRecordBuf.getShort());
-        Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, deleteRecordBuf.getLong());
-      }
-      crc = new Crc32();
-      crc.update(deleteRecordOutput, 0, deleteRecordSize - MessageFormatRecord.Crc_Size);
-      Assert.assertEquals(crc.getValue(), deleteRecordBuf.getLong());
+      UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
+      Assert.assertEquals("Type of update record not DELETE", UpdateRecord.Type.DELETE, updateRecord.getType());
+      Assert.assertNotNull("DeleteRecord should not be null", updateRecord.getDeleteRecord());
+      Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
+      Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
+      Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, updateRecord.getUpdateTimeInMs());
     }
   }
 }
