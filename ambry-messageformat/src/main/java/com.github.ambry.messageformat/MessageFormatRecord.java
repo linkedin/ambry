@@ -1068,7 +1068,7 @@ public class MessageFormatRecord {
     }
 
     /**
-     * @param inputStream the stream that contains the serialized form of an {@link DeleteRecord}.
+     * @param inputStream the stream that contains the serialized form of a {@link DeleteRecord}.
      * @return the deserialized {@link DeleteRecord}
      * @throws IOException if there are problems reading from stream.
      * @throws MessageFormatException if the format of the message is unexpected.

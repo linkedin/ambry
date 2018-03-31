@@ -22,10 +22,10 @@ public class UpdateRecord {
   }
 
   private final Type type;
-  private final DeleteRecord deleteRecord;
   private final short accountId;
   private final short containerId;
   private final long updateTimeInMs;
+  private final DeleteRecord deleteRecord;
 
   /**
    * @param accountId the account that the blob that this update is associated with belongs to
@@ -38,6 +38,9 @@ public class UpdateRecord {
   }
 
   /**
+   * @param accountId the account that the blob that this update is associated with belongs to
+   * @param containerId the id of the container that the blob that this update is associated with belongs to
+   * @param updateTimeInMs the time in ms at which the update occurred.
    * @param type the type of the update record.
    * @param deleteRecord the delete record that this update record represents.
    */

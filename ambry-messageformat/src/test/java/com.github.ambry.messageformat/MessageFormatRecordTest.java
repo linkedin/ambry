@@ -420,7 +420,7 @@ public class MessageFormatRecordTest {
           MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecordBuf));
       Assert.assertEquals("AccountId mismatch ", accountId, deserializeUpdateRecord.getAccountId());
       Assert.assertEquals("ContainerId mismatch ", containerId, deserializeUpdateRecord.getContainerId());
-      Assert.assertEquals("DeletionTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
+      Assert.assertEquals("UpdateTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
       Assert.assertEquals("Type of update record incorrect", type, deserializeUpdateRecord.getType());
       switch (type) {
         case DELETE:
