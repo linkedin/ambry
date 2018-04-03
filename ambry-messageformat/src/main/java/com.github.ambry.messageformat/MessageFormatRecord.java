@@ -289,7 +289,7 @@ public class MessageFormatRecord {
 
     /**
      * @return if this is a put record, the relative offset of the Blob Properties Record from the end of the header. If
-     * this is a update record, returns {@link #Message_Header_Invalid_Relative_Offset}
+     * this is an update record, returns {@link #Message_Header_Invalid_Relative_Offset}
      */
     int getBlobPropertiesRecordRelativeOffset();
 
