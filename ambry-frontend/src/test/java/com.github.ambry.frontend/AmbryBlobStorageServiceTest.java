@@ -486,7 +486,7 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void injectionAccountAndContainerForGetHeadDeleteBlobIdTest() throws Exception {
-    for (short version : new Short[]{BlobId.BLOB_ID_V2, BlobId.BLOB_ID_V3}) {
+    for (short version : new Short[]{BlobId.BLOB_ID_V2, BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4}) {
       populateAccountService();
 
       // aid=refAId, cid=refCId

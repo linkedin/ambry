@@ -53,20 +53,23 @@ public class FrontendUtilsTest {
     short referenceContainerId = getRandomShort(TestUtils.RANDOM);
     PartitionId referencePartitionId = referenceClusterMap.getWritablePartitionIds().get(0);
     boolean referenceIsEncrypted = TestUtils.RANDOM.nextBoolean();
-    BlobId blobId =
-        new BlobId(BlobId.BLOB_ID_V3, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, referenceIsEncrypted);
-    BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
-    assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
-    assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,
-        referenceContainerId, referencePartitionId, referenceIsEncrypted);
+    short[] versions = {BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4};
+    for (short version : versions) {
+      BlobId blobId =
+          new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
+              referencePartitionId, referenceIsEncrypted);
+      BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
+      assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
+      assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,
+          referenceContainerId, referencePartitionId, referenceIsEncrypted);
 
-    // bad path
-    try {
-      FrontendUtils.getBlobIdFromString(blobId.getID().substring(1), referenceClusterMap);
-      fail("Should have thrown exception for bad blobId ");
-    } catch (RestServiceException e) {
-      assertEquals("RestServiceErrorCode mismatch", RestServiceErrorCode.BadRequest, e.getErrorCode());
+      // bad path
+      try {
+        FrontendUtils.getBlobIdFromString(blobId.getID().substring(1), referenceClusterMap);
+        fail("Should have thrown exception for bad blobId ");
+      } catch (RestServiceException e) {
+        assertEquals("RestServiceErrorCode mismatch", RestServiceErrorCode.BadRequest, e.getErrorCode());
+      }
     }
   }
 

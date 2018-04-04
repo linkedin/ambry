@@ -83,12 +83,30 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * +--------------+-------------+---------------+
  *
  * </pre>
+ *
+ * <br>
+ * Version 4, which is the same as Version 3 now.
+ * <br>
+ * <pre>
+ * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
+ * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
+ * | (short) | (byte)| (byte)       | (short)   | (short)     | (n bytes)   | (int)    | (n bytes)|
+ * +---------+----------------------+-----------+-------------+-------------+----------+----------+
+ *
+ * Flag format: 1 Byte
+ * +--------------+-------------+---------------+
+ * |  1 to 5 bits |    6th bit  | 7 and 8th bit |
+ * |  un-assigned | IsEncrypted |  BlobIdType   |
+ * +--------------+-------------+---------------+
+ *
+ * </pre>
  */
 
 public class BlobId extends StoreKey {
   public static final short BLOB_ID_V1 = 1;
   public static final short BLOB_ID_V2 = 2;
   public static final short BLOB_ID_V3 = 3;
+  public static final short BLOB_ID_V4 = 4;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
@@ -158,6 +176,7 @@ public class BlobId extends StoreKey {
         this.isEncrypted = false;
         break;
       case BLOB_ID_V3:
+      case BLOB_ID_V4:
         this.type = type;
         this.datacenterId = datacenterId;
         this.accountId = accountId;
@@ -235,6 +254,7 @@ public class BlobId extends StoreKey {
         return sizeForBlobIdV1;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
+      case BLOB_ID_V4:
         return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
       default:
@@ -328,6 +348,7 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
+      case BLOB_ID_V4:
         byte flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         idBuf.put(flag);
@@ -359,6 +380,7 @@ public class BlobId extends StoreKey {
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
+      case BLOB_ID_V4:
         sb.append(":").append(type);
         sb.append(":").append(datacenterId);
         sb.append(":").append(accountId);
@@ -396,7 +418,7 @@ public class BlobId extends StoreKey {
     }
     BlobId other = (BlobId) o;
     int result = 0;
-    if (version < BLOB_ID_V3 || other.version < BLOB_ID_V3) {
+    if (version < BLOB_ID_V4 || other.version < BLOB_ID_V4) {
       result = Short.compare(version, other.version);
     }
     if (result == 0) {
@@ -426,6 +448,7 @@ public class BlobId extends StoreKey {
           }
           break;
         case BLOB_ID_V3:
+        case BLOB_ID_V4:
           result = uuid.compareTo(other.uuid);
           break;
         default:
@@ -456,7 +479,7 @@ public class BlobId extends StoreKey {
    * @return all valid versions of BlobId.
    */
   public static Short[] getAllValidVersions() {
-    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3};
+    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4};
   }
 
   /**
@@ -575,6 +598,7 @@ public class BlobId extends StoreKey {
           isEncrypted = false;
           break;
         case BLOB_ID_V3:
+        case BLOB_ID_V4:
           byte blobIdFlag = stream.readByte();
           type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
           isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
