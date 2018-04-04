@@ -418,7 +418,7 @@ public class BlobId extends StoreKey {
     }
     BlobId other = (BlobId) o;
     int result = 0;
-    if (version < BLOB_ID_V4 || other.version < BLOB_ID_V4) {
+    if (version < BLOB_ID_V3 || other.version < BLOB_ID_V3) {
       result = Short.compare(version, other.version);
     }
     if (result == 0) {

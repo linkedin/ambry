@@ -168,11 +168,7 @@ public class BlobIdTest {
         assertFalse(blobIdV1.equals(blobIdV3));
         assertTrue("blobIdV2 should be less than blobIdV3", blobIdV2.compareTo(blobIdV3) < 0);
         assertFalse(blobIdV2.equals(blobIdV3));
-        assertTrue("blobIdV3 should be less than blobIdV4", blobIdV3.compareTo(blobIdV4) < 0);
-        assertFalse(blobIdV3.equals(blobIdV4));
 
-        assertTrue("blobIdV4 should be greater than blobIdV3", blobIdV4.compareTo(blobIdV3) > 0);
-        assertFalse(blobIdV4.equals(blobIdV3));
         assertTrue("blobIdV3 should be greater than blobIdV2", blobIdV3.compareTo(blobIdV2) > 0);
         assertFalse(blobIdV3.equals(blobIdV2));
         assertTrue("blobIdV3 should be greater than blobIdV1", blobIdV3.compareTo(blobIdV1) > 0);
@@ -188,6 +184,10 @@ public class BlobIdTest {
         assertTrue(blobIdV3.equals(blobIdV3));
         assertTrue("blobIdV4 should be equal to blobIdV4", blobIdV4.compareTo(blobIdV4) == 0);
         assertTrue(blobIdV4.equals(blobIdV4));
+
+        assertTrue("Comparison for blobIdV3 and above are based on uuid only",
+            blobIdV3.compareTo(blobIdV4) == blobIdV3.getUuid().compareTo(blobIdV4.getUuid()));
+        assertFalse(blobIdV3.equals(blobIdV4));
 
         BlobId blobIdV1Alt = getRandomBlobId(BLOB_ID_V1);
         BlobId blobIdV2Alt = getRandomBlobId(BLOB_ID_V2);
@@ -256,7 +256,7 @@ public class BlobIdTest {
     assertEquals("Containers should match", crafted.getContainerId(), craftedAgain.getContainerId());
     assertEquals("The id string should match", crafted.getID(), craftedAgain.getID());
 
-    if (version >= BLOB_ID_V3) {
+    if (version == BLOB_ID_V3) {
       // version check to avoid testing this repetitively.
       try {
         BlobId.isCrafted("");
