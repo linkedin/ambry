@@ -28,10 +28,12 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 class AmbryPartition extends PartitionId {
   private final Long id;
+  private final String partitionClass;
   private final ClusterManagerCallback clusterManagerCallback;
+  private final Lock stateChangeLock = new ReentrantLock();
+
   private volatile PartitionState state;
   private long lastUpdatedSealedStateChangeCounter = 0;
-  private final Lock stateChangeLock = new ReentrantLock();
 
   private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
   private static final short CURRENT_VERSION = 1;
@@ -40,12 +42,14 @@ class AmbryPartition extends PartitionId {
   /**
    * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
+   * @param partitionClass the partition class that this partition belongs to
    * @param clusterManagerCallback the {@link ClusterManagerCallback} to use to make callbacks
    *                               to the {@link HelixClusterManager}
    * The initial state defaults to {@link PartitionState#READ_WRITE}.
    */
-  AmbryPartition(long id, ClusterManagerCallback clusterManagerCallback) {
+  AmbryPartition(long id, String partitionClass, ClusterManagerCallback clusterManagerCallback) {
     this.id = id;
+    this.partitionClass = partitionClass;
     this.clusterManagerCallback = clusterManagerCallback;
     this.state = PartitionState.READ_WRITE;
   }
@@ -119,6 +123,11 @@ class AmbryPartition extends PartitionId {
   @Override
   public String toPathString() {
     return id.toString();
+  }
+
+  @Override
+  public String getPartitionClass() {
+    return partitionClass;
   }
 
   /**

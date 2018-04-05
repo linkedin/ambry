@@ -72,6 +72,7 @@ class HelixClusterManager implements ClusterMap {
   private final AtomicReference<Exception> initializationException = new AtomicReference<>();
   private final AtomicLong sealedStateChangeCounter = new AtomicLong(0);
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  private final PartitionSelectionHelper partitionSelectionHelper;
 
   /**
    * Instantiate a HelixClusterManager.
@@ -146,6 +147,8 @@ class HelixClusterManager implements ClusterMap {
           initializationException.get());
     }
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
+    partitionSelectionHelper =
+        new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName);
   }
 
   /**
@@ -230,30 +233,14 @@ class HelixClusterManager implements ClusterMap {
     return partition;
   }
 
-  /**
-   * @return list of partition ids that are in {@link PartitionState#READ_WRITE}.
-   */
   @Override
-  public List<AmbryPartition> getWritablePartitionIds() {
-    List<AmbryPartition> writablePartitions = new ArrayList<>();
-    List<AmbryPartition> healthyWritablePartitions = new ArrayList<>();
-    for (AmbryPartition partition : partitionNameToAmbryPartition.values()) {
-      if (partition.getPartitionState() == PartitionState.READ_WRITE) {
-        writablePartitions.add(partition);
-        if (areAllReplicasForPartitionUp(partition)) {
-          healthyWritablePartitions.add(partition);
-        }
-      }
-    }
-    return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+  public List<PartitionId> getWritablePartitionIds(String partitionClass) {
+    return partitionSelectionHelper.getWritablePartitions(partitionClass);
   }
 
-  /**
-   * @return list of all partition ids in the cluster
-   */
   @Override
-  public List<AmbryPartition> getAllPartitionIds() {
-    return new ArrayList<>(partitionNameToAmbryPartition.values());
+  public List<PartitionId> getAllPartitionIds(String partitionClass) {
+    return partitionSelectionHelper.getPartitions(partitionClass);
   }
 
   /**
@@ -265,20 +252,6 @@ class HelixClusterManager implements ClusterMap {
       dcInfo.helixManager.disconnect();
     }
     dcToDcZkInfo.clear();
-  }
-
-  /**
-   * Check whether all replicas of the given {@link AmbryPartition} are up.
-   * @param partition the {@link AmbryPartition} to check.
-   * @return true if all associated replicas are up; false otherwise.
-   */
-  private boolean areAllReplicasForPartitionUp(AmbryPartition partition) {
-    for (AmbryReplica replica : ambryPartitionToAmbryReplicas.get(partition)) {
-      if (replica.isDown()) {
-        return false;
-      }
-    }
-    return true;
   }
 
   /**
@@ -454,8 +427,12 @@ class HelixClusterManager implements ClusterMap {
             // partition name and replica name are the same.
             String partitionName = info[0];
             long replicaCapacity = Long.valueOf(info[1]);
+            String partitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
+            if (info.length > 2) {
+              partitionClass = info[2];
+            }
             AmbryPartition mappedPartition =
-                new AmbryPartition(Long.valueOf(partitionName), helixClusterManagerCallback);
+                new AmbryPartition(Long.valueOf(partitionName), partitionClass, helixClusterManagerCallback);
             // Ensure only one AmbryPartition entry goes in to the mapping based on the name.
             AmbryPartition existing = partitionNameToAmbryPartition.putIfAbsent(partitionName, mappedPartition);
             if (existing != null) {

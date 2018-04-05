@@ -90,7 +90,7 @@ public class DirectoryUploader {
   }
 
   private void setPartitionId(ClusterMap clusterMap, String partitionStr, boolean enableVerboseLogging) {
-    for (PartitionId writablePartition : clusterMap.getWritablePartitionIds()) {
+    for (PartitionId writablePartition : clusterMap.getWritablePartitionIds(null)) {
       if (writablePartition.toString().equalsIgnoreCase(partitionStr)) {
         partitionId = writablePartition;
         break;

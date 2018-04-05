@@ -121,7 +121,7 @@ public final class ServerTestUtil {
       if (testEncryption) {
         TestUtils.RANDOM.nextBytes(encryptionKey);
       }
-      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false);
@@ -176,7 +176,7 @@ public final class ServerTestUtil {
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       ids.add(blobId1);
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -198,7 +198,7 @@ public final class ServerTestUtil {
 
       // get blob properties with expired flag set
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      partition = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -221,7 +221,7 @@ public final class ServerTestUtil {
       // get blob properties for expired blob
       // 1. With no flag
       ArrayList<BlobId> idsExpired = new ArrayList<>();
-      MockPartitionId partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      MockPartitionId partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       idsExpired.add(blobId4);
       ArrayList<PartitionRequestInfo> partitionRequestInfoListExpired = new ArrayList<>();
       PartitionRequestInfo partitionRequestInfoExpired = new PartitionRequestInfo(partitionExpired, idsExpired);
@@ -236,7 +236,7 @@ public final class ServerTestUtil {
 
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<>();
-      partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       idsExpired.add(blobId4);
       partitionRequestInfoListExpired = new ArrayList<>();
       partitionRequestInfoExpired = new PartitionRequestInfo(partitionExpired, idsExpired);
@@ -342,7 +342,7 @@ public final class ServerTestUtil {
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      partition = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), properties.getAccountId(), properties.getContainerId(), partition, false));
       partitionRequestInfoList.clear();
@@ -376,7 +376,7 @@ public final class ServerTestUtil {
 
       // get a blob properties on a stopped store, which should fail
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      partition = (MockPartitionId) blobId1.getPartition();
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -424,7 +424,7 @@ public final class ServerTestUtil {
 
       // get a blob on a restarted store , which should succeed
       ids = new ArrayList<BlobId>();
-      PartitionId partitionId = clusterMap.getWritablePartitionIds().get(0);
+      PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
@@ -452,7 +452,8 @@ public final class ServerTestUtil {
       e.printStackTrace();
       Assert.fail();
     } finally {
-      List<? extends ReplicaId> replicaIds = cluster.getClusterMap().getWritablePartitionIds().get(0).getReplicaIds();
+      List<? extends ReplicaId> replicaIds =
+          cluster.getClusterMap().getWritablePartitionIds(null).get(0).getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
         MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
         ((MockDiskId) mockReplicaId.getDiskId()).setDiskState(HardwareState.AVAILABLE, true);
@@ -1295,7 +1296,7 @@ public final class ServerTestUtil {
       ArrayList<byte[]> encryptionKeyList = new ArrayList<>();
       byte[] usermetadata = new byte[1000];
       TestUtils.RANDOM.nextBytes(usermetadata);
-      PartitionId partition = clusterMap.getWritablePartitionIds().get(0);
+      PartitionId partition = clusterMap.getWritablePartitionIds(null).get(0);
 
       for (int i = 0; i < 11; i++) {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -1404,7 +1405,7 @@ public final class ServerTestUtil {
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      MockPartitionId mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      MockPartitionId mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       ids.add(blobIdList.get(2));
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
@@ -1529,7 +1530,7 @@ public final class ServerTestUtil {
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
-      mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds().get(0);
+      mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), propertyList.get(0).getAccountId(), propertyList.get(0).getContainerId(),
           mockPartitionId, false));

@@ -129,6 +129,13 @@ public class ClusterMapConfig {
   @Default("true")
   public final boolean clusterMapResolveHostnames;
 
+  /**
+   * The partition class to assign to a partition if one is not supplied
+   */
+  @Config("clustermap.default.partition.class")
+  @Default("max-replicas-all-datacenters")
+  public final String clusterMapDefaultPartitionClass;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -151,5 +158,7 @@ public class ClusterMapConfig {
     clusterMapHostName = verifiableProperties.getString("clustermap.host.name");
     clusterMapPort = verifiableProperties.getInteger("clustermap.port", null);
     clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
+    clusterMapDefaultPartitionClass =
+        verifiableProperties.getString("clustermap.default.partition.class", "max-replicas-all-datacenters");
   }
 }

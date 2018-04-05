@@ -69,7 +69,6 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.stats.publish.health.report.enabled", false);
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
-    serverEnableStoreDataPrefetch =
-        verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
+    serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
   }
 }

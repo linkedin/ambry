@@ -63,7 +63,7 @@ public class GetReplicasHandlerTest {
    */
   @Test
   public void getReplicasTest() throws Exception {
-    List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
+    List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,

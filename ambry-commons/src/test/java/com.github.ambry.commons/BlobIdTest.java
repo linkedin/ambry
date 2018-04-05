@@ -81,7 +81,7 @@ public class BlobIdTest {
     referenceDatacenterId = bytes[0];
     referenceAccountId = getRandomShort(random);
     referenceContainerId = getRandomShort(random);
-    referencePartitionId = referenceClusterMap.getWritablePartitionIds().get(0);
+    referencePartitionId = referenceClusterMap.getWritablePartitionIds(null).get(0);
     referenceIsEncrypted = random.nextBoolean();
   }
 
@@ -384,7 +384,8 @@ public class BlobIdTest {
    */
   private void generateAndAssertBadBlobId(Short version) throws Exception {
     List<String> invalidBlobIdLikeList = new ArrayList<>();
-    PartitionId badPartitionId = new MockPartitionId(200000, Collections.EMPTY_LIST, 0);
+    PartitionId badPartitionId =
+        new MockPartitionId(200000, MockClusterMap.DEFAULT_PARTITION_CLASS, Collections.EMPTY_LIST, 0);
     String goodUUID = UUID.randomUUID().toString();
 
     // Partition ID not in cluster map
@@ -600,7 +601,7 @@ public class BlobIdTest {
     short accountId = getRandomShort(random);
     short containerId = getRandomShort(random);
     BlobIdType type = random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED;
-    PartitionId partitionId = referenceClusterMap.getWritablePartitionIds().get(random.nextInt(3));
+    PartitionId partitionId = referenceClusterMap.getWritablePartitionIds(null).get(random.nextInt(3));
     boolean isEncrypted = random.nextBoolean();
     return new BlobId(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted);
   }

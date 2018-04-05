@@ -60,4 +60,9 @@ public abstract class PartitionId implements Resource, Comparable<PartitionId> {
    * @return Strictly numerical string representation of the {@code PartitionId}.
    */
   public abstract String toPathString();
+
+  /**
+   * @return the partition class that this partition belongs to
+   */
+  public abstract String getPartitionClass();
 }

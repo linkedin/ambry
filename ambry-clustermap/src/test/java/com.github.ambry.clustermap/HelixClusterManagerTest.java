@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +37,7 @@ import java.util.Random;
 import java.util.Set;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
@@ -67,6 +69,13 @@ public class HelixClusterManagerTest {
   private final boolean useComposite;
   private final String hardwareLayoutPath;
 
+  // for verifying getPartitions() and getWritablePartitions()
+  private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
+  private final PartitionRangeCheckParams defaultRw;
+  private final PartitionRangeCheckParams specialRw;
+  private final PartitionRangeCheckParams defaultRo;
+  private final PartitionRangeCheckParams specialRo;
+
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{false}, {true}});
@@ -80,6 +89,7 @@ public class HelixClusterManagerTest {
    */
   public HelixClusterManagerTest(boolean useComposite) throws Exception {
     this.useComposite = useComposite;
+    String localDc = dcs[0];
     Random random = new Random();
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
@@ -94,18 +104,32 @@ public class HelixClusterManagerTest {
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
     JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(clusterNameStatic);
-    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3);
-    // add 3 partitions with read_only state.
-    testPartitionLayout.partitionState = PartitionState.READ_ONLY;
-    testPartitionLayout.addNewPartitions(3);
-    testPartitionLayout.partitionState = PartitionState.READ_WRITE;
+    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3, localDc);
+
+    // for getPartitions() and getWritablePartitions() tests
+    assertTrue("There should be more than 1 replica per partition in each DC for some of these tests to work",
+        testPartitionLayout.replicaCountPerDc > 1);
+    defaultRw = new PartitionRangeCheckParams(0, testPartitionLayout.partitionCount, DEFAULT_PARTITION_CLASS,
+        PartitionState.READ_WRITE);
+    // add 15 RW partitions for the special class
+    specialRw =
+        new PartitionRangeCheckParams(defaultRw.rangeEnd + 1, 15, SPECIAL_PARTITION_CLASS, PartitionState.READ_WRITE);
+    testPartitionLayout.addNewPartitions(specialRw.count, SPECIAL_PARTITION_CLASS, PartitionState.READ_WRITE, localDc);
+    // add 10 RO partitions for the default class
+    defaultRo =
+        new PartitionRangeCheckParams(specialRw.rangeEnd + 1, 10, DEFAULT_PARTITION_CLASS, PartitionState.READ_ONLY);
+    testPartitionLayout.addNewPartitions(defaultRo.count, DEFAULT_PARTITION_CLASS, PartitionState.READ_ONLY, localDc);
+    // add 5 RO partitions for the special class
+    specialRo =
+        new PartitionRangeCheckParams(defaultRo.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY);
+    testPartitionLayout.addNewPartitions(specialRo.count, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY, localDc);
 
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionId.getPartitionState().equals(PartitionState.READ_ONLY)) {
         String partitionName = partitionId.toString();
         String helixPartitionName = partitionName.substring(partitionName.indexOf('[') + 1, partitionName.indexOf(']'));
@@ -117,7 +141,7 @@ public class HelixClusterManagerTest {
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.datacenter.name", dcs[0]);
+    props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
@@ -235,11 +259,10 @@ public class HelixClusterManagerTest {
   /**
    * Test that everything works as expected in the presence of liveness changes initiated by clients of the cluster
    * manager.
-   * @throws Exception
    */
   @Test
-  public void clientInitiatedLivenessChangeTest() throws Exception {
-    ReplicaId replica = clusterManager.getWritablePartitionIds().get(0).getReplicaIds().get(0);
+  public void clientInitiatedLivenessChangeTest() {
+    ReplicaId replica = clusterManager.getWritablePartitionIds(null).get(0).getReplicaIds().get(0);
     DataNodeId dataNode = replica.getDataNodeId();
     assertTrue(clusterManager.getReplicaIds(dataNode).contains(replica));
     DiskId disk = replica.getDiskId();
@@ -298,27 +321,27 @@ public class HelixClusterManagerTest {
     // all instances are up initially.
     assertStateEquivalency();
 
-    AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds().get(0);
+    AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
     List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
     helixCluster.setReplicaSealedState(partition, instances.get(0), true, false);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
-        clusterManager.getWritablePartitionIds().contains(partition));
+        clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
     helixCluster.setReplicaSealedState(partition, instances.get(1), true, true);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
-        clusterManager.getWritablePartitionIds().contains(partition));
+        clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
     helixCluster.setReplicaSealedState(partition, instances.get(1), false, true);
     assertFalse("If any one replica is SEALED, the whole partition should be SEALED",
-        clusterManager.getWritablePartitionIds().contains(partition));
+        clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
         partition.getPartitionState());
     helixCluster.setReplicaSealedState(partition, instances.get(0), false, false);
     // At this point all replicas have been marked READ_WRITE. Now, the entire partition should be READ_WRITE.
     assertTrue("If no replica is SEALED, the whole partition should be Writable",
-        clusterManager.getWritablePartitionIds().contains(partition));
+        clusterManager.getWritablePartitionIds(null).contains(partition));
     assertEquals("If no replica is SEALED, the whole partition should be Writable", PartitionState.READ_WRITE,
         partition.getPartitionState());
     assertStateEquivalency();
@@ -383,7 +406,7 @@ public class HelixClusterManagerTest {
     assertEquals(1L, getGaugeValue("isMajorityReplicasDownForAnyPartition"));
     if (useComposite) {
       helixCluster.bringAllInstancesUp();
-      PartitionId partition = clusterManager.getWritablePartitionIds().get(0);
+      PartitionId partition = clusterManager.getWritablePartitionIds(null).get(0);
       assertEquals(0L, getCounterValue("getPartitionIdFromStreamMismatchCount"));
 
       ReplicaId replicaId = partition.getReplicaIds().get(0);
@@ -393,7 +416,7 @@ public class HelixClusterManagerTest {
       for (int i = 0; i < clusterMapConfig.clusterMapFixedTimeoutDiskErrorThreshold; i++) {
         clusterManager.onReplicaEvent(replicaId, ReplicaEventType.Disk_Error);
       }
-      clusterManager.getWritablePartitionIds();
+      clusterManager.getWritablePartitionIds(null);
       assertEquals(0L, getCounterValue("getPartitionIdFromStreamMismatchCount"));
 
       InputStream partitionStream = new ByteBufferInputStream(ByteBuffer.wrap(partition.getBytes()));
@@ -410,6 +433,28 @@ public class HelixClusterManagerTest {
       clusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
       assertEquals(0L, getCounterValue("getDataNodeIdMismatchCount"));
     }
+  }
+
+  /**
+   * Tests for {@link PartitionLayout#getPartitions(String)} and {@link PartitionLayout#getWritablePartitions(String)}.
+   * @throws JSONException
+   */
+  @Test
+  public void getPartitionsTest() {
+    // "good" cases for getPartitions() and getWritablePartitions() only
+    // getPartitions(), class null
+    List<? extends PartitionId> returnedPartitions = clusterManager.getAllPartitionIds(null);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo, specialRw, specialRo));
+    // getWritablePartitions(), class null
+    returnedPartitions = clusterManager.getWritablePartitionIds(null);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw));
+
+    // getPartitions(), class default
+    returnedPartitions = clusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo));
+    // getWritablePartitions(), class default
+    returnedPartitions = clusterManager.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+    checkReturnedPartitions(returnedPartitions, Collections.singletonList(defaultRw));
   }
 
   // Helpers
@@ -438,7 +483,7 @@ public class HelixClusterManagerTest {
    */
   private void testWritablePartitions() {
     Set<String> writableInClusterManager = new HashSet<>();
-    for (PartitionId partition : clusterManager.getWritablePartitionIds()) {
+    for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
       String partitionStr =
           useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
       writableInClusterManager.add(partitionStr);
@@ -456,7 +501,7 @@ public class HelixClusterManagerTest {
    */
   private void testAllPartitions() {
     Set<String> partitionsInClusterManager = new HashSet<>();
-    for (PartitionId partition : clusterManager.getAllPartitionIds()) {
+    for (PartitionId partition : clusterManager.getAllPartitionIds(null)) {
       String partitionStr =
           useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
       partitionsInClusterManager.add(partitionStr);
@@ -470,7 +515,7 @@ public class HelixClusterManagerTest {
    * those in the cluster.
    */
   private void testPartitionReplicaConsistency() throws Exception {
-    for (PartitionId partition : clusterManager.getWritablePartitionIds()) {
+    for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
       assertEquals(testPartitionLayout.getTotalReplicaCount(), partition.getReplicaIds().size());
       InputStream partitionStream = new ByteBufferInputStream(ByteBuffer.wrap(partition.getBytes()));
       PartitionId fetchedPartition = clusterManager.getPartitionIdFromStream(partitionStream);
@@ -482,7 +527,7 @@ public class HelixClusterManagerTest {
    * Test that invalid partition id deserialization fails as expected.
    */
   private void testInvalidPartitionId() {
-    PartitionId partition = clusterManager.getWritablePartitionIds().get(0);
+    PartitionId partition = clusterManager.getWritablePartitionIds(null).get(0);
     try {
       byte[] fakePartition = Arrays.copyOf(partition.getBytes(), partition.getBytes().length);
       for (int i = fakePartition.length; i > fakePartition.length - Long.SIZE / Byte.SIZE; i--) {
