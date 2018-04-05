@@ -85,7 +85,8 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * </pre>
  *
  * <br>
- * Version 4, which is the same as Version 3 now.
+ * Version 4 has the same format with Version 3. The difference is Version 3 ignores isEncrypted bit in flag while
+ * Version 4 honors it.
  * <br>
  * <pre>
  * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
@@ -135,7 +136,11 @@ public class BlobId extends StoreKey {
    * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
    * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
-   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise.
+   *                                For {@link BlobId#BLOB_ID_V3}, isEncrypted is valid in frontend's memory for
+   *                                frontend encryption metric but it is ignored in {@link BlobId#toBytes},
+   *                                {@link BlobId#getID} and {@link BlobId#toString}
+   *
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
       PartitionId partitionId, boolean isEncrypted) {
@@ -347,10 +352,17 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V1:
         break;
       case BLOB_ID_V2:
-      case BLOB_ID_V3:
       case BLOB_ID_V4:
         byte flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
+        idBuf.put(flag);
+        idBuf.put(datacenterId);
+        idBuf.putShort(accountId);
+        idBuf.putShort(containerId);
+        break;
+      case BLOB_ID_V3:
+        flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        // BLOB_ID_V3 always ignores isEncrypted
         idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
