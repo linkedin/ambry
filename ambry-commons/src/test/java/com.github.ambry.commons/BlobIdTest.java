@@ -64,7 +64,7 @@ public class BlobIdTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{BLOB_ID_V1}, {BLOB_ID_V2}, {BLOB_ID_V3}});
+    return Arrays.asList(new Object[][]{{BLOB_ID_V1}, {BLOB_ID_V2}, {BLOB_ID_V3}, {BLOB_ID_V4}});
   }
 
   /**
@@ -126,7 +126,7 @@ public class BlobIdTest {
     if (version >= BLOB_ID_V3) {
       for (BlobIdType type : BlobIdType.values()) {
         for (boolean isEncrypted : isEncryptedValues) {
-          BlobId blobId = new BlobId(BLOB_ID_V3, type, referenceDatacenterId, referenceAccountId, referenceContainerId,
+          BlobId blobId = new BlobId(version, type, referenceDatacenterId, referenceAccountId, referenceContainerId,
               referencePartitionId, isEncrypted);
           BlobId blobIdSerDed =
               new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
@@ -160,6 +160,7 @@ public class BlobIdTest {
         BlobId blobIdV1 = getRandomBlobId(BLOB_ID_V1);
         BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
         BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
+        BlobId blobIdV4 = getRandomBlobId(BLOB_ID_V4);
 
         assertTrue("blobIdV1 should be less than blobIdV2", blobIdV1.compareTo(blobIdV2) < 0);
         assertFalse(blobIdV1.equals(blobIdV2));
@@ -181,10 +182,28 @@ public class BlobIdTest {
         assertTrue(blobIdV2.equals(blobIdV2));
         assertTrue("blobIdV3 should be equal to blobIdV3", blobIdV3.compareTo(blobIdV3) == 0);
         assertTrue(blobIdV3.equals(blobIdV3));
+        assertTrue("blobIdV4 should be equal to blobIdV4", blobIdV4.compareTo(blobIdV4) == 0);
+        assertTrue(blobIdV4.equals(blobIdV4));
+
+        assertTrue("Comparison for blobIdV3 and above are based on uuid only",
+            blobIdV3.compareTo(blobIdV4) == blobIdV3.getUuid().compareTo(blobIdV4.getUuid()));
+        assertTrue("blobIdV3 and blobIdV4 should be unequal",
+            blobIdV3.compareTo(blobIdV4) != blobIdV4.compareTo(blobIdV3));
+        assertFalse("blobIdV3 and blobIdV4 should be unequal", blobIdV3.equals(blobIdV4));
+        assertFalse("blobIdV3 and blobIdV4 should be unequal", blobIdV4.equals(blobIdV3));
+        // V4 should greater than V1 and V2
+        BlobId[] lowerVersions = {blobIdV1, blobIdV2};
+        for (BlobId lowerVersion : lowerVersions) {
+          assertTrue("blobIdV1 or blobIdV2 should be less than blobIdV4", lowerVersion.compareTo(blobIdV4) < 0);
+          assertFalse(lowerVersion.equals(blobIdV4));
+          assertTrue("blobIdV4 should be greater than blobIdV1 or blobIdV2", blobIdV4.compareTo(lowerVersion) > 0);
+          assertFalse(blobIdV4.equals(lowerVersion));
+        }
 
         BlobId blobIdV1Alt = getRandomBlobId(BLOB_ID_V1);
         BlobId blobIdV2Alt = getRandomBlobId(BLOB_ID_V2);
         BlobId blobIdV3Alt = getRandomBlobId(BLOB_ID_V3);
+        BlobId blobIdV4Alt = getRandomBlobId(BLOB_ID_V4);
 
         assertFalse("Two randomly generated V1 blob ids should be unequal", blobIdV1.compareTo(blobIdV1Alt) == 0);
         assertFalse("Two randomly generated V1 blob ids should be unequal", blobIdV1.equals(blobIdV1Alt));
@@ -194,6 +213,9 @@ public class BlobIdTest {
 
         assertFalse("Two randomly generated V3 blob ids should be unequal", blobIdV3.compareTo(blobIdV3Alt) == 0);
         assertFalse("Two randomly generated V3 blob ids should be unequal", blobIdV3.equals(blobIdV3Alt));
+
+        assertFalse("Two randomly generated V4 blob ids should be unequal", blobIdV4.compareTo(blobIdV4Alt) == 0);
+        assertFalse("Two randomly generated V4 blob ids should be unequal", blobIdV4.equals(blobIdV4Alt));
       }
     }
   }
@@ -270,6 +292,7 @@ public class BlobIdTest {
     BlobId blobIdV1 = getRandomBlobId(BLOB_ID_V1);
     BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
     BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
+    BlobId blobIdV4 = getRandomBlobId(BLOB_ID_V4);
     // test v1
     assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
         blobIdV1.isAccountContainerMatch(blobIdV1.getAccountId(), blobIdV1.getContainerId()));
@@ -277,8 +300,8 @@ public class BlobIdTest {
         blobIdV1.isAccountContainerMatch((short) -1, (short) -1));
     assertTrue("isAccountContainerMatch() should always return true for  V1 blobID.",
         blobIdV1.isAccountContainerMatch(getRandomShort(random), getRandomShort(random)));
-    // test v2 and v3
-    BlobId[] blobIds = {blobIdV2, blobIdV3};
+    // test v2, v3 and v4
+    BlobId[] blobIds = {blobIdV2, blobIdV3, blobIdV4};
     for (BlobId blobId : blobIds) {
       assertTrue("isAccountContainerMatch() should return true because account and container match.",
           blobId.isAccountContainerMatch(blobId.getAccountId(), blobId.getContainerId()));
@@ -397,6 +420,7 @@ public class BlobIdTest {
         idBuf.putShort(containerId);
         break;
       case BLOB_ID_V3:
+      case BLOB_ID_V4:
         idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuidLike.length();
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
@@ -485,6 +509,7 @@ public class BlobIdTest {
         assertFalse("Wrong isEncrypted value id in blobId: " + blobId, blobId.isEncrypted());
         break;
       case BLOB_ID_V3:
+      case BLOB_ID_V4:
         assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
         assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
         assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
