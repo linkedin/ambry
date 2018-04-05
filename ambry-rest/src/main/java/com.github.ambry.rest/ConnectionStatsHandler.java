@@ -42,7 +42,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
     metrics.registerConnectionsStatsHandler(openConnections);
     handshakeListener = future -> {
       if (!future.isSuccess()) {
-        logger.info("SSL handshake failed", future.cause());
+        logger.debug("SSL handshake failed", future.cause());
         metrics.handshakeFailureCount.inc();
       }
     };
