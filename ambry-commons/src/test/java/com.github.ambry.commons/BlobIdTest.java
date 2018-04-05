@@ -187,7 +187,18 @@ public class BlobIdTest {
 
         assertTrue("Comparison for blobIdV3 and above are based on uuid only",
             blobIdV3.compareTo(blobIdV4) == blobIdV3.getUuid().compareTo(blobIdV4.getUuid()));
-        assertFalse(blobIdV3.equals(blobIdV4));
+        assertTrue("blobIdV3 and blobIdV4 should be unequal",
+            blobIdV3.compareTo(blobIdV4) != blobIdV4.compareTo(blobIdV3));
+        assertFalse("blobIdV3 and blobIdV4 should be unequal", blobIdV3.equals(blobIdV4));
+        assertFalse("blobIdV3 and blobIdV4 should be unequal", blobIdV4.equals(blobIdV3));
+        // V4 should greater than V1 and V2
+        BlobId[] lowerVersions = {blobIdV1, blobIdV2};
+        for (BlobId lowerVersion : lowerVersions) {
+          assertTrue("blobIdV1 or blobIdV2 should be less than blobIdV4", lowerVersion.compareTo(blobIdV4) < 0);
+          assertFalse(lowerVersion.equals(blobIdV4));
+          assertTrue("blobIdV4 should be greater than blobIdV1 or blobIdV2", blobIdV4.compareTo(lowerVersion) > 0);
+          assertFalse(blobIdV4.equals(lowerVersion));
+        }
 
         BlobId blobIdV1Alt = getRandomBlobId(BLOB_ID_V1);
         BlobId blobIdV2Alt = getRandomBlobId(BLOB_ID_V2);
