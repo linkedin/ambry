@@ -103,12 +103,9 @@ public class BlobIdTest {
    */
   @Test
   public void testSerDes() throws Exception {
-    if (version == BLOB_ID_V3) {
-      return;
-    }
     BlobId blobId = new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
         referencePartitionId, referenceIsEncrypted);
-    deserializeBlobIdAndAssert(version, blobId.getID(), referenceIsEncrypted);
+    deserializeBlobIdAndAssert(version, blobId.getID());
     BlobId blobIdSerDed =
         new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
     // Ensure that deserialized blob is exactly the same as the original in comparisons.
@@ -117,31 +114,6 @@ public class BlobIdTest {
     assertEquals(blobId.hashCode(), blobIdSerDed.hashCode());
     assertEquals(0, blobId.compareTo(blobIdSerDed));
     assertEquals(0, blobIdSerDed.compareTo(blobId));
-  }
-
-  /**
-   * Tests simlar with above test but {@link BlobId#BLOB_ID_V3} ignores encrypted bit when deserialize.
-   * @throws Exception Any unexpected exception.
-   */
-  @Test
-  public void testSerDesV3() throws Exception {
-    if (version != BLOB_ID_V3) {
-      return;
-    }
-    boolean[] isEncryptedValues = {true, false};
-    for (boolean isEncrypted : isEncryptedValues) {
-      BlobId blobId = new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-          referencePartitionId, isEncrypted);
-      deserializeBlobIdAndAssert(version, blobId.getID(), false);
-      BlobId blobIdSerDed =
-          new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
-      // Ensure that deserialized blob is exactly the same as the original in comparisons.
-      assertTrue(blobId.equals(blobIdSerDed));
-      assertTrue(blobIdSerDed.equals(blobId));
-      assertEquals(blobId.hashCode(), blobIdSerDed.hashCode());
-      assertEquals(0, blobId.compareTo(blobIdSerDed));
-      assertEquals(0, blobIdSerDed.compareTo(blobId));
-    }
   }
 
   /**
@@ -159,11 +131,8 @@ public class BlobIdTest {
           BlobId blobIdSerDed =
               new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
           assertEquals("The type should match the original's type", type, blobIdSerDed.getType());
-          if (version == BLOB_ID_V3) {
-            assertEquals("The isEncrypted in BLOB_ID_V3 is ignored", false, blobIdSerDed.isEncrypted());
-          } else {
-            assertEquals("The isEncrypted should match the original", isEncrypted, blobIdSerDed.isEncrypted());
-          }
+          assertEquals("The isEncrypted should match the original", version >= BLOB_ID_V4 ? isEncrypted : false,
+              blobIdSerDed.isEncrypted());
         }
       }
     }
@@ -477,10 +446,9 @@ public class BlobIdTest {
    * Deserializes BlobId string and assert the resulted BlobId object.
    * @param version The version of BlobId.
    * @param srcBlobIdStr The string to deserialize.
-   * @param isEncrypted The expected isEncrypted.
    * @throws Exception Any unexpected exception.
    */
-  private void deserializeBlobIdAndAssert(short version, String srcBlobIdStr, boolean isEncrypted) throws Exception {
+  private void deserializeBlobIdAndAssert(short version, String srcBlobIdStr) throws Exception {
     List<BlobId> blobIds = new ArrayList<>();
     blobIds.add(new BlobId(srcBlobIdStr, referenceClusterMap));
     blobIds.add(new BlobId(getStreamFromBase64(srcBlobIdStr), referenceClusterMap));
@@ -489,7 +457,7 @@ public class BlobIdTest {
       assertEquals("Wrong base-64 ID in blobId: " + blobId, srcBlobIdStr, blobId.getID());
       assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
       assertBlobIdFieldValues(version, blobId, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, isEncrypted);
+          referenceContainerId, referencePartitionId, referenceIsEncrypted);
     }
   }
 
@@ -542,6 +510,12 @@ public class BlobIdTest {
         assertFalse("Wrong isEncrypted value id in blobId: " + blobId, blobId.isEncrypted());
         break;
       case BLOB_ID_V3:
+        assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
+        assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
+        assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
+        assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
+        assertFalse("Wrong isEncrypted value id in blobId: " + blobId, blobId.isEncrypted());
+        break;
       case BLOB_ID_V4:
         assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
         assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());

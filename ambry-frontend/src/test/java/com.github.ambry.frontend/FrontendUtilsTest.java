@@ -35,12 +35,12 @@ import static org.junit.Assert.*;
 public class FrontendUtilsTest {
 
   /**
-   * Tests {@link FrontendUtils#getBlobIdFromString(String, ClusterMap)} for {@link BlobId#BLOB_ID_V4}
+   * Tests {@link FrontendUtils#getBlobIdFromString(String, ClusterMap)}
    * @throws IOException
    * @throws RestServiceException
    */
   @Test
-  public void testGetBlobIdFromStringV4() throws IOException, RestServiceException {
+  public void testGetBlobIdFromString() throws IOException, RestServiceException {
     // good path
     byte[] bytes = new byte[2];
     ClusterMap referenceClusterMap = new MockClusterMap();
@@ -53,50 +53,15 @@ public class FrontendUtilsTest {
     short referenceContainerId = getRandomShort(TestUtils.RANDOM);
     PartitionId referencePartitionId = referenceClusterMap.getWritablePartitionIds().get(0);
     boolean referenceIsEncrypted = TestUtils.RANDOM.nextBoolean();
-    BlobId blobId =
-        new BlobId(BlobId.BLOB_ID_V4, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-            referencePartitionId, referenceIsEncrypted);
-    BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
-    assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
-    assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,
-        referenceContainerId, referencePartitionId, referenceIsEncrypted);
-
-    // bad path
-    try {
-      FrontendUtils.getBlobIdFromString(blobId.getID().substring(1), referenceClusterMap);
-      fail("Should have thrown exception for bad blobId ");
-    } catch (RestServiceException e) {
-      assertEquals("RestServiceErrorCode mismatch", RestServiceErrorCode.BadRequest, e.getErrorCode());
-    }
-  }
-
-  /**
-   * Tests {@link FrontendUtils#getBlobIdFromString(String, ClusterMap)} for {@link BlobId#BLOB_ID_V3}
-   * @throws IOException
-   * @throws RestServiceException
-   */
-  @Test
-  public void testGetBlobIdFromStringV3() throws IOException, RestServiceException {
-    // good path
-    byte[] bytes = new byte[2];
-    ClusterMap referenceClusterMap = new MockClusterMap();
-    TestUtils.RANDOM.nextBytes(bytes);
-    BlobId.BlobIdType referenceType =
-        TestUtils.RANDOM.nextBoolean() ? BlobId.BlobIdType.NATIVE : BlobId.BlobIdType.CRAFTED;
-    TestUtils.RANDOM.nextBytes(bytes);
-    byte referenceDatacenterId = bytes[0];
-    short referenceAccountId = getRandomShort(TestUtils.RANDOM);
-    short referenceContainerId = getRandomShort(TestUtils.RANDOM);
-    PartitionId referencePartitionId = referenceClusterMap.getWritablePartitionIds().get(0);
-    boolean[] referenceIsEncrypteds = {true, false};
-    for (boolean referenceIsEncrypted : referenceIsEncrypteds) {
+    short[] versions = {BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4};
+    for (short version : versions) {
       BlobId blobId =
-          new BlobId(BlobId.BLOB_ID_V3, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
+          new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
               referencePartitionId, referenceIsEncrypted);
       BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
       assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
       assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, false);
+          referenceContainerId, referencePartitionId, version >= BlobId.BLOB_ID_V4 ? referenceIsEncrypted : false);
 
       // bad path
       try {

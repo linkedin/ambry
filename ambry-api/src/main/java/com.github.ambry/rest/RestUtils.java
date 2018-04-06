@@ -236,6 +236,8 @@ public class RestUtils {
   private static final short USER_METADATA_VERSION_V1 = 1;
   private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
   private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
+  private static final String BLOB_ID_V3_NAIVE_ENCRYPTED_PREFIX = "AAME";
+  private static final String BLOB_ID_V3_CRAFTED_ENCRYPTED_PREFIX = "AAMF";
 
   /**
    * Builds {@link BlobProperties} given the arguments associated with a request.
@@ -767,5 +769,13 @@ public class RestUtils {
           RestServiceErrorCode.InvalidArgs);
     }
     return range;
+  }
+
+  /**
+   * A hacky way to determine if V3 blobId is encrypted or not.
+   */
+  public static boolean isEncrypted(String blobIdStr) {
+    return blobIdStr != null && (blobIdStr.startsWith(BLOB_ID_V3_NAIVE_ENCRYPTED_PREFIX) || blobIdStr.startsWith(
+        BLOB_ID_V3_CRAFTED_ENCRYPTED_PREFIX));
   }
 }

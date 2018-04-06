@@ -413,7 +413,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
       }
       long operationLatencyMs = time.milliseconds() - submissionTimeMs;
-      if (blobId.isEncrypted()) {
+      if (blobId.isEncrypted() || (serverBlobProperties != null && serverBlobProperties.isEncrypted())) {
         routerMetrics.getEncryptedBlobInfoOperationLatencyMs.update(operationLatencyMs);
       } else {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);

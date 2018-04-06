@@ -186,7 +186,7 @@ class GetBlobOperation extends GetOperation {
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
           long timeElapsed = time.milliseconds() - submissionTimeMs;
-          if (blobId.isEncrypted()) {
+          if (blobId.isEncrypted() || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted())) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
           } else {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
@@ -404,7 +404,7 @@ class GetBlobOperation extends GetOperation {
           routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
-        if (blobId.isEncrypted()) {
+        if (blobId.isEncrypted() || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted())) {
           routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
         } else {
           routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);
