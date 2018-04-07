@@ -180,7 +180,7 @@ public class AmbryRequests implements RequestAPI {
     PutResponse response = null;
     try {
       ServerErrorCode error =
-          validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest);
+          validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest, false);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating put request failed with error {} for request {}", error, receivedRequest);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(), error);
@@ -282,7 +282,8 @@ public class AmbryRequests implements RequestAPI {
       List<PartitionResponseInfo> partitionResponseInfoList =
           new ArrayList<PartitionResponseInfo>(getRequest.getPartitionInfoList().size());
       for (PartitionRequestInfo partitionRequestInfo : getRequest.getPartitionInfoList()) {
-        ServerErrorCode error = validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest);
+        ServerErrorCode error =
+            validateRequest(partitionRequestInfo.getPartition(), RequestOrResponseType.GetRequest, false);
         if (error != ServerErrorCode.No_Error) {
           logger.error("Validating get request failed for partition {} with error {}",
               partitionRequestInfo.getPartition(), error);
@@ -391,7 +392,7 @@ public class AmbryRequests implements RequestAPI {
     DeleteResponse response = null;
     try {
       ServerErrorCode error =
-          validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest);
+          validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest, false);
       if (error != ServerErrorCode.No_Error) {
         logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
@@ -471,7 +472,7 @@ public class AmbryRequests implements RequestAPI {
       for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
         long partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
         PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
-        ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.ReplicaMetadataRequest);
+        ServerErrorCode error = validateRequest(partitionId, RequestOrResponseType.ReplicaMetadataRequest, false);
         logger.trace("{} Time used to validate metadata request: {}", partitionId,
             (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
@@ -556,16 +557,18 @@ public class AmbryRequests implements RequestAPI {
 
   /**
    * Enables/disables {@code requestOrResponseType} on the given {@code ids}.
-   * @param requestType the {@link RequestOrResponseType} to enable/disable.
+   * @param requestTypes the {@link RequestOrResponseType} to enable/disable.
    * @param ids the {@link PartitionId}s to enable/disable it on.
    * @param enable whether to enable ({@code true}) or disable
    */
-  private void controlRequestForPartitions(RequestOrResponseType requestType, Collection<PartitionId> ids,
+  private void controlRequestForPartitions(EnumSet<RequestOrResponseType> requestTypes, Collection<PartitionId> ids,
       boolean enable) {
-    if (enable) {
-      requestsDisableInfo.get(requestType).removeAll(ids);
-    } else {
-      requestsDisableInfo.get(requestType).addAll(ids);
+    for (RequestOrResponseType requestType : requestTypes) {
+      if (enable) {
+        requestsDisableInfo.get(requestType).removeAll(ids);
+      } else {
+        requestsDisableInfo.get(requestType).addAll(ids);
+      }
     }
   }
 
@@ -661,7 +664,7 @@ public class AmbryRequests implements RequestAPI {
    * @return the {@link AdminResponse} to the request.
    */
   private AdminResponse handleTriggerCompactionRequest(AdminRequest adminRequest) {
-    ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+    ServerErrorCode error = validateRequest(adminRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
     if (error != ServerErrorCode.No_Error) {
       logger.error("Validating trigger compaction request failed with error {} for {}", error, adminRequest);
     } else if (!storageManager.scheduleNextForCompaction(adminRequest.getPartitionId())) {
@@ -691,13 +694,13 @@ public class AmbryRequests implements RequestAPI {
     } else {
       error = ServerErrorCode.No_Error;
       if (controlRequest.getPartitionId() != null) {
-        error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+        error = validateRequest(controlRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
         partitionIds = Collections.singletonList(controlRequest.getPartitionId());
       } else {
         partitionIds = partitionsInCurrentNode;
       }
       if (!error.equals(ServerErrorCode.Partition_Unknown)) {
-        controlRequestForPartitions(toControl, partitionIds, controlRequest.shouldEnable());
+        controlRequestForPartitions(EnumSet.of(toControl), partitionIds, controlRequest.shouldEnable());
         for (PartitionId partitionId : partitionIds) {
           logger.info("Enable state for {} on {} is {}", toControl, partitionId,
               isRequestEnabled(toControl, partitionId));
@@ -721,7 +724,7 @@ public class AmbryRequests implements RequestAPI {
     ReplicationControlAdminRequest replControlRequest =
         ReplicationControlAdminRequest.readFrom(requestStream, adminRequest);
     if (replControlRequest.getPartitionId() != null) {
-      error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+      error = validateRequest(replControlRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
       partitionIds = Collections.singletonList(replControlRequest.getPartitionId());
     } else {
       partitionIds = partitionsInCurrentNode;
@@ -758,7 +761,7 @@ public class AmbryRequests implements RequestAPI {
       error = ServerErrorCode.Bad_Request;
     } else {
       if (catchupStatusRequest.getPartitionId() != null) {
-        error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest);
+        error = validateRequest(catchupStatusRequest.getPartitionId(), RequestOrResponseType.AdminRequest, false);
         partitionIds = Collections.singletonList(catchupStatusRequest.getPartitionId());
       } else {
         partitionIds = partitionsInCurrentNode;
@@ -785,29 +788,59 @@ public class AmbryRequests implements RequestAPI {
     ServerErrorCode error;
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
         BlobStoreControlAdminRequest.readFrom(requestStream, adminRequest);
-    if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() > 0) {
-      PartitionId partitionId = blobStoreControlAdminRequest.getPartitionId();
-      if (partitionId != null) {
-        error = validateRequest(partitionId, RequestOrResponseType.AdminRequest);
+    PartitionId partitionId = blobStoreControlAdminRequest.getPartitionId();
+    if (partitionId != null) {
+      if (blobStoreControlAdminRequest.shouldEnable()) {
+        // start BlobStore properly
+        error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, true);
         if (error.equals(ServerErrorCode.No_Error)) {
-          if (blobStoreControlAdminRequest.shouldEnable()) {
-            // TODO: start BlobStore properly
-            error = ServerErrorCode.Temporarily_Disabled;
-          } else {
+          if (storageManager.startBlobStore(partitionId)) {
             Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
-            if (storageManager.disableCompactionForBlobStore(partitionId)) {
-              controlRequestForPartitions(RequestOrResponseType.PutRequest, partitionIds, false);
-              controlRequestForPartitions(RequestOrResponseType.DeleteRequest, partitionIds, false);
+            controlRequestForPartitions(
+                EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
+                    RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds, true);
+            if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
+                true)) {
+              if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
+                error = ServerErrorCode.No_Error;
+                logger.info("Store is successfully started and functional for partition: {}", partitionId);
+              } else {
+                error = ServerErrorCode.Unknown_Error;
+                logger.error("Enable compaction fails on given BlobStore {}", partitionId);
+              }
+            } else {
+              error = ServerErrorCode.Unknown_Error;
+              logger.error("Could not enable replication on {}", partitionIds);
+            }
+          } else {
+            error = ServerErrorCode.Unknown_Error;
+            logger.error("Starting BlobStore fails on {}", partitionId);
+          }
+        } else {
+          logger.debug("Validate request fails for {} with error code {} when trying to start store", partitionId,
+              error);
+        }
+      } else {
+        // stop BlobStore properly
+        error = validateRequest(partitionId, RequestOrResponseType.AdminRequest, false);
+        if (error.equals(ServerErrorCode.No_Error)) {
+          if (blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition() >= 0) {
+            if (storageManager.controlCompactionForBlobStore(partitionId, false)) {
+              Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
+              controlRequestForPartitions(
+                  EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds,
+                  false);
               if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                   false)) {
                 if (isRemoteLagLesserOrEqual(partitionIds, 0,
                     blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition())) {
-                  controlRequestForPartitions(RequestOrResponseType.GetRequest, partitionIds, false);
-                  controlRequestForPartitions(RequestOrResponseType.ReplicaMetadataRequest, partitionIds, false);
+                  controlRequestForPartitions(
+                      EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest),
+                      partitionIds, false);
                   // Shutdown the BlobStore completely
                   if (storageManager.shutdownBlobStore(partitionId)) {
                     error = ServerErrorCode.No_Error;
-                    logger.info("store shutdown for partition: {}", partitionId);
+                    logger.info("Store is successfully shutdown for partition: {}", partitionId);
                   } else {
                     error = ServerErrorCode.Unknown_Error;
                     logger.error("Shutting down BlobStore fails on {}", partitionId);
@@ -822,20 +855,21 @@ public class AmbryRequests implements RequestAPI {
               }
             } else {
               error = ServerErrorCode.Unknown_Error;
-              logger.error("Disable compaction on given BlobStore failed for {}", partitionId);
+              logger.error("Disable compaction fails on given BlobStore {}", partitionId);
             }
+          } else {
+            error = ServerErrorCode.Bad_Request;
+            logger.debug("The number of replicas to catch up should not be less or equal to zero {}",
+                blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition());
           }
         } else {
-          logger.debug("Validate request fails for {} with error code {}", partitionId, error);
+          logger.debug("Validate request fails for {} with error code {} when trying to stop store", partitionId,
+              error);
         }
-      } else {
-        error = ServerErrorCode.Partition_Unknown;
-        logger.debug("The partition Id should not be null.");
       }
     } else {
       error = ServerErrorCode.Bad_Request;
-      logger.debug("The number of replicas to catch up should not be less or equal to zero {}",
-          blobStoreControlAdminRequest.getNumReplicasCaughtUpPerPartition());
+      logger.debug("The partition Id should not be null.");
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
   }
@@ -927,33 +961,38 @@ public class AmbryRequests implements RequestAPI {
    * Check that the provided partition is valid, on the disk, and can be written to.
    * @param partition the partition to validate.
    * @param requestType the {@link RequestOrResponseType} being validated.
+   * @param skipPartitionAndDiskAvailableCheck whether to skip ({@code true}) conditions check for the availability of
+   *                                           partition and disk.
    * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
    *         if it cannot.
    */
-  private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType) {
+  private ServerErrorCode validateRequest(PartitionId partition, RequestOrResponseType requestType,
+      boolean skipPartitionAndDiskAvailableCheck) {
     // 1. Check partition is null
     if (partition == null) {
       metrics.badRequestError.inc();
       return ServerErrorCode.Bad_Request;
     }
-    // 2. check if partition exists on this node and that the store for this partition has been started
-    if (storageManager.getStore(partition) == null) {
-      if (partitionsInCurrentNode.contains(partition)) {
-        metrics.diskUnavailableError.inc();
-        return ServerErrorCode.Disk_Unavailable;
-      } else {
-        metrics.partitionUnknownError.inc();
-        return ServerErrorCode.Partition_Unknown;
-      }
-    }
-    // 3. ensure the disk for the partition/replica is available
-    List<? extends ReplicaId> replicaIds = partition.getReplicaIds();
-    for (ReplicaId replica : replicaIds) {
-      if (replica.getDataNodeId().getHostname().equals(currentNode.getHostname())
-          && replica.getDataNodeId().getPort() == currentNode.getPort()) {
-        if (replica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
+    if (!skipPartitionAndDiskAvailableCheck) {
+      // 2. check if partition exists on this node and that the store for this partition has been started
+      if (storageManager.getStore(partition) == null) {
+        if (partitionsInCurrentNode.contains(partition)) {
           metrics.diskUnavailableError.inc();
           return ServerErrorCode.Disk_Unavailable;
+        } else {
+          metrics.partitionUnknownError.inc();
+          return ServerErrorCode.Partition_Unknown;
+        }
+      }
+      // 3. ensure the disk for the partition/replica is available
+      List<? extends ReplicaId> replicaIds = partition.getReplicaIds();
+      for (ReplicaId replica : replicaIds) {
+        if (replica.getDataNodeId().getHostname().equals(currentNode.getHostname())
+            && replica.getDataNodeId().getPort() == currentNode.getPort()) {
+          if (replica.getDiskId().getState() == HardwareState.UNAVAILABLE) {
+            metrics.diskUnavailableError.inc();
+            return ServerErrorCode.Disk_Unavailable;
+          }
         }
       }
     }

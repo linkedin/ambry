@@ -532,6 +532,7 @@ class BlobStore implements Store {
         compactor.close(30);
         index.close();
         log.close();
+        metrics.deregisterMetrics(storeId);
         started = false;
       } catch (Exception e) {
         logger.error("Store : " + dataDir + " shutdown of store failed for directory ", e);

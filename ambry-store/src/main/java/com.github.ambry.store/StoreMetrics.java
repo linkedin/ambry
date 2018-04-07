@@ -176,6 +176,18 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"), currentSegmentCount);
   }
 
+  /**
+   * Deregister the IndexGauges for given {@code store}.
+   * @param storeId the {@link BlobStore} for which the IndexGauges should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  private boolean deregisterIndexGauges(String storeId) {
+    String prefix = storeId + SEPERATOR;
+    return registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentCapacityUsed")) && registry.remove(
+        MetricRegistry.name(Log.class, prefix + "PercentageUsedCapacity")) && registry.remove(
+        MetricRegistry.name(Log.class, prefix + "CurrentSegmentCount"));
+  }
+
   void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
     String prefix = storeId + SEPERATOR;
     Gauge<Long> currentHardDeleteProgress = hardDeleter::getProgress;
@@ -195,10 +207,42 @@ public class StoreMetrics {
     registry.register(MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"), hardDeleteCaughtUp);
   }
 
+  /**
+   * Deregister the HardDeleteMetric for given {@code store}.
+   * @param storeId the {@link BlobStore} for which the HardDeleteMetric should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  private boolean deregisterHardDeleteMetric(String storeId) {
+    String prefix = storeId + SEPERATOR;
+    return registry.remove(MetricRegistry.name(PersistentIndex.class, prefix + "CurrentHardDeleteProgress")) && registry
+        .remove(MetricRegistry.name(Log.class, prefix + "PercentageHardDeleteCompleted")) && registry.remove(
+        MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteThreadRunning")) && registry.remove(
+        MetricRegistry.name(PersistentIndex.class, prefix + "HardDeleteCaughtUp"));
+  }
+
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress) {
     String prefix = storeId + SEPERATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
         compactionInProgressGauge);
+  }
+
+  /**
+   * Deregister the CompactorGauges for given {@code store}.
+   * @param storeId the {@link BlobStore} for which the CompactorGauges should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  private boolean deregisterCompactorGauges(String storeId) {
+    String prefix = storeId + SEPERATOR;
+    return registry.remove(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"));
+  }
+
+  /**
+   * Deregister the Metrics related to the given {@code store}.
+   * @param storeId the {@link BlobStore} for which some Metrics should be deregistered.
+   * @return {@code true} if deregistration was successful. {@code false} if not.
+   */
+  boolean deregisterMetrics(String storeId) {
+    return deregisterIndexGauges(storeId) && deregisterHardDeleteMetric(storeId) && deregisterCompactorGauges(storeId);
   }
 }

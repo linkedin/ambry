@@ -221,8 +221,8 @@ public class CompactionManagerTest {
     compactionManager = new CompactionManager(MOUNT_PATH, config, stores, new StorageManagerMetrics(metricRegistry),
         SystemTime.getInstance());
     // disable the third blobstore for compaction before starting the CompactionExecutor thread
-    MockBlobStore compactionDisabledStore = (MockBlobStore) stores.get(2);
-    compactionManager.disableCompactionForBlobStore(compactionDisabledStore);
+    MockBlobStore controlCompactionTestStore = (MockBlobStore) stores.get(2);
+    compactionManager.controlCompactionForBlobStore(controlCompactionTestStore, false);
     compactionManager.enable();
     assertNotNull("Compaction thread should be created",
         TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -264,6 +264,39 @@ public class CompactionManagerTest {
           throw store.callOrderException;
         }
         assertTrue("compact() should have been called", store.compactCalled);
+      }
+    }
+
+    // disable Compaction Manager for restart
+    compactionManager.disable();
+    compactionManager.awaitTermination();
+    assertFalse("Compaction thread should not be running", compactionManager.isCompactionExecutorRunning());
+    compactCallsCountdown = new CountDownLatch(2);
+    // set all compact called to false
+    for (BlobStore store : stores) {
+      ((MockBlobStore) store).compactCalled = false;
+      ((MockBlobStore) store).resumeCompactionCalled = false;
+      ((MockBlobStore) store).compactCallsCountdown = compactCallsCountdown;
+    }
+    compactionManager.controlCompactionForBlobStore(controlCompactionTestStore, true);
+    // restart Compaction Manager to trigger Periodic Compaction
+    compactionManager.enable();
+    assertNotNull("Compaction thread should be created",
+        TestUtils.getThreadByThisName(CompactionManager.THREAD_NAME_PREFIX));
+    assertTrue("Compaction calls did not come within the expected time",
+        compactCallsCountdown.await(1, TimeUnit.SECONDS));
+    for (int i = 0; i < numStores; i++) {
+      MockBlobStore store = (MockBlobStore) stores.get(i);
+      if (store.callOrderException != null) {
+        throw store.callOrderException;
+      }
+      if (i == 2 || i == 4) {
+        assertTrue("Compact was not called", store.compactCalled);
+      } else {
+        // should not call for i == 0 because store has not been started.
+        // should not call for i == 1 because resumeCompaction() would have marked this as a misbehaving store.
+        // should not call for i == 3 because it encountered exception during last compaction.
+        assertFalse("Compact should not have been called", store.compactCalled);
       }
     }
     compactionManager.disable();
@@ -330,14 +363,14 @@ public class CompactionManagerTest {
   }
 
   /**
-   * Tests for cases where compaction is disabled on a given BlobStore
+   * Tests for cases where compaction is disabled or enabled on a given BlobStore
    */
   @Test
-  public void testDisableCompactionForBlobStore() throws Exception {
+  public void testControlCompactionForBlobStore() throws Exception {
     // without compaction enabled.
     compactionManager.enable();
     assertTrue("Disable compaction on BlobStore should be true when compaction executor is not instantiated",
-        compactionManager.disableCompactionForBlobStore(blobStore));
+        compactionManager.controlCompactionForBlobStore(blobStore, false));
     compactionManager.disable();
     compactionManager.awaitTermination();
     // with compaction enabled.
@@ -347,8 +380,12 @@ public class CompactionManagerTest {
     compactionManager = new CompactionManager(MOUNT_PATH, config, Collections.singleton(blobStore), metrics, time);
     compactionManager.enable();
     assertTrue("Disable compaction on given BlobStore should succeed",
-        compactionManager.disableCompactionForBlobStore(blobStore));
+        compactionManager.controlCompactionForBlobStore(blobStore, false));
     assertFalse("BlobStore should not be scheduled after compaction is disabled on it",
+        compactionManager.scheduleNextForCompaction(blobStore));
+    assertTrue("Enable compaction on given BlobStore should succeed",
+        compactionManager.controlCompactionForBlobStore(blobStore, true));
+    assertTrue("BlobStore should be scheduled after compaction is enabled on it",
         compactionManager.scheduleNextForCompaction(blobStore));
     compactionManager.disable();
     compactionManager.awaitTermination();

@@ -98,6 +98,7 @@ class CompactionManager {
           logger.error("Thread {} threw exception", t, e);
         }
       });
+      compactionExecutor.enable();
       compactionThread.start();
     }
   }
@@ -143,11 +144,12 @@ class CompactionManager {
 
   /**
    * Disable the given {@code store} for compaction.
-   * @param store the {@link BlobStore} to be disabled.
+   * @param store the {@link BlobStore} to be disabled or enabled.
+   * @param enable whether to enable ({@code true}) or disable.
    * @return {@code true} if the disabling was successful. {@code false} if not.
    */
-  boolean disableCompactionForBlobStore(BlobStore store) {
-    return compactionExecutor == null || compactionExecutor.disableCompactionForBlobStore(store);
+  boolean controlCompactionForBlobStore(BlobStore store, boolean enable) {
+    return compactionExecutor == null || compactionExecutor.controlCompactionForBlobStore(store, enable);
   }
 
   /**
@@ -174,7 +176,7 @@ class CompactionManager {
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
 
-    private volatile boolean enabled = true;
+    private volatile boolean enabled = false;
 
     volatile boolean isRunning = false;
 
@@ -278,6 +280,18 @@ class CompactionManager {
     }
 
     /**
+     * Enables the executor by allowing scheduling of new compaction jobs.
+     */
+    void enable() {
+      lock.lock();
+      try {
+        enabled = true;
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    /**
      * Disables the executor by disallowing scheduling of any new compaction jobs.
      */
     void disable() {
@@ -314,11 +328,16 @@ class CompactionManager {
 
     /**
      * Disable the compaction on given blobstore
-     * @param store the {@link BlobStore} on which the compaction is disabled.
+     * @param store the {@link BlobStore} on which the compaction is enabled or disabled.
+     * @param enable whether to enable ({@code true}) or disable.
      * @return {@code true} if the disabling was successful. {@code false} if not.
      */
-    boolean disableCompactionForBlobStore(BlobStore store) {
-      storesDisabledCompaction.add(store);
+    boolean controlCompactionForBlobStore(BlobStore store, boolean enable) {
+      if (enable) {
+        storesDisabledCompaction.remove(store);
+      } else {
+        storesDisabledCompaction.add(store);
+      }
       return true;
     }
   }

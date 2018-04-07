@@ -145,6 +145,15 @@ public class StorageManager {
   }
 
   /**
+   * @param id the {@link PartitionId} to find the DiskManager for.
+   * @return the {@link DiskManager} corresponding to the given {@link PartitionId}, or {@code null} if no DiskManager was found for
+   *         that partition
+   */
+  DiskManager getDiskManager(PartitionId id) {
+    return partitionToDiskManager.get(id);
+  }
+
+  /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.
    * @param id the {@link PartitionId} of the {@link Store} to compact.
    * @return {@code true} if the scheduling was successful. {@code false} if not.
@@ -156,12 +165,13 @@ public class StorageManager {
 
   /**
    * Disable compaction on the {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} on which compaction is disabled.
+   * @param id the {@link PartitionId} of the {@link Store} on which compaction is disabled or enabled.
+   * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
-  public boolean disableCompactionForBlobStore(PartitionId id) {
+  public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     DiskManager diskManager = partitionToDiskManager.get(id);
-    return diskManager != null && diskManager.disableCompactionForBlobStore(id);
+    return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
   }
 
   /**
@@ -196,7 +206,16 @@ public class StorageManager {
   }
 
   /**
-   * Shutdown blobstore with given {@link PartitionId} {@code id}.
+   * Start BlobStore with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link Store} which would be started.
+   */
+  public boolean startBlobStore(PartitionId id) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.startBlobStore(id);
+  }
+
+  /**
+   * Shutdown BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
    */
   public boolean shutdownBlobStore(PartitionId id) {

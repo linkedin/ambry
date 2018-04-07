@@ -231,30 +231,55 @@ class DiskManager {
 
   /**
    * Disable compaction on the {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link BlobStore} on which compaction is disabled.
+   * @param id the {@link PartitionId} of the {@link BlobStore} on which compaction is disabled or enabled.
+   * @param enabled whether to enable ({@code true}) or disable.
    * @return {@code true} if disabling was successful. {@code false} if not.
    */
-  boolean disableCompactionForBlobStore(PartitionId id) {
+  boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     BlobStore store = stores.get(id);
-    return store != null && compactionManager.disableCompactionForBlobStore(store);
+    return store != null && compactionManager.controlCompactionForBlobStore(store, enabled);
   }
 
   /**
-   * Shutdown the {@link PartitionId} {@code id}.
+   * Start the BlobStore with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link BlobStore} which should be started.
+   */
+  boolean startBlobStore(PartitionId id) {
+    BlobStore store = stores.get(id);
+    if (store == null || !running) {
+      return false;
+    } else if (store.isStarted()) {
+      return true;
+    } else {
+      try {
+        store.start();
+      } catch (Exception e) {
+        logger.error("Exception while starting store {} on disk {}", id, disk, e);
+        return false;
+      }
+      return true;
+    }
+  }
+
+  /**
+   * Shutdown the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
    */
   boolean shutdownBlobStore(PartitionId id) {
-    BlobStore store = (BlobStore) getStore(id);
-    if (store == null) {
+    BlobStore store = stores.get(id);
+    if (store == null || !running) {
       return false;
+    } else if (!store.isStarted()) {
+      return true;
+    } else {
+      try {
+        store.shutdown();
+      } catch (Exception e) {
+        logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
+        return false;
+      }
+      return true;
     }
-    try {
-      store.shutdown();
-    } catch (Exception e) {
-      logger.error("Exception while shutting down store {} on disk {}", id, disk, e);
-      return false;
-    }
-    return true;
   }
 
   /**
