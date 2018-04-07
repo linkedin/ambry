@@ -451,7 +451,7 @@ public class AmbryRequestsTest {
         new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, null, correlationId, clientId);
     BlobStoreControlAdminRequest blobStoreControlAdminRequest =
         new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, false, adminRequest);
-    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Partition_Unknown);
+    Response response = sendRequestGetResponse(blobStoreControlAdminRequest, ServerErrorCode.Bad_Request);
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     // test validate request failure
     storageManager.returnNullStore = true;

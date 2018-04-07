@@ -862,7 +862,7 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } else {
-      error = ServerErrorCode.Partition_Unknown;
+      error = ServerErrorCode.Bad_Request;
       logger.debug("The partition Id should not be null.");
     }
     return new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), error);
