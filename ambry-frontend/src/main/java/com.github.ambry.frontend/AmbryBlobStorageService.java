@@ -515,7 +515,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
               // inject encryption metrics if need be
-              if (blobId.isEncrypted() || RestUtils.isEncrypted(result)) {
+              if (BlobId.isEncrypted(blobId, result)) {
                 restRequest.getMetricsTracker()
                     .injectMetrics(
                         getRestRequestMetricsForGet(frontendMetrics, subresource, restRequest.getSSLSession() != null,
@@ -540,7 +540,7 @@ class AmbryBlobStorageService implements BlobStorageService {
             case HEAD:
               GetOption getOption = RestUtils.getGetOption(restRequest);
               // inject encryption metrics if need be
-              if (blobId.isEncrypted() || RestUtils.isEncrypted(result)) {
+              if (BlobId.isEncrypted(blobId, result)) {
                 RestRequestMetrics requestMetrics =
                     frontendMetrics.headRequestMetricsGroup.getRestRequestMetrics(restRequest.getSSLSession() != null,
                         true);

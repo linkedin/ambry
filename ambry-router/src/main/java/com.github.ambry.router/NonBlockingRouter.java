@@ -29,7 +29,6 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -153,11 +152,12 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
     try {
       BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+      boolean isEncrypted = BlobId.isEncrypted(blobId, blobIdStr);
       if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
           && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
         routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
       }
-      trackGetBlobRateMetrics(options, blobId.isEncrypted() || RestUtils.isEncrypted(blobIdStr));
+      trackGetBlobRateMetrics(options, isEncrypted);
       routerMetrics.operationQueuingRate.mark();
       if (isOpen.get()) {
         getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
@@ -173,8 +173,7 @@ class NonBlockingRouter implements Router {
       } else {
         RouterException routerException =
             new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-        completeGetBlobOperation(routerException, internalOptions, futureResult, callback,
-            blobId.isEncrypted() || RestUtils.isEncrypted(blobIdStr));
+        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, isEncrypted);
       }
     } catch (RouterException e) {
       completeGetBlobOperation(e, internalOptions, futureResult, callback, false);

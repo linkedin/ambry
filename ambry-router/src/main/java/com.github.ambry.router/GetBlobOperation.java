@@ -186,7 +186,9 @@ class GetBlobOperation extends GetOperation {
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
           long timeElapsed = time.milliseconds() - submissionTimeMs;
-          if (blobId.isEncrypted() || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted())) {
+          boolean isEncrypted =
+              BlobId.isEncrypted(blobId, null) || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
+          if (isEncrypted) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
           } else {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
@@ -197,7 +199,7 @@ class GetBlobOperation extends GetOperation {
           } else {
             blobDataChannel = null;
             operationResult = null;
-            routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
+            routerMetrics.onGetBlobError(e, options, isEncrypted);
           }
         }
         NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
@@ -398,13 +400,15 @@ class GetBlobOperation extends GetOperation {
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, e);
         }
+        boolean isEncrypted =
+            BlobId.isEncrypted(blobId, null) || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
-          routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
+          routerMetrics.onGetBlobError(e, options, isEncrypted);
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
-        if (blobId.isEncrypted() || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted())) {
+        if (isEncrypted) {
           routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
         } else {
           routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);

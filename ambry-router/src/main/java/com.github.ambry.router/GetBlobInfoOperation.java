@@ -408,12 +408,14 @@ class GetBlobInfoOperation extends GetOperation {
         e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);
         routerMetrics.operationFailureWithUnsetExceptionCount.inc();
       }
+      boolean isEncrypted =
+          BlobId.isEncrypted(blobId, null) || (serverBlobProperties != null && serverBlobProperties.isEncrypted());
       if (e != null) {
         operationResult = null;
-        routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
+        routerMetrics.onGetBlobError(e, options, isEncrypted);
       }
       long operationLatencyMs = time.milliseconds() - submissionTimeMs;
-      if (blobId.isEncrypted() || (serverBlobProperties != null && serverBlobProperties.isEncrypted())) {
+      if (isEncrypted) {
         routerMetrics.getEncryptedBlobInfoOperationLatencyMs.update(operationLatencyMs);
       } else {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);

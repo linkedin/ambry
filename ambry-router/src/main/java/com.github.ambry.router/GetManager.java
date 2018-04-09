@@ -247,7 +247,8 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      routerMetrics.onGetBlobError(abortCause, op.getOptions(), op.blobId != null && op.blobId.isEncrypted());
+      routerMetrics.onGetBlobError(abortCause, op.getOptions(),
+          op.blobId != null && BlobId.isEncrypted(op.blobId, null));
     }
   }
 }

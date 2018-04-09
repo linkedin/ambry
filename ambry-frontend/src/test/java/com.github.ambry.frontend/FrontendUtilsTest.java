@@ -98,6 +98,6 @@ public class FrontendUtilsTest {
     assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
     assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
     assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
-    assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, blobId.isEncrypted());
+    assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, BlobId.isEncrypted(blobId, null));
   }
 }

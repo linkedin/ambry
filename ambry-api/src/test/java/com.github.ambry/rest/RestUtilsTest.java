@@ -758,19 +758,6 @@ public class RestUtilsTest {
     assertNull("There should no value for HeaderD", RestUtils.getLongHeader(args, "HeaderD", false));
   }
 
-  /**
-   * Tests for {@link RestUtils#isEncrypted(String)}.
-   */
-  @Test
-  public void isEncryptedTest() {
-    assertTrue("Should be true for IDs begins with AAME", RestUtils.isEncrypted("AAME...."));
-    assertTrue("Should be true for IDs begins with AAMF", RestUtils.isEncrypted("AAMF...."));
-    assertFalse("Only true for IDs begins with AAMF or AAME", RestUtils.isEncrypted("aame...."));
-    assertFalse("Only true for IDs begins with AAMF or AAME", RestUtils.isEncrypted("aamf...."));
-    assertFalse("Only true for IDs begins with AAMF or AAME", RestUtils.isEncrypted("AAEA...."));
-    assertFalse("Only true for IDs begins with AAMF or AAME", RestUtils.isEncrypted(""));
-  }
-
   // helpers.
   // general.
 
