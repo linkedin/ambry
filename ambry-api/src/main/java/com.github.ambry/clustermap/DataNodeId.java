@@ -71,10 +71,10 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
   public abstract String getDatacenterName();
 
   /**
-   * Get the DataNodeId's server rack ID.  If there is no rack ID for this node,
-   * -1 will be returned, so the caller must check that the returned value is non-negative.
+   * Get the DataNodeId's server rack ID.  This is a unique identifier for a failure zone. If there is no rack ID for
+   * this node, null will be returned, so the caller must check that the returned value is non-null
    *
-   * @return a valid rack ID, or a negative number if no rack ID is assigned
+   * @return a valid rack ID, or null if no rack ID is assigned
    */
-  public abstract long getRackId();
+  public abstract String getRackId();
 }

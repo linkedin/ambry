@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -259,7 +260,7 @@ class HelixBootstrapUpgradeUtil {
             instanceConfig.getRecord().setSimpleField(ClusterMapUtils.SSLPORT_STR, Integer.toString(node.getSSLPort()));
           }
           instanceConfig.getRecord().setSimpleField(ClusterMapUtils.DATACENTER_STR, node.getDatacenterName());
-          instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, Long.toString(node.getRackId()));
+          instanceConfig.getRecord().setSimpleField(ClusterMapUtils.RACKID_STR, node.getRackId());
           instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, new ArrayList<String>());
 
           // Finally, add this node to the DC.
@@ -580,7 +581,7 @@ class HelixBootstrapUpgradeUtil {
               .equals(instanceConfig.getRecord().getSimpleField(ClusterMapUtils.DATACENTER_STR)),
           "Datacenter mismatch for instance " + instanceName);
       ensureOrThrow(
-          dataNode.getRackId() == Long.valueOf(instanceConfig.getRecord().getSimpleField(ClusterMapUtils.RACKID_STR)),
+          Objects.equals(dataNode.getRackId(), instanceConfig.getRecord().getSimpleField(ClusterMapUtils.RACKID_STR)),
           "Rack Id mismatch for instance " + instanceName);
       Set<String> sealedReplicasInHelix =
           new HashSet<>(instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR));

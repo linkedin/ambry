@@ -281,7 +281,7 @@ class StaticClusterManager implements ClusterMap {
    */
   private Disk getBestDiskCandidate(List<DataNode> dataNodes, Set<DataNode> dataNodesUsed, long replicaCapacityInBytes,
       boolean rackAware, int numChoices) {
-    Set<Long> rackIdsUsed = new HashSet<>();
+    Set<String> rackIdsUsed = new HashSet<>();
     if (rackAware) {
       for (DataNode dataNode : dataNodesUsed) {
         rackIdsUsed.add(dataNode.getRackId());

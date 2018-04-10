@@ -33,7 +33,7 @@ class AmbryDataNode extends DataNodeId implements Resource {
   private final Port plainTextPort;
   private final Port sslPort;
   private final String dataCenterName;
-  private final long rackId;
+  private final String rackId;
   private final List<String> sslEnabledDataCenters;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ResourceStatePolicy resourceStatePolicy;
@@ -49,14 +49,14 @@ class AmbryDataNode extends DataNodeId implements Resource {
    * @param sslPortNum the ssl port associated with this data node (may be null).
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
-  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, Long rackId,
+  AmbryDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig, String hostName, int portNum, String rackId,
       Integer sslPortNum) throws Exception {
     this.hostName = hostName;
     this.plainTextPort = new Port(portNum, PortType.PLAINTEXT);
     this.sslPort = sslPortNum != null ? new Port(sslPortNum, PortType.SSL) : null;
     this.dataCenterName = dataCenterName;
     this.clusterMapConfig = clusterMapConfig;
-    this.rackId = rackId != null ? rackId : UNKNOWN_RACK_ID;
+    this.rackId = rackId;
     this.sslEnabledDataCenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
     ResourceStatePolicyFactory resourceStatePolicyFactory =
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
@@ -130,7 +130,7 @@ class AmbryDataNode extends DataNodeId implements Resource {
   }
 
   @Override
-  public long getRackId() {
+  public String getRackId() {
     return rackId;
   }
 

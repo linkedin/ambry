@@ -110,7 +110,7 @@ public class TestUtils {
     jsonObject.put("hostname", hostname);
     jsonObject.put("port", port);
     jsonObject.put("sslport", sslPort);
-    jsonObject.put("rackId", rackId);
+    jsonObject.put("rackId", Long.toString(rackId));
     jsonObject.put("hardwareState", hardwareState);
     jsonObject.put("disks", disks);
     return jsonObject;

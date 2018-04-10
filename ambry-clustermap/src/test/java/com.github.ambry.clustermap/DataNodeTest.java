@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.PortType;
+import java.util.Objects;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -58,10 +59,10 @@ class TestDataNode extends DataNode {
     if (getState() != testDataNode.getState()) {
       return false;
     }
-    if (getRackId() != testDataNode.getRackId()) {
+    if (getRawCapacityInBytes() != testDataNode.getRawCapacityInBytes()) {
       return false;
     }
-    return getRawCapacityInBytes() == testDataNode.getRawCapacityInBytes();
+    return Objects.equals(getRackId(), testDataNode.getRackId());
   }
 }
 
@@ -100,7 +101,7 @@ public class DataNodeTest {
     assertEquals(dataNode.getDisks().size(), diskCount);
     assertEquals(dataNode.getRawCapacityInBytes(), diskCount * diskCapacityInBytes);
 
-    assertEquals(-1, dataNode.getRackId());
+    assertEquals(null, dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
@@ -109,7 +110,7 @@ public class DataNodeTest {
     jsonObject =
         TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 42, HardwareState.AVAILABLE, getDisks());
     dataNode = new TestDataNode("datacenter", jsonObject, clusterMapConfig);
-    assertEquals(42, dataNode.getRackId());
+    assertEquals("42", dataNode.getRackId());
 
     assertEquals(dataNode.toJSONObject().toString(), jsonObject.toString());
     assertEquals(dataNode, new TestDataNode("datacenter", dataNode.toJSONObject(), clusterMapConfig));
@@ -166,11 +167,6 @@ public class DataNodeTest {
 
     // same port number for plain text and ssl port
     jsonObject = TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 6666, HardwareState.AVAILABLE, getDisks());
-    failValidation(jsonObject, clusterMapConfig);
-
-    // bad rack ID
-    jsonObject =
-        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, -2, HardwareState.AVAILABLE, getDisks());
     failValidation(jsonObject, clusterMapConfig);
   }
 

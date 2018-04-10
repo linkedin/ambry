@@ -46,7 +46,7 @@ class DataNode extends DataNodeId {
   private final ArrayList<Disk> disks;
   private final long rawCapacityInBytes;
   private final ResourceStatePolicy dataNodeStatePolicy;
-  private final long rackId;
+  private final String rackId;
   private final ArrayList<String> sslEnabledDataCenters;
   private final ClusterMapConfig clusterMapConfig;
 
@@ -83,15 +83,7 @@ class DataNode extends DataNodeId {
     this.ports = new HashMap<PortType, Port>();
     this.ports.put(PortType.PLAINTEXT, new Port(portNum, PortType.PLAINTEXT));
     populatePorts(jsonObject);
-
-    if (jsonObject.has("rackId")) {
-      this.rackId = jsonObject.getLong("rackId");
-      if (this.rackId < 0) {
-        throw new IllegalStateException("Invalid rackId : " + this.rackId + " is less than 0");
-      }
-    } else {
-      this.rackId = UNKNOWN_RACK_ID;
-    }
+    this.rackId = jsonObject.optString("rackId", null);
 
     validate();
   }
@@ -195,7 +187,7 @@ class DataNode extends DataNodeId {
   }
 
   @Override
-  public long getRackId() {
+  public String getRackId() {
     return rackId;
   }
 
@@ -245,9 +237,7 @@ class DataNode extends DataNodeId {
   JSONObject toJSONObject() throws JSONException {
     JSONObject jsonObject = new JSONObject().put("hostname", hostname).put("port", portNum);
     addSSLPortToJson(jsonObject);
-    if (rackId >= 0) {
-      jsonObject.put("rackId", getRackId());
-    }
+    jsonObject.putOpt("rackId", rackId);
     jsonObject.put("hardwareState",
         dataNodeStatePolicy.isHardDown() ? HardwareState.UNAVAILABLE : HardwareState.AVAILABLE)
         .put("disks", new JSONArray());

@@ -46,7 +46,6 @@ public class ClusterMapUtils {
   static final String DATACENTER_STR = "datacenter";
   static final String DATACENTER_ID_STR = "id";
   static final String SCHEMA_VERSION_STR = "schemaVersion";
-  static final int UNKNOWN_RACK_ID = -1;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
@@ -141,9 +140,8 @@ public class ClusterMapUtils {
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the rack id associated with the given instance.
    */
-  static Long getRackId(InstanceConfig instanceConfig) {
-    String rackIdStr = instanceConfig.getRecord().getSimpleField(RACKID_STR);
-    return rackIdStr == null ? null : Long.valueOf(rackIdStr);
+  static String getRackId(InstanceConfig instanceConfig) {
+    return instanceConfig.getRecord().getSimpleField(RACKID_STR);
   }
 
   /**
