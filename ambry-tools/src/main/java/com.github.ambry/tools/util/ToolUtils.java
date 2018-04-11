@@ -122,7 +122,7 @@ public final class ToolUtils {
   public static void ensureExactOrExit(List<OptionSpec<?>> exactExpectedOptions, List<OptionSpec<?>> actualOptions,
       OptionParser parser) throws IOException {
     if (!new HashSet<>(exactExpectedOptions).equals(new HashSet<>(actualOptions))) {
-      System.err.println("Incompatible options.");
+      System.err.println("***Incompatible options, expected exactly: " + exactExpectedOptions);
       parser.printHelpOn(System.err);
       System.exit(1);
     }

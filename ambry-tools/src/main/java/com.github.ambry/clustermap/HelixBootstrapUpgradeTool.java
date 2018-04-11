@@ -92,7 +92,7 @@ public class HelixBootstrapUpgradeTool {
     OptionParser parser = new OptionParser();
 
     OptionSpec dropClusterOpt = parser.accepts("dropCluster",
-        "(Optional argument) If present, must be accompanied with and only with the clusterNamePrefix argument");
+        "(Optional argument) If present, must be accompanied with and only with the clusterName argument");
 
     ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
         parser.accepts("hardwareLayoutPath", "The path to the hardware layout json file")
@@ -121,7 +121,6 @@ public class HelixBootstrapUpgradeTool {
 
     ArgumentAcceptingOptionSpec<String> clusterNamePrefixOpt =
         parser.accepts("clusterNamePrefix", "The prefix for the cluster in Helix to bootstrap or upgrade")
-            .requiredUnless(dropClusterOpt)
             .withRequiredArg()
             .describedAs("cluster_name_prefix")
             .ofType(String.class);
