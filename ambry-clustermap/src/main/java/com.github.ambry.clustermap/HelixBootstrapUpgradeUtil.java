@@ -308,7 +308,8 @@ class HelixBootstrapUpgradeUtil {
       }
 
       for (String instanceName : instancesInHelix) {
-        info("Instance {} is in Helix, but not in static. Ignoring for now. Remaining instances: {}", --totalInstances);
+        info("Instance {} is in Helix, but not in static. Ignoring for now. Remaining instances: {}", instanceName,
+            --totalInstances);
         // At this time we are not allowing for dropping instances, to be safe.
         //if (!dryRun) {
         //  dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
@@ -412,12 +413,13 @@ class HelixBootstrapUpgradeUtil {
       // Note: An instance config has to contain the information for each disk about the replicas it hosts.
       // This information will be initialized to the empty string - but will be updated whenever the partition
       // is added to the cluster.
-      String replicasStr = "";
+      StringBuilder replicasStrBuilder = new StringBuilder();
       for (ReplicaId replicaId : replicasInDisk) {
         Replica replica = (Replica) replicaId;
-        replicasStr +=
-            replica.getPartition().getId() + ClusterMapUtils.REPLICAS_STR_SEPARATOR + replica.getCapacityInBytes()
-                + ClusterMapUtils.REPLICAS_DELIM_STR;
+        replicasStrBuilder.append(replica.getPartition().getId())
+            .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
+            .append(replica.getCapacityInBytes())
+            .append(ClusterMapUtils.REPLICAS_DELIM_STR);
         if (replica.isSealed()) {
           sealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
         }
@@ -427,7 +429,7 @@ class HelixBootstrapUpgradeUtil {
       Map<String, String> diskInfo = new HashMap<>();
       diskInfo.put(ClusterMapUtils.DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
       diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
-      diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStr);
+      diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStrBuilder.toString());
       diskInfos.put(disk.getMountPath(), diskInfo);
     }
     instanceConfig.getRecord().setMapFields(diskInfos);
@@ -583,6 +585,10 @@ class HelixBootstrapUpgradeUtil {
           List<String> replicaInfoList = Arrays.asList(replicasStr.split(ClusterMapUtils.REPLICAS_DELIM_STR));
           for (String replicaInfo : replicaInfoList) {
             String[] info = replicaInfo.split(ClusterMapUtils.REPLICAS_STR_SEPARATOR);
+            // This is schema specific, but the assumption is that partition id and capacity fields should always be
+            // there. At this time these are the only things checked.
+            ensureOrThrow(info.length >= 2,
+                "Replica info field should have at least two fields - partition id and capacity");
             replicasInHelix.add(info[0]);
             ensureOrThrow(info[1].equals(replicaList.get(info[0])), "Replica capacity should be the same.");
           }
