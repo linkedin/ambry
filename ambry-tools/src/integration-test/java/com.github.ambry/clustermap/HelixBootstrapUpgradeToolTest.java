@@ -93,7 +93,7 @@ public class HelixBootstrapUpgradeToolTest {
       Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, "DC1", DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+            CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, new HelixAdminFactory());
         Assert.fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -168,7 +168,7 @@ public class HelixBootstrapUpgradeToolTest {
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, "DC1", DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
+        CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, new HelixAdminFactory());
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 

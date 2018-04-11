@@ -17,6 +17,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
@@ -108,6 +109,22 @@ public final class ToolUtils {
         parser.printHelpOn(System.err);
         System.exit(1);
       }
+    }
+  }
+
+  /**
+   * Ensures that the given argument list has only and exactly the options in the given list and nothing else.
+   * @param exactExpectedOptions the exact options expected
+   * @param actualOptions the actual options received.
+   * @param parser the {@link OptionParser} used to parse arguments.
+   * @throws IOException if there is a problem writing out usage information.
+   */
+  public static void ensureExactOrExit(List<OptionSpec<?>> exactExpectedOptions, List<OptionSpec<?>> actualOptions,
+      OptionParser parser) throws IOException {
+    if (!new HashSet<>(exactExpectedOptions).equals(new HashSet<>(actualOptions))) {
+      System.err.println("***Incompatible options, expected exactly: " + exactExpectedOptions);
+      parser.printHelpOn(System.err);
+      System.exit(1);
     }
   }
 

@@ -52,6 +52,7 @@ public class ClusterMapUtils {
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
   static final long MAX_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
+  static final int CURRENT_SCHEMA_VERSION = 0;
 
   /**
    * Stores all zk related info for a DC.
