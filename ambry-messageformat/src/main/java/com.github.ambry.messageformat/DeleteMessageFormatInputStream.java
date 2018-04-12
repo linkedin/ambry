@@ -51,7 +51,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
     buffer.put(key.toBytes());
     // set the message as deleted
     MessageFormatRecord.Update_Format_V2.serialize(buffer,
-        new UpdateRecord(accountId, containerId, deletionTimeMs, new DeleteRecord()));
+        new UpdateRecord(accountId, containerId, deletionTimeMs, new DeleteSubRecord()));
     messageLength = buffer.capacity();
     buffer.flip();
   }

@@ -302,7 +302,7 @@ public class MessageFormatInputStreamTest {
       // check delete record
       UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
       Assert.assertEquals("Type of update record not DELETE", UpdateRecord.Type.DELETE, updateRecord.getType());
-      Assert.assertNotNull("DeleteRecord should not be null", updateRecord.getDeleteRecord());
+      Assert.assertNotNull("DeleteSubRecord should not be null", updateRecord.getDeleteSubRecord());
       Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
       Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
       Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, updateRecord.getUpdateTimeInMs());

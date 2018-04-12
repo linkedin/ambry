@@ -14,13 +14,13 @@
 package com.github.ambry.messageformat;
 
 /**
- * Contains the delete record info
+ * Contains the delete sub-record info
  */
-public class DeleteRecord {
+public class DeleteSubRecord {
 
   /**
-   * Constructs Delete Record
+   * Constructs Delete sub-record
    */
-  DeleteRecord() {
+  DeleteSubRecord() {
   }
 }

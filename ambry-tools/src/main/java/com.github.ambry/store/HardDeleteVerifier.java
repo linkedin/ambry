@@ -665,7 +665,8 @@ public class HardDeleteVerifier {
     boolean caughtException = false;
     boolean caughtExceptionInOld = false;
     try {
-      isDeleteRecord = MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(UpdateRecord.Type.DELETE);
+      isDeleteRecord =
+          MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(UpdateRecord.Type.DELETE);
     } catch (Exception e) {
       caughtException = true;
     }

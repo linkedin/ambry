@@ -205,7 +205,7 @@ public class MessageSievingInputStream extends InputStream {
         logger.trace("Message Successfully read");
         logger.trace(
             "Header - version {} Message Size {} Starting offset of the blob {} BlobEncryptionKeyRecord {} BlobPropertiesRelativeOffset {}"
-                + " UserMetadataRelativeOffset {} DataRelativeOffset {} DeleteRecordRelativeOffset {} Crc {}",
+                + " UserMetadataRelativeOffset {} DataRelativeOffset {} UpdateRecordRelativeOffset {} Crc {}",
             header.getVersion(), header.getMessageSize(), currentOffset,
             header.getBlobEncryptionKeyRecordRelativeOffset(), header.getBlobPropertiesRecordRelativeOffset(),
             header.getUserMetadataRecordRelativeOffset(), header.getBlobRecordRelativeOffset(),

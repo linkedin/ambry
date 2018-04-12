@@ -909,7 +909,7 @@ public class MessageFormatRecord {
             "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new UpdateRecord(UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time, new DeleteRecord());
+      return new UpdateRecord(UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time, new DeleteSubRecord());
     }
   }
 
@@ -965,7 +965,7 @@ public class MessageFormatRecord {
             "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new UpdateRecord(accountId, containerId, udpateTimeInMs, new DeleteRecord());
+      return new UpdateRecord(accountId, containerId, udpateTimeInMs, new DeleteSubRecord());
     }
   }
 
@@ -1004,7 +1004,7 @@ public class MessageFormatRecord {
       int subRecordSize;
       switch (type) {
         case DELETE:
-          subRecordSize = Delete_Format_V1.getRecordSize();
+          subRecordSize = Delete_Sub_Format_V1.getRecordSize();
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + type);
@@ -1027,7 +1027,7 @@ public class MessageFormatRecord {
       outputBuffer.putShort((short) updateRecord.getType().ordinal());
       switch (updateRecord.getType()) {
         case DELETE:
-          Delete_Format_V1.serialize(outputBuffer, updateRecord.getDeleteRecord());
+          Delete_Sub_Format_V1.serialize(outputBuffer, updateRecord.getDeleteSubRecord());
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + updateRecord.getType());
@@ -1052,7 +1052,7 @@ public class MessageFormatRecord {
       UpdateRecord.Type type = UpdateRecord.Type.values()[dataStream.readShort()];
       switch (type) {
         case DELETE:
-          updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getDeleteRecord(dataStream));
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getDeleteSubRecord(dataStream));
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + type);
@@ -1068,17 +1068,17 @@ public class MessageFormatRecord {
     }
 
     /**
-     * @param inputStream the stream that contains the serialized form of a {@link DeleteRecord}.
-     * @return the deserialized {@link DeleteRecord}
+     * @param inputStream the stream that contains the serialized form of a {@link DeleteSubRecord}.
+     * @return the deserialized {@link DeleteSubRecord}
      * @throws IOException if there are problems reading from stream.
      * @throws MessageFormatException if the format of the message is unexpected.
      */
-    private static DeleteRecord getDeleteRecord(DataInputStream inputStream)
+    private static DeleteSubRecord getDeleteSubRecord(DataInputStream inputStream)
         throws IOException, MessageFormatException {
       short version = inputStream.readShort();
       switch (version) {
         case Delete_Version_V1:
-          return Delete_Format_V1.deserialize(inputStream);
+          return Delete_Sub_Format_V1.deserialize(inputStream);
         default:
           throw new MessageFormatException("delete record version not supported: " + version,
               MessageFormatErrorCodes.Unknown_Format_Version);
@@ -1099,7 +1099,7 @@ public class MessageFormatRecord {
    *                    is required to be able to support undelete in the future if required.
    *
    */
-  private static class Delete_Format_V1 {
+  private static class Delete_Sub_Format_V1 {
 
     private static final int Delete_Field_Size_In_Bytes = 1;
 
@@ -1107,14 +1107,14 @@ public class MessageFormatRecord {
       return Version_Field_Size_In_Bytes + Delete_Field_Size_In_Bytes;
     }
 
-    static void serialize(ByteBuffer outputBuffer, DeleteRecord deleteRecord) {
+    static void serialize(ByteBuffer outputBuffer, DeleteSubRecord deleteSubRecord) {
       outputBuffer.putShort(Delete_Version_V1);
       outputBuffer.put((byte) 1);
     }
 
-    static DeleteRecord deserialize(DataInputStream stream) throws IOException {
+    static DeleteSubRecord deserialize(DataInputStream stream) throws IOException {
       boolean isDeleted = stream.readByte() == 1;
-      return new DeleteRecord();
+      return new DeleteSubRecord();
     }
   }
 

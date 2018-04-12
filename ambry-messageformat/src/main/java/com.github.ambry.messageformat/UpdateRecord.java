@@ -25,16 +25,16 @@ public class UpdateRecord {
   private final short accountId;
   private final short containerId;
   private final long updateTimeInMs;
-  private final DeleteRecord deleteRecord;
+  private final DeleteSubRecord deleteSubRecord;
 
   /**
    * @param accountId the account that the blob that this update is associated with belongs to
    * @param containerId the id of the container that the blob that this update is associated with belongs to
    * @param updateTimeInMs the time in ms at which the update occurred.
-   * @param deleteRecord the delete record that this update record represents.
+   * @param deleteSubRecord the delete record that this update record represents.
    */
-  UpdateRecord(short accountId, short containerId, long updateTimeInMs, DeleteRecord deleteRecord) {
-    this(accountId, containerId, updateTimeInMs, Type.DELETE, deleteRecord);
+  UpdateRecord(short accountId, short containerId, long updateTimeInMs, DeleteSubRecord deleteSubRecord) {
+    this(accountId, containerId, updateTimeInMs, Type.DELETE, deleteSubRecord);
   }
 
   /**
@@ -42,14 +42,15 @@ public class UpdateRecord {
    * @param containerId the id of the container that the blob that this update is associated with belongs to
    * @param updateTimeInMs the time in ms at which the update occurred.
    * @param type the type of the update record.
-   * @param deleteRecord the delete record that this update record represents.
+   * @param deleteSubRecord the delete record that this update record represents.
    */
-  private UpdateRecord(short accountId, short containerId, long updateTimeInMs, Type type, DeleteRecord deleteRecord) {
+  private UpdateRecord(short accountId, short containerId, long updateTimeInMs, Type type,
+      DeleteSubRecord deleteSubRecord) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.updateTimeInMs = updateTimeInMs;
     this.type = type;
-    this.deleteRecord = deleteRecord;
+    this.deleteSubRecord = deleteSubRecord;
   }
 
   /**
@@ -83,7 +84,7 @@ public class UpdateRecord {
   /**
    * @return the delete record if type is {@link Type#DELETE}. {@code null} otherwise.
    */
-  public DeleteRecord getDeleteRecord() {
-    return deleteRecord;
+  public DeleteSubRecord getDeleteSubRecord() {
+    return deleteSubRecord;
   }
 }
