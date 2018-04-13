@@ -32,6 +32,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -122,7 +123,13 @@ class GetManager {
       Callback<GetBlobResultInternal> callback) throws RouterException {
     GetOperation getOperation;
     BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-    boolean isEncrypted = BlobId.isEncrypted(blobIdStr);
+    boolean isEncrypted = false;
+    try {
+      BlobId.isEncrypted(blobIdStr);
+    } catch (IOException e) {
+      logger.warn(
+          "This shouldn't happen because getBlobIdFromString() should have thrown RouterException for this case.", e);
+    }
     if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
         && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
       routerMetrics.getBlobNotOriginateLocalOperationRate.mark();

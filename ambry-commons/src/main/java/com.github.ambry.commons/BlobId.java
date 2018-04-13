@@ -343,24 +343,12 @@ public class BlobId extends StoreKey {
   /**
    * Check if encrypted bit in blobId is set based on original blobId string.
    * @return {@code true} if encrypted bit in this string is set. {@code false} otherwise
+   * @throws IOException If parsing a string blobId fails.
    */
-  public static boolean isEncrypted(String blobIdString) {
-    if (blobIdString == null) {
-      return false;
-    }
+  public static boolean isEncrypted(String blobIdString) throws IOException {
     DataInputStream stream =
         new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(blobIdString))));
-    boolean isEncrypted = false;
-    try {
-      short version = stream.readShort();
-      if (version >= BLOB_ID_V3) {
-        isEncrypted = (stream.readByte() & IS_ENCRYPTED_MASK) != 0;
-      }
-    } catch (IOException e) {
-      isEncrypted = false;
-    } finally {
-      return isEncrypted;
-    }
+    return (stream.readShort() >= BLOB_ID_V3) && ((stream.readByte() & IS_ENCRYPTED_MASK) != 0);
   }
 
   /**

@@ -151,14 +151,10 @@ public class BlobIdTest {
     BlobId blobIdV2 = getRandomBlobId(BLOB_ID_V2);
     BlobId blobIdV3 = getRandomBlobId(BLOB_ID_V3);
     // V1 and V2 should always return false
-    assertFalse("Null should be false", BlobId.isEncrypted(null));
     assertFalse("V1 encrypted bit should be false", BlobId.isEncrypted(blobIdV1.getID()));
     assertFalse("V2 encrypted bit should be false", BlobId.isEncrypted(blobIdV2.getID()));
-
-    // V3 should return false if string is not provided or doesn't have encrypted bit.
-    assertFalse("V3 encrypted bit should be false if blobIdString is not provided", BlobId.isEncrypted(null));
-    assertFalse("V3 encrypted bit should be false if blobIdString has no encrypted bit",
-        BlobId.isEncrypted(blobIdV3.getID()));
+    // V3 return False if encrypted is not set in the string of blobId.
+    assertFalse("V3 encrypted bit should be false", BlobId.isEncrypted(blobIdV3.getID()));
 
     // V3 should return true if blobIdString has encrypted bit
     assertTrue("V3 should return true if blobIdString has encrypted bit", BlobId.isEncrypted("AAME"));
@@ -167,10 +163,6 @@ public class BlobIdTest {
     // V3 should return false if blobIdString has no encrypted
     assertFalse("V3 should return false if blobIdString has no encrypted", BlobId.isEncrypted("AAMA"));
     assertFalse("V3 should return false if blobIdString has no encrypted", BlobId.isEncrypted("AAMB"));
-
-    // V3 should return false if blobIdString is not valid
-    assertFalse("V3 should return false if blobIdString is not valid", BlobId.isEncrypted("AAM"));
-    assertFalse("V3 should return false if blobIdString is not valid", BlobId.isEncrypted("AAM"));
 
     // V4 should return true or false based on its encrypted bit
     boolean[] isEncryptedValues = {true, false};

@@ -162,10 +162,15 @@ class NonBlockingRouter implements Router {
           }
         });
       } else {
+        boolean isEncrypted = false;
+        try {
+          isEncrypted = BlobId.isEncrypted(blobIdStr);
+        } catch (IOException e) {
+          logger.warn("Blob ID string is not valid", e);
+        }
         RouterException routerException =
             new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-        completeGetBlobOperation(routerException, internalOptions, futureResult, callback,
-            BlobId.isEncrypted(blobIdStr));
+        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, isEncrypted);
       }
     } catch (RouterException e) {
       completeGetBlobOperation(e, internalOptions, futureResult, callback, false);
