@@ -128,7 +128,6 @@ class GetManager {
       routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
     }
     trackGetBlobRateMetrics(options.getBlobOptions, isEncrypted);
-    routerMetrics.operationQueuingRate.mark();
     if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       getOperation =
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,

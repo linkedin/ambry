@@ -14,7 +14,6 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
@@ -149,6 +148,7 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    routerMetrics.operationQueuingRate.mark();
     try {
       if (isOpen.get()) {
         getOperationController().getBlob(blobIdStr, internalOptions, new Callback<GetBlobResultInternal>() {
@@ -524,18 +524,21 @@ class NonBlockingRouter implements Router {
     protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
         final Callback<Void> callback, boolean attemptChunkDeletes) {
       try {
-        deleteManager.submitDeleteBlobOperation(blobIdStr, serviceId, futureResult, (Void result, Exception exception) -> {
-          if (exception == null && attemptChunkDeletes) {
-            try {
-              initiateChunkDeletesIfAny(blobIdStr, serviceId);
-            } catch (RouterException e) {
-              logger.warn("Should not have RouterException throw here", e);
-            }
-          }
-          if (callback != null) {
-            callback.onCompletion(result, exception);
-          }
-        });
+        deleteManager.submitDeleteBlobOperation(blobIdStr, serviceId, futureResult,
+            (Void result, Exception exception) -> {
+              if (exception == null && attemptChunkDeletes) {
+                try {
+                  initiateChunkDeletesIfAny(blobIdStr, serviceId);
+                } catch (RouterException e) {
+                  logger.warn(
+                      "RouterException for same reason should have been thrown by submitDeleteBlobOperation() and no callback should be triggered.",
+                      e);
+                }
+              }
+              if (callback != null) {
+                callback.onCompletion(result, exception);
+              }
+            });
       } catch (RouterException e) {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.onDeleteBlobError(e);
