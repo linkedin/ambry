@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -96,13 +97,19 @@ class DeleteManager {
 
   /**
    * Submits a {@link DeleteOperation} to this {@code DeleteManager}.
-   * @param blobId The {@link BlobId} to be deleted.
+   * @param blobIdStr The original blobId string for a {@link BlobId}.
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    * @param futureResult The {@link FutureResult} that will contain the result eventually and exception if any.
    * @param callback The {@link Callback} that will be called on completion of the request.
+   * @throws RouterException if the blobIdStr is invalid.
    */
-  void submitDeleteBlobOperation(BlobId blobId, String serviceId, FutureResult<Void> futureResult,
-      Callback<Void> callback) {
+  void submitDeleteBlobOperation(String blobIdStr, String serviceId, FutureResult<Void> futureResult,
+      Callback<Void> callback) throws RouterException {
+    final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+    if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
+        && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+      routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
+    }
     DeleteOperation deleteOperation =
         new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
             futureResult);

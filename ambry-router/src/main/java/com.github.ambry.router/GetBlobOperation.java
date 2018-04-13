@@ -125,14 +125,16 @@ class GetBlobOperation extends GetOperation {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
+   * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      boolean isEncrypted) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobLocalColoLatencyMs, routerMetrics.getBlobCrossColoLatencyMs,
-        routerMetrics.getBlobPastDueCount, kms, cryptoService, cryptoJobHandler, time);
+        routerMetrics.getBlobPastDueCount, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
     firstChunk = new FirstGetChunk();
@@ -186,8 +188,6 @@ class GetBlobOperation extends GetOperation {
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
           long timeElapsed = time.milliseconds() - submissionTimeMs;
-          boolean isEncrypted =
-              BlobId.isEncrypted(blobId, null) || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
           if (isEncrypted) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
           } else {
@@ -400,8 +400,6 @@ class GetBlobOperation extends GetOperation {
         if (readIntoCallback != null) {
           readIntoCallback.onCompletion(bytesWritten, e);
         }
-        boolean isEncrypted =
-            BlobId.isEncrypted(blobId, null) || (blobInfo != null && blobInfo.getBlobProperties().isEncrypted());
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
