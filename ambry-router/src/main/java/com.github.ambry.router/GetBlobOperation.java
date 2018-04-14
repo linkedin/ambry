@@ -125,14 +125,16 @@ class GetBlobOperation extends GetOperation {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
+   * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      boolean isEncrypted) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobLocalColoLatencyMs, routerMetrics.getBlobCrossColoLatencyMs,
-        routerMetrics.getBlobPastDueCount, kms, cryptoService, cryptoJobHandler, time);
+        routerMetrics.getBlobPastDueCount, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     this.blobIdFactory = blobIdFactory;
     firstChunk = new FirstGetChunk();
@@ -186,7 +188,7 @@ class GetBlobOperation extends GetOperation {
           // poll it periodically. If any exception is encountered while processing subsequent chunks, those will be
           // notified during the channel read.
           long timeElapsed = time.milliseconds() - submissionTimeMs;
-          if (blobId.isEncrypted()) {
+          if (isEncrypted) {
             routerMetrics.getEncryptedBlobOperationLatencyMs.update(timeElapsed);
           } else {
             routerMetrics.getBlobOperationLatencyMs.update(timeElapsed);
@@ -197,7 +199,7 @@ class GetBlobOperation extends GetOperation {
           } else {
             blobDataChannel = null;
             operationResult = null;
-            routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
+            routerMetrics.onGetBlobError(e, options, isEncrypted);
           }
         }
         NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
@@ -401,10 +403,10 @@ class GetBlobOperation extends GetOperation {
         if (e == null) {
           updateChunkingAndSizeMetricsOnSuccessfulGet();
         } else {
-          routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
+          routerMetrics.onGetBlobError(e, options, isEncrypted);
         }
         long totalTime = time.milliseconds() - submissionTimeMs;
-        if (blobId.isEncrypted()) {
+        if (isEncrypted) {
           routerMetrics.getEncryptedBlobOperationTotalTimeMs.update(totalTime);
         } else {
           routerMetrics.getBlobOperationTotalTimeMs.update(totalTime);

@@ -135,7 +135,9 @@ public class BlobId extends StoreKey {
    * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
    * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
-   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise.
+   *                                Valid for {@link BlobId#BLOB_ID_V4} and above.
+   *
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
       PartitionId partitionId, boolean isEncrypted) {
@@ -176,6 +178,12 @@ public class BlobId extends StoreKey {
         this.isEncrypted = false;
         break;
       case BLOB_ID_V3:
+        this.type = type;
+        this.datacenterId = datacenterId;
+        this.accountId = accountId;
+        this.containerId = containerId;
+        this.isEncrypted = false;
+        break;
       case BLOB_ID_V4:
         this.type = type;
         this.datacenterId = datacenterId;
@@ -328,8 +336,19 @@ public class BlobId extends StoreKey {
   /**
    * @return {@code true} if the blob that this id represents is encrypted. {@code false} otherwise
    */
-  public boolean isEncrypted() {
+  private boolean isEncrypted() {
     return isEncrypted;
+  }
+
+  /**
+   * Check if encrypted bit in blobId is set based on original blobId string.
+   * @return {@code true} if encrypted bit in this string is set. {@code false} otherwise
+   * @throws IOException If parsing a string blobId fails.
+   */
+  public static boolean isEncrypted(String blobIdString) throws IOException {
+    DataInputStream stream =
+        new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(blobIdString))));
+    return (stream.readShort() >= BLOB_ID_V3) && ((stream.readByte() & IS_ENCRYPTED_MASK) != 0);
   }
 
   /**
@@ -343,13 +362,20 @@ public class BlobId extends StoreKey {
   public byte[] toBytes() {
     ByteBuffer idBuf = ByteBuffer.allocate(sizeInBytes());
     idBuf.putShort(version);
+    byte flag;
     switch (version) {
       case BLOB_ID_V1:
         break;
       case BLOB_ID_V2:
       case BLOB_ID_V3:
+        flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        idBuf.put(flag);
+        idBuf.put(datacenterId);
+        idBuf.putShort(accountId);
+        idBuf.putShort(containerId);
+        break;
       case BLOB_ID_V4:
-        byte flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
         idBuf.put(flag);
         idBuf.put(datacenterId);
@@ -581,6 +607,7 @@ public class BlobId extends StoreKey {
      */
     BlobIdPreamble(DataInputStream stream) throws IOException {
       version = stream.readShort();
+      byte blobIdFlag;
       switch (version) {
         case BLOB_ID_V1:
           type = BlobIdType.NATIVE;
@@ -598,8 +625,15 @@ public class BlobId extends StoreKey {
           isEncrypted = false;
           break;
         case BLOB_ID_V3:
+          blobIdFlag = stream.readByte();
+          type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
+          datacenterId = stream.readByte();
+          accountId = stream.readShort();
+          containerId = stream.readShort();
+          isEncrypted = false;
+          break;
         case BLOB_ID_V4:
-          byte blobIdFlag = stream.readByte();
+          blobIdFlag = stream.readByte();
           type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
           isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
           datacenterId = stream.readByte();

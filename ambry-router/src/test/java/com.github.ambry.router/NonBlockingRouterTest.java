@@ -935,8 +935,9 @@ public class NonBlockingRouterTest {
      * Submit a put, get or delete operation based on the associated {@link OperationType} of this object.
      * @param blobId the blobId to get or delete. For puts, this is ignored.
      * @return the {@link FutureResult} associated with the submitted operation.
+     * @throws RouterException if the blobIdStr is invalid.
      */
-    FutureResult submitOperation(BlobId blobId) {
+    FutureResult submitOperation(BlobId blobId) throws RouterException{
       FutureResult futureResult = null;
       switch (opType) {
         case PUT:
@@ -946,7 +947,7 @@ public class NonBlockingRouterTest {
           break;
         case GET:
           final FutureResult getFutureResult = new FutureResult<GetBlobResultInternal>();
-          getManager.submitGetBlobOperation(blobId, new GetBlobOptionsInternal(
+          getManager.submitGetBlobOperation(blobId.getID(), new GetBlobOptionsInternal(
               new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
               routerMetrics.ageAtGet), new Callback<GetBlobResultInternal>() {
             @Override
@@ -958,7 +959,7 @@ public class NonBlockingRouterTest {
           break;
         case DELETE:
           futureResult = new FutureResult<Void>();
-          deleteManager.submitDeleteBlobOperation(blobId, null, futureResult, null);
+          deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null);
           break;
       }
       NonBlockingRouter.currentOperationsCount.incrementAndGet();

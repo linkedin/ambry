@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.ResponseInfo;
@@ -58,6 +57,7 @@ abstract class GetOperation {
   protected final AtomicReference<Exception> operationException = new AtomicReference<>();
   protected GetBlobResultInternal operationResult;
   protected final long submissionTimeMs;
+  protected final boolean isEncrypted;
 
   private static final Logger logger = LoggerFactory.getLogger(GetOperation.class);
 
@@ -77,12 +77,13 @@ abstract class GetOperation {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the {@link Time} instance to use.
+   * @param isEncrypted if encrypted bit is set based on original blobId string.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResultInternal> getOperationCallback, Histogram localColoTracker, Histogram crossColoTracker,
       Counter pastDueCounter, KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      Time time) {
+      Time time, boolean isEncrypted) {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.clusterMap = clusterMap;
@@ -98,6 +99,7 @@ abstract class GetOperation {
     this.time = time;
     submissionTimeMs = time.milliseconds();
     this.blobId = blobId;
+    this.isEncrypted = isEncrypted;
     validateTrackerType();
   }
 
