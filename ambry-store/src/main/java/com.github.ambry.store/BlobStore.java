@@ -315,16 +315,22 @@ class BlobStore implements Store {
       if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
         if (!writeStatusDelegate.seal(replicaId)) {
           metrics.sealSetError.inc();
-          logger.debug("Could not set the partition as read-only status on {}", replicaId);
+          logger.warn("Could not set the partition as read-only status on {}", replicaId);
         } else {
-          logger.debug("Store is successfully sealed for partition : {}", replicaId.getPartitionId());
+          metrics.sealDoneCount.inc();
+          logger.info(
+              "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : {} bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesHigh);
         }
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
         if (!writeStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
-          logger.debug("Could not set the partition as read-write status on {}", replicaId);
+          logger.warn("Could not set the partition as read-write status on {}", replicaId);
         } else {
-          logger.debug("Store is successfully unsealed for partition : {}", replicaId.getPartitionId());
+          metrics.unsealDoneCount.inc();
+          logger.info(
+              "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below ReadWrite threshold : {} bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesLow);
         }
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
