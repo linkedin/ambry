@@ -99,6 +99,10 @@ public class ClusterMapUtilsTest {
           Arrays.asList(everywhere1, everywhere2), psh.getPartitions(maxReplicasAllSites));
       assertCollectionEquals("Partitions returned for " + maxLocalOneRemote + " not as expected",
           Arrays.asList(majorDc11, majorDc12, majorDc21, majorDc22), psh.getPartitions(maxLocalOneRemote));
+      checkCaseInsensitivityForPartitionSelectionHelper(psh, true, maxReplicasAllSites,
+          Arrays.asList(everywhere1, everywhere2));
+      checkCaseInsensitivityForPartitionSelectionHelper(psh, true, maxLocalOneRemote,
+          Arrays.asList(majorDc11, majorDc12, majorDc21, majorDc22));
       try {
         psh.getPartitions(UtilsTest.getRandomString(3));
         fail("partition class is invalid, should have thrown");
@@ -176,6 +180,28 @@ public class ClusterMapUtilsTest {
   }
 
   /**
+   * Checks that the {@code partitionClass} is treated in a case insensitive way.
+   * @param psh the {@link ClusterMapUtils.PartitionSelectionHelper} to use.
+   * @param allPartitions if {@code true}, calls {@link ClusterMapUtils.PartitionSelectionHelper#getPartitions(String)}.
+   *                      If {@code false}, calls
+   *                      calls {@link ClusterMapUtils.PartitionSelectionHelper#getWritablePartitions(String)}.
+   * @param partitionClass the partition class to test against
+   * @param expected the expected partitions to be returned for the partition class
+   */
+  private void checkCaseInsensitivityForPartitionSelectionHelper(ClusterMapUtils.PartitionSelectionHelper psh,
+      boolean allPartitions, String partitionClass, Collection<? extends PartitionId> expected) {
+    // case insensitivity check
+    int halfwayPoint = partitionClass.length() / 2;
+    String mixedCaseName =
+        partitionClass.substring(0, halfwayPoint).toLowerCase() + partitionClass.substring(halfwayPoint).toUpperCase();
+    String[] classesToTry = {partitionClass, partitionClass.toLowerCase(), partitionClass.toUpperCase(), mixedCaseName};
+    for (String classToTry : classesToTry) {
+      assertCollectionEquals("Partitions returned for " + classToTry + " not as expected", expected,
+          allPartitions ? psh.getPartitions(classToTry) : psh.getWritablePartitions(classToTry));
+    }
+  }
+
+  /**
    * Verifies that the values returned {@link ClusterMapUtils.PartitionSelectionHelper#getWritablePartitions(String)} is
    * correct.
    * @param psh the {@link ClusterMapUtils.PartitionSelectionHelper} instance to use.
@@ -197,6 +223,7 @@ public class ClusterMapUtilsTest {
     assertCollectionEquals("Partitions returned not as expected", allPartitionIds, psh.getWritablePartitions(null));
     assertCollectionEquals("Partitions returned not as expected", expectedReturnForClassBeingTested,
         psh.getWritablePartitions(classBeingTested));
+    checkCaseInsensitivityForPartitionSelectionHelper(psh, false, classBeingTested, expectedReturnForClassBeingTested);
     // one replica of one partition of "classBeingTested" down
     ((MockReplicaId) testedPart1.getReplicaIds().get(0)).markReplicaDownStatus(true);
     allPartitionIds.remove(testedPart1);

@@ -271,7 +271,7 @@ public class ClusterMapUtils {
      */
     void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
       this.allPartitions = allPartitions;
-      partitionIdsByClassAndLocalReplicaCount = new HashMap<>();
+      partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       for (PartitionId partition : allPartitions) {
         String partitionClass = partition.getPartitionClass();
         int localReplicaCount = 0;

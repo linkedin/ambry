@@ -169,7 +169,7 @@ public class BlobIdTest {
     for (boolean isEncrypted : isEncryptedValues) {
       BlobId blobIdV4 =
           new BlobId(BLOB_ID_V4, random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED, (byte) 1, (short) 1,
-              (short) 1, referenceClusterMap.getWritablePartitionIds().get(random.nextInt(3)), isEncrypted);
+              (short) 1, referenceClusterMap.getWritablePartitionIds(null).get(random.nextInt(3)), isEncrypted);
       assertEquals("V4 should return true or false based on its encrypted bit", isEncrypted,
           BlobId.isEncrypted(blobIdV4.getID()));
     }
