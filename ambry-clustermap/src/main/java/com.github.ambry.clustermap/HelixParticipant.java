@@ -58,6 +58,8 @@ class HelixParticipant implements ClusterParticipant {
    */
   HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
     clusterName = clusterMapConfig.clusterMapClusterName;
+    instanceName =
+        ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
     this.helixFactory = helixFactory;
     if (clusterName.isEmpty()) {
       throw new IllegalStateException("Clustername is empty in clusterMapConfig");
@@ -69,21 +71,18 @@ class HelixParticipant implements ClusterParticipant {
     } catch (JSONException e) {
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
+    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
   }
 
   /**
-   * Initialize the participant by registering via the {@link HelixManager} as a participant to the associated Helix
-   * cluster.
-   * @param hostName the hostname to use when registering as a participant.
-   * @param port the port to use when registering as a participant.
+   * Initiate the participation by registering via the {@link HelixManager} as a participant to the associated
+   * Helix cluster.
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
    * @throws IOException if there is an error connecting to the Helix cluster.
    */
   @Override
-  public void initialize(String hostName, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException {
-    logger.info("Initializing participant");
-    instanceName = ClusterMapUtils.getInstanceName(hostName, port);
-    manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.PARTICIPANT, zkConnectStr);
+  public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+    logger.info("Initiating the participation");
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
