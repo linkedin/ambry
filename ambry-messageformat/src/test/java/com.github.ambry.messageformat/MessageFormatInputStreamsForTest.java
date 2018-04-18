@@ -56,7 +56,7 @@ class PutMessageFormatBlobV1InputStream extends MessageFormatInputStream {
 }
 
 /**
- * Represents a message that consist of the delete record in version {@link MessageFormatRecord.Update_Format_V1}
+ * Represents a message that consists of the delete record in version {@link MessageFormatRecord.Update_Format_V1}
  * This format is used to delete a blob
  *
  *  - - - - - - - - - - - - -

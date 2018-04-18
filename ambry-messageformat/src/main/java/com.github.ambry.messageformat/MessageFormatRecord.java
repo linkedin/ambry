@@ -57,7 +57,7 @@ public class MessageFormatRecord {
 
   static short headerVersionToUse = Message_Header_Version_V2;
 
-  private static final short Delete_Version_V1 = 1;
+  private static final short Delete_Subrecord_Version_V1 = 1;
 
   static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {
@@ -1077,7 +1077,7 @@ public class MessageFormatRecord {
         throws IOException, MessageFormatException {
       short version = inputStream.readShort();
       switch (version) {
-        case Delete_Version_V1:
+        case Delete_Subrecord_Version_V1:
           return Delete_Sub_Format_V1.deserialize(inputStream);
         default:
           throw new MessageFormatException("delete record version not supported: " + version,
@@ -1087,33 +1087,25 @@ public class MessageFormatRecord {
   }
 
   /**
-   *  - - - - - - - - - - - - -
-   * |         |               |
-   * | version |   delete byte |
-   * |(2 bytes)|    (1 byte)   |
-   * |         |               |
-   *  - - - - - - - - - - - - -
+   *  - - - - -
+   * |         |
+   * | version |
+   * |(2 bytes)|
+   * |         |
+   *  - - - - -
    *  version         - The version of the delete record
-   *
-   *  delete byte     - Takes value 0 or 1. If it is set to 1, it signifies that the blob is deleted. The field
-   *                    is required to be able to support undelete in the future if required.
-   *
    */
   private static class Delete_Sub_Format_V1 {
 
-    private static final int Delete_Field_Size_In_Bytes = 1;
-
     static int getRecordSize() {
-      return Version_Field_Size_In_Bytes + Delete_Field_Size_In_Bytes;
+      return Version_Field_Size_In_Bytes;
     }
 
     static void serialize(ByteBuffer outputBuffer, DeleteSubRecord deleteSubRecord) {
-      outputBuffer.putShort(Delete_Version_V1);
-      outputBuffer.put((byte) 1);
+      outputBuffer.putShort(Delete_Subrecord_Version_V1);
     }
 
-    static DeleteSubRecord deserialize(DataInputStream stream) throws IOException {
-      boolean isDeleted = stream.readByte() == 1;
+    static DeleteSubRecord deserialize(DataInputStream stream) {
       return new DeleteSubRecord();
     }
   }

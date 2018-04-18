@@ -18,9 +18,4 @@ package com.github.ambry.messageformat;
  */
 public class DeleteSubRecord {
 
-  /**
-   * Constructs Delete sub-record
-   */
-  DeleteSubRecord() {
-  }
 }
