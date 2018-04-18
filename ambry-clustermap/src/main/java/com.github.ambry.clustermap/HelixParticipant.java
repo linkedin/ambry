@@ -18,6 +18,7 @@ import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -109,11 +110,11 @@ class HelixParticipant implements ClusterParticipant {
     String partitionId = replicaId.getPartitionId().toPathString();
     boolean success = true;
     if (!isSealed && sealedReplicas.contains(partitionId)) {
-      logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
+      logger.trace("Removing the partition {} from sealReplicas list", partitionId);
       sealedReplicas.remove(partitionId);
       success = setSealedReplicas(sealedReplicas);
     } else if (isSealed && !sealedReplicas.contains(partitionId)) {
-      logger.trace("Adding the partition {} from sealedReplicas list", partitionId);
+      logger.trace("Adding the partition {} from sealReplicas list", partitionId);
       sealedReplicas.add(partitionId);
       success = setSealedReplicas(sealedReplicas);
     }
@@ -186,7 +187,7 @@ class HelixParticipant implements ClusterParticipant {
       throw new IllegalStateException(
           "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
-    logger.trace("Setting the list of sealed replicas in InstanceConfig");
+    logger.trace("Setting InstanceConfig with list of sealed replicas: {}", Arrays.toString(sealedReplicas.toArray()));
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
