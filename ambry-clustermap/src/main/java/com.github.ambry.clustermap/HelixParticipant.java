@@ -109,12 +109,15 @@ class HelixParticipant implements ClusterParticipant {
     String partitionId = replicaId.getPartitionId().toPathString();
     boolean success = true;
     if (!isSealed && sealedReplicas.contains(partitionId)) {
+      logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
       sealedReplicas.remove(partitionId);
       success = setSealedReplicas(sealedReplicas);
     } else if (isSealed && !sealedReplicas.contains(partitionId)) {
+      logger.trace("Adding the partition {} from sealedReplicas list", partitionId);
       sealedReplicas.add(partitionId);
       success = setSealedReplicas(sealedReplicas);
     }
+    logger.trace("Set sealed state of partition {} is completed", partitionId);
     return success;
   }
 
@@ -183,6 +186,7 @@ class HelixParticipant implements ClusterParticipant {
       throw new IllegalStateException(
           "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
+    logger.trace("Setting the list of sealed replicas in InstanceConfig");
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }

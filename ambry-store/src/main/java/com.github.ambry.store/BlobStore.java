@@ -212,6 +212,7 @@ class BlobStore implements Store {
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
         checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+        logger.trace("The store: " + storeId + " is successfully started");
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -306,16 +307,27 @@ class BlobStore implements Store {
    */
   private void checkCapacityAndUpdateWriteStatusDelegate(long totalCapacity, long usedCapacity) {
     if (writeStatusDelegate != null) {
+      logger.debug(
+          "Checking current used capacity: {} Bytes of store {} with High threshold: {} Bytes and Low threshold: {} Bytes",
+          index.getLogUsedCapacity(), replicaId.getPartitionId(), thresholdBytesHigh, thresholdBytesLow);
       if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
         if (!writeStatusDelegate.seal(replicaId)) {
           metrics.sealSetError.inc();
+          logger.error("Could not set the partition as read-only status on {}", replicaId);
+        } else {
+          logger.debug("Store is successfully sealed for partition : {}", replicaId.getPartitionId());
         }
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
         if (!writeStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
+          logger.error("Could not set the partition as read-write status on {}", replicaId);
+        } else {
+          logger.debug("Store is successfully unsealed for partition : {}", replicaId.getPartitionId());
         }
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
+    } else {
+      logger.debug("The WriteStatusDelegate is not instantiated");
     }
   }
 
@@ -580,6 +592,7 @@ class BlobStore implements Store {
     checkStarted();
     compactor.compact(details);
     checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+    logger.trace("One cycle of compaction is completed on the store: " + storeId);
   }
 
   /**
