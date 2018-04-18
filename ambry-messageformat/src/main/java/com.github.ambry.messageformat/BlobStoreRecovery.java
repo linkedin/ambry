@@ -85,11 +85,17 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
           messageRecovered.add(info);
         } else {
-          DeleteRecord deleteRecord = deserializeDeleteRecord(stream);
-          MessageInfo info =
-              new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
-                  deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
-          messageRecovered.add(info);
+          UpdateRecord updateRecord = deserializeUpdateRecord(stream);
+          switch (updateRecord.getType()) {
+            case DELETE:
+              MessageInfo info =
+                  new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+                      updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+              messageRecovered.add(info);
+              break;
+            default:
+              throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
+          }
         }
         startOffset = stream.getCurrentPosition();
       }

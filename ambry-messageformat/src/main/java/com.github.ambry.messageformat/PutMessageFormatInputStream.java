@@ -81,11 +81,11 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
             : headerSize + key.sizeInBytes();
     int blobPropertiesRecordRelativeOffset = blobEncryptionKey == null ? headerSize + key.sizeInBytes()
         : blobEncryptionKeyRecordRelativeOffset + blobEncryptionKeySize;
-    int deleteRecordRelativeOffset = MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
+    int updateRecordRelativeOffset = MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
     int userMetadataRecordRelativeOffset = blobPropertiesRecordRelativeOffset + blobPropertiesRecordSize;
     int blobRecordRelativeOffset = userMetadataRecordRelativeOffset + userMetadataSize;
     MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, totalSize,
-        blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
+        blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
         userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
     buffer.put(key.toBytes());
     if (blobEncryptionKey != null) {

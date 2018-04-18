@@ -1765,7 +1765,7 @@ public final class ServerTestUtil {
    */
   private static long getDeleteRecordSize(BlobId blobId) {
     return MessageFormatRecord.MessageHeader_Format_V2.getHeaderSize() + blobId.sizeInBytes()
-        + MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
+        + MessageFormatRecord.Update_Format_V2.getRecordSize();
   }
 
   /**
