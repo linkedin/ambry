@@ -25,13 +25,11 @@ import java.util.List;
 public interface ClusterParticipant extends AutoCloseable {
 
   /**
-   * Initialize the participant.
-   * @param hostname the hostname to use when registering as a participant.
-   * @param port the port to use when registering as a participant.
+   * Initiate the participation of cluster participant.
    * @param ambryHealthReports {@link List} of {@link AmbryHealthReport} to be registered to the participant.
    * @throws IOException
    */
-  void initialize(String hostname, int port, List<AmbryHealthReport> ambryHealthReports) throws IOException;
+  void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException;
 
   /**
    * Set or reset the sealed state of the given replica.

@@ -74,6 +74,7 @@ public class HelixParticipantTest {
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.port", "2200");
     props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
@@ -96,7 +97,6 @@ public class HelixParticipantTest {
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     HelixParticipant helixParticipant =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
-    helixParticipant.initialize(hostname, port, Collections.EMPTY_LIST);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
@@ -170,8 +170,8 @@ public class HelixParticipantTest {
     helixManagerFactory.helixManager.beBad = true;
     HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
     try {
-      helixParticipant.initialize("localhost", 2200, Collections.EMPTY_LIST);
-      fail("Initialization should have failed");
+      helixParticipant.participate(Collections.EMPTY_LIST);
+      fail("Participation should have failed");
     } catch (IOException e) {
       // OK
     }
@@ -205,7 +205,7 @@ public class HelixParticipantTest {
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory);
-    participant.initialize("localhost", 2200, Collections.EMPTY_LIST);
+    participant.participate(Collections.EMPTY_LIST);
     MockHelixManager helixManager = helixManagerFactory.helixManager;
     assertTrue(helixManager.isConnected());
     assertEquals(LeaderStandbySMD.name, helixManager.stateModelDef);
@@ -215,7 +215,7 @@ public class HelixParticipantTest {
   }
 
   /**
-   * A Mock implementaion of {@link HelixFactory} that returns the {@link MockHelixManager}
+   * A Mock implementation of {@link HelixFactory} that returns the {@link MockHelixManager}
    */
   private static class MockHelixManagerFactory extends HelixFactory {
     private final MockHelixManager helixManager;

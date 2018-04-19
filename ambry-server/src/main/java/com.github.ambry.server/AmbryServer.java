@@ -180,7 +180,7 @@ public class AmbryServer {
             new QuotaHealthReport(statsManager, serverConfig.serverQuotaStatsAggregateIntervalInMinutes));
       }
 
-      clusterParticipant.initialize(networkConfig.hostName, networkConfig.port, ambryHealthReports);
+      clusterParticipant.participate(ambryHealthReports);
 
       logger.info("started");
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
