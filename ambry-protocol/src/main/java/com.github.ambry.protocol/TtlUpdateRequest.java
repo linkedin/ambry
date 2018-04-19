@@ -32,7 +32,6 @@ public class TtlUpdateRequest extends RequestOrResponse {
   static final short TTL_UPDATE_REQUEST_VERSION_1 = 1;
   private final static short CURRENT_VERSION = TTL_UPDATE_REQUEST_VERSION_1;
 
-  private final short version;
   private final BlobId blobId;
   private final long expiresAtMs;
   private final long operationTimeInMs;
@@ -78,7 +77,6 @@ public class TtlUpdateRequest extends RequestOrResponse {
   TtlUpdateRequest(int correlationId, String clientId, BlobId blobId, long expiresAtMs, long operationTimeMs,
       short version) {
     super(TtlUpdateRequest, version, correlationId, clientId);
-    this.version = version;
     this.blobId = blobId;
     this.expiresAtMs = expiresAtMs;
     this.operationTimeInMs = operationTimeMs;
