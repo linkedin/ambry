@@ -235,8 +235,19 @@ public class HelixParticipantTest {
      * @param zkAddr unused.
      * @return the {@link MockHelixManager}
      */
+    @Override
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       return helixManager;
+    }
+
+    /**
+     * Return the {@link MockHelixAdmin}
+     * @param zkAddr unused.
+     * @return the {@link MockHelixAdmin}
+     */
+    @Override
+    HelixAdmin getHelixAdmin(String zkAddr) {
+      return new MockHelixAdmin();
     }
   }
 

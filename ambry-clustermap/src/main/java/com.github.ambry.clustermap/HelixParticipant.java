@@ -49,6 +49,7 @@ class HelixParticipant implements ClusterParticipant {
   private final HelixFactory helixFactory;
   private HelixManager manager;
   private String instanceName;
+  private HelixAdmin helixAdmin;
 
   /**
    * Instantiate a HelixParticipant.
@@ -68,6 +69,7 @@ class HelixParticipant implements ClusterParticipant {
       zkConnectStr = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
           .get(clusterMapConfig.clusterMapDatacenterName)
           .getZkConnectStr();
+      helixAdmin = helixFactory.getHelixAdmin(zkConnectStr);
     } catch (JSONException e) {
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
@@ -87,7 +89,9 @@ class HelixParticipant implements ClusterParticipant {
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
+      helixAdmin.close();
       manager.connect();
+      helixAdmin = manager.getClusterManagmentTool();
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
     }
@@ -165,7 +169,7 @@ class HelixParticipant implements ClusterParticipant {
    * @return list of sealed replicas from HelixAdmin
    */
   private List<String> getSealedReplicas() {
-    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
+    helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(
@@ -180,7 +184,7 @@ class HelixParticipant implements ClusterParticipant {
    * @return whether the operation succeeded or not
    */
   private boolean setSealedReplicas(List<String> sealedReplicas) {
-    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
+    helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(
