@@ -48,6 +48,7 @@ public class MessageFormatRecord {
   public static final short Update_Version_V1 = 1;
   public static final short Update_Version_V2 = 2;
   public static final short Update_Version_V3 = 3;
+
   public static final short Blob_Encryption_Key_V1 = 1;
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
@@ -58,6 +59,7 @@ public class MessageFormatRecord {
   static short headerVersionToUse = Message_Header_Version_V2;
 
   private static final short Delete_Subrecord_Version_V1 = 1;
+  private static final short Ttl_Update_Subrecord_Version_V1 = 1;
 
   static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {
@@ -1006,6 +1008,9 @@ public class MessageFormatRecord {
         case DELETE:
           subRecordSize = Delete_Sub_Format_V1.getRecordSize();
           break;
+        case TTL_UPDATE:
+          subRecordSize = Ttl_Update_Sub_Format_V1.getRecordSize();
+          break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + type);
       }
@@ -1028,6 +1033,9 @@ public class MessageFormatRecord {
       switch (updateRecord.getType()) {
         case DELETE:
           Delete_Sub_Format_V1.serialize(outputBuffer, updateRecord.getDeleteSubRecord());
+          break;
+        case TTL_UPDATE:
+          Ttl_Update_Sub_Format_V1.serialize(outputBuffer, updateRecord.getTtlUpdateSubRecord());
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + updateRecord.getType());
@@ -1053,6 +1061,9 @@ public class MessageFormatRecord {
       switch (type) {
         case DELETE:
           updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getDeleteSubRecord(dataStream));
+          break;
+        case TTL_UPDATE:
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getTtlUpdateSubRecord(dataStream));
           break;
         default:
           throw new IllegalArgumentException("Unknown update record type: " + type);
@@ -1084,6 +1095,24 @@ public class MessageFormatRecord {
               MessageFormatErrorCodes.Unknown_Format_Version);
       }
     }
+
+    /**
+     * @param inputStream the stream that contains the serialized form of a {@link TtlUpdateSubRecord}.
+     * @return the deserialized {@link TtlUpdateSubRecord}
+     * @throws IOException if there are problems reading from stream.
+     * @throws MessageFormatException if the format of the message is unexpected.
+     */
+    private static TtlUpdateSubRecord getTtlUpdateSubRecord(DataInputStream inputStream)
+        throws IOException, MessageFormatException {
+      short version = inputStream.readShort();
+      switch (version) {
+        case Ttl_Update_Subrecord_Version_V1:
+          return Ttl_Update_Sub_Format_V1.deserialize(inputStream);
+        default:
+          throw new MessageFormatException("ttl update record version not supported: " + version,
+              MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+    }
   }
 
   /**
@@ -1107,6 +1136,37 @@ public class MessageFormatRecord {
 
     static DeleteSubRecord deserialize(DataInputStream stream) {
       return new DeleteSubRecord();
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - -
+   * |         |                   |
+   * | version | UpdatedExpiryTime |
+   * |(2 bytes)|   (8 bytes)       |
+   * |         |                   |
+   *  - - - - - - - - - - - - - - -
+   *  version         - The version of the ttl update record
+   *
+   *  UpdatedExpiryTime  - Time in ms to which the expiry time was updated
+   *
+   */
+  private static class Ttl_Update_Sub_Format_V1 {
+
+    private static final int EXPIRE_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
+
+    static int getRecordSize() {
+      return Version_Field_Size_In_Bytes + EXPIRE_TIME_FIELD_SIZE_IN_BYTES;
+    }
+
+    static void serialize(ByteBuffer outputBuffer, TtlUpdateSubRecord ttlUpdateSubRecord) {
+      outputBuffer.putShort(Ttl_Update_Subrecord_Version_V1);
+      outputBuffer.putLong(ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
+    }
+
+    static TtlUpdateSubRecord deserialize(DataInputStream stream) throws IOException {
+      long updatedExpiryTimeMs = stream.readLong();
+      return new TtlUpdateSubRecord(updatedExpiryTimeMs);
     }
   }
 

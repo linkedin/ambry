@@ -403,6 +403,7 @@ public class MessageFormatRecordTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    long updatedExpiryTimesMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
     for (UpdateRecord.Type type : UpdateRecord.Type.values()) {
       ByteBuffer updateRecordBuf = ByteBuffer.allocate(Update_Format_V3.getRecordSize(type));
       UpdateRecord updateRecord = null;
@@ -410,6 +411,10 @@ public class MessageFormatRecordTest {
         case DELETE:
           DeleteSubRecord deleteSubRecord = new DeleteSubRecord();
           updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, deleteSubRecord);
+          break;
+        case TTL_UPDATE:
+          TtlUpdateSubRecord ttlUpdateSubRecord = new TtlUpdateSubRecord(updatedExpiryTimesMs);
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, ttlUpdateSubRecord);
           break;
         default:
           fail("Unknown update record type: " + type);
@@ -425,6 +430,12 @@ public class MessageFormatRecordTest {
       switch (type) {
         case DELETE:
           Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
+          break;
+        case TTL_UPDATE:
+          TtlUpdateSubRecord ttlUpdateSubRecord = deserializeUpdateRecord.getTtlUpdateSubRecord();
+          Assert.assertNotNull("TtlUpdateSubRecord is null", ttlUpdateSubRecord);
+          Assert.assertEquals("Updated expiry time is incorrect", updatedExpiryTimesMs,
+              ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
           break;
         default:
           fail("Unknown update record type: " + type);
