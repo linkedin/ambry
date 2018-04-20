@@ -17,7 +17,6 @@ import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
-import org.apache.helix.manager.zk.ZKHelixAdmin;
 
 
 /**
@@ -42,7 +41,7 @@ public class HelixFactory {
    * @return the constructed {@link HelixAdmin}.
    */
   HelixAdmin getHelixAdmin(String zkAddr) {
-    return new ZKHelixAdmin(zkAddr);
+    return new HelixAdminFactory().getHelixAdmin(zkAddr);
   }
 }
 

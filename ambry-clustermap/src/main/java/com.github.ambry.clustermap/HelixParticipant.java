@@ -89,8 +89,12 @@ class HelixParticipant implements ClusterParticipant {
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
+      // close the temporary helixAdmin used in the process of starting StorageManager
+      // this is to ensure there is only one valid helixAdmin
       helixAdmin.close();
+      // register server as a participant
       manager.connect();
+      // reassign the helixAdmin from ZKHelixManager, which is the actual helixAdmin after participation
       helixAdmin = manager.getClusterManagmentTool();
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
