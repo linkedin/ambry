@@ -320,11 +320,11 @@ public class Selector implements Selectable {
     // check ready keys
     long startSelect = time.milliseconds();
     int readyKeys = select(timeoutMs);
-    long endSelect = time.milliseconds();
-    this.metrics.selectorSelectTime.update(endSelect - startSelect);
-    this.metrics.selectorSelectCount.inc();
 
     if (readyKeys > 0) {
+      long endSelect = time.milliseconds();
+      this.metrics.selectorSelectTime.update(endSelect - startSelect);
+      this.metrics.selectorSelectCount.inc();
       Set<SelectionKey> keys = nioSelector.selectedKeys();
       Iterator<SelectionKey> iter = keys.iterator();
       while (iter.hasNext()) {
