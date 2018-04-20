@@ -169,7 +169,6 @@ class HelixParticipant implements ClusterParticipant {
    * @return list of sealed replicas from HelixAdmin
    */
   private List<String> getSealedReplicas() {
-    helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(
@@ -184,7 +183,6 @@ class HelixParticipant implements ClusterParticipant {
    * @return whether the operation succeeded or not
    */
   private boolean setSealedReplicas(List<String> sealedReplicas) {
-    helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(
