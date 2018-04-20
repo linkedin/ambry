@@ -320,11 +320,11 @@ public class Selector implements Selectable {
     // check ready keys
     long startSelect = time.milliseconds();
     int readyKeys = select(timeoutMs);
+    this.metrics.selectorSelectCount.inc();
 
     if (readyKeys > 0) {
       long endSelect = time.milliseconds();
       this.metrics.selectorSelectTime.update(endSelect - startSelect);
-      this.metrics.selectorSelectCount.inc();
       Set<SelectionKey> keys = nioSelector.selectedKeys();
       Iterator<SelectionKey> iter = keys.iterator();
       while (iter.hasNext()) {
@@ -374,11 +374,10 @@ public class Selector implements Selectable {
       }
       checkUnreadyConnectionsStatus();
       this.metrics.selectorIOCount.inc();
+      this.metrics.selectorIOTime.update(time.milliseconds() - endSelect);
     }
     disconnected.addAll(closedConnections);
     closedConnections.clear();
-    long endIo = time.milliseconds();
-    this.metrics.selectorIOTime.update(endIo - endSelect);
   }
 
   /**
