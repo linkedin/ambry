@@ -69,6 +69,8 @@ class HelixParticipant implements ClusterParticipant {
       zkConnectStr = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
           .get(clusterMapConfig.clusterMapDatacenterName)
           .getZkConnectStr();
+      // HelixAdmin is initialized in constructor allowing caller to do any administrative operations in Helix
+      // before participating.
       helixAdmin = helixFactory.getHelixAdmin(zkConnectStr);
     } catch (JSONException e) {
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
@@ -121,7 +123,7 @@ class HelixParticipant implements ClusterParticipant {
       sealedReplicas.remove(partitionId);
       success = setSealedReplicas(sealedReplicas);
     } else if (isSealed && !sealedReplicas.contains(partitionId)) {
-      logger.trace("Adding the partition {} from sealReplicas list", partitionId);
+      logger.trace("Adding the partition {} to sealReplicas list", partitionId);
       sealedReplicas.add(partitionId);
       success = setSealedReplicas(sealedReplicas);
     }
