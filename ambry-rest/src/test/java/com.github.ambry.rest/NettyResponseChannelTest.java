@@ -409,42 +409,47 @@ public class NettyResponseChannelTest {
   public void errorResponseTest() {
     EmbeddedChannel channel = createEmbeddedChannel();
     for (RestServiceErrorCode errorCode : RestServiceErrorCode.values()) {
-      HttpHeaders httpHeaders = new DefaultHttpHeaders();
-      httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, errorCode);
-      channel.writeInbound(
-          RestTestUtils.createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(),
-              httpHeaders));
-      HttpResponse response = channel.readOutbound();
-      HttpResponseStatus expectedStatus = getExpectedHttpResponseStatus(errorCode);
-      assertEquals("Unexpected response status", expectedStatus, response.status());
-      boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
-      if (expectedStatus == HttpResponseStatus.BAD_REQUEST) {
-        assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
-      } else {
-        assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
-      }
-      if (HttpStatusClass.CLIENT_ERROR.contains(response.status().code())) {
-        assertEquals("Wrong error code", errorCode,
-            RestServiceErrorCode.valueOf(response.headers().get(NettyResponseChannel.ERROR_CODE_HEADER)));
-      } else {
-        assertFalse("Should not have found error code header",
-            response.headers().contains(NettyResponseChannel.ERROR_CODE_HEADER));
-      }
-      if (response instanceof FullHttpResponse) {
-        // assert that there is no content
-        assertEquals("The response should not contain content", 0,
-            ((FullHttpResponse) response).content().readableBytes());
-      } else {
-        HttpContent content = channel.readOutbound();
-        assertTrue("End marker should be received", content instanceof LastHttpContent);
-      }
-      assertNull("There should be no more data in the channel", channel.readOutbound());
-      boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedStatus);
-      assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
-      assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
-          HttpUtil.isKeepAlive(response));
-      if (!shouldBeAlive) {
-        channel = createEmbeddedChannel();
+      for (boolean includeExceptionMessageInResponse : new boolean[]{true, false}) {
+        HttpHeaders httpHeaders = new DefaultHttpHeaders();
+        httpHeaders.set(MockNettyMessageProcessor.REST_SERVICE_ERROR_CODE_HEADER_NAME, errorCode);
+        if (includeExceptionMessageInResponse) {
+          httpHeaders.set(MockNettyMessageProcessor.INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME, "true");
+        }
+        channel.writeInbound(
+            RestTestUtils.createRequest(HttpMethod.HEAD, TestingUri.OnResponseCompleteWithRestException.toString(),
+                httpHeaders));
+        HttpResponse response = channel.readOutbound();
+        HttpResponseStatus expectedStatus = getExpectedHttpResponseStatus(errorCode);
+        assertEquals("Unexpected response status", expectedStatus, response.status());
+        boolean containsFailureReasonHeader = response.headers().contains(NettyResponseChannel.FAILURE_REASON_HEADER);
+        if (expectedStatus == HttpResponseStatus.BAD_REQUEST || includeExceptionMessageInResponse) {
+          assertTrue("Could not find failure reason header.", containsFailureReasonHeader);
+        } else {
+          assertFalse("Should not have found failure reason header.", containsFailureReasonHeader);
+        }
+        if (HttpStatusClass.CLIENT_ERROR.contains(response.status().code())) {
+          assertEquals("Wrong error code", errorCode,
+              RestServiceErrorCode.valueOf(response.headers().get(NettyResponseChannel.ERROR_CODE_HEADER)));
+        } else {
+          assertFalse("Should not have found error code header",
+              response.headers().contains(NettyResponseChannel.ERROR_CODE_HEADER));
+        }
+        if (response instanceof FullHttpResponse) {
+          // assert that there is no content
+          assertEquals("The response should not contain content", 0,
+              ((FullHttpResponse) response).content().readableBytes());
+        } else {
+          HttpContent content = channel.readOutbound();
+          assertTrue("End marker should be received", content instanceof LastHttpContent);
+        }
+        assertNull("There should be no more data in the channel", channel.readOutbound());
+        boolean shouldBeAlive = !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedStatus);
+        assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
+        assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
+            HttpUtil.isKeepAlive(response));
+        if (!shouldBeAlive) {
+          channel = createEmbeddedChannel();
+        }
       }
     }
     channel.close();
@@ -907,6 +912,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   static final String CUSTOM_HEADER_NAME = "customHeader";
   static final String STATUS_HEADER_NAME = "status";
   static final String REST_SERVICE_ERROR_CODE_HEADER_NAME = "restServiceErrorCode";
+  static final String INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME = "includeExceptionMessageInResponse";
 
   // CHUNK and CHUNK_COUNT HEADER_NAME together help in Content-Length tests.
   // If a test sets CHUNK_COUNT_HEADER_NAME to 3,
@@ -1004,8 +1010,11 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         break;
       case OnResponseCompleteWithRestException:
         String errorCodeStr = (String) request.getArgs().get(REST_SERVICE_ERROR_CODE_HEADER_NAME);
+        boolean includeExceptionMessageInResponse =
+            request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
         RestServiceErrorCode errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
-        restResponseChannel.onResponseComplete(new RestServiceException(errorCodeStr, errorCode));
+        restResponseChannel.onResponseComplete(
+            new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),
             restResponseChannel.getStatus());
         assertFalse("Request channel is not closed", request.isOpen());
