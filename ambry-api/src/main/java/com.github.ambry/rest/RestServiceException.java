@@ -19,23 +19,54 @@ package com.github.ambry.rest;
  */
 public class RestServiceException extends Exception {
   private final RestServiceErrorCode error;
+  private final boolean includeExceptionMessageInResponse;
 
+  /**
+   * @param message the exception message.
+   * @param error the {@link RestServiceErrorCode}.
+   */
   public RestServiceException(String message, RestServiceErrorCode error) {
-    super(message);
-    this.error = error;
+    this(message, error, false);
   }
 
+  /**
+   * @param message the exception message.
+   * @param e the exception cause.
+   * @param error the {@link RestServiceErrorCode}.
+   */
   public RestServiceException(String message, Throwable e, RestServiceErrorCode error) {
     super(message, e);
     this.error = error;
+    includeExceptionMessageInResponse = false;
   }
 
+  /**
+   * @param e the exception cause.
+   * @param error the {@link RestServiceErrorCode}.
+   */
   public RestServiceException(Throwable e, RestServiceErrorCode error) {
     super(e);
     this.error = error;
+    includeExceptionMessageInResponse = false;
+  }
+
+  /**
+   * @param message the exception message.
+   * @param error the {@link RestServiceErrorCode}.
+   * @param includeExceptionMessageInResponse {@code true} to hint that the exception message should be returned to the
+   *                                          client as a response header.
+   */
+  public RestServiceException(String message, RestServiceErrorCode error, boolean includeExceptionMessageInResponse) {
+    super(message);
+    this.error = error;
+    this.includeExceptionMessageInResponse = includeExceptionMessageInResponse;
   }
 
   public RestServiceErrorCode getErrorCode() {
-    return this.error;
+    return error;
+  }
+
+  public boolean shouldIncludeExceptionMessageInResponse() {
+    return includeExceptionMessageInResponse;
   }
 }
