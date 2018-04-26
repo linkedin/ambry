@@ -47,6 +47,7 @@ class HelixParticipant implements ClusterParticipant {
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
+  private final Object participateLock = new Object();
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
@@ -91,13 +92,15 @@ class HelixParticipant implements ClusterParticipant {
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
-      // close the temporary helixAdmin used in the process of starting StorageManager
-      // this is to ensure there is only one valid helixAdmin
-      helixAdmin.close();
-      // register server as a participant
-      manager.connect();
-      // reassign the helixAdmin from ZKHelixManager, which is the actual helixAdmin after participation
-      helixAdmin = manager.getClusterManagmentTool();
+      synchronized (participateLock) {
+        // close the temporary helixAdmin used in the process of starting StorageManager
+        // this is to ensure there is only one valid helixAdmin
+        helixAdmin.close();
+        // register server as a participant
+        manager.connect();
+        // reassign the helixAdmin from ZKHelixManager, which is the actual helixAdmin after participation
+        helixAdmin = manager.getClusterManagmentTool();
+      }
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
     }
@@ -189,13 +192,16 @@ class HelixParticipant implements ClusterParticipant {
    * @return whether the operation succeeded or not
    */
   private boolean setSealedReplicas(List<String> sealedReplicas) {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    synchronized (participateLock) {
+      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      if (instanceConfig == null) {
+        throw new IllegalStateException(
+            "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+      }
+      logger.trace("Setting InstanceConfig with list of sealed replicas: {}",
+          Arrays.toString(sealedReplicas.toArray()));
+      instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+      return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
     }
-    logger.trace("Setting InstanceConfig with list of sealed replicas: {}", Arrays.toString(sealedReplicas.toArray()));
-    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
-    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 }
