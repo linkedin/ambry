@@ -502,7 +502,8 @@ public class NettyPerfClient {
         }
       } else {
         request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
-      } chunksReceived = 0;
+      }
+      chunksReceived = 0;
       sizeReceived = 0;
       lastChunkReceiveTime = 0;
       requestStartTime = System.currentTimeMillis();
