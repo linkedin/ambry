@@ -80,7 +80,7 @@ public class NettyPerfClient {
 
   private final String host;
   private final int port;
-  private final String uri;
+  private final String path;
   private final int concurrency;
   private final long totalSize;
   private final byte[] chunk;
@@ -88,6 +88,8 @@ public class NettyPerfClient {
   private final String serviceId;
   private final String targetAccountName;
   private final String targetContainerName;
+  private final String customizedHeaderName;
+  private final String customizedHeaderValue;
   private final Bootstrap b = new Bootstrap();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -114,6 +116,7 @@ public class NettyPerfClient {
     final String sslPropsFilePath;
     final String targetAccountName;
     final String targetContainerName;
+    final String customizedHeader;
     final String serviceId;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -169,6 +172,11 @@ public class NettyPerfClient {
               .withOptionalArg()
               .describedAs("targetContainerName")
               .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> customizedHeader =
+          parser.accepts("customizedHeader", "Add http header for the request. HeaderName:HeaderValue")
+              .withOptionalArg()
+              .describedAs("customizedHeader")
+              .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> serviceId = parser.accepts("serviceId", "serviceId representing the caller")
           .withOptionalArg()
           .describedAs("serviceId")
@@ -191,6 +199,7 @@ public class NettyPerfClient {
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
       this.targetAccountName = options.valueOf(targetAccountName);
       this.targetContainerName = options.valueOf(targetContainerName);
+      this.customizedHeader = options.valueOf(customizedHeader);
       this.serviceId = options.valueOf(serviceId);
       validateArgs();
 
@@ -233,10 +242,18 @@ public class NettyPerfClient {
   public static void main(String[] args) {
     try {
       ClientArgs clientArgs = new ClientArgs(args);
+      String customizedHeaderName = null;
+      String customizedHeaderValue = null;
+      if (clientArgs.customizedHeader != null) {
+        String[] customizedHeaderNameAndValue = clientArgs.customizedHeader.split(":");
+        customizedHeaderName = customizedHeaderNameAndValue[0];
+        customizedHeaderValue = customizedHeaderNameAndValue[1];
+      }
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
               clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
-              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName);
+              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName, customizedHeaderName,
+              customizedHeaderValue);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
@@ -263,15 +280,17 @@ public class NettyPerfClient {
    * @param serviceId serviceId of the caller to represent the identity
    * @param targetAccountName target account name for POST
    * @param targetContainerName target container name for POST
+   * @param customizedHeaderName customized http header name to be added.
+   * @param customizedHeaderValue customized http header value to be added.
    * @throws IOException
    * @throws GeneralSecurityException
    */
   private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
-      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName)
-      throws IOException, GeneralSecurityException {
+      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName,
+      String customizedHeaderName, String customizedHeaderValue) throws IOException, GeneralSecurityException {
     this.host = host;
     this.port = port;
-    this.uri = "http://" + host + ":" + port + path;
+    this.path = path;
     this.concurrency = concurrency;
     if (chunkSize != null) {
       this.totalSize = totalSize;
@@ -286,8 +305,10 @@ public class NettyPerfClient {
     this.serviceId = serviceId;
     this.targetAccountName = targetAccountName;
     this.targetContainerName = targetContainerName;
-    logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, uri {} with concurrency {}",
-        this.host, this.port, uri, this.concurrency);
+    this.customizedHeaderName = customizedHeaderName;
+    this.customizedHeaderValue = customizedHeaderValue;
+    logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, path {} with concurrency {}",
+        this.host, this.port, this.path, this.concurrency);
   }
 
   /**
@@ -415,7 +436,8 @@ public class NettyPerfClient {
             ctx.close();
           } else {
             perfClientMetrics.requestResponseError.inc();
-            logger.error("Channel {} not kept alive. Last response status was {}", ctx.channel(), response.status());
+            logger.error("Channel {} not kept alive. Last response status was {} and header was {}", ctx.channel(),
+                response.status(), response.headers());
             ctx.close();
           }
         }
@@ -468,17 +490,19 @@ public class NettyPerfClient {
     private void reset() {
       if (chunk != null) {
         chunkedInput = new HttpChunkedInput(new RepeatedBytesInput());
-        request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, uri);
+        request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, path);
         HttpUtil.setContentLength(request, totalSize);
         request.headers().add(RestUtils.Headers.BLOB_SIZE, totalSize);
         request.headers().add(RestUtils.Headers.SERVICE_ID, serviceId);
         request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
         request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
         request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
+        if (customizedHeaderName != null && customizedHeaderName != null) {
+          request.headers().add(customizedHeaderName, customizedHeaderValue);
+        }
       } else {
-        request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
-      }
-      chunksReceived = 0;
+        request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
+      } chunksReceived = 0;
       sizeReceived = 0;
       lastChunkReceiveTime = 0;
       requestStartTime = System.currentTimeMillis();
