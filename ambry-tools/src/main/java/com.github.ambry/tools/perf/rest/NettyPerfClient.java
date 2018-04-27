@@ -87,7 +87,7 @@ public class NettyPerfClient {
 
   private final String host;
   private final int port;
-  private final String uri;
+  private final String path;
   private final int concurrency;
   private final long totalSize;
   private final byte[] chunk;
@@ -293,7 +293,7 @@ public class NettyPerfClient {
       String targetContainerName) throws IOException, GeneralSecurityException {
     this.host = host;
     this.port = port;
-    this.uri = (sslPropsFilePath == null ? "http://" : "https://") + host + ":" + port + path;
+    this.path = path;
     this.concurrency = concurrency;
     if (chunkSize != null) {
       this.totalSize = totalSize;
@@ -320,8 +320,8 @@ public class NettyPerfClient {
     this.serviceId = serviceId;
     this.targetAccountName = targetAccountName;
     this.targetContainerName = targetContainerName;
-    logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, uri {} with concurrency {}",
-        this.host, this.port, uri, this.concurrency);
+    logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, path {} with concurrency {}",
+        this.host, this.port, this.path, this.concurrency);
   }
 
   /**
@@ -507,7 +507,7 @@ public class NettyPerfClient {
     private void reset() {
       if (chunk != null) {
         chunkedInput = new HttpChunkedInput(new RepeatedBytesInput());
-        request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, uri);
+        request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, path);
         HttpUtil.setContentLength(request, totalSize);
         request.headers().add(RestUtils.Headers.BLOB_SIZE, totalSize);
         request.headers().add(RestUtils.Headers.SERVICE_ID, serviceId);
@@ -515,7 +515,7 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
         request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
       } else {
-        request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
+        request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
       }
       chunksReceived = 0;
       sizeReceived = 0;
