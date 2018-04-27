@@ -47,7 +47,7 @@ class HelixParticipant implements ClusterParticipant {
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
-  private final Object participateLock = new Object();
+  private final Object helixAdministrationLock = new Object();
   private HelixManager manager;
   private String instanceName;
   private HelixAdmin helixAdmin;
@@ -92,7 +92,7 @@ class HelixParticipant implements ClusterParticipant {
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
-      synchronized (participateLock) {
+      synchronized (helixAdministrationLock) {
         // close the temporary helixAdmin used in the process of starting StorageManager
         // this is to ensure there is only one valid helixAdmin
         helixAdmin.close();
@@ -115,23 +115,25 @@ class HelixParticipant implements ClusterParticipant {
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
-    List<String> sealedReplicas = getSealedReplicas();
-    if (sealedReplicas == null) {
-      sealedReplicas = new ArrayList<>();
+    synchronized (helixAdministrationLock) {
+      List<String> sealedReplicas = getSealedReplicas();
+      if (sealedReplicas == null) {
+        sealedReplicas = new ArrayList<>();
+      }
+      String partitionId = replicaId.getPartitionId().toPathString();
+      boolean success = true;
+      if (!isSealed && sealedReplicas.contains(partitionId)) {
+        logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
+        sealedReplicas.remove(partitionId);
+        success = setSealedReplicas(sealedReplicas);
+      } else if (isSealed && !sealedReplicas.contains(partitionId)) {
+        logger.trace("Adding the partition {} to sealedReplicas list", partitionId);
+        sealedReplicas.add(partitionId);
+        success = setSealedReplicas(sealedReplicas);
+      }
+      logger.trace("Set sealed state of partition {} is completed", partitionId);
+      return success;
     }
-    String partitionId = replicaId.getPartitionId().toPathString();
-    boolean success = true;
-    if (!isSealed && sealedReplicas.contains(partitionId)) {
-      logger.trace("Removing the partition {} from sealReplicas list", partitionId);
-      sealedReplicas.remove(partitionId);
-      success = setSealedReplicas(sealedReplicas);
-    } else if (isSealed && !sealedReplicas.contains(partitionId)) {
-      logger.trace("Adding the partition {} to sealReplicas list", partitionId);
-      sealedReplicas.add(partitionId);
-      success = setSealedReplicas(sealedReplicas);
-    }
-    logger.trace("Set sealed state of partition {} is completed", partitionId);
-    return success;
   }
 
   /**
@@ -174,7 +176,7 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Get the list of sealed replicas from the HelixAdmin
+   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the lock is taken.
    * @return list of sealed replicas from HelixAdmin
    */
   private List<String> getSealedReplicas() {
@@ -187,21 +189,18 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Set the list of sealed replicas in the HelixAdmin
+   * Set the list of sealed replicas in the HelixAdmin. This method is called only after the lock is taken.
    * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
    * @return whether the operation succeeded or not
    */
   private boolean setSealedReplicas(List<String> sealedReplicas) {
-    synchronized (participateLock) {
-      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-      if (instanceConfig == null) {
-        throw new IllegalStateException(
-            "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-      }
-      logger.trace("Setting InstanceConfig with list of sealed replicas: {}",
-          Arrays.toString(sealedReplicas.toArray()));
-      instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
-      return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
+    logger.trace("Setting InstanceConfig with list of sealed replicas: {}", Arrays.toString(sealedReplicas.toArray()));
+    instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 }
