@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerFactory;
 import org.apache.helix.InstanceType;
@@ -32,6 +33,15 @@ public class HelixFactory {
    */
   HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
     return HelixManagerFactory.getZKHelixManager(clusterName, instanceName, instanceType, zkAddr);
+  }
+
+  /**
+   * Get a reference to a {@link HelixAdmin}
+   * @param zkAddr the address identifying the zk service to which this request is to be made.
+   * @return the constructed {@link HelixAdmin}.
+   */
+  HelixAdmin getHelixAdmin(String zkAddr) {
+    return new HelixAdminFactory().getHelixAdmin(zkAddr);
   }
 }
 

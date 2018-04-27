@@ -47,8 +47,10 @@ class HelixParticipant implements ClusterParticipant {
   private final String clusterName;
   private final String zkConnectStr;
   private final HelixFactory helixFactory;
+  private final Object helixAdministrationLock = new Object();
   private HelixManager manager;
   private String instanceName;
+  private HelixAdmin helixAdmin;
 
   /**
    * Instantiate a HelixParticipant.
@@ -68,6 +70,9 @@ class HelixParticipant implements ClusterParticipant {
       zkConnectStr = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings)
           .get(clusterMapConfig.clusterMapDatacenterName)
           .getZkConnectStr();
+      // HelixAdmin is initialized in constructor allowing caller to do any administrative operations in Helix
+      // before participating.
+      helixAdmin = helixFactory.getHelixAdmin(zkConnectStr);
     } catch (JSONException e) {
       throw new IOException("Received JSON exception while parsing ZKInfo json string", e);
     }
@@ -87,7 +92,15 @@ class HelixParticipant implements ClusterParticipant {
     stateMachineEngine.registerStateModelFactory(LeaderStandbySMD.name, new AmbryStateModelFactory());
     registerHealthReportTasks(stateMachineEngine, ambryHealthReports);
     try {
-      manager.connect();
+      synchronized (helixAdministrationLock) {
+        // close the temporary helixAdmin used in the process of starting StorageManager
+        // this is to ensure there is only one valid helixAdmin
+        helixAdmin.close();
+        // register server as a participant
+        manager.connect();
+        // reassign the helixAdmin from ZKHelixManager, which is the actual helixAdmin after participation
+        helixAdmin = manager.getClusterManagmentTool();
+      }
     } catch (Exception e) {
       throw new IOException("Exception while connecting to the Helix manager", e);
     }
@@ -97,28 +110,30 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   @Override
-  public synchronized boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+  public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
     if (!(replicaId instanceof AmbryReplica)) {
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
     }
-    List<String> sealedReplicas = getSealedReplicas();
-    if (sealedReplicas == null) {
-      sealedReplicas = new ArrayList<>();
+    synchronized (helixAdministrationLock) {
+      List<String> sealedReplicas = getSealedReplicas();
+      if (sealedReplicas == null) {
+        sealedReplicas = new ArrayList<>();
+      }
+      String partitionId = replicaId.getPartitionId().toPathString();
+      boolean success = true;
+      if (!isSealed && sealedReplicas.contains(partitionId)) {
+        logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
+        sealedReplicas.remove(partitionId);
+        success = setSealedReplicas(sealedReplicas);
+      } else if (isSealed && !sealedReplicas.contains(partitionId)) {
+        logger.trace("Adding the partition {} to sealedReplicas list", partitionId);
+        sealedReplicas.add(partitionId);
+        success = setSealedReplicas(sealedReplicas);
+      }
+      logger.trace("Set sealed state of partition {} is completed", partitionId);
+      return success;
     }
-    String partitionId = replicaId.getPartitionId().toPathString();
-    boolean success = true;
-    if (!isSealed && sealedReplicas.contains(partitionId)) {
-      logger.trace("Removing the partition {} from sealReplicas list", partitionId);
-      sealedReplicas.remove(partitionId);
-      success = setSealedReplicas(sealedReplicas);
-    } else if (isSealed && !sealedReplicas.contains(partitionId)) {
-      logger.trace("Adding the partition {} from sealReplicas list", partitionId);
-      sealedReplicas.add(partitionId);
-      success = setSealedReplicas(sealedReplicas);
-    }
-    logger.trace("Set sealed state of partition {} is completed", partitionId);
-    return success;
   }
 
   /**
@@ -161,11 +176,11 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Get the list of sealed replicas from the HelixAdmin
+   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
    * @return list of sealed replicas from HelixAdmin
    */
   private List<String> getSealedReplicas() {
-    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(
@@ -175,12 +190,12 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Set the list of sealed replicas in the HelixAdmin
+   * Set the list of sealed replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
    * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
    * @return whether the operation succeeded or not
    */
   private boolean setSealedReplicas(List<String> sealedReplicas) {
-    HelixAdmin helixAdmin = manager.getClusterManagmentTool();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(

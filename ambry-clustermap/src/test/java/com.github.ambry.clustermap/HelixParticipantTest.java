@@ -97,6 +97,7 @@ public class HelixParticipantTest {
     String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
     HelixParticipant helixParticipant =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
+    helixParticipant.participate(Collections.EMPTY_LIST);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("someInstanceId");
@@ -235,8 +236,19 @@ public class HelixParticipantTest {
      * @param zkAddr unused.
      * @return the {@link MockHelixManager}
      */
+    @Override
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       return helixManager;
+    }
+
+    /**
+     * Return the {@link MockHelixAdmin}
+     * @param zkAddr unused.
+     * @return the {@link MockHelixAdmin}
+     */
+    @Override
+    HelixAdmin getHelixAdmin(String zkAddr) {
+      return new MockHelixAdmin();
     }
   }
 
