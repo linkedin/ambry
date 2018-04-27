@@ -176,7 +176,8 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the lock is taken.
+   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
    * @return list of sealed replicas from HelixAdmin
    */
   private List<String> getSealedReplicas() {
@@ -189,7 +190,8 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Set the list of sealed replicas in the HelixAdmin. This method is called only after the lock is taken.
+   * Set the list of sealed replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
    * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
    * @return whether the operation succeeded or not
    */
