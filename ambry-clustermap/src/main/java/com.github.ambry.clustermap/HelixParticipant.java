@@ -110,7 +110,7 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   @Override
-  public synchronized boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+  public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
     if (!(replicaId instanceof AmbryReplica)) {
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
