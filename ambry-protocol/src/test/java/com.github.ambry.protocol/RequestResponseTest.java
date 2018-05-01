@@ -550,6 +550,65 @@ public class RequestResponseTest {
   }
 
   /**
+   * Tests the ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void replicationControlAdminRequestTest() throws IOException {
+    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
+    List<String> origins = new ArrayList<>();
+    for (int i = 0; i < numOrigins; i++) {
+      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
+    }
+    doReplicationControlAdminRequestTest(origins, true);
+    doReplicationControlAdminRequestTest(origins, false);
+    doReplicationControlAdminRequestTest(Collections.EMPTY_LIST, true);
+  }
+
+  /**
+   * Tests for {@link TtlUpdateRequest} and {@link TtlUpdateResponse}.
+   * @throws IOException
+   */
+  @Test
+  public void ttlUpdateRequestResponseTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    int correlationId = TestUtils.RANDOM.nextInt();
+    long opTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    long expiresAtMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds().get(0),
+        false);
+    short[] versions = new short[]{TtlUpdateRequest.TTL_UPDATE_REQUEST_VERSION_1};
+    for (short version : versions) {
+      TtlUpdateRequest ttlUpdateRequest =
+          new TtlUpdateRequest(correlationId, "client", id1, expiresAtMs, opTimeMs, version);
+      DataInputStream requestStream = serAndPrepForRead(ttlUpdateRequest, -1, true);
+      TtlUpdateRequest deserializedTtlUpdateRequest = TtlUpdateRequest.readFrom(requestStream, clusterMap);
+      Assert.assertEquals("Request type mismatch", RequestOrResponseType.TtlUpdateRequest,
+          deserializedTtlUpdateRequest.getRequestType());
+      Assert.assertEquals("Correlation ID mismatch", correlationId, deserializedTtlUpdateRequest.getCorrelationId());
+      Assert.assertEquals("Client ID mismatch", "client", deserializedTtlUpdateRequest.getClientId());
+      Assert.assertEquals("Blob ID mismatch", id1, deserializedTtlUpdateRequest.getBlobId());
+      Assert.assertEquals("AccountId mismatch ", id1.getAccountId(), deserializedTtlUpdateRequest.getAccountId());
+      Assert.assertEquals("ContainerId mismatch ", id1.getContainerId(), deserializedTtlUpdateRequest.getContainerId());
+      Assert.assertEquals("ExpiresAtMs mismatch ", expiresAtMs, deserializedTtlUpdateRequest.getExpiresAtMs());
+      Assert.assertEquals("DeletionTime mismatch ", opTimeMs, deserializedTtlUpdateRequest.getOperationTimeInMs());
+
+      TtlUpdateResponse response = new TtlUpdateResponse(correlationId, "client", ServerErrorCode.No_Error);
+      requestStream = serAndPrepForRead(response, -1, false);
+      TtlUpdateResponse deserializedTtlUpdateResponse = TtlUpdateResponse.readFrom(requestStream);
+      Assert.assertEquals("Response type mismatch", RequestOrResponseType.TtlUpdateResponse,
+          deserializedTtlUpdateResponse.getRequestType());
+      Assert.assertEquals("Correlation ID mismatch", correlationId, deserializedTtlUpdateResponse.getCorrelationId());
+      Assert.assertEquals("Client ID mismatch", "client", deserializedTtlUpdateResponse.getClientId());
+      Assert.assertEquals("Server error code mismatch", ServerErrorCode.No_Error,
+          deserializedTtlUpdateResponse.getError());
+    }
+  }
+
+  /**
    * Does the actual test of ser/de of {@link BlobStoreControlAdminRequest} and checks for equality of fields with
    * reference data.
    * @param enable the value for the enable field in {@link BlobStoreControlAdminRequest}.
@@ -581,22 +640,6 @@ public class RequestResponseTest {
         + deserializedBlobStoreControlRequest.getNumReplicasCaughtUpPerPartition() + ", PartitionId="
         + deserializedBlobStoreControlRequest.getPartitionId() + "]";
     Assert.assertEquals("The test of toString method fails", correctString, "" + deserializedBlobStoreControlRequest);
-  }
-
-  /**
-   * Tests the ser/de of {@link ReplicationControlAdminRequest} and checks for equality of fields with reference data.
-   * @throws IOException
-   */
-  @Test
-  public void replicationControlAdminRequestTest() throws IOException {
-    int numOrigins = TestUtils.RANDOM.nextInt(8) + 2;
-    List<String> origins = new ArrayList<>();
-    for (int i = 0; i < numOrigins; i++) {
-      origins.add(UtilsTest.getRandomString(TestUtils.RANDOM.nextInt(8) + 2));
-    }
-    doReplicationControlAdminRequestTest(origins, true);
-    doReplicationControlAdminRequestTest(origins, false);
-    doReplicationControlAdminRequestTest(Collections.EMPTY_LIST, true);
   }
 
   /**

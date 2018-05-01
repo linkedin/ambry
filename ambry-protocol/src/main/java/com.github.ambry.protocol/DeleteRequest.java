@@ -28,7 +28,6 @@ import java.nio.channels.WritableByteChannel;
 public class DeleteRequest extends RequestOrResponse {
   private final BlobId blobId;
   private final long deletionTimeInMs;
-  private final short version;
   static final short DELETE_REQUEST_VERSION_1 = 1;
   static final short DELETE_REQUEST_VERSION_2 = 2;
   private final static short CURRENT_VERSION = DELETE_REQUEST_VERSION_2;
@@ -57,7 +56,6 @@ public class DeleteRequest extends RequestOrResponse {
    */
   protected DeleteRequest(int correlationId, String clientId, BlobId blobId, long deletionTimeInMs, short version) {
     super(RequestOrResponseType.DeleteRequest, version, correlationId, clientId);
-    this.version = version;
     this.blobId = blobId;
     this.deletionTimeInMs = deletionTimeInMs;
     sizeSent = 0;
@@ -82,7 +80,7 @@ public class DeleteRequest extends RequestOrResponse {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
       bufferToSend.put(blobId.toBytes());
-      if (version == DELETE_REQUEST_VERSION_2) {
+      if (versionId == DELETE_REQUEST_VERSION_2) {
         bufferToSend.putLong(deletionTimeInMs);
       }
       bufferToSend.flip();
@@ -119,7 +117,7 @@ public class DeleteRequest extends RequestOrResponse {
   public long sizeInBytes() {
     // header + blobId
     long sizeInBytes = super.sizeInBytes() + blobId.sizeInBytes();
-    if (version == DELETE_REQUEST_VERSION_2) {
+    if (versionId == DELETE_REQUEST_VERSION_2) {
       // deletion time
       sizeInBytes += DELETION_TIME_FIELD_SIZE_IN_BYTES;
     }
