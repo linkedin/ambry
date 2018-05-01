@@ -282,15 +282,9 @@ public class ClusterMapUtils {
             localReplicaCount++;
           }
         }
-        if (!partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
-          partitionIdsByClassAndLocalReplicaCount.put(partitionClass, new TreeMap<>());
-        }
         SortedMap<Integer, List<PartitionId>> replicaCountToPartitionIds =
-            partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
-        if (!replicaCountToPartitionIds.containsKey(localReplicaCount)) {
-          replicaCountToPartitionIds.put(localReplicaCount, new ArrayList<>());
-        }
-        replicaCountToPartitionIds.get(localReplicaCount).add(partition);
+            partitionIdsByClassAndLocalReplicaCount.computeIfAbsent(partitionClass, key -> new TreeMap<>());
+        replicaCountToPartitionIds.computeIfAbsent(localReplicaCount, key -> new ArrayList<>()).add(partition);
       }
     }
 
