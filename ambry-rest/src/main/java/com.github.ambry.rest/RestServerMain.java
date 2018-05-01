@@ -15,7 +15,6 @@ package com.github.ambry.rest;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -74,9 +73,9 @@ public class RestServerMain {
   }
 
   /**
-   * Instantiate an {@link JdkSslFactory} if any components require it.
+   * Instantiate an {@link SSLFactory} if any components require it.
    * @param verifiableProperties The {@link VerifiableProperties} to check if any components require it.
-   * @return the {@link JdkSslFactory}, or {@code null} if no components require it.
+   * @return the {@link SSLFactory}, or {@code null} if no components require it.
    * @throws GeneralSecurityException
    * @throws IOException
    */
@@ -85,12 +84,7 @@ public class RestServerMain {
              IllegalAccessException {
     boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
         || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    SSLFactory sslFactory = null;
-    if (sslRequired) {
-      SSLConfig sslConfig = new SSLConfig(verifiableProperties);
-      sslFactory = Utils.getObj(sslConfig.sslFactory, sslConfig);
-    }
-    return sslFactory;
+    return sslRequired? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
   }
 }
 

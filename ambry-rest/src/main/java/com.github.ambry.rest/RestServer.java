@@ -20,7 +20,6 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.HelixNotifier;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -149,7 +148,7 @@ public class RestServer {
    * @param verifiableProperties the properties that define the behavior of the RestServer and its components.
    * @param clusterMap the {@link ClusterMap} instance that needs to be used.
    * @param notificationSystem the {@link NotificationSystem} instance that needs to be used.
-   * @param sslFactory the {@link JdkSslFactory} to be used. This can be {@code null} if no components require SSL support.
+   * @param sslFactory the {@link SSLFactory} to be used. This can be {@code null} if no components require SSL support.
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,

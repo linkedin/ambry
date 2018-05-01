@@ -66,18 +66,16 @@ public class JdkSslFactory implements SSLFactory {
     }
 
     ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
-    if (cipherSuitesList != null && cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1
-        && cipherSuitesList.get(0).equals(""))) {
+    if (cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
       this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
     }
 
     ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
-    if (protocolsList != null && protocolsList.size() > 0) {
+    if (protocolsList.size() > 0 && !(protocolsList.size() == 1 && protocolsList.get(0).equals(""))) {
       this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
     }
 
-    if (sslConfig.sslEndpointIdentificationAlgorithm.length() > 0
-        && !sslConfig.sslEndpointIdentificationAlgorithm.equals("")) {
+    if (!sslConfig.sslEndpointIdentificationAlgorithm.isEmpty()) {
       this.endpointIdentification = sslConfig.sslEndpointIdentificationAlgorithm;
     }
 

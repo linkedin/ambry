@@ -17,7 +17,6 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
@@ -374,7 +373,7 @@ public final class BlockingChannelConnectionPool implements ConnectionPool {
 
   private void initializeSSLSocketFactory() throws Exception {
     try {
-      SSLFactory sslFactory = new JdkSslFactory(sslConfig);
+      SSLFactory sslFactory = SSLFactory.getNewInstance(sslConfig);
       SSLContext sslContext = sslFactory.getSSLContext();
       this.sslSocketFactory = sslContext.getSocketFactory();
       this.sslSocketFactoryClientInitializationCount.inc();

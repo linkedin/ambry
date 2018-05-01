@@ -14,7 +14,6 @@
 
 package com.github.ambry.rest;
 
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import io.netty.channel.ChannelInitializer;
@@ -48,7 +47,7 @@ public class NettyServerChannelInitializer extends ChannelInitializer<SocketChan
    * @param requestHandler the {@link RestRequestHandler} to handle requests on this pipeline.
    * @param publicAccessLogger the {@link PublicAccessLogger} to use.
    * @param restServerState the {@link RestServerState} object to use.
-   * @param sslFactory the {@link JdkSslFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
+   * @param sslFactory the {@link SSLFactory} to use for generating {@link javax.net.ssl.SSLEngine} instances,
    *                   or {@code null} if SSL is not enabled in this pipeline.
    */
   public NettyServerChannelInitializer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,

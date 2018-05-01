@@ -237,8 +237,10 @@ public class TestSSLUtils {
     if (enabledProtocols.length == 2) {
       // Apparently the Netty OpenSslEngine has no way of disabling the SSLv2Hello protocol.
       // This is the relevant code from ReferenceCountedOpenSslEngine.getEnabledProtocols():
-      //     // Seems like there is no way to explicit disable SSLv2Hello in openssl so it is always enabled
-      //     enabled.add(PROTOCOL_SSL_V2_HELLO);
+      // """
+      // // Seems like there is no way to explicit disable SSLv2Hello in openssl so it is always enabled
+      // enabled.add(PROTOCOL_SSL_V2_HELLO);
+      // """
       Assert.assertArrayEquals("enabledProtocols does not match expected",
           new String[]{SSL_V2_HELLO_PROTOCOL, TLS_V1_2_PROTOCOL}, enabledProtocols);
     } else {

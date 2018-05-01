@@ -15,7 +15,6 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.NetworkConfig;
@@ -58,7 +57,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param verifiableProperties the in-memory properties to use to construct configurations.
    * @param clusterMap the {@link ClusterMap} to use to determine where operations should go.
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
-   * @param sslFactory the {@link JdkSslFactory} to support SSL transmissions. Required if SSL is enabled for any
+   * @param sslFactory the {@link SSLFactory} to support SSL transmissions. Required if SSL is enabled for any
    *                   datacenters.
    * @throws Exception if any of the arguments are null or if instantiation of KMS or CryptoService fails
    */

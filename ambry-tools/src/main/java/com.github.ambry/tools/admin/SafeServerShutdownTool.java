@@ -16,7 +16,6 @@ package com.github.ambry.tools.admin;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -148,7 +147,7 @@ public class SafeServerShutdownTool {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     try (ClusterMap clusterMap = ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory,
         clusterMapConfig, config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap()) {
-      SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new JdkSslFactory(
+      SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
           new SSLConfig(verifiableProperties)) : null;
       try (ServerAdminTool serverAdminTool = new ServerAdminTool(clusterMap.getMetricRegistry(), sslFactory,
           verifiableProperties)) {

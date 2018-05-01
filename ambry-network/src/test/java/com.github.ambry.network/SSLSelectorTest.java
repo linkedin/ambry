@@ -14,7 +14,6 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
@@ -48,8 +47,8 @@ public class SSLSelectorTest {
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
     SSLConfig clientSSLConfig =
         new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
-    SSLFactory serverSSLFactory = new JdkSslFactory(sslConfig);
-    SSLFactory clientSSLFactory = new JdkSslFactory(clientSSLConfig);
+    SSLFactory serverSSLFactory = SSLFactory.getNewInstance(sslConfig);
+    SSLFactory clientSSLFactory = SSLFactory.getNewInstance(clientSSLConfig);
     server = new EchoServer(serverSSLFactory, 18383);
     server.start();
     selector = new Selector(new NetworkMetrics(new MetricRegistry()), SystemTime.getInstance(), clientSSLFactory);

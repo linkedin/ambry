@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -256,7 +255,7 @@ public class ServerAdminTool implements Closeable {
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new JdkSslFactory(
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
         new SSLConfig(verifiableProperties)) : null;
     ServerAdminTool serverAdminTool =
         new ServerAdminTool(clusterMap.getMetricRegistry(), sslFactory, verifiableProperties);
@@ -477,7 +476,7 @@ public class ServerAdminTool implements Closeable {
   /**
    * Creates an instance of the server admin tool
    * @param metricRegistry the {@link MetricRegistry} to use for metrics
-   * @param sslFactory the {@link JdkSslFactory} to use
+   * @param sslFactory the {@link SSLFactory} to use
    * @param verifiableProperties the {@link VerifiableProperties} to use for config.
    * @throws Exception
    */

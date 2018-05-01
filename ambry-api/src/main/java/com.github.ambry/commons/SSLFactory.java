@@ -14,6 +14,9 @@
 
 package com.github.ambry.commons;
 
+import com.github.ambry.config.SSLConfig;
+import com.github.ambry.utils.Utils;
+import java.lang.reflect.InvocationTargetException;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
@@ -39,5 +42,24 @@ public interface SSLFactory {
   /**
    * Whether the ssl engine should operate in client or server mode.
    */
-  enum Mode {CLIENT, SERVER}
+  enum Mode {
+    CLIENT, SERVER
+  }
+
+  /**
+   * Instantiate {@link SSLFactory} based on the provided config. Uses the {@link SSLConfig#sslFactory} class name
+   * to choose the desired implementation to instantiate via reflection.
+   * @param sslConfig the {@link SSLConfig} provided to the {@link SSLFactory} that is instantiated.
+   * @return a new {@link SSLFactory} based on the provided config.
+   * @throws ClassNotFoundException
+   * @throws NoSuchMethodException
+   * @throws InvocationTargetException
+   * @throws InstantiationException
+   * @throws IllegalAccessException
+   */
+  static SSLFactory getNewInstance(SSLConfig sslConfig)
+      throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
+             IllegalAccessException {
+    return Utils.getObj(sslConfig.sslFactory, sslConfig);
+  }
 }

@@ -14,7 +14,6 @@
 package com.github.ambry.server;
 
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.SSLConfig;
@@ -82,7 +81,7 @@ public class ServerSSLTokenTest {
     sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
-    sslFactory = new JdkSslFactory(clientSSLConfig);
+    sslFactory = SSLFactory.getNewInstance(clientSSLConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory = sslContext.getSocketFactory();
   }

@@ -14,7 +14,6 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.ClusterMapConfig;
@@ -78,7 +77,7 @@ public class BlockingChannelConnectionPoolTest {
     props.setProperty("clustermap.datacenter.name", "dc1");
     props.setProperty("clustermap.host.name", "localhost");
     plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    sslFactory = new JdkSslFactory(sslConfig);
+    sslFactory = SSLFactory.getNewInstance(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }

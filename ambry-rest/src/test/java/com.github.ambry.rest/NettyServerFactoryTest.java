@@ -14,7 +14,6 @@
 package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -52,7 +51,7 @@ public class NettyServerFactoryTest {
   /**
    * Test that a {@link NettyServer} can be constructed by the factory.
    * @param properties the {@link Properties} to use.
-   * @param sslFactory the {@link JdkSslFactory} to use.
+   * @param sslFactory the {@link SSLFactory} to use.
    */
   private void doGetNettyServerTest(Properties properties, SSLFactory sslFactory) {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -104,7 +103,7 @@ public class NettyServerFactoryTest {
    * @param restRequestHandler the {@link RestRequestHandler} to use.
    * @param publicAccessLogger the {@link PublicAccessLogger} to use.
    * @param restServerState the {@link RestServerState} to use.
-   * @param sslFactory the {@link JdkSslFactory} to use.
+   * @param sslFactory the {@link SSLFactory} to use.
    */
   private void doConstructionFailureTest(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       RestRequestHandler restRequestHandler, PublicAccessLogger publicAccessLogger, RestServerState restServerState,

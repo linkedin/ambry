@@ -92,6 +92,7 @@ public class BlobIdTest {
   public void testBuildBlobId() throws Exception {
     BlobId blobId = new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
         referencePartitionId, referenceIsEncrypted);
+    System.out.println(blobId.getID());
     assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
     assertBlobIdFieldValues(version, blobId, referenceType, referenceDatacenterId, referenceAccountId,
         referenceContainerId, referencePartitionId, referenceIsEncrypted);
