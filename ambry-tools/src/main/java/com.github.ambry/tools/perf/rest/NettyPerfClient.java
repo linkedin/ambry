@@ -19,11 +19,9 @@ import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
-import com.github.ambry.commons.JdkSslFactory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.NettySslFactory;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -51,9 +49,7 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
-import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
@@ -124,7 +120,6 @@ public class NettyPerfClient {
     final String serviceId;
     final Integer testTime;
     final String sslPropsFilePath;
-    final boolean useOpenSsl;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
     /**
@@ -194,8 +189,6 @@ public class NettyPerfClient {
               .withOptionalArg()
               .describedAs("sslPropsFilePath")
               .ofType(String.class);
-      OptionSpec<Void> useOpenSsl =
-          parser.accepts("useOpenSsl", "Use the netty SSL libraries that support OpenSsl instead of the jdk default.");
 
       OptionSet options = parser.parse(args);
       this.host = options.valueOf(host);
@@ -210,7 +203,6 @@ public class NettyPerfClient {
       this.serviceId = options.valueOf(serviceId);
       this.testTime = options.valueOf(testTime);
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
-      this.useOpenSsl = options.has(useOpenSsl);
       validateArgs();
 
       logger.info("Host: {}", this.host);
@@ -255,18 +247,19 @@ public class NettyPerfClient {
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
               clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
-              clientArgs.useOpenSsl, clientArgs.serviceId, clientArgs.targetAccountName,
-              clientArgs.targetContainerName);
+              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         logger.info("Received shutdown signal. Requesting NettyPerfClient shutdown");
         nettyPerfClient.shutdown();
       }));
       nettyPerfClient.start();
-      ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-      scheduler.schedule(nettyPerfClient::shutdown, clientArgs.testTime, TimeUnit.SECONDS);
-      nettyPerfClient.awaitShutdown();
-      scheduler.shutdownNow();
+      if (clientArgs.testTime != null) {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.schedule(nettyPerfClient::shutdown, clientArgs.testTime, TimeUnit.SECONDS);
+        nettyPerfClient.awaitShutdown();
+        scheduler.shutdownNow();
+      }
     } catch (Exception e) {
       logger.error("Exception during execution of NettyPerfClient", e);
     }
@@ -281,7 +274,6 @@ public class NettyPerfClient {
    * @param totalSize the total size in bytes of a blob to be POSTed ({@code null} if non-POST).
    * @param chunkSize size in bytes of each chunk to be POSTed ({@code null} if non-POST).
    * @param sslPropsFilePath the path to the SSL properties, or {@code null} to disable SSL.
-   * @param useOpenSsl {@code true} to use Netty's OpenSSL based libraries instead of the JDK implementation.
    * @param serviceId serviceId of the caller to represent the identity
    * @param targetAccountName target account name for POST
    * @param targetContainerName target container name for POST
@@ -289,8 +281,8 @@ public class NettyPerfClient {
    * @throws GeneralSecurityException
    */
   private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
-      String sslPropsFilePath, boolean useOpenSsl, String serviceId, String targetAccountName,
-      String targetContainerName) throws IOException, GeneralSecurityException {
+      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName)
+      throws Exception {
     this.host = host;
     this.port = port;
     this.path = path;
@@ -303,20 +295,8 @@ public class NettyPerfClient {
       this.totalSize = 0;
       chunk = null;
     }
-    if (sslPropsFilePath != null) {
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(Utils.loadProps(sslPropsFilePath)));
-      if (useOpenSsl) {
-        if (SslContext.defaultClientProvider() == SslProvider.JDK) {
-          throw new IllegalStateException("OpenSsl not supported. netty-tcnative might not be loaded correctly");
-        }
-        logger.info("Using this buffer pool: " + ByteBufAllocator.DEFAULT);
-        sslFactory = new NettySslFactory(sslConfig);
-      } else {
-        sslFactory = new JdkSslFactory(sslConfig);
-      }
-    } else {
-      sslFactory = null;
-    }
+    sslFactory = sslPropsFilePath != null ? SSLFactory.getNewInstance(
+        new SSLConfig(new VerifiableProperties(Utils.loadProps(sslPropsFilePath)))) : null;
     this.serviceId = serviceId;
     this.targetAccountName = targetAccountName;
     this.targetContainerName = targetContainerName;
@@ -335,7 +315,9 @@ public class NettyPerfClient {
     b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) throws Exception {
-        maybeAddSslHandler(ch);
+        if (sslFactory != null) {
+          ch.pipeline().addLast(new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT)));
+        }
         ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(new ResponseHandler());
       }
     });
@@ -348,12 +330,6 @@ public class NettyPerfClient {
     isRunning = true;
     logger.info("Created {} channel(s)", concurrency);
     logger.info("NettyPerfClient started");
-  }
-
-  private void maybeAddSslHandler(SocketChannel ch) {
-    if (sslFactory != null) {
-      ch.pipeline().addLast(new SslHandler(sslFactory.createSSLEngine(host, port, SSLFactory.Mode.CLIENT)));
-    }
   }
 
   /**

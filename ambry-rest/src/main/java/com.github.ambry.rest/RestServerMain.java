@@ -24,7 +24,6 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.security.GeneralSecurityException;
 import java.util.Properties;
 import org.slf4j.Logger;
@@ -79,12 +78,10 @@ public class RestServerMain {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
-      throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
-             IllegalAccessException {
+  private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
     boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
         || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    return sslRequired? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
+    return sslRequired ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
   }
 }
 

@@ -63,8 +63,9 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
     SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
     if (sslHandler != null) {
       sslHandler.handshakeFuture().addListener(future -> {
+        System.out.println(future);
         if (!future.isSuccess()) {
-          logger.debug("SSL handshake failed for channel: {}", ctx.channel(), future.cause());
+          logger.warn("SSL handshake failed for channel: {}", ctx.channel(), future.cause());
           metrics.handshakeFailureCount.inc();
         }
       });

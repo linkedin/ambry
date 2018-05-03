@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2018 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.util.ArrayList;
+import java.util.Arrays;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -72,6 +73,8 @@ public class NettySslFactory implements SSLFactory {
       sslParams.setEndpointIdentificationAlgorithm(endpointIdentification);
       sslEngine.setSSLParameters(sslParams);
     }
+    String[] ciphers = sslEngine.getEnabledCipherSuites();
+    System.out.println(Arrays.toString(ciphers));
     return sslEngine;
   }
 

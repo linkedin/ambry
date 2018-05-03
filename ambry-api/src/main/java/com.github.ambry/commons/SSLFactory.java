@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2018 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,7 +11,6 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-
 package com.github.ambry.commons;
 
 import com.github.ambry.config.SSLConfig;
@@ -21,6 +20,10 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
 
+/**
+ * Simplifies the creation of new {@link SSLEngine}s and {@link SSLContext} objects that can be used by components
+ * that require SSL support.
+ */
 public interface SSLFactory {
   /**
    * Create {@link SSLEngine} for given host name and port number.
@@ -51,15 +54,9 @@ public interface SSLFactory {
    * to choose the desired implementation to instantiate via reflection.
    * @param sslConfig the {@link SSLConfig} provided to the {@link SSLFactory} that is instantiated.
    * @return a new {@link SSLFactory} based on the provided config.
-   * @throws ClassNotFoundException
-   * @throws NoSuchMethodException
-   * @throws InvocationTargetException
-   * @throws InstantiationException
-   * @throws IllegalAccessException
+   * @throws Exception
    */
-  static SSLFactory getNewInstance(SSLConfig sslConfig)
-      throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
-             IllegalAccessException {
+  static SSLFactory getNewInstance(SSLConfig sslConfig) throws Exception {
     return Utils.getObj(sslConfig.sslFactory, sslConfig);
   }
 }
