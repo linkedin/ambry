@@ -55,6 +55,7 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -88,8 +89,7 @@ public class NettyPerfClient {
   private final String serviceId;
   private final String targetAccountName;
   private final String targetContainerName;
-  private final String customizedHeaderName;
-  private final String customizedHeaderValue;
+  private final List<String[]> customizedHeaders = new ArrayList<>();
   private final Bootstrap b = new Bootstrap();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -116,7 +116,7 @@ public class NettyPerfClient {
     final String sslPropsFilePath;
     final String targetAccountName;
     final String targetContainerName;
-    final String customizedHeader;
+    final List<String> customizedHeaders;
     final String serviceId;
     private final Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -199,7 +199,7 @@ public class NettyPerfClient {
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
       this.targetAccountName = options.valueOf(targetAccountName);
       this.targetContainerName = options.valueOf(targetContainerName);
-      this.customizedHeader = options.valueOf(customizedHeader);
+      this.customizedHeaders = options.valuesOf(customizedHeader);
       this.serviceId = options.valueOf(serviceId);
       validateArgs();
 
@@ -211,6 +211,7 @@ public class NettyPerfClient {
       logger.info("Post blob total size: {}", this.postBlobTotalSize);
       logger.info("Post blob chunk size: {}", this.postBlobChunkSize);
       logger.info("SSL properties file path: {}", this.sslPropsFilePath);
+      logger.info("Custom Headers: {}", this.customizedHeaders);
     }
 
     /**
@@ -242,18 +243,11 @@ public class NettyPerfClient {
   public static void main(String[] args) {
     try {
       ClientArgs clientArgs = new ClientArgs(args);
-      String customizedHeaderName = null;
-      String customizedHeaderValue = null;
-      if (clientArgs.customizedHeader != null) {
-        String[] customizedHeaderNameAndValue = clientArgs.customizedHeader.split(":");
-        customizedHeaderName = customizedHeaderNameAndValue[0];
-        customizedHeaderValue = customizedHeaderNameAndValue[1];
-      }
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
               clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
-              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName, customizedHeaderName,
-              customizedHeaderValue);
+              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName,
+              clientArgs.customizedHeaders);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
@@ -280,14 +274,13 @@ public class NettyPerfClient {
    * @param serviceId serviceId of the caller to represent the identity
    * @param targetAccountName target account name for POST
    * @param targetContainerName target container name for POST
-   * @param customizedHeaderName customized http header name to be added.
-   * @param customizedHeaderValue customized http header value to be added.
+   * @param customizedHeaders list of http headers name:value to be added.
    * @throws IOException
    * @throws GeneralSecurityException
    */
   private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
       String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName,
-      String customizedHeaderName, String customizedHeaderValue) throws IOException, GeneralSecurityException {
+      List<String> customizedHeaders) throws IOException, GeneralSecurityException {
     this.host = host;
     this.port = port;
     this.path = path;
@@ -305,8 +298,11 @@ public class NettyPerfClient {
     this.serviceId = serviceId;
     this.targetAccountName = targetAccountName;
     this.targetContainerName = targetContainerName;
-    this.customizedHeaderName = customizedHeaderName;
-    this.customizedHeaderValue = customizedHeaderValue;
+    if (customizedHeaders != null && customizedHeaders.size() > 0) {
+      for (String customizedHeader : customizedHeaders) {
+        this.customizedHeaders.add(customizedHeader.split(":"));
+      }
+    }
     logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, path {} with concurrency {}",
         this.host, this.port, this.path, this.concurrency);
   }
@@ -497,8 +493,8 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
         request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
         request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
-        if (customizedHeaderName != null && customizedHeaderName != null) {
-          request.headers().add(customizedHeaderName, customizedHeaderValue);
+        for (String[] headerNameValue : customizedHeaders) {
+          request.headers().add(headerNameValue[0], headerNameValue[1]);
         }
       } else {
         request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
