@@ -77,7 +77,8 @@ public class HelixBootstrapUpgradeToolTest {
     zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
     zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP);
-    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE);
+    testPartitionLayout =
+        constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, null);
   }
 
   /**
@@ -115,13 +116,13 @@ public class HelixBootstrapUpgradeToolTest {
     int numNewNodes = 4;
     int numNewPartitions = 220;
     testHardwareLayout.addNewDataNodes(numNewNodes);
-    testPartitionLayout.addNewPartitions(numNewPartitions);
+    testPartitionLayout.addNewPartitions(numNewPartitions, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, null);
     expectedResourceCount += (numNewPartitions - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
     writeBootstrapOrUpgrade(expectedResourceCount);
 
     /* Test sealed state update. */
     Set<Long> partitionIdsBeforeAddition = new HashSet<>();
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       partitionIdsBeforeAddition.add(((Partition) partitionId).getId());
     }
 
@@ -129,14 +130,15 @@ public class HelixBootstrapUpgradeToolTest {
     numNewNodes = 2;
     numNewPartitions = 50;
     testHardwareLayout.addNewDataNodes(numNewNodes);
-    testPartitionLayout.addNewPartitions(numNewPartitions);
+    testPartitionLayout.addNewPartitions(numNewPartitions, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, null);
 
-    // Next, mark all previous partitions as READ_ONLY, and change their replica capacities.
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    // Next, mark all previous partitions as READ_ONLY, and change their replica capacities and partition classes.
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionIdsBeforeAddition.contains(((Partition) partitionId).getId())) {
         Partition partition = (Partition) partitionId;
         partition.partitionState = PartitionState.READ_ONLY;
         partition.replicaCapacityInBytes += 1;
+        partition.partitionClass = "specialPartitionClass";
       }
     }
 
@@ -144,7 +146,7 @@ public class HelixBootstrapUpgradeToolTest {
     writeBootstrapOrUpgrade(expectedResourceCount);
 
     // Now, mark the ones that were READ_ONLY as READ_WRITE and vice versa
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       Partition partition = (Partition) partitionId;
       if (partitionIdsBeforeAddition.contains(((Partition) partitionId).getId())) {
         partition.partitionState = PartitionState.READ_WRITE;

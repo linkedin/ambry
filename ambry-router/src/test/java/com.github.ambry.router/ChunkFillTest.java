@@ -152,7 +152,7 @@ public class ChunkFillTest {
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             putUserMetadata, putChannel, futureResult, null,
             new RouterCallback(networkClientFactory.getNetworkClient(), new ArrayList<BackgroundDeleteRequest>()), null,
-            null, null, null, new MockTime(), putBlobProperties);
+            null, null, null, new MockTime(), putBlobProperties, null);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     // largeBlobSize is not a multiple of chunkSize
@@ -261,7 +261,7 @@ public class ChunkFillTest {
     PutOperation op =
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             putUserMetadata, putChannel, futureResult, null, routerCallback, null, kms, cryptoService, cryptoJobHandler,
-            time, putBlobProperties);
+            time, putBlobProperties, null);
     op.startReadingFromChannel();
     numChunks = RouterUtils.getNumChunksForBlobAndChunkSize(blobSize, chunkSize);
     compositeBuffers = new ByteBuffer[numChunks];

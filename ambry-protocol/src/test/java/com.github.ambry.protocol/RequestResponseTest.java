@@ -220,7 +220,7 @@ public class RequestResponseTest {
     String clientId = "client";
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), clusterMap.getWritablePartitionIds().get(0), false);
+        Utils.getRandomShort(TestUtils.RANDOM), clusterMap.getWritablePartitionIds(null).get(0), false);
     byte[] userMetadata = new byte[50];
     TestUtils.RANDOM.nextBytes(userMetadata);
     int blobKeyLength = TestUtils.RANDOM.nextInt(4096);
@@ -282,7 +282,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds().get(0),
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds(null).get(0),
         false);
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
     blobIdList.add(id1);
@@ -307,7 +307,8 @@ public class RequestResponseTest {
     messageInfoList.add(messageInfo);
     messageMetadataList.add(messageMetadata);
     PartitionResponseInfo partitionResponseInfo =
-        new PartitionResponseInfo(clusterMap.getWritablePartitionIds().get(0), messageInfoList, messageMetadataList);
+        new PartitionResponseInfo(clusterMap.getWritablePartitionIds(null).get(0), messageInfoList,
+            messageMetadataList);
     List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
     partitionResponseInfoList.add(partitionResponseInfo);
     byte[] buf = TestUtils.getRandomBytes(1000);
@@ -350,7 +351,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds().get(0),
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds(null).get(0),
         false);
     short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
     for (short version : versions) {
@@ -390,7 +391,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds().get(0),
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds(null).get(0),
         false);
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -422,7 +423,7 @@ public class RequestResponseTest {
     List<MessageInfo> messageInfoList = new ArrayList<MessageInfo>();
     messageInfoList.add(messageInfo);
     ReplicaMetadataResponseInfo responseInfo =
-        new ReplicaMetadataResponseInfo(clusterMap.getWritablePartitionIds().get(0), new MockFindToken(0, 1000),
+        new ReplicaMetadataResponseInfo(clusterMap.getWritablePartitionIds(null).get(0), new MockFindToken(0, 1000),
             messageInfoList, 1000);
     List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList = new ArrayList<ReplicaMetadataResponseInfo>();
     replicaMetadataResponseInfoList.add(responseInfo);
@@ -464,7 +465,7 @@ public class RequestResponseTest {
     String clientId = "client";
     for (AdminRequestOrResponseType type : AdminRequestOrResponseType.values()) {
       MockClusterMap clusterMap = new MockClusterMap();
-      PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+      PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
       // with a valid partition id
       AdminRequest adminRequest = new AdminRequest(type, id, correlationId, clientId);
       DataInputStream requestStream = serAndPrepForRead(adminRequest, -1, true);
@@ -505,7 +506,7 @@ public class RequestResponseTest {
   @Test
   public void catchupStatusAdminRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
     int correlationId = 1234;
     String clientId = "client";
     // request
@@ -578,7 +579,7 @@ public class RequestResponseTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds().get(0),
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId, clusterMap.getWritablePartitionIds(null).get(0),
         false);
     short[] versions = new short[]{TtlUpdateRequest.TTL_UPDATE_REQUEST_VERSION_1};
     for (short version : versions) {
@@ -616,7 +617,7 @@ public class RequestResponseTest {
    */
   private void doBlobStoreControlAdminRequestTest(boolean enable) throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
     int correlationId = 1234;
     String clientId = "client";
     // test BlobStore Control request
@@ -717,7 +718,7 @@ public class RequestResponseTest {
   private void doRequestControlAdminRequestTest(RequestOrResponseType requestOrResponseType, boolean enable)
       throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
     int correlationId = 1234;
     String clientId = "client";
     AdminRequest adminRequest =
@@ -743,7 +744,7 @@ public class RequestResponseTest {
    */
   private void doReplicationControlAdminRequestTest(List<String> origins, boolean enable) throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
-    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
     int correlationId = 1234;
     String clientId = "client";
     AdminRequest adminRequest =

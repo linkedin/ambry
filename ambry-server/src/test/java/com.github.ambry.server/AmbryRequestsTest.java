@@ -136,7 +136,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void scheduleCompactionSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
     for (PartitionId id : partitionIds) {
       doScheduleCompactionTest(id, ServerErrorCode.No_Error);
       assertEquals("Partition scheduled for compaction not as expected", id,
@@ -154,7 +154,7 @@ public class AmbryRequestsTest {
     // partitionId not specified
     doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
 
-    PartitionId id = clusterMap.getWritablePartitionIds().get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
 
     // store is not started - Disk_Unavailable
     storageManager.returnNullStore = true;
@@ -196,7 +196,7 @@ public class AmbryRequestsTest {
     RequestOrResponseType[] requestOrResponseTypes =
         {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest};
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
-      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
       for (PartitionId id : partitionIds) {
         doRequestControlRequestTest(requestType, id);
       }
@@ -222,7 +222,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void controlReplicationSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
     for (PartitionId id : partitionIds) {
       doControlReplicationTest(id, ServerErrorCode.No_Error);
     }
@@ -237,12 +237,12 @@ public class AmbryRequestsTest {
   public void controlReplicationFailureTest() throws InterruptedException, IOException {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
-    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false, clusterMap.getWritablePartitionIds().get(0),
-        ServerErrorCode.Bad_Request);
+    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
+        clusterMap.getWritablePartitionIds(null).get(0), ServerErrorCode.Bad_Request);
     replicationManager.reset();
     replicationManager.exceptionToThrow = new IllegalStateException();
-    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false, clusterMap.getWritablePartitionIds().get(0),
-        ServerErrorCode.Unknown_Error);
+    sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
+        clusterMap.getWritablePartitionIds(null).get(0), ServerErrorCode.Unknown_Error);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
 
@@ -253,7 +253,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void catchupStatusSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     assertTrue("This test needs more than one partition to work", partitionIds.size() > 1);
     PartitionId id = partitionIds.get(0);
     ReplicaId thisPartRemoteRep = getRemoteReplicaId(id);
@@ -338,7 +338,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void controlBlobStoreSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     List<? extends ReplicaId> replicaIds = id.getReplicaIds();
     assertTrue("This test needs more than one replica for the first partition to work", replicaIds.size() > 1);
@@ -386,7 +386,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void startBlobStoreFailureTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
@@ -441,7 +441,7 @@ public class AmbryRequestsTest {
    */
   @Test
   public void stopBlobStoreFailureTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     PartitionId id = partitionIds.get(0);
     int correlationId = TestUtils.RANDOM.nextInt();
     String clientId = UtilsTest.getRandomString(10);
@@ -589,7 +589,7 @@ public class AmbryRequestsTest {
       throws InterruptedException, IOException {
     List<? extends PartitionId> idsToTest;
     if (id == null) {
-      idsToTest = clusterMap.getAllPartitionIds();
+      idsToTest = clusterMap.getAllPartitionIds(null);
     } else {
       idsToTest = Collections.singletonList(id);
     }
@@ -748,7 +748,7 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     List<PartitionId> idsVal;
     if (id == null) {
-      idsVal = clusterMap.getAllPartitionIds();
+      idsVal = clusterMap.getAllPartitionIds(null);
     } else {
       idsVal = Collections.singletonList(id);
     }
@@ -789,7 +789,7 @@ public class AmbryRequestsTest {
    */
   private void generateLagOverrides(long base, long upperBound) {
     replicationManager.lagOverrides = new HashMap<>();
-    for (PartitionId partitionId : clusterMap.getAllPartitionIds()) {
+    for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
       for (ReplicaId replicaId : partitionId.getReplicaIds()) {
         String key = MockReplicationManager.getPartitionLagKey(partitionId, replicaId.getDataNodeId().getHostname(),
             replicaId.getReplicaPath());

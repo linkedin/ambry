@@ -346,7 +346,7 @@ public class ServerWritePerformance {
               new BlobProperties(randomNum, "test", Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, false);
           ConnectedChannel channel = null;
           try {
-            List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+            List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),

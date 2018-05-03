@@ -16,9 +16,13 @@ package com.github.ambry.clustermap;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -223,6 +227,129 @@ public class ClusterMapUtils {
     } else if (diskCapacityInBytes > MAX_DISK_CAPACITY_IN_BYTES) {
       throw new IllegalStateException(
           "Invalid disk capacity: " + diskCapacityInBytes + " is more than " + MAX_DISK_CAPACITY_IN_BYTES);
+    }
+  }
+
+  /**
+   * Check whether all replicas of the given {@link PartitionId} are up.
+   * @param partition the {@link PartitionId} to check.
+   * @return true if all associated replicas are up; false otherwise.
+   */
+  static boolean areAllReplicasForPartitionUp(PartitionId partition) {
+    for (ReplicaId replica : partition.getReplicaIds()) {
+      if (replica.isDown()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Helper class to perform common operations like maintaining partitions by partition class and returning all/writable
+   * partitions.
+   * <p/>
+   * Not thread safe.
+   */
+  static class PartitionSelectionHelper {
+    private Collection<? extends PartitionId> allPartitions;
+    private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
+
+    /**
+     * @param allPartitions the list of all {@link PartitionId}s
+     * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
+     *                            are not required.
+     */
+    PartitionSelectionHelper(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+      updatePartitions(allPartitions, localDatacenterName);
+    }
+
+    /**
+     * Updates the partitions tracked by this helper.
+     * @param allPartitions the list of all {@link PartitionId}s
+     * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
+     *                            are not required.
+     */
+    void updatePartitions(Collection<? extends PartitionId> allPartitions, String localDatacenterName) {
+      this.allPartitions = allPartitions;
+      partitionIdsByClassAndLocalReplicaCount = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+      for (PartitionId partition : allPartitions) {
+        String partitionClass = partition.getPartitionClass();
+        int localReplicaCount = 0;
+        for (ReplicaId replicaId : partition.getReplicaIds()) {
+          if (localDatacenterName != null && !localDatacenterName.isEmpty() && replicaId.getDataNodeId()
+              .getDatacenterName()
+              .equals(localDatacenterName)) {
+            localReplicaCount++;
+          }
+        }
+        SortedMap<Integer, List<PartitionId>> replicaCountToPartitionIds =
+            partitionIdsByClassAndLocalReplicaCount.computeIfAbsent(partitionClass, key -> new TreeMap<>());
+        replicaCountToPartitionIds.computeIfAbsent(localReplicaCount, key -> new ArrayList<>()).add(partition);
+      }
+    }
+
+    /**
+     * Gets all partitions belonging to the {@code paritionClass} (all partitions if it is {@code null}).
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @return all the partitions in {@code partitionClass} (all partitions if it is {@code null})
+     */
+    List<PartitionId> getPartitions(String partitionClass) {
+      return getPartitionsInClass(partitionClass, false);
+    }
+
+    /**
+     * Returns all the partitions that are in state {@link PartitionState#READ_WRITE} AND have the highest number of
+     * replicas in the local datacenter for the given {@code partitionClass}.
+     * <p/>
+     * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
+     * the eligible partitions irrespective of replica health.
+     * <p/>
+     * If {@code partitionClass} is {@code null}, gets writable partitions from all partition classes.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @return all the writable partitions in {@code partitionClass} with the highest replica count in the local
+     * datacenter (all writable partitions if it is {@code null}).
+     */
+    List<PartitionId> getWritablePartitions(String partitionClass) {
+      List<PartitionId> writablePartitions = new ArrayList<>();
+      List<PartitionId> healthyWritablePartitions = new ArrayList<>();
+      for (PartitionId partition : getPartitionsInClass(partitionClass, true)) {
+        if (partition.getPartitionState() == PartitionState.READ_WRITE) {
+          writablePartitions.add(partition);
+          if (areAllReplicasForPartitionUp((partition))) {
+            healthyWritablePartitions.add(partition);
+          }
+        }
+      }
+      return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+    }
+
+    /**
+     * Returns the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
+     * is {@code null}.
+     * @param partitionClass the class of the partitions desired.
+     * @param highestReplicaCountOnly if {@code true}, returns only the partitions with the highest number of replicas
+     *                                in the local datacenter.
+     * @return the partitions belonging to the {@code partitionClass}. Returns all partitions if {@code partitionClass}
+     * is {@code null}.
+     */
+    private List<PartitionId> getPartitionsInClass(String partitionClass, boolean highestReplicaCountOnly) {
+      List<PartitionId> toReturn = new ArrayList<>();
+      if (partitionClass == null) {
+        toReturn.addAll(allPartitions);
+      } else if (partitionIdsByClassAndLocalReplicaCount.containsKey(partitionClass)) {
+        SortedMap<Integer, List<PartitionId>> partitionsByReplicaCount =
+            partitionIdsByClassAndLocalReplicaCount.get(partitionClass);
+        if (highestReplicaCountOnly) {
+          toReturn.addAll(partitionsByReplicaCount.get(partitionsByReplicaCount.lastKey()));
+        } else {
+          for (List<PartitionId> partitionIds : partitionIdsByClassAndLocalReplicaCount.get(partitionClass).values()) {
+            toReturn.addAll(partitionIds);
+          }
+        }
+      } else {
+        throw new IllegalArgumentException("Unrecognized partition class " + partitionClass);
+      }
+      return toReturn;
     }
   }
 }

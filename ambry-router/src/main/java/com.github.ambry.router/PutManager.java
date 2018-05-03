@@ -72,6 +72,7 @@ class PutManager {
   private final RouterConfig routerConfig;
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
+  private final String defaultPartitionClass;
 
   private class PutRequestRegistrationCallbackImpl implements RequestRegistrationCallback<PutOperation> {
     private List<RequestInfo> requestListToFill;
@@ -100,17 +101,22 @@ class PutManager {
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
+   *                              container config). Can be {@code null} if no affinity is required for the puts for
+   *                              which the container contains no partition class hints.
    * @param time The {@link Time} instance to use.
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, String suffix,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      String defaultPartitionClass) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.routerCallback = routerCallback;
+    this.defaultPartitionClass = defaultPartitionClass;
     this.chunkArrivalListener = new ByteBufferAsyncWritableChannel.ChannelEventListener() {
       @Override
       public void onEvent(ByteBufferAsyncWritableChannel.EventType e) {
@@ -145,18 +151,12 @@ class PutManager {
    */
   void submitPutBlobOperation(BlobProperties blobProperties, byte[] userMetaData, ReadableStreamChannel channel,
       FutureResult<String> futureResult, Callback<String> callback) {
-    try {
-      PutOperation putOperation =
-          new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, userMetaData,
-              channel, futureResult, callback, routerCallback, chunkArrivalListener, kms, cryptoService,
-              cryptoJobHandler, time, blobProperties);
-      putOperations.add(putOperation);
-      putOperation.startReadingFromChannel();
-    } catch (RouterException e) {
-      routerMetrics.operationDequeuingRate.mark();
-      routerMetrics.onPutBlobError(e, blobProperties != null && blobProperties.isEncrypted());
-      NonBlockingRouter.completeOperation(futureResult, callback, null, e);
-    }
+    PutOperation putOperation =
+        new PutOperation(routerConfig, routerMetrics, clusterMap, responseHandler, notificationSystem, userMetaData,
+            channel, futureResult, callback, routerCallback, chunkArrivalListener, kms, cryptoService, cryptoJobHandler,
+            time, blobProperties, defaultPartitionClass);
+    putOperations.add(putOperation);
+    putOperation.startReadingFromChannel();
   }
 
   /**

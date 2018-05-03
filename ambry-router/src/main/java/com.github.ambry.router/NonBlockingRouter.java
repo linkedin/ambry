@@ -82,12 +82,15 @@ class NonBlockingRouter implements Router {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the time instance.
+   * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
+   *                              container config). Can be {@code null} if no affinity is required for the puts for
+   *                              which the container contains no partition class hints.
    * @throws IOException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time)
-      throws IOException {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      String defaultPartitionClass) throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
@@ -101,7 +104,7 @@ class NonBlockingRouter implements Router {
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
-      ocList.add(new OperationController(Integer.toString(i)));
+      ocList.add(new OperationController(Integer.toString(i), defaultPartitionClass));
     }
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
@@ -461,14 +464,17 @@ class NonBlockingRouter implements Router {
     /**
      * Constructs an OperationController
      * @param suffix the suffix to associate with the thread names of this OperationController
+     * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
+     *                              container config). Can be {@code null} if no affinity is required for the puts for
+     *                              which the container contains no partition class hints.
      * @throws IOException if the network components could not be created.
      */
-    OperationController(String suffix) throws IOException {
+    OperationController(String suffix, String defaultPartitionClass) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
-              suffix, kms, cryptoService, cryptoJobHandler, time);
+              suffix, kms, cryptoService, cryptoJobHandler, time, defaultPartitionClass);
       getManager =
           new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
               cryptoJobHandler, time);
@@ -669,7 +675,7 @@ class NonBlockingRouter implements Router {
      * @throws IOException if the associated {@link OperationController} throws one.
      */
     BackgroundDeleter() throws IOException {
-      super("backgroundDeleter");
+      super("backgroundDeleter", null);
       putManager.close();
     }
 

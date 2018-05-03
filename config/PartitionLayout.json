@@ -4,6 +4,7 @@
     "partitions": [
         {
             "id": 0,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [

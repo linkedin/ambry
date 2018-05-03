@@ -43,6 +43,7 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +61,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+
+import static org.junit.Assert.*;
 
 
 /**
@@ -93,6 +96,7 @@ public class PutManagerTest {
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
+  private static final String LOCAL_DC = "DC1";
 
   /**
    * Running for both regular and encrypted blobs
@@ -115,6 +119,7 @@ public class PutManagerTest {
     successTarget = 2;
     mockSelectorState.set(MockSelectorState.Good);
     mockClusterMap = new MockClusterMap();
+    mockClusterMap.setLocalDatacenterName(LOCAL_DC);
     mockServerLayout = new MockServerLayout(mockClusterMap);
     notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
@@ -145,7 +150,10 @@ public class PutManagerTest {
       // size in [1, chunkSize]
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
+      // since the puts are processed one at a time, it is fair to check the last partition class set
+      mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
+      checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
   }
 
@@ -158,7 +166,11 @@ public class PutManagerTest {
     for (int i = 1; i < 10; i++) {
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * i));
+      // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
+      mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
+      // one extra call if there is a metadata blob
+      checkLastRequestPartitionClasses(i == 1 ? 1 : i + 1, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
   }
 
@@ -170,7 +182,10 @@ public class PutManagerTest {
     for (int i = 1; i < 10; i++) {
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * i + random.nextInt(chunkSize - 1) + 1));
+      // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
+      mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
+      checkLastRequestPartitionClasses(i + 2, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
   }
 
@@ -200,7 +215,7 @@ public class PutManagerTest {
     //future.get() for operation with bad callback should still succeed
     future.get();
     Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
-    Assert.assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+    assertEquals("All operations should be finished.", 0, router.getOperationsCount());
     Assert.assertTrue("Router should not be closed", router.isOpen());
     // Test that PutManager is still operational
     requestAndResultsList.clear();
@@ -263,11 +278,11 @@ public class PutManagerTest {
     submitPutsAndAssertFailure(expectedException, true, true, true);
     // router should get closed automatically
     Assert.assertFalse("Router should be closed", router.isOpen());
-    Assert.assertEquals("No ChunkFiller threads should be running after the router is closed", 0,
+    assertEquals("No ChunkFiller threads should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("No RequestResponseHandler threads should be running after the router is closed", 0,
+    assertEquals("No RequestResponseHandler threads should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**
@@ -653,7 +668,7 @@ public class PutManagerTest {
   private NonBlockingRouter getNonBlockingRouter() throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.datacenter.name", LOCAL_DC);
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
@@ -665,7 +680,7 @@ public class PutManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, mockTime);
+        cryptoJobHandler, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     return router;
   }
 
@@ -804,10 +819,10 @@ public class PutManagerTest {
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
-      Assert.assertEquals("Wrong max chunk size in metadata", chunkSize, compositeBlobInfo.getChunkSize());
-      Assert.assertEquals("Wrong total size in metadata", originalPutContent.length, compositeBlobInfo.getTotalSize());
+      assertEquals("Wrong max chunk size in metadata", chunkSize, compositeBlobInfo.getChunkSize());
+      assertEquals("Wrong total size in metadata", originalPutContent.length, compositeBlobInfo.getTotalSize());
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
-      Assert.assertEquals("Number of chunks is not as expected",
+      assertEquals("Number of chunks is not as expected",
           RouterUtils.getNumChunksForBlobAndChunkSize(originalPutContent.length, chunkSize), dataBlobIds.size());
       // verify user-metadata
       if (properties.isEncrypted()) {
@@ -818,7 +833,7 @@ public class PutManagerTest {
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
             new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           Assert.assertNull("Exception should not be thrown", exception);
-          Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+          assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
           Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
               result.getDecryptedUserMetadata().array());
         }).run();
@@ -846,7 +861,7 @@ public class PutManagerTest {
               @Override
               public void onCompletion(DecryptJob.DecryptJobResult result, Exception exception) {
                 Assert.assertNull("Exception should not be thrown", exception);
-                Assert.assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
+                assertEquals("BlobId mismatch", origBlobId, result.getBlobId());
                 Assert.assertArrayEquals("Content mismatch", originalPutContent,
                     result.getDecryptedBlobContent().array());
                 Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
@@ -890,7 +905,7 @@ public class PutManagerTest {
             ByteBuffer.wrap(dataBlobContent), dataBlobPutRequest.getUsermetadata().duplicate(), cryptoService, kms,
             new CryptoJobMetricsTracker(metrics.decryptJobMetrics), (result, exception) -> {
           Assert.assertNull("Exception should not be thrown", exception);
-          Assert.assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
+          assertEquals("BlobId mismatch", dataBlobPutRequest.getBlobId(), result.getBlobId());
           Assert.assertArrayEquals("UserMetadata mismatch", originalUserMetadata,
               result.getDecryptedUserMetadata().array());
           dataBlobLength.set(result.getDecryptedBlobContent().remaining());
@@ -898,13 +913,13 @@ public class PutManagerTest {
         }).run();
       }
       if (key != lastKey) {
-        Assert.assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());
+        assertEquals("all chunks except last should be fully filled", chunkSize, dataBlobLength.get());
       } else {
-        Assert.assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
+        assertEquals("Last chunk should be of non-zero length and equal to the length of the remaining bytes",
             (originalPutContent.length - 1) % chunkSize + 1, dataBlobLength.get());
       }
       offset.addAndGet(dataBlobLength.get());
-      Assert.assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
+      assertEquals("dataBlobStream should have no more data", -1, dataBlobStream.read());
       notificationSystem.verifyNotification(key.getID(), NotificationBlobType.DataChunk,
           dataBlobPutRequest.getBlobProperties());
     }
@@ -982,16 +997,31 @@ public class PutManagerTest {
    * router is closed.
    */
   private void assertCloseCleanup() {
-    Assert.assertEquals("Exactly one chunkFiller thread should be running before the router is closed", 1,
+    assertEquals("Exactly one chunkFiller thread should be running before the router is closed", 1,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("Exactly two RequestResponseHandler thread should be running before the router is closed", 2,
+    assertEquals("Exactly two RequestResponseHandler thread should be running before the router is closed", 2,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     router.close();
-    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
+    assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
+    assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    assertEquals("All operations should have completed", 0, router.getOperationsCount());
+  }
+
+  /**
+   * Checks the last {@code expectedCount} partition classes requested from the clustermap to make sure they match with
+   * {@code expectedClass}
+   * @param expectedCount the number of times the {@code expectedClass} was requested.
+   * @param expectedClass the partition class requested
+   */
+  private void checkLastRequestPartitionClasses(int expectedCount, String expectedClass) {
+    List<String> lastNRequestedPartitionClasses = mockClusterMap.getLastNRequestedPartitionClasses();
+    assertEquals("Last requested partition class count is not as expected", expectedCount,
+        lastNRequestedPartitionClasses.size());
+    List<String> partitionClassesExpected = Collections.nCopies(expectedCount, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    assertEquals("Last requested partition classes not as expected", partitionClassesExpected,
+        lastNRequestedPartitionClasses);
   }
 
   private class RequestAndResult {
@@ -1038,11 +1068,11 @@ public class PutManagerTest {
       List<BlobCreatedEvent> events = blobCreatedEvents.get(blobId);
       Assert.assertTrue("Wrong number of events for blobId", events != null && events.size() == 1);
       BlobCreatedEvent event = events.get(0);
-      Assert.assertEquals("NotificationBlobType does not match data in notification event.",
-          expectedNotificationBlobType, event.notificationBlobType);
+      assertEquals("NotificationBlobType does not match data in notification event.", expectedNotificationBlobType,
+          event.notificationBlobType);
       Assert.assertTrue("BlobProperties does not match data in notification event.",
           RouterTestHelpers.haveEquivalentFields(expectedBlobProperties, event.blobProperties));
-      Assert.assertEquals("Expected blob size does not match data in notification event.",
+      assertEquals("Expected blob size does not match data in notification event.",
           expectedBlobProperties.getBlobSize(), event.blobProperties.getBlobSize());
     }
 

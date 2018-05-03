@@ -59,12 +59,12 @@ public class ResponseHandlerTest {
     }
 
     @Override
-    public List<PartitionId> getWritablePartitionIds() {
+    public List<PartitionId> getWritablePartitionIds(String partitionClass) {
       return null;
     }
 
     @Override
-    public List<PartitionId> getAllPartitionIds() {
+    public List<PartitionId> getAllPartitionIds(String partitionClass) {
       return null;
     }
 

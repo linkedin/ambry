@@ -105,7 +105,7 @@ public class PutOperationTest {
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             userMetadata, channel, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
-            time, blobProperties);
+            time, blobProperties, null);
     op.startReadingFromChannel();
     List<RequestInfo> requestInfos = new ArrayList<>();
     requestRegistrationCallback.requestListToFill = requestInfos;
@@ -213,7 +213,7 @@ public class PutOperationTest {
         new PutOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, new LoggingNotificationSystem(),
             userMetadata, channel, future, null,
             new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>()), null, null, null, null,
-            time, blobProperties);
+            time, blobProperties, null);
     RouterErrorCode[] routerErrorCodes = new RouterErrorCode[5];
     routerErrorCodes[0] = RouterErrorCode.OperationTimedOut;
     routerErrorCodes[1] = RouterErrorCode.UnexpectedInternalError;

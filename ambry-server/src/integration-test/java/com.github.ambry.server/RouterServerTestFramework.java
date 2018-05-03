@@ -134,7 +134,7 @@ class RouterServerTestFramework {
         partitionCount.put(partitionId, count + 1);
       }
     }
-    double numPartitions = clusterMap.getWritablePartitionIds().size();
+    double numPartitions = clusterMap.getWritablePartitionIds(null).size();
     if (opChains.size() > numPartitions) {
       double blobBalanceThreshold = BALANCE_FACTOR * Math.ceil(blobsPut / numPartitions);
       for (Map.Entry<PartitionId, Integer> entry : partitionCount.entrySet()) {
@@ -183,6 +183,7 @@ class RouterServerTestFramework {
     properties.setProperty("clustermap.datacenter.name", routerDatacenter);
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
+    properties.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
     return properties;
   }
 

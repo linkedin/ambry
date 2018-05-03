@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -279,21 +280,21 @@ class TailoredPeersClusterMap implements ClusterMap {
     List<MockDataNodeId> partNodes = new ArrayList<>();
     partNodes.add(datanodes.get(DATANODE_NAMES[0]));
     partNodes.add(datanodes.get(DATANODE_NAMES[1]));
-    partitions.add(new MockPartitionId(0, partNodes, 0));
+    partitions.add(new MockPartitionId(0, MockClusterMap.DEFAULT_PARTITION_CLASS, partNodes, 0));
     partNodes.clear();
     partNodes.add(datanodes.get(DATANODE_NAMES[0]));
     partNodes.add(datanodes.get(DATANODE_NAMES[1]));
-    partitions.add(new MockPartitionId(1, partNodes, 0));
+    partitions.add(new MockPartitionId(1, MockClusterMap.DEFAULT_PARTITION_CLASS, partNodes, 0));
     partNodes.clear();
     partNodes.add(datanodes.get(DATANODE_NAMES[0]));
     partNodes.add(datanodes.get(DATANODE_NAMES[2]));
-    partitions.add(new MockPartitionId(2, partNodes, 0));
+    partitions.add(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS, partNodes, 0));
     partNodes.clear();
     partNodes.add(datanodes.get(DATANODE_NAMES[0]));
-    partitions.add(new MockPartitionId(3, partNodes, 0));
+    partitions.add(new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS, partNodes, 0));
     partNodes.clear();
     partNodes.add(datanodes.get(DATANODE_NAMES[3]));
-    partitions.add(new MockPartitionId(4, partNodes, 0));
+    partitions.add(new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS, partNodes, 0));
 
     peerMap.put(DATANODE_NAMES[0], new HashSet(Arrays.asList(DATANODE_NAMES[1], DATANODE_NAMES[2])));
     peerMap.put(DATANODE_NAMES[1], new HashSet(Arrays.asList(DATANODE_NAMES[0])));
@@ -307,12 +308,12 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
-  public List<? extends PartitionId> getWritablePartitionIds() {
+  public List<? extends PartitionId> getWritablePartitionIds(String partitionClass) {
     throw new IllegalStateException();
   }
 
   @Override
-  public List<? extends PartitionId> getAllPartitionIds() {
+  public List<? extends PartitionId> getAllPartitionIds(String partitionClass) {
     throw new IllegalStateException();
   }
 
