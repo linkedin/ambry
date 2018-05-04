@@ -93,6 +93,7 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
             return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
                 updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
           default:
+            // TODO (TTL update): handle TTL update
             throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
         }
       }

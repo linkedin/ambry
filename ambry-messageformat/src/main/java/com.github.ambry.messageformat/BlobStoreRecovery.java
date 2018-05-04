@@ -94,6 +94,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
               messageRecovered.add(info);
               break;
             default:
+              // TODO (TTL update): handle TTL update
               throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
           }
         }

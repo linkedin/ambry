@@ -18,7 +18,7 @@ package com.github.ambry.messageformat;
  */
 public class UpdateRecord {
   public enum Type {
-    DELETE
+    DELETE, TTL_UPDATE
   }
 
   private final Type type;
@@ -26,6 +26,7 @@ public class UpdateRecord {
   private final short containerId;
   private final long updateTimeInMs;
   private final DeleteSubRecord deleteSubRecord;
+  private final TtlUpdateSubRecord ttlUpdateSubRecord;
 
   /**
    * @param accountId the account that the blob that this update is associated with belongs to
@@ -34,7 +35,17 @@ public class UpdateRecord {
    * @param deleteSubRecord the delete record that this update record represents.
    */
   UpdateRecord(short accountId, short containerId, long updateTimeInMs, DeleteSubRecord deleteSubRecord) {
-    this(accountId, containerId, updateTimeInMs, Type.DELETE, deleteSubRecord);
+    this(accountId, containerId, updateTimeInMs, Type.DELETE, deleteSubRecord, null);
+  }
+
+  /**
+   * @param accountId the account that the blob that this update is associated with belongs to
+   * @param containerId the id of the container that the blob that this update is associated with belongs to
+   * @param updateTimeInMs the time in ms at which the update occurred.
+   * @param ttlUpdateSubRecord the ttl update record that this update record represents.
+   */
+  UpdateRecord(short accountId, short containerId, long updateTimeInMs, TtlUpdateSubRecord ttlUpdateSubRecord) {
+    this(accountId, containerId, updateTimeInMs, Type.TTL_UPDATE, null, ttlUpdateSubRecord);
   }
 
   /**
@@ -43,14 +54,16 @@ public class UpdateRecord {
    * @param updateTimeInMs the time in ms at which the update occurred.
    * @param type the type of the update record.
    * @param deleteSubRecord the delete record that this update record represents.
+   * @param ttlUpdateSubRecord the ttl update record that this update record represents.
    */
   private UpdateRecord(short accountId, short containerId, long updateTimeInMs, Type type,
-      DeleteSubRecord deleteSubRecord) {
+      DeleteSubRecord deleteSubRecord, TtlUpdateSubRecord ttlUpdateSubRecord) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.updateTimeInMs = updateTimeInMs;
     this.type = type;
     this.deleteSubRecord = deleteSubRecord;
+    this.ttlUpdateSubRecord = ttlUpdateSubRecord;
   }
 
   /**
@@ -86,5 +99,12 @@ public class UpdateRecord {
    */
   public DeleteSubRecord getDeleteSubRecord() {
     return deleteSubRecord;
+  }
+
+  /**
+   * @return the ttl update record if type is {@link Type#TTL_UPDATE}. {@code null} otherwise.
+   */
+  public TtlUpdateSubRecord getTtlUpdateSubRecord() {
+    return ttlUpdateSubRecord;
   }
 }
