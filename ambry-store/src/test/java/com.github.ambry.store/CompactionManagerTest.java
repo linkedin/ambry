@@ -401,7 +401,7 @@ public class CompactionManagerTest {
    * @return the randomly generated {@link CompactionDetails}
    */
   private CompactionDetails generateRandomCompactionDetails(int count) {
-    List<String> logSegmentsNames = CompactionPolicyTest.generateRandomStrings(count);
+    List<String> logSegmentsNames = CompactionPolicyTest.generateRandomLogSegmentName(count);
     return new CompactionDetails(time.milliseconds(), logSegmentsNames);
   }
 
