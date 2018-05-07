@@ -55,6 +55,12 @@ public class PartitionManager {
           .describedAs("partition_layout_path")
           .ofType(String.class);
 
+      ArgumentAcceptingOptionSpec<String> serverPropsFilePathOpt =
+          parser.accepts("serverPropsFilePath", "REQUIRED: The path to server properties file")
+              .withRequiredArg()
+              .describedAs("server_props_file_path")
+              .ofType(String.class);
+
       ArgumentAcceptingOptionSpec<String> outputPartitionLayoutPathOpt = parser.accepts("outputPartitionLayoutPath",
           "The path to the output partition layout map. The file is updated with the new partitions")
           .withOptionalArg()
@@ -96,11 +102,13 @@ public class PartitionManager {
       ArrayList<OptionSpec> listOpt = new ArrayList<OptionSpec>();
       listOpt.add(hardwareLayoutPathOpt);
       listOpt.add(operationTypeOpt);
+      listOpt.add(serverPropsFilePathOpt);
 
       ToolUtils.ensureOrExit(listOpt, options, parser);
 
       String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
+      String serverPropsFilePath = options.valueOf(serverPropsFilePathOpt);
       String outputPartitionLayoutPath =
           options.has(outputPartitionLayoutPathOpt) ? options.valueOf(outputPartitionLayoutPathOpt)
               : partitionLayoutPath;
@@ -114,7 +122,8 @@ public class PartitionManager {
         System.out.println("Partition layout path not found. Creating new file");
       }
       StaticClusterManager manager = null;
-      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
+      Properties properties = Utils.loadProps(serverPropsFilePath);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
       if (fileString == null) {
         manager = (new StaticClusterAgentsFactory(clusterMapConfig, new PartitionLayout(
             new HardwareLayout(new JSONObject(Utils.readStringFromFile(hardwareLayoutPath)), clusterMapConfig),
