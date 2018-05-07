@@ -236,12 +236,11 @@ public class CompactionPolicyTest {
   static List<String> generateRandomLogSegmentName(int count) {
     List<String> randomLogSegmentNames = new ArrayList<>();
     while (randomLogSegmentNames.size() < count) {
-      String logSegmentNames =
-          Integer.toString(TestUtils.RANDOM.nextInt(20)) + '_' + Integer.toString(TestUtils.RANDOM.nextInt(20));
-      if (randomLogSegmentNames.contains(logSegmentNames)) {
-        continue;
+      String logSegmentName =
+          LogSegmentNameHelper.getName(TestUtils.RANDOM.nextInt(count * 1000), TestUtils.RANDOM.nextInt(count * 1000));
+      if (!randomLogSegmentNames.contains(logSegmentName)) {
+        randomLogSegmentNames.add(logSegmentName);
       }
-      randomLogSegmentNames.add(logSegmentNames);
     }
     Collections.sort(randomLogSegmentNames, LogSegmentNameHelper.COMPARATOR);
     return randomLogSegmentNames;
