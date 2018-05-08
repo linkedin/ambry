@@ -45,8 +45,8 @@ public class MockHelixCluster {
     helixAdmins = helixAdminFactory.getAllHelixAdmins();
     this.partitionLayoutPath = partitionLayoutPath;
     this.zkLayoutPath = zkLayoutPath;
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        3, false, helixAdminFactory);
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
+        false, false, helixAdminFactory);
     this.clusterName = clusterName;
   }
 
@@ -56,8 +56,8 @@ public class MockHelixCluster {
    * @throws Exception
    */
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        3, false, helixAdminFactory);
+    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName, 3,
+        false, false, helixAdminFactory);
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       helixAdmin.triggerInstanceConfigChangeNotification(false);
     }

@@ -30,13 +30,12 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.SortedSet;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
-import org.apache.helix.model.builder.SemiAutoModeISBuilder;
+import org.apache.helix.model.ResourceConfig;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -88,9 +87,18 @@ class HelixBootstrapUpgradeUtil {
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
   private final HashMap<String, HashMap<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap = new HashMap<>();
   private final HashMap<String, HashMap<String, DataNodeId>> dcToInstanceNameToDataNodeId = new HashMap<>();
+  private int maxResource = -1;
   final String clusterName;
   private final int maxPartitionsInOneResource;
   private final boolean dryRun;
+  private final boolean forceRemove;
+  private boolean expectMoreInHelixDuringValidate = false;
+  private int instancesAdded = 0;
+  private int instancesUpdated = 0;
+  private int instancesDropped = 0;
+  private int resourcesAdded = 0;
+  private int resourcesUpdated = 0;
+  private int resourcesDropped = 0;
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
 
@@ -104,29 +112,51 @@ class HelixBootstrapUpgradeUtil {
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
+   * @param forceRemove if true, removes any hosts from Helix not present in the json files.
    * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void bootstrapOrUpgrade(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, int maxPartitionsInOneResource, boolean dryRun, HelixAdminFactory helixAdminFactory)
-      throws Exception {
+      String clusterNamePrefix, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
+      HelixAdminFactory helixAdminFactory) throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
     }
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
-            maxPartitionsInOneResource, dryRun);
+            maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
     }
-    clusterMapToHelixMapper.updateClusterMapInHelixAlt(helixAdminFactory);
+    clusterMapToHelixMapper.updateClusterMapInHelix();
     if (!dryRun) {
-      info("Validating static and Helix clustermaps");
       clusterMapToHelixMapper.validateAndClose();
     }
+    clusterMapToHelixMapper.logSummary();
+  }
+
+  /**
+   * Takes in the path to the files that make up the static cluster map and validates that the information is consistent
+   * with the information in Helix.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @throws IOException if there is an error reading a file.
+   * @throws JSONException if there is an error parsing the JSON content in any of the files.
+   */
+  static void validate(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, HelixAdminFactory helixAdminFactory) throws Exception {
+    HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, 0,
+            false, false, helixAdminFactory);
+    clusterMapToHelixMapper.validateAndClose();
+    clusterMapToHelixMapper.logSummary();
   }
 
   /**
@@ -156,13 +186,17 @@ class HelixBootstrapUpgradeUtil {
    * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
    *                          will give the cluster name in Helix to bootstrap or upgrade.
    * @param dryRun if true, perform a dry run; do not update anything in Helix.
+   * @param forceRemove if true, removes any hosts from Helix not present in the json files.
+   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   private HelixBootstrapUpgradeUtil(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, int maxPartitionsInOneResource, boolean dryRun) throws Exception {
+      String clusterNamePrefix, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
+      HelixAdminFactory helixAdminFactory) throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
+    this.forceRemove = forceRemove;
     this.dataCenterToZkAddress = ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
 
     Properties props = new Properties();
@@ -188,6 +222,10 @@ class HelixBootstrapUpgradeUtil {
         throw new IllegalArgumentException(
             "There is no ZK host for datacenter " + datacenter.getName() + " in the static clustermap");
       }
+    }
+    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
+      adminForDc.put(entry.getKey(), admin);
     }
   }
 
@@ -245,131 +283,182 @@ class HelixBootstrapUpgradeUtil {
    *     dropInstanceFromHelix()
    *   endfor
    * endfor
-   *
-   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    */
 
-  private void updateClusterMapInHelixAlt(HelixAdminFactory helixAdminFactory) {
+  private void updateClusterMapInHelix() {
     info("Initializing admins and possibly adding cluster in Helix (if non-existent)");
-    initializeAdminsAndAddCluster(helixAdminFactory);
+    maybeAddCluster();
     info("Initialized");
     info("Populating resources and partitions set");
     info("Populated resources and partitions set");
     populateInstancesAndPartitionsMap();
     for (Datacenter dc : staticClusterMap.hardwareLayout.getDatacenters()) {
       info("\n=======Starting datacenter: {}=========\n", dc.getName());
-      HelixAdmin dcAdmin = adminForDc.get(dc.getName());
       Map<String, Set<String>> partitionsToInstancesInDc = new HashMap<>();
-      info("Getting list of instances in {}", dc.getName());
-      Set<String> instancesInHelix = new HashSet<>(dcAdmin.getInstancesInCluster(clusterName));
-      Set<String> instancesInStatic = new HashSet<>(dcToInstanceNameToDataNodeId.get(dc.getName()).keySet());
-      Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
-      // set instances in both correctly.
-      instancesInBoth.retainAll(instancesInStatic);
-      // set instances in Helix only correctly.
-      instancesInHelix.removeAll(instancesInBoth);
-      // set instances in Static only correctly.
-      instancesInStatic.removeAll(instancesInBoth);
-      int totalInstances = instancesInBoth.size() + instancesInHelix.size() + instancesInStatic.size();
-      for (String instanceName : instancesInBoth) {
-        InstanceConfig instanceConfigInHelix = dcAdmin.getInstanceConfig(clusterName, instanceName);
-        InstanceConfig instanceConfigFromStatic =
-            createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dc.getName()).get(instanceName),
-                partitionsToInstancesInDc);
-        // Note about the following check: This compares ZNode data for exact equality, which suffices for now.
-        // However, in the future, this needs to discount comparisons for certain things that are dynamically set by
-        // instances (and hence will have outdated information in the static map). Such as
-        // 1. RO/RW status of replicas.
-        // 2. Replica availability (for which support has not yet been added).
-        // 3. xid (for which support has not yet been added).
-        if (!instanceConfigFromStatic.getRecord().equals(instanceConfigInHelix.getRecord())) {
-          info(
-              "Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
-              instanceName, --totalInstances);
-          // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
-          // availability and so on should be updated at all (if not, instanceConfigFromStatic should be replaced with
-          // the appropriate instanceConfig that is constructed with the correct values from both.
-          if (!dryRun) {
-            dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
-          }
-        } else {
-          info("Instance {} already present in Helix, with same InstanceConfig, skipping. Remaining instances: {}",
-              instanceName, --totalInstances);
-        }
-      }
-
-      for (String instanceName : instancesInStatic) {
-        InstanceConfig instanceConfigFromStatic =
-            createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dc.getName()).get(instanceName),
-                partitionsToInstancesInDc);
-        info("Instance {} is new, adding to Helix. Remaining instances: {}", instanceName, --totalInstances);
-        if (!dryRun) {
-          dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
-        }
-      }
-
-      for (String instanceName : instancesInHelix) {
-        info("Instance {} is in Helix, but not in static. Ignoring for now. Remaining instances: {}", instanceName,
-            --totalInstances);
-        // At this time we are not allowing for dropping instances, to be safe.
-        //if (!dryRun) {
-        //  dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
-        //}
-      }
-
+      addUpdateInstances(dc.getName(), partitionsToInstancesInDc);
       // Process those partitions that are already under resources. Just update their instance sets if that has changed.
       info(
           "Done adding all instances in {}, now scanning resources in Helix and ensuring instance set for partitions are the same.",
           dc.getName());
-      long maxResource = -1;
-      for (String resourceName : dcAdmin.getResourcesInCluster(clusterName)) {
-        if (!resourceName.matches("\\d+")) {
-          // there may be other resources created under the cluster (say, for stats) that are not part of the
-          // cluster map. These will be ignored.
-          info("Ignoring resource {} as it is not part of the cluster map", resourceName);
-          continue;
-        }
-        maxResource = Math.max(maxResource, Long.valueOf(resourceName));
-        IdealState resourceIs = dcAdmin.getResourceIdealState(clusterName, resourceName);
-        for (String partitionName : resourceIs.getPartitionSet()) {
-          Set<String> instanceSetInHelix = resourceIs.getInstanceSet(partitionName);
-          Set<String> instanceSetInStatic = partitionsToInstancesInDc.remove(partitionName);
-          if (instanceSetInHelix.equals(instanceSetInStatic)) {
-            info("Instance set is the same for partition {} which is under resource {}", partitionName, resourceName);
-          } else {
-            info("Different instance sets for partition {} which is under resource {}. Updating Helix using static.",
-                partitionName, resourceName);
-            ArrayList<String> instances = new ArrayList<>(instanceSetInStatic);
-            Collections.shuffle(instances);
-            resourceIs.setPreferenceList(partitionName, instances);
-            if (!dryRun) {
-              dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
-            }
-          }
-        }
-      }
+      addUpdateResources(dc.getName(), partitionsToInstancesInDc);
+    }
+  }
 
-      info("Done updating all existing partitions, now adding new partitions under new resources, if any.");
-      long nextResource = maxResource + 1;
-      TreeMap<String, Set<String>> partitionsUnderNextResource = new TreeMap<>();
-      for (Map.Entry<String, Set<String>> entry : partitionsToInstancesInDc.entrySet()) {
-        partitionsUnderNextResource.put(entry.getKey(), entry.getValue());
-        if (partitionsUnderNextResource.size() == maxPartitionsInOneResource) {
-          info("maxPartitions reached for resource {}, adding them under it", nextResource);
-          addPartitionsUnderResource(dcAdmin, dc.getName(), partitionsUnderNextResource, Long.toString(nextResource));
-          info("Added partitions from {} to {} under resource {}", partitionsUnderNextResource.firstKey(),
-              partitionsUnderNextResource.lastKey(), nextResource);
-          partitionsUnderNextResource.clear();
-          nextResource++;
+  /**
+   * Add and/or update instances in Helix based on the information in the static cluster map.
+   * @param dcName the name of the datacenter being processed.
+   * @param partitionsToInstancesInDc a map to be filled with the mapping of partitions to their instance sets in the
+   *                                  given datacenter.
+   */
+  private void addUpdateInstances(String dcName, Map<String, Set<String>> partitionsToInstancesInDc) {
+    HelixAdmin dcAdmin = adminForDc.get(dcName);
+    info("Getting list of instances in {}", dcName);
+    Set<String> instancesInHelix = new HashSet<>(dcAdmin.getInstancesInCluster(clusterName));
+    Set<String> instancesInStatic = new HashSet<>(dcToInstanceNameToDataNodeId.get(dcName).keySet());
+    Set<String> instancesInBoth = new HashSet<>(instancesInHelix);
+    // set instances in both correctly.
+    instancesInBoth.retainAll(instancesInStatic);
+    // set instances in Helix only correctly.
+    instancesInHelix.removeAll(instancesInBoth);
+    // set instances in Static only correctly.
+    instancesInStatic.removeAll(instancesInBoth);
+    int totalInstances = instancesInBoth.size() + instancesInHelix.size() + instancesInStatic.size();
+    for (String instanceName : instancesInBoth) {
+      InstanceConfig instanceConfigInHelix = dcAdmin.getInstanceConfig(clusterName, instanceName);
+      InstanceConfig instanceConfigFromStatic =
+          createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
+              partitionsToInstancesInDc);
+      // Note about the following check: This compares ZNode data for exact equality, which suffices for now.
+      // However, in the future, this needs to discount comparisons for certain things that are dynamically set by
+      // instances (and hence will have outdated information in the static map). Such as
+      // 1. RO/RW status of replicas.
+      // 2. Replica availability (for which support has not yet been added).
+      // 3. xid (for which support has not yet been added).
+      if (!instanceConfigFromStatic.getRecord().equals(instanceConfigInHelix.getRecord())) {
+        info("Instance {} already present in Helix, but InstanceConfig has changed, updating. Remaining instances: {}",
+            instanceName, --totalInstances);
+        // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
+        // availability and so on should be updated at all (if not, instanceConfigFromStatic should be replaced with
+        // the appropriate instanceConfig that is constructed with the correct values from both.
+        if (!dryRun) {
+          dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
+          instancesUpdated++;
+        }
+      } else {
+        info("Instance {} already present in Helix, with same InstanceConfig, skipping. Remaining instances: {}",
+            instanceName, --totalInstances);
+      }
+    }
+
+    for (String instanceName : instancesInStatic) {
+      InstanceConfig instanceConfigFromStatic =
+          createInstanceConfigFromStaticInfo(dcToInstanceNameToDataNodeId.get(dcName).get(instanceName),
+              partitionsToInstancesInDc);
+      info("Instance {} is new, adding to Helix. Remaining instances: {}", instanceName, --totalInstances);
+      if (!dryRun) {
+        dcAdmin.addInstance(clusterName, instanceConfigFromStatic);
+        instancesAdded++;
+      }
+    }
+
+    for (String instanceName : instancesInHelix) {
+      if (!dryRun && forceRemove) {
+        info("Instance {} is in Helix, but not in static. Forcefully removing. Remaining instances: {}", instanceName,
+            --totalInstances);
+        dcAdmin.dropInstance(clusterName, new InstanceConfig(instanceName));
+        instancesDropped++;
+      } else {
+        info("Instance {} is in Helix, but not in static. Ignoring for now (use --forceRemove to forcefully remove). "
+            + "Remaining instances: {}", instanceName, --totalInstances);
+        expectMoreInHelixDuringValidate = true;
+      }
+    }
+  }
+
+  /**
+   * Add and/or update resources in Helix based on the information in the static cluster map. This may involve adding
+   * or removing partitions from under a resource, and adding or dropping resources altogether. This may also involve
+   * changing the instance set for a partition under a resource, based on the static cluster map.
+   * @param dcName the name of the datacenter being processed.
+   * @param partitionsToInstancesInDc a map to be filled with the mapping of partitions to their instance sets in the
+   *                                  given datacenter.
+   */
+  private void addUpdateResources(String dcName, Map<String, Set<String>> partitionsToInstancesInDc) {
+    HelixAdmin dcAdmin = adminForDc.get(dcName);
+    List<String> resourcesInCluster = dcAdmin.getResourcesInCluster(clusterName);
+    for (String resourceName : resourcesInCluster) {
+      boolean resourceModified = false;
+      if (!resourceName.matches("\\d+")) {
+        // there may be other resources created under the cluster (say, for stats) that are not part of the
+        // cluster map. These will be ignored.
+        continue;
+      }
+      maxResource = Math.max(maxResource, Integer.valueOf(resourceName));
+      IdealState resourceIs = dcAdmin.getResourceIdealState(clusterName, resourceName);
+      for (String partitionName : new HashSet<>(resourceIs.getPartitionSet())) {
+        Set<String> instanceSetInHelix = resourceIs.getInstanceSet(partitionName);
+        Set<String> instanceSetInStatic = partitionsToInstancesInDc.remove(partitionName);
+        if (instanceSetInStatic == null || instanceSetInStatic.isEmpty()) {
+          if (forceRemove) {
+            info("*** Partition {} no longer present in the static clustermap, removing from Resource *** ",
+                partitionName);
+            // this is a hacky way of removing a partition from the resource, as there isn't another way today.
+            // Helix team is planning to provide an API for this.
+            resourceIs.getRecord().getListFields().remove(partitionName);
+            resourceModified = true;
+          } else {
+            info(
+                "*** forceRemove option not provided, resources will not be removed (use --forceRemove to forcefully remove)");
+            expectMoreInHelixDuringValidate = true;
+          }
+        } else if (!instanceSetInStatic.equals(instanceSetInHelix)) {
+          info("Different instance sets for partition {} under resource {}. Updating Helix using static.",
+              partitionName, resourceName);
+          ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
+          Collections.shuffle(newInstances);
+          resourceIs.setPreferenceList(partitionName, newInstances);
+          resourceModified = true;
         }
       }
-      if (!partitionsUnderNextResource.isEmpty()) {
-        info("last resource " + nextResource + ", actually adding all newly added partitions");
-        addPartitionsUnderResource(dcAdmin, dc.getName(), partitionsUnderNextResource, Long.toString(nextResource));
-        info("Added all remaining partitions {} to {} under resource {}", partitionsUnderNextResource.firstKey(),
-            partitionsUnderNextResource.lastKey(), nextResource);
+      if (resourceModified) {
+        if (resourceIs.getPartitionSet().isEmpty()) {
+          dcAdmin.dropResource(clusterName, resourceName);
+          resourcesDropped++;
+        } else {
+          dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
+          resourcesUpdated++;
+        }
       }
-      info("Done with {}\n", dc.getName());
+    }
+
+    // Add what is not already in Helix under new resources.
+    int fromIndex = 0;
+    List<Map.Entry<String, Set<String>>> newPartitions = new ArrayList<>(partitionsToInstancesInDc.entrySet());
+    while (fromIndex < newPartitions.size()) {
+      String resourceName = Integer.toString(++maxResource);
+      int toIndex = Math.min(fromIndex + maxPartitionsInOneResource, newPartitions.size());
+      List<Map.Entry<String, Set<String>>> partitionsUnderNextResource = newPartitions.subList(fromIndex, toIndex);
+      fromIndex = toIndex;
+      IdealState idealState = new IdealState(resourceName);
+      idealState.setStateModelDefRef(LeaderStandbySMD.name);
+      info("Adding partitions for instances in " + dcName);
+      for (Map.Entry<String, Set<String>> entry : partitionsUnderNextResource) {
+        String partitionName = entry.getKey();
+        ArrayList<String> instances = new ArrayList<>(entry.getValue());
+        Collections.shuffle(instances);
+        idealState.setPreferenceList(partitionName, instances);
+      }
+      idealState.setNumPartitions(partitionsUnderNextResource.size());
+      idealState.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.toString());
+      if (!idealState.isValid()) {
+        throw new IllegalStateException("IdealState could not be validated for new resource " + resourceName);
+      }
+      if (!dryRun) {
+        dcAdmin.addResource(clusterName, resourceName, idealState);
+        resourcesAdded++;
+      }
+      info("Added " + partitionsUnderNextResource.size() + " new partitions under resource " + resourceName
+          + " in datacenter " + dcName);
     }
   }
 
@@ -441,51 +530,15 @@ class HelixBootstrapUpgradeUtil {
   }
 
   /**
-   * Add partitions under a given resource.
-   * @param dcAdmin the {@link HelixAdmin} to use.
-   * @param dcName the name of the datacenter in which this resource is being added.
-   * @param partitionsToInstances the map reflecting partitions to instances hosting its replicas. All these partitions
-   *                              will be added under the given resource
-   * @param resourceName the name of the resource under which the given partitions are to be added.
-   */
-  private void addPartitionsUnderResource(HelixAdmin dcAdmin, String dcName,
-      Map<String, Set<String>> partitionsToInstances, String resourceName) {
-    // Multiple resources are created and partitions are grouped under these resources upto a maximum threshold.
-    if (partitionsToInstances.isEmpty()) {
-      throw new IllegalArgumentException("Cannot add resource with zero partitions");
-    }
-    SemiAutoModeISBuilder resourceISBuilder = new SemiAutoModeISBuilder(resourceName);
-    int numReplicas = 0;
-    resourceISBuilder.setStateModel(LeaderStandbySMD.name);
-    info("Adding partitions for instances in " + dcName);
-    for (Map.Entry<String, Set<String>> entry : partitionsToInstances.entrySet()) {
-      String partitionName = entry.getKey();
-      numReplicas = entry.getValue().size();
-      String[] instances = entry.getValue().toArray(new String[0]);
-      Collections.shuffle(Arrays.asList(instances));
-      resourceISBuilder.assignPreferenceList(partitionName, instances);
-    }
-    resourceISBuilder.setNumPartitions(partitionsToInstances.size());
-    resourceISBuilder.setNumReplica(numReplicas);
-    IdealState idealState = resourceISBuilder.build();
-    if (!dryRun) {
-      dcAdmin.addResource(clusterName, resourceName, idealState);
-    }
-    info("Added " + partitionsToInstances.size() + " new partitions under resource " + resourceName + " in datacenter "
-        + dcName);
-  }
-
-  /**
    * Initialize a map of dataCenter to HelixAdmin based on the given zk Connect Strings.
-   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
    */
-  private void initializeAdminsAndAddCluster(HelixAdminFactory helixAdminFactory) {
-    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
-      adminForDc.put(entry.getKey(), admin);
+  private void maybeAddCluster() {
+    for (Map.Entry<String, HelixAdmin> entry : adminForDc.entrySet()) {
       // Add a cluster entry in every DC
+      String dcName = entry.getKey();
+      HelixAdmin admin = entry.getValue();
       if (!admin.getClusters().contains(clusterName)) {
-        info("Adding cluster {} in {}", clusterName, entry.getKey());
+        info("Adding cluster {} in {}", clusterName, dcName);
         admin.addCluster(clusterName);
         admin.addStateModelDef(clusterName, LeaderStandbySMD.name, LeaderStandbySMD.build());
       }
@@ -507,6 +560,7 @@ class HelixBootstrapUpgradeUtil {
    */
   private void validateAndClose() throws Exception {
     try {
+      info("Validating static and Helix cluster maps");
       verifyEquivalencyWithStaticClusterMap(staticClusterMap.hardwareLayout, staticClusterMap.partitionLayout);
     } finally {
       for (HelixAdmin admin : adminForDc.values()) {
@@ -629,8 +683,12 @@ class HelixBootstrapUpgradeUtil {
       ensureOrThrow(sealedReplicasInClusterMap.equals(sealedReplicasInHelix),
           "Sealed replicas info mismatch for " + "instance " + instanceName);
     }
-    ensureOrThrow(allInstancesInHelix.isEmpty(),
-        "Following instances in Helix not found in the clustermap " + allInstancesInHelix);
+    if (!expectMoreInHelixDuringValidate) {
+      ensureOrThrow(allInstancesInHelix.isEmpty(),
+          "Following instances in Helix not found in the clustermap " + allInstancesInHelix);
+    } else {
+      info("*** Helix may have more instances than in the given clustermap as removals were not forced.");
+    }
     info("Successfully verified datanode and disk equivalency in dc {}", dc.getName());
   }
 
@@ -653,13 +711,9 @@ class HelixBootstrapUpgradeUtil {
       IdealState resourceIS = admin.getResourceIdealState(clusterName, resourceName);
       ensureOrThrow(resourceIS.getStateModelDefRef().equals(LeaderStandbySMD.name),
           "StateModel name mismatch for resource " + resourceName);
-      int numReplicasAtResourceLevel = Integer.valueOf(resourceIS.getReplicas());
       Set<String> resourcePartitions = resourceIS.getPartitionSet();
       for (String resourcePartition : resourcePartitions) {
         Set<String> partitionInstanceSet = resourceIS.getInstanceSet(resourcePartition);
-        ensureOrThrow(numReplicasAtResourceLevel == partitionInstanceSet.size(),
-            "NumReplicas at resource level " + numReplicasAtResourceLevel
-                + " different from number of replicas for partition " + partitionInstanceSet);
         ensureOrThrow(allPartitionsToInstancesInHelix.put(resourcePartition, partitionInstanceSet) == null,
             "Partition " + resourcePartition + " already found under a different resource.");
       }
@@ -675,16 +729,24 @@ class HelixBootstrapUpgradeUtil {
           String instanceName = getInstanceName(replica.getDataNodeId());
           expectedInHelix.add(instanceName);
           ensureOrThrow(replicaHostsInHelix.remove(instanceName),
-              "Instance " + instanceName + " for the given " + "replica in the clustermap not found in Helix");
+              "Instance " + instanceName + " for the given replica in the clustermap not found in Helix");
         }
       }
-      ensureOrThrow(replicaHostsInHelix.isEmpty(),
-          "More instances in Helix than in clustermap for partition: " + partitionName + ", expected: "
-              + expectedInHelix + ", found additional instances: " + replicaHostsInHelix);
+      if (!expectMoreInHelixDuringValidate) {
+        ensureOrThrow(replicaHostsInHelix.isEmpty(),
+            "More instances in Helix than in clustermap for partition: " + partitionName + ", expected: "
+                + expectedInHelix + ", found additional instances: " + replicaHostsInHelix);
+      } else {
+        info("*** Helix may have more replicas than in the given clustermap as removals were not forced.");
+      }
     }
-    ensureOrThrow(allPartitionsToInstancesInHelix.isEmpty(),
-        "More partitions in Helix than in clustermap, additional partitions: "
-            + allPartitionsToInstancesInHelix.keySet());
+    if (!expectMoreInHelixDuringValidate) {
+      ensureOrThrow(allPartitionsToInstancesInHelix.isEmpty(),
+          "More partitions in Helix than in clustermap, additional partitions: "
+              + allPartitionsToInstancesInHelix.keySet());
+    } else {
+      info("*** Helix may have more partitions than in the given clustermap as removals were not forced.");
+    }
     info("Successfully verified resources and partitions equivalency in dc {}", dcName);
   }
 
@@ -729,6 +791,24 @@ class HelixBootstrapUpgradeUtil {
    */
   private static void info(String format, Object... arguments) {
     logger.info(format, arguments);
+  }
+
+  /**
+   * Log the summary of this run.
+   */
+  private void logSummary() {
+    if (instancesUpdated + instancesAdded + instancesDropped + resourcesUpdated + resourcesAdded + resourcesDropped
+        > 0) {
+      info("========Cluster in Helix was updated, summary:========");
+      info("New instances added: {}", instancesAdded);
+      info("Existing instances updated: {}", instancesUpdated);
+      info("Existing instances dropped: {}", instancesDropped);
+      info("New resources added: {}", resourcesAdded);
+      info("Existing resources updated: {}", resourcesUpdated);
+      info("Existing resources dropped: {}", resourcesDropped);
+    } else {
+      info("========No updates were done to the cluster in Helix========");
+    }
   }
 }
 

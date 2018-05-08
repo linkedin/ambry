@@ -92,7 +92,14 @@ public class HelixBootstrapUpgradeTool {
     OptionParser parser = new OptionParser();
 
     OptionSpec dropClusterOpt = parser.accepts("dropCluster",
-        "(Optional argument) If present, must be accompanied with and only with the clusterName argument");
+        "Drops the given Ambry cluster from Helix. Use this option with care. If present, must be accompanied with and "
+            + "only with the clusterName argument");
+
+    OptionSpec validateOnly = parser.accepts("validateOnly",
+        "Validates that the information in the given cluster map is consistent with the information in Helix");
+
+    OptionSpec forceRemove = parser.accepts("forceRemove",
+        "Specifies that any instances or partitions absent in the json files be removed from Helix. Use this with care");
 
     ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
         parser.accepts("hardwareLayoutPath", "The path to the hardware layout json file")
@@ -134,7 +141,6 @@ public class HelixBootstrapUpgradeTool {
 
     ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
         "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource")
-        .requiredUnless(dropClusterOpt)
         .withRequiredArg()
         .describedAs("max_partitions_in_one_resource")
         .ofType(String.class);
@@ -160,13 +166,23 @@ public class HelixBootstrapUpgradeTool {
       expectedOpts.add(zkLayoutPathOpt);
       ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
       HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, new HelixAdminFactory());
+    } else if (options.has(validateOnly)) {
+      ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
+      expectedOpts.add(validateOnly);
+      expectedOpts.add(clusterNamePrefixOpt);
+      expectedOpts.add(zkLayoutPathOpt);
+      expectedOpts.add(hardwareLayoutPathOpt);
+      expectedOpts.add(partitionLayoutPathOpt);
+      ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
+      HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+          new HelixAdminFactory());
     } else {
       ToolUtils.ensureOrExit(listOpt, options, parser);
       HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
           clusterNamePrefix,
           options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
               : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
-          new HelixAdminFactory());
+          options.has(forceRemove), new HelixAdminFactory());
     }
   }
 }
