@@ -69,7 +69,8 @@ class Partition extends PartitionId {
       logger.trace("Partition " + jsonObject.toString());
     }
     this.id = jsonObject.getLong("id");
-    this.partitionClass = jsonObject.getString("partitionClass");
+    this.partitionClass = jsonObject.has("partitionClass") ? jsonObject.getString("partitionClass")
+        : hardwareLayout.getClusterMapConfig().clusterMapDefaultPartitionClass;
     this.partitionState = PartitionState.valueOf(jsonObject.getString("partitionState"));
     this.replicaCapacityInBytes = jsonObject.getLong("replicaCapacityInBytes");
     this.replicas = new ArrayList<Replica>(jsonObject.getJSONArray("replicas").length());
