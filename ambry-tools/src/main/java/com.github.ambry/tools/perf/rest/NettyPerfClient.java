@@ -495,11 +495,11 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
         request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
         request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
-        for (Pair<String, String> headerNameValue : customHeaders) {
-          request.headers().add(headerNameValue.getFirst(), headerNameValue.getSecond());
-        }
       } else {
         request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
+      }
+      for (Pair<String, String> headerNameValue : customHeaders) {
+        request.headers().add(headerNameValue.getFirst(), headerNameValue.getSecond());
       }
       chunksReceived = 0;
       sizeReceived = 0;
