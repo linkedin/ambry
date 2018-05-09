@@ -23,15 +23,19 @@ import static com.github.ambry.account.Container.*;
  * This class is not thread safe.
  */
 public class ContainerBuilder {
+  // necessary
   private short id;
   private String name;
   private ContainerStatus status;
   private String description;
-  private boolean encrypted;
-  private final boolean previouslyEncrypted;
-  private boolean cacheable;
-  private boolean mediaScanDisabled;
   private short parentAccountId;
+
+  // optional
+  private boolean encrypted = false;
+  private boolean previouslyEncrypted = false;
+  private boolean cacheable = false;
+  private boolean mediaScanDisabled = false;
+  private String replicationPolicy = null;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -51,6 +55,7 @@ public class ContainerBuilder {
     previouslyEncrypted = origin.wasPreviouslyEncrypted();
     cacheable = origin.isCacheable();
     mediaScanDisabled = origin.isMediaScanDisabled();
+    replicationPolicy = origin.getReplicationPolicy();
     parentAccountId = origin.getParentAccountId();
   }
 
@@ -60,24 +65,13 @@ public class ContainerBuilder {
    * @param name The name of the {@link Container}.
    * @param status The status of the {@link Container}.
    * @param description The description of the {@link Container}.
-   * @param encrypted {@code true} if blobs in the {@link Container} should be encrypted, {@code false} otherwise.
-   * @param previouslyEncrypted {@code true} if this {@link Container} was encrypted in the past, or currently, and a
-   *                            subset of blobs in it could still be encrypted.
-   * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
-   *                  this container.
-   * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
    * @param parentAccountId The id of the parent {@link Account} of the {@link Container} to build.
    */
-  public ContainerBuilder(short id, String name, ContainerStatus status, String description, boolean encrypted,
-      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
+  public ContainerBuilder(short id, String name, ContainerStatus status, String description, short parentAccountId) {
     this.id = id;
     this.name = name;
     this.status = status;
     this.description = description;
-    this.encrypted = encrypted;
-    this.previouslyEncrypted = previouslyEncrypted;
-    this.cacheable = cacheable;
-    this.mediaScanDisabled = mediaScanDisabled;
     this.parentAccountId = parentAccountId;
   }
 
@@ -122,12 +116,32 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the ID of the parent {@link Account} of the {@link Container} to build.
+   * @param parentAccountId The parent {@link Account} ID to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setParentAccountId(short parentAccountId) {
+    this.parentAccountId = parentAccountId;
+    return this;
+  }
+
+  /**
    * Sets the encryption setting of the {@link Container} to build.
    * @param encrypted The encryption setting to set.
    * @return This builder.
    */
   public ContainerBuilder setEncrypted(boolean encrypted) {
     this.encrypted = encrypted;
+    return this;
+  }
+
+  /**
+   * Sets the previously encrypted setting of the {@link Container} to build.
+   * @param previouslyEncrypted The previouslyEncrypted setting to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setPreviouslyEncrypted(boolean previouslyEncrypted) {
+    this.previouslyEncrypted = previouslyEncrypted;
     return this;
   }
 
@@ -152,12 +166,12 @@ public class ContainerBuilder {
   }
 
   /**
-   * Sets the ID of the parent {@link Account} of the {@link Container} to build.
-   * @param parentAccountId The parent {@link Account} ID to set.
-   * @return This builder.
+   * Sets the replication policy desired by the {@link Container}.
+   * @param replicationPolicy the replication policy desired by the container
+   * @return
    */
-  public ContainerBuilder setParentAccountId(short parentAccountId) {
-    this.parentAccountId = parentAccountId;
+  public ContainerBuilder setReplicationPolicy(String replicationPolicy) {
+    this.replicationPolicy = replicationPolicy;
     return this;
   }
 
@@ -169,6 +183,6 @@ public class ContainerBuilder {
    */
   public Container build() {
     return new Container(id, name, status, description, encrypted, previouslyEncrypted || encrypted, cacheable,
-        mediaScanDisabled, parentAccountId);
+        mediaScanDisabled, replicationPolicy, parentAccountId);
   }
 }

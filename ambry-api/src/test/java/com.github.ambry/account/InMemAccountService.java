@@ -164,7 +164,10 @@ public class InMemAccountService implements AccountService {
     boolean refContainerCaching = TestUtils.RANDOM.nextBoolean();
     boolean refContainerMediaScanDisabled = TestUtils.RANDOM.nextBoolean();
     return new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
-        accountId).build();
+        accountId).setEncrypted(refContainerEncryption)
+        .setPreviouslyEncrypted(refContainerPreviousEncryption)
+        .setCacheable(refContainerCaching)
+        .setMediaScanDisabled(refContainerMediaScanDisabled)
+        .build();
   }
 }

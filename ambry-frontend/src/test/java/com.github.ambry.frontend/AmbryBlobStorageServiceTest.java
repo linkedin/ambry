@@ -2073,12 +2073,12 @@ public class AmbryBlobStorageServiceTest {
 
     Container legacyContainerForPublicBlob =
         new ContainerBuilder(Container.DEFAULT_PUBLIC_CONTAINER_ID, "containerForLegacyPublicPut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob", false, false, false,
-            false, refAccount.getId()).build();
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy public blob",
+            refAccount.getId()).setCacheable(true).build();
     Container legacyContainerForPrivateBlob =
         new ContainerBuilder(Container.DEFAULT_PRIVATE_CONTAINER_ID, "containerForLegacyPrivatePut",
-            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", false, false, true,
-            false, refAccount.getId()).build();
+            Container.ContainerStatus.ACTIVE, "This is a container for putting legacy private blob", refAccount.getId())
+            .build();
     Account accountWithTwoDefaultContainers =
         new AccountBuilder(refAccount).addOrUpdateContainer(legacyContainerForPrivateBlob)
             .addOrUpdateContainer(legacyContainerForPublicBlob)

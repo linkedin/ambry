@@ -21,6 +21,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -94,6 +95,7 @@ public class HelixAccountServiceTest {
   private boolean refContainerEncryption;
   private boolean refContainerPreviousEncryption;
   private boolean refContainerMediaScanDisabled;
+  private String refReplicationPolicy;
   private short refParentAccountId;
   private AccountService accountService;
   private MockHelixAccountServiceFactory mockHelixAccountServiceFactory;
@@ -224,6 +226,7 @@ public class HelixAccountServiceTest {
         containerBuilder.setStatus(
             container.getStatus().equals(ContainerStatus.ACTIVE) ? ContainerStatus.INACTIVE : ContainerStatus.ACTIVE);
         containerBuilder.setDescription(container.getDescription() + "--extra");
+        containerBuilder.setReplicationPolicy(container.getReplicationPolicy() + "---extra");
         accountBuilder.addOrUpdateContainer(containerBuilder.build());
       }
       accountsToUpdate.add(accountBuilder.build());
@@ -925,13 +928,17 @@ public class HelixAccountServiceTest {
     refContainerDescription = UUID.randomUUID().toString();
     refContainerCaching = random.nextBoolean();
     refParentAccountId = refAccountId;
-    // TODO make these randomly generated once V2 container writes are enabled
-    refContainerEncryption = Container.ENCRYPTED_DEFAULT_VALUE;
-    refContainerPreviousEncryption = Container.PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
-    refContainerMediaScanDisabled = Container.MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+    refContainerEncryption = random.nextBoolean();
+    refContainerPreviousEncryption = refContainerEncryption || random.nextBoolean();
+    refContainerMediaScanDisabled = random.nextBoolean();
+    refReplicationPolicy = UtilsTest.getRandomString(10);
     refContainer = new ContainerBuilder(refContainerId, refContainerName, refContainerStatus, refContainerDescription,
-        refContainerEncryption, refContainerPreviousEncryption, refContainerCaching, refContainerMediaScanDisabled,
-        refParentAccountId).build();
+        refParentAccountId).setEncrypted(refContainerEncryption)
+        .setPreviouslyEncrypted(refContainerPreviousEncryption)
+        .setCacheable(refContainerCaching)
+        .setMediaScanDisabled(refContainerMediaScanDisabled)
+        .setReplicationPolicy(refReplicationPolicy)
+        .build();
     refAccount =
         new AccountBuilder(refAccountId, refAccountName, refAccountStatus).addOrUpdateContainer(refContainer).build();
     generateRefAccounts(idToRefAccountMap, idToRefContainerMap, accountIdSet, NUM_REF_ACCOUNT,
