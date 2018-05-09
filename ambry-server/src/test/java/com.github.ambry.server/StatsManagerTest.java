@@ -15,13 +15,18 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageWriteSet;
@@ -42,6 +47,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -95,10 +101,17 @@ public class StatsManagerTest {
     storeMap = new HashMap<>();
     preAggregatedSnapshot = generateRandomSnapshot();
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
+    List<ReplicaId> replicaIds = new ArrayList<>();
+    PartitionId partitionId;
+    DataNodeId dataNodeId;
     for (int i = 0; i < 2; i++) {
+      dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+          Collections.singletonList("/tmp"), "DC1");
+      partitionId =
+          new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
-      storeMap.put(new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS),
-          new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      storeMap.put(partitionId, new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      replicaIds.add(partitionId.getReplicaIds().get(0));
     }
     storeMap.put(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS),
         new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
@@ -106,8 +119,7 @@ public class StatsManagerTest {
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
     config = new StatsManagerConfig(new VerifiableProperties(properties));
-    statsManager = new StatsManager(storageManager, new ArrayList<>(storeMap.keySet()), new MetricRegistry(), config,
-        new MockTime());
+    statsManager = new StatsManager(storageManager, replicaIds, new MetricRegistry(), config, new MockTime());
   }
 
   /**
@@ -145,13 +157,19 @@ public class StatsManagerTest {
    */
   @Test
   public void testStatsManagerWithProblematicStores() throws StoreException, IOException {
+    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+        Collections.singletonList("/tmp"), "DC1");
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
-    problematicStoreMap.put(new MockPartitionId(1, MockClusterMap.DEFAULT_PARTITION_CLASS), null);
+    PartitionId partitionId1 =
+        new MockPartitionId(1, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    PartitionId partitionId2 =
+        new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    problematicStoreMap.put(partitionId1, null);
     Store exceptionStore = new MockStore(new MockStoreStats(null, true));
-    problematicStoreMap.put(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS), exceptionStore);
-    StatsManager testStatsManager =
-        new StatsManager(new MockStorageManager(problematicStoreMap), new ArrayList<>(problematicStoreMap.keySet()),
-            new MetricRegistry(), config, new MockTime());
+    problematicStoreMap.put(partitionId2, exceptionStore);
+    StatsManager testStatsManager = new StatsManager(new MockStorageManager(problematicStoreMap),
+        Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)), new MetricRegistry(),
+        config, new MockTime());
     List<String> unreachableStores = new ArrayList<>();
     StatsSnapshot actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
@@ -162,10 +180,15 @@ public class StatsManagerTest {
     // test for the scenario where some stores are healthy and some are bad
     Map<PartitionId, Store> mixedStoreMap = new HashMap<>(storeMap);
     unreachableStores.clear();
-    mixedStoreMap.put(new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS), null);
-    mixedStoreMap.put(new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS), exceptionStore);
-    testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap), new ArrayList<>(mixedStoreMap.keySet()),
-        new MetricRegistry(), config, new MockTime());
+    PartitionId partitionId3 =
+        new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    PartitionId partitionId4 =
+        new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS, Arrays.asList((MockDataNodeId) dataNodeId), 0);
+    mixedStoreMap.put(partitionId3, null);
+    mixedStoreMap.put(partitionId4, exceptionStore);
+    testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap),
+        Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
+        config, new MockTime());
     actualSnapshot = new StatsSnapshot(0L, null);
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregate(actualSnapshot, partitionId, unreachableStores);

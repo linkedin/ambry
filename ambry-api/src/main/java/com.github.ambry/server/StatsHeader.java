@@ -15,12 +15,14 @@
 package com.github.ambry.server;
 
 import java.util.List;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
 
 
 /**
  * A model object that contains metadata information about some reported stats. For example, the kind of stats that is
  * being reported, timestamp and etc.
  */
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 public class StatsHeader {
   public enum StatsDescription {
     QUOTA

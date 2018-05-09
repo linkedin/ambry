@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 
@@ -41,7 +40,6 @@ public class HelixClusterAggregatorTest {
 
   public HelixClusterAggregatorTest() {
     clusterAggregator = new HelixClusterAggregator(RELEVANT_PERIOD_IN_MINUTES);
-    mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(JsonAutoDetect.Visibility.ANY));
   }
 
   /**

@@ -16,6 +16,7 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -51,6 +53,7 @@ class StatsManager {
   private final long publishPeriodInSecs;
   private final int initialDelayInSecs;
   private final List<PartitionId> totalPartitionIds;
+  private final Map<PartitionId, ReplicaId> partitionToReplicaMap;
   private final StatsManagerMetrics metrics;
   private final Time time;
   private final ObjectMapper mapper = new ObjectMapper();
@@ -60,21 +63,28 @@ class StatsManager {
   /**
    * Constructs a {@link StatsManager}.
    * @param storageManager the {@link StorageManager} to be used to fetch the {@link Store}s
-   * @param partitionIds a {@link List} of {@link PartitionId}s that are going to be fetched
+   * @param replicaIds a {@link List} of {@link ReplicaId}s that are going to be fetched
    * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
    * @param time the {@link Time} instance to be used for reporting
    * @throws IOException
    */
-  StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
+  StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
       StatsManagerConfig config, Time time) throws IOException {
     this.storageManager = storageManager;
-    totalPartitionIds = partitionIds;
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
     mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(JsonAutoDetect.Visibility.ANY));
+    totalPartitionIds = new ArrayList<>();
+    partitionToReplicaMap = new HashMap<>();
+    PartitionId partitionId;
+    for (ReplicaId replicaId : replicaIds) {
+      partitionId = replicaId.getPartitionId();
+      totalPartitionIds.add(partitionId);
+      partitionToReplicaMap.put(partitionId, replicaId);
+    }
     this.time = time;
   }
 
