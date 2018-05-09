@@ -11,23 +11,25 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.protocol;
+package com.github.ambry.messageformat;
 
 /**
- * Type of request response. Do not change this order. Add
- * new entries to the end of the list.
+ * In mem representation of a TTL update record
  */
-public enum RequestOrResponseType {
-  PutRequest,
-  PutResponse,
-  GetRequest,
-  GetResponse,
-  DeleteRequest,
-  DeleteResponse,
-  TtlUpdateRequest,
-  TtlUpdateResponse,
-  ReplicaMetadataRequest,
-  ReplicaMetadataResponse,
-  AdminRequest,
-  AdminResponse
+public class TtlUpdateSubRecord {
+  private final long updatedExpiryTimeMs;
+
+  /**
+   * @param updatedExpiryTimeMs the new expiry time in ms
+   */
+  TtlUpdateSubRecord(long updatedExpiryTimeMs) {
+    this.updatedExpiryTimeMs = updatedExpiryTimeMs;
+  }
+
+  /**
+   * @return the expiry time in ms
+   */
+  public long getUpdatedExpiryTimeMs() {
+    return updatedExpiryTimeMs;
+  }
 }

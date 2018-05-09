@@ -321,70 +321,136 @@ public class MessageFormatRecordTest {
   }
 
   /**
-   * Tests DeleteRecord V1 for serialization and deserialization
+   * Tests UpdateRecord V1 for serialization and deserialization
    * @throws IOException
    * @throws MessageFormatException
    */
   @Test
-  public void testDeleteRecordV1() throws IOException, MessageFormatException {
-    // Test delete V1 record
-    // irrespective of what values are set for acccountId, containerId and deletionTimeMs, legacy values will be returned
-    // with Delete_Format_V1
+  public void testUpdateRecordV1() throws IOException, MessageFormatException {
+    // Test update V1 record
+    // irrespective of what values are set for acccountId, containerId and updateTimeMs, legacy values will be returned
+    // with Update_Format_V1
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize());
-    MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(deleteRecord,
-        new DeleteRecord(accountId, containerId, deletionTimeMs));
-    deleteRecord.flip();
-    DeleteRecord deserializeDeleteRecord =
-        MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-    Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, deserializeDeleteRecord.getAccountId());
-    Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, deserializeDeleteRecord.getContainerId());
-    Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time, deserializeDeleteRecord.getDeletionTimeInMs());
+    long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    ByteBuffer updateRecord = ByteBuffer.allocate(Update_Format_V1.getRecordSize());
+    Update_Format_V1.serialize(updateRecord,
+        new UpdateRecord(accountId, containerId, updateTimeMs, new DeleteSubRecord()));
+    updateRecord.flip();
+    UpdateRecord deserializeUpdateRecord =
+        MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecord));
+    Assert.assertEquals("AccountId mismatch ", UNKNOWN_ACCOUNT_ID, deserializeUpdateRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", UNKNOWN_CONTAINER_ID, deserializeUpdateRecord.getContainerId());
+    Assert.assertEquals("DeletionTime mismatch ", Utils.Infinite_Time, deserializeUpdateRecord.getUpdateTimeInMs());
+    Assert.assertEquals("Type of update record incorrect", UpdateRecord.Type.DELETE, deserializeUpdateRecord.getType());
+    Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
 
-    // corrupt delete V1 record
-    deleteRecord.flip();
-    byte toCorrupt = deleteRecord.get(10);
-    deleteRecord.put(10, (byte) (toCorrupt + 1));
+    // corrupt update V1 record
+    updateRecord.flip();
+    byte toCorrupt = updateRecord.get(10);
+    updateRecord.put(10, (byte) (toCorrupt + 1));
     try {
-      MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-      fail("Deserialization of a corrupt delete record V1 should have failed ");
+      MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecord));
+      fail("Deserialization of a corrupt update record V1 should have failed ");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
     }
   }
 
   /**
-   * Tests DeleteRecord V2 for serialization and deserialization
+   * Tests UpdateRecord V2 for serialization and deserialization
    * @throws IOException
    * @throws MessageFormatException
    */
   @Test
-  public void testDeleteRecordV2() throws IOException, MessageFormatException {
-    // Test delete V2 record
-    ByteBuffer deleteRecord = ByteBuffer.allocate(MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize());
+  public void testUpdateRecordV2() throws IOException, MessageFormatException {
+    // Test update V2 record
+    ByteBuffer updateRecord = ByteBuffer.allocate(Update_Format_V2.getRecordSize());
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
-    MessageFormatRecord.Delete_Format_V2.serializeDeleteRecord(deleteRecord,
-        new DeleteRecord(accountId, containerId, deletionTimeMs));
-    deleteRecord.flip();
-    DeleteRecord deserializeDeleteRecord =
-        MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-    Assert.assertEquals("AccountId mismatch ", accountId, deserializeDeleteRecord.getAccountId());
-    Assert.assertEquals("ContainerId mismatch ", containerId, deserializeDeleteRecord.getContainerId());
-    Assert.assertEquals("DeletionTime mismatch ", deletionTimeMs, deserializeDeleteRecord.getDeletionTimeInMs());
+    long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    Update_Format_V2.serialize(updateRecord,
+        new UpdateRecord(accountId, containerId, updateTimeMs, new DeleteSubRecord()));
+    updateRecord.flip();
+    UpdateRecord deserializeUpdateRecord =
+        MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecord));
+    Assert.assertEquals("AccountId mismatch ", accountId, deserializeUpdateRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch ", containerId, deserializeUpdateRecord.getContainerId());
+    Assert.assertEquals("DeletionTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
+    Assert.assertEquals("Type of update record incorrect", UpdateRecord.Type.DELETE, deserializeUpdateRecord.getType());
+    Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
 
-    // corrupt delete V2 record
-    deleteRecord.flip();
-    byte toCorrupt = deleteRecord.get(10);
-    deleteRecord.put(10, (byte) (toCorrupt + 1));
+    // corrupt update V2 record
+    updateRecord.flip();
+    byte toCorrupt = updateRecord.get(10);
+    updateRecord.put(10, (byte) (toCorrupt + 1));
     try {
-      MessageFormatRecord.deserializeDeleteRecord(new ByteBufferInputStream(deleteRecord));
-      fail("Deserialization of a corrupt delete record V2 should have failed ");
+      MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecord));
+      fail("Deserialization of a corrupt update record V2 should have failed ");
     } catch (MessageFormatException e) {
       Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+    }
+  }
+
+  /**
+   * Tests UpdateRecord V3 for serialization and deserialization
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  @Test
+  public void testUpdateRecordV3() throws IOException, MessageFormatException {
+    // Test update V3 record
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long updateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    long updatedExpiryTimesMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    for (UpdateRecord.Type type : UpdateRecord.Type.values()) {
+      ByteBuffer updateRecordBuf = ByteBuffer.allocate(Update_Format_V3.getRecordSize(type));
+      UpdateRecord updateRecord = null;
+      switch (type) {
+        case DELETE:
+          DeleteSubRecord deleteSubRecord = new DeleteSubRecord();
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, deleteSubRecord);
+          break;
+        case TTL_UPDATE:
+          TtlUpdateSubRecord ttlUpdateSubRecord = new TtlUpdateSubRecord(updatedExpiryTimesMs);
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeMs, ttlUpdateSubRecord);
+          break;
+        default:
+          fail("Unknown update record type: " + type);
+      }
+      Update_Format_V3.serialize(updateRecordBuf, updateRecord);
+      updateRecordBuf.flip();
+      UpdateRecord deserializeUpdateRecord =
+          MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecordBuf));
+      Assert.assertEquals("AccountId mismatch ", accountId, deserializeUpdateRecord.getAccountId());
+      Assert.assertEquals("ContainerId mismatch ", containerId, deserializeUpdateRecord.getContainerId());
+      Assert.assertEquals("UpdateTime mismatch ", updateTimeMs, deserializeUpdateRecord.getUpdateTimeInMs());
+      Assert.assertEquals("Type of update record incorrect", type, deserializeUpdateRecord.getType());
+      switch (type) {
+        case DELETE:
+          Assert.assertNotNull("DeleteSubRecord is null", deserializeUpdateRecord.getDeleteSubRecord());
+          break;
+        case TTL_UPDATE:
+          TtlUpdateSubRecord ttlUpdateSubRecord = deserializeUpdateRecord.getTtlUpdateSubRecord();
+          Assert.assertNotNull("TtlUpdateSubRecord is null", ttlUpdateSubRecord);
+          Assert.assertEquals("Updated expiry time is incorrect", updatedExpiryTimesMs,
+              ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
+          break;
+        default:
+          fail("Unknown update record type: " + type);
+      }
+
+      // corrupt update V3 record
+      updateRecordBuf.flip();
+      byte toCorrupt = updateRecordBuf.get(10);
+      updateRecordBuf.put(10, (byte) (toCorrupt + 1));
+      try {
+        MessageFormatRecord.deserializeUpdateRecord(new ByteBufferInputStream(updateRecordBuf));
+        fail("Deserialization of a corrupt update record V3 should have failed ");
+      } catch (MessageFormatException e) {
+        Assert.assertEquals(e.getErrorCode(), MessageFormatErrorCodes.Data_Corrupt);
+      }
     }
   }
 

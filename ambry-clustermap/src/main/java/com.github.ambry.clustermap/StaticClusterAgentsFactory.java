@@ -48,7 +48,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
       String partitionLayoutFilePath) throws JSONException, IOException {
     this(clusterMapConfig, new PartitionLayout(
         new HardwareLayout(new JSONObject(readStringFromFile(hardwareLayoutFilePath)), clusterMapConfig),
-        new JSONObject(readStringFromFile(partitionLayoutFilePath))));
+        new JSONObject(readStringFromFile(partitionLayoutFilePath)), clusterMapConfig.clusterMapDatacenterName));
   }
 
   /**
@@ -75,7 +75,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
     if (clusterParticipant == null) {
       clusterParticipant = new ClusterParticipant() {
         @Override
-        public void initialize(String hostname, int port, List<AmbryHealthReport> ambryHealthReports) {
+        public void participate(List<AmbryHealthReport> ambryHealthReports) {
 
         }
 

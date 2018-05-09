@@ -18,10 +18,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.DeleteRecord;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.UpdateRecord;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -117,10 +117,17 @@ class DumpDataHelper {
         BlobData blobData = MessageFormatRecord.deserializeBlob(streamlog);
         blobDataOutput = "Blob - size " + blobData.getSize();
       } else {
-        DeleteRecord deleteRecord = MessageFormatRecord.deserializeDeleteRecord(streamlog);
-        isDeleted = true;
-        deleteMsg = "delete change : AccountId:" + deleteRecord.getAccountId() + ", ContainerId:"
-            + deleteRecord.getContainerId() + ", DeletionTimeInSecs:" + deleteRecord.getDeletionTimeInMs();
+        UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(streamlog);
+        switch (updateRecord.getType()) {
+          case DELETE:
+            isDeleted = true;
+            deleteMsg = "delete change : AccountId:" + updateRecord.getAccountId() + ", ContainerId:"
+                + updateRecord.getContainerId() + ", DeletionTimeInSecs:" + updateRecord.getUpdateTimeInMs();
+            break;
+          default:
+            // TODO (TTL update): handle TTL update
+            throw new IllegalStateException("Unrecognized update record type: " + updateRecord.getType());
+        }
       }
       return new LogBlobRecordInfo(messageheader, blobId, encryptionKey, blobProperty, usermetadata, blobDataOutput,
           deleteMsg, isDeleted, isExpired, expiresAtMs, totalRecordSize);

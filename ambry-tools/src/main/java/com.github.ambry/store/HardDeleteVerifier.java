@@ -22,6 +22,7 @@ import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.UpdateRecord;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
@@ -458,8 +459,9 @@ public class HardDeleteVerifier {
               } else {
                 unDeletedPuts++;
               }
-            } else {
-              MessageFormatRecord.deserializeDeleteRecord(streamlog);
+            } else if (MessageFormatRecord.deserializeUpdateRecord(streamlog)
+                .getType()
+                .equals(UpdateRecord.Type.DELETE)) {
               deletes++;
             }
             currentOffset += (header.getMessageSize() + buffer.capacity() + id.sizeInBytes());
@@ -605,8 +607,7 @@ public class HardDeleteVerifier {
                     unDeletedPuts++;
                   }
                 }
-              } else {
-                deserializeDeleteRecord(streamlog, oldStreamlog);
+              } else if (deserializeUpdateRecord(streamlog, oldStreamlog)) {
                 deletes++;
               }
             }
@@ -655,28 +656,31 @@ public class HardDeleteVerifier {
     }
   }
 
-  void deserializeDeleteRecord(InputStream streamlog, InputStream oldStreamlog) throws ContinueException {
+  /**
+   * @return {@code true} if this was a delete record, {@code false} otherwise
+   * @throws ContinueException if there is a deser failure in the new log
+   */
+  private boolean deserializeUpdateRecord(InputStream streamlog, InputStream oldStreamlog) throws ContinueException {
+    boolean isDeleteRecord = false;
     boolean caughtException = false;
     boolean caughtExceptionInOld = false;
     try {
-      MessageFormatRecord.deserializeDeleteRecord(streamlog);
-    } catch (MessageFormatException e) {
+      isDeleteRecord =
+          MessageFormatRecord.deserializeUpdateRecord(streamlog).getType().equals(UpdateRecord.Type.DELETE);
+    } catch (Exception e) {
       caughtException = true;
-    } catch (IOException e) {
-      caughtExceptionInOld = true;
     }
 
     try {
-      MessageFormatRecord.deserializeDeleteRecord(oldStreamlog);
-    } catch (MessageFormatException e) {
-      caughtException = true;
-    } catch (IOException e) {
+      MessageFormatRecord.deserializeUpdateRecord(oldStreamlog);
+    } catch (Exception e) {
       caughtExceptionInOld = true;
     }
 
-    if (caughtException) {
+    if (caughtException && !caughtExceptionInOld) {
       throw new ContinueException("delete record could not be deserialized");
     }
+    return isDeleteRecord;
   }
 
   boolean deserializeUserMetadataAndBlob(InputStream streamlog, InputStream oldStreamlog, boolean isDeleted)

@@ -401,7 +401,7 @@ public class ServerAdminTool implements Closeable {
       return null;
     }
     PartitionId targetPartitionId = null;
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       if (partitionId.isEqual(partitionIdStr)) {
         targetPartitionId = partitionId;

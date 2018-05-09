@@ -51,7 +51,7 @@ public class FrontendUtilsTest {
     byte referenceDatacenterId = bytes[0];
     short referenceAccountId = getRandomShort(TestUtils.RANDOM);
     short referenceContainerId = getRandomShort(TestUtils.RANDOM);
-    PartitionId referencePartitionId = referenceClusterMap.getWritablePartitionIds().get(0);
+    PartitionId referencePartitionId = referenceClusterMap.getWritablePartitionIds(null).get(0);
     boolean referenceIsEncrypted = TestUtils.RANDOM.nextBoolean();
     short[] versions = {BlobId.BLOB_ID_V3, BlobId.BLOB_ID_V4};
     for (short version : versions) {
@@ -61,7 +61,7 @@ public class FrontendUtilsTest {
       BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
       assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
       assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, referenceIsEncrypted);
+          referenceContainerId, referencePartitionId, version >= BlobId.BLOB_ID_V4 ? referenceIsEncrypted : false);
 
       // bad path
       try {
@@ -98,6 +98,6 @@ public class FrontendUtilsTest {
     assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
     assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
     assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
-    assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, blobId.isEncrypted());
+    assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, BlobId.isEncrypted(blobId.getID()));
   }
 }

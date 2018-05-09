@@ -113,8 +113,8 @@ public class AmbryRequests implements RequestAPI {
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
-      NotificationSystem operationNotification, ReplicationManager replicationManager,
-      StoreKeyFactory storeKeyFactory, boolean enableDataPrefetch) {
+      NotificationSystem operationNotification, ReplicationManager replicationManager, StoreKeyFactory storeKeyFactory,
+      boolean enableDataPrefetch) {
     this.storageManager = storageManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -230,7 +230,6 @@ public class AmbryRequests implements RequestAPI {
       publicAccessLogger.info("{} {} processingTime {}", receivedRequest, response, processingTime);
       metrics.putBlobProcessingTimeInMs.update(processingTime);
       metrics.updatePutBlobProcessingTimeBySize(receivedRequest.getBlobSize(), processingTime);
-
     }
     sendPutResponse(requestResponseChannel, response, request, metrics.putBlobResponseQueueTimeInMs,
         metrics.putBlobSendTimeInMs, metrics.putBlobTotalTimeInMs, totalTimeSpent, receivedRequest.getBlobSize(),

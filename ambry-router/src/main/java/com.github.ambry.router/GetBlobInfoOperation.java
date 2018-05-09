@@ -77,14 +77,14 @@ class GetBlobInfoOperation extends GetOperation {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
+   * @param isEncrypted if encrypted bit set based on original string of a {@link BlobId}
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time) {
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
-        routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time);
+        routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
     operationTracker = getOperationTracker(blobId.getPartition());
     progressTracker = new ProgressTracker(operationTracker);
@@ -410,10 +410,10 @@ class GetBlobInfoOperation extends GetOperation {
       }
       if (e != null) {
         operationResult = null;
-        routerMetrics.onGetBlobError(e, options, blobId.isEncrypted());
+        routerMetrics.onGetBlobError(e, options, isEncrypted);
       }
       long operationLatencyMs = time.milliseconds() - submissionTimeMs;
-      if (blobId.isEncrypted()) {
+      if (isEncrypted) {
         routerMetrics.getEncryptedBlobInfoOperationLatencyMs.update(operationLatencyMs);
       } else {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);

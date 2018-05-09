@@ -13,9 +13,7 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
@@ -84,12 +82,15 @@ class NonBlockingRouter implements Router {
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the time instance.
+   * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
+   *                              container config). Can be {@code null} if no affinity is required for the puts for
+   *                              which the container contains no partition class hints.
    * @throws IOException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time)
-      throws IOException {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
+      String defaultPartitionClass) throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
@@ -103,7 +104,7 @@ class NonBlockingRouter implements Router {
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
-      ocList.add(new OperationController(Integer.toString(i)));
+      ocList.add(new OperationController(Integer.toString(i), defaultPartitionClass));
     }
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
@@ -150,16 +151,10 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
     GetBlobOptionsInternal internalOptions = new GetBlobOptionsInternal(options, false, routerMetrics.ageAtGet);
+    routerMetrics.operationQueuingRate.mark();
     try {
-      BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-      if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
-          && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
-        routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
-      }
-      trackGetBlobRateMetrics(options, blobId.isEncrypted());
-      routerMetrics.operationQueuingRate.mark();
       if (isOpen.get()) {
-        getOperationController().getBlob(blobId, internalOptions, new Callback<GetBlobResultInternal>() {
+        getOperationController().getBlob(blobIdStr, internalOptions, new Callback<GetBlobResultInternal>() {
           @Override
           public void onCompletion(GetBlobResultInternal internalResult, Exception exception) {
             GetBlobResult getBlobResult = internalResult == null ? null : internalResult.getBlobResult;
@@ -170,9 +165,15 @@ class NonBlockingRouter implements Router {
           }
         });
       } else {
+        boolean isEncrypted = false;
+        try {
+          isEncrypted = BlobId.isEncrypted(blobIdStr);
+        } catch (IOException e) {
+          logger.warn("Blob ID string is not valid", e);
+        }
         RouterException routerException =
             new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
-        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, blobId.isEncrypted());
+        completeGetBlobOperation(routerException, internalOptions, futureResult, callback, isEncrypted);
       }
     } catch (RouterException e) {
       completeGetBlobOperation(e, internalOptions, futureResult, callback, false);
@@ -292,17 +293,17 @@ class NonBlockingRouter implements Router {
   /**
    * Initiate the deletes of the data chunks associated with this blobId, if this blob turns out to be a composite
    * blob. Note that this causes the rate of gets to increase at the servers.
-   * @param blobId the {@link BlobId} associated with the possibly composite blob.
+   * @param blobIdStr the original string of a {@link BlobId} which associated with the possibly composite blob.
    * @param serviceId the service ID associated with the original delete request.
    */
-  private void initiateChunkDeletesIfAny(final BlobId blobId, final String serviceId) {
+  private void initiateChunkDeletesIfAny(final String blobIdStr, final String serviceId) throws RouterException {
     Callback<GetBlobResultInternal> callback = (GetBlobResultInternal result, Exception exception) -> {
       if (exception != null) {
         // It is expected that these requests will not always succeed. For example, this may have been triggered by a
         // duplicate delete and the blob could have already been hard deleted, so the deserialization can fail, or the
         // blob could have been garbage collected and not found at all and so on.
         logger.trace("Encountered exception when attempting to get chunks of a possibly composite deleted blob {} ",
-            blobId, exception);
+            blobIdStr, exception);
       } else if (result.getBlobResult != null) {
         logger.error("Unexpected result returned by background get operation to fetch chunk ids.");
       } else if (result.storeKeys != null) {
@@ -320,29 +321,7 @@ class NonBlockingRouter implements Router {
     GetBlobOptionsInternal options =
         new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.Include_All, null),
             true, routerMetrics.ageAtDelete);
-    backgroundDeleter.getBlob(blobId, options, callback);
-  }
-
-  /**
-   * Track get blob rate metrics based on the {@link GetBlobOptions} and whether the blob is encrypted or not
-   * @param options {@link GetBlobOptions} instance to use
-   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
-   */
-  private void trackGetBlobRateMetrics(GetBlobOptions options, boolean isEncrypted) {
-    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
-      Meter blobInfoOperationRate =
-          isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
-      blobInfoOperationRate.mark();
-    } else {
-      Meter blobOperationRate =
-          isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
-      blobOperationRate.mark();
-    }
-    if (options.getRange() != null) {
-      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
-          : routerMetrics.getBlobWithRangeOperationRate;
-      blobWithRangeOperationRate.mark();
-    }
+    backgroundDeleter.getBlob(blobIdStr, options, callback);
   }
 
   /**
@@ -485,14 +464,17 @@ class NonBlockingRouter implements Router {
     /**
      * Constructs an OperationController
      * @param suffix the suffix to associate with the thread names of this OperationController
+     * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
+     *                              container config). Can be {@code null} if no affinity is required for the puts for
+     *                              which the container contains no partition class hints.
      * @throws IOException if the network components could not be created.
      */
-    OperationController(String suffix) throws IOException {
+    OperationController(String suffix, String defaultPartitionClass) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
-              suffix, kms, cryptoService, cryptoJobHandler, time);
+              suffix, kms, cryptoService, cryptoJobHandler, time, defaultPartitionClass);
       getManager =
           new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
               cryptoJobHandler, time);
@@ -506,13 +488,13 @@ class NonBlockingRouter implements Router {
     /**
      * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request
      * completes.
-     * @param blobId The {@link BlobId} for which blob data is requested.
+     * @param blobIdStr The ID of the blob for which blob data is requested.
      * @param options The {@link GetBlobOptionsInternal} associated with the request.
      * @param callback The callback which will be invoked on the completion of the request.
      */
-    protected void getBlob(BlobId blobId, GetBlobOptionsInternal options,
-        final Callback<GetBlobResultInternal> callback) {
-      getManager.submitGetBlobOperation(blobId, options, callback);
+    protected void getBlob(String blobIdStr, GetBlobOptionsInternal options,
+        final Callback<GetBlobResultInternal> callback) throws RouterException {
+      getManager.submitGetBlobOperation(blobIdStr, options, callback);
       routerCallback.onPollReady();
     }
 
@@ -553,19 +535,21 @@ class NonBlockingRouter implements Router {
     protected void deleteBlob(final String blobIdStr, final String serviceId, FutureResult<Void> futureResult,
         final Callback<Void> callback, boolean attemptChunkDeletes) {
       try {
-        final BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
-        if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
-            && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
-          routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
-        }
-        deleteManager.submitDeleteBlobOperation(blobId, serviceId, futureResult, (Void result, Exception exception) -> {
-          if (exception == null && attemptChunkDeletes) {
-            initiateChunkDeletesIfAny(blobId, serviceId);
-          }
-          if (callback != null) {
-            callback.onCompletion(result, exception);
-          }
-        });
+        deleteManager.submitDeleteBlobOperation(blobIdStr, serviceId, futureResult,
+            (Void result, Exception exception) -> {
+              if (exception == null && attemptChunkDeletes) {
+                try {
+                  initiateChunkDeletesIfAny(blobIdStr, serviceId);
+                } catch (RouterException e) {
+                  logger.warn(
+                      "RouterException for same reason should have been thrown by submitDeleteBlobOperation() and no callback should be triggered.",
+                      e);
+                }
+              }
+              if (callback != null) {
+                callback.onCompletion(result, exception);
+              }
+            });
       } catch (RouterException e) {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.onDeleteBlobError(e);
@@ -691,7 +675,7 @@ class NonBlockingRouter implements Router {
      * @throws IOException if the associated {@link OperationController} throws one.
      */
     BackgroundDeleter() throws IOException {
-      super("backgroundDeleter");
+      super("backgroundDeleter", null);
       putManager.close();
     }
 

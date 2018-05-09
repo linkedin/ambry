@@ -13,6 +13,8 @@
  */
 package com.github.ambry.messageformat;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -237,7 +239,8 @@ public class MessageFormatInputStreamTest {
    */
   @Test
   public void messageFormatDeleteRecordTest() throws IOException, MessageFormatException {
-    short[] versions = {MessageFormatRecord.Delete_Version_V1, MessageFormatRecord.Delete_Version_V2};
+    short[] versions =
+        {MessageFormatRecord.Update_Version_V1, MessageFormatRecord.Update_Version_V2, MessageFormatRecord.Update_Version_V3};
     for (short version : versions) {
       StoreKey key = new MockId("id1");
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -245,18 +248,26 @@ public class MessageFormatInputStreamTest {
       long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
       MessageFormatInputStream messageFormatStream;
       boolean useV2Header;
-      if (version == MessageFormatRecord.Delete_Version_V1) {
+      int deleteRecordSize;
+      if (version == MessageFormatRecord.Update_Version_V1) {
         messageFormatStream = new DeleteMessageFormatV1InputStream(key, accountId, containerId, deletionTimeMs);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V1.getRecordSize();
         useV2Header = false;
-      } else {
+        // reset account, container ids and time
+        accountId = Account.UNKNOWN_ACCOUNT_ID;
+        containerId = Container.UNKNOWN_CONTAINER_ID;
+        deletionTimeMs = Utils.Infinite_Time;
+      } else if (version == MessageFormatRecord.Update_Version_V2) {
         messageFormatStream = new DeleteMessageFormatInputStream(key, accountId, containerId, deletionTimeMs);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V2.getRecordSize();
+        useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
+      } else {
+        messageFormatStream = new DeleteMessageFormatV3InputStream(key, accountId, containerId, deletionTimeMs);
+        deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
         useV2Header = MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2;
       }
       int headerSize = MessageFormatRecord.getHeaderSizeForVersion(
           useV2Header ? MessageFormatRecord.Message_Header_Version_V2 : MessageFormatRecord.Message_Header_Version_V1);
-      int deleteRecordSize =
-          version == MessageFormatRecord.Delete_Version_V1 ? MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize()
-              : MessageFormatRecord.Delete_Format_V2.getDeleteRecordSize();
       Assert.assertEquals(headerSize + deleteRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
 
       // check header
@@ -285,27 +296,67 @@ public class MessageFormatInputStreamTest {
 
       // verify handle
       byte[] handleOutput = new byte[key.sizeInBytes()];
-      ByteBuffer handleOutputBuf = ByteBuffer.wrap(handleOutput);
       messageFormatStream.read(handleOutput);
-      byte[] dest = new byte[key.sizeInBytes()];
-      handleOutputBuf.get(dest);
-      Assert.assertArrayEquals(dest, key.toBytes());
+      Assert.assertArrayEquals(handleOutput, key.toBytes());
 
       // check delete record
-      byte[] deleteRecordOutput = new byte[deleteRecordSize];
-      ByteBuffer deleteRecordBuf = ByteBuffer.wrap(deleteRecordOutput);
-      messageFormatStream.read(deleteRecordOutput);
-      Assert.assertEquals(deleteRecordBuf.getShort(), version);
-      if (version == MessageFormatRecord.Delete_Version_V1) {
-        Assert.assertEquals(true, deleteRecordBuf.get() == 1 ? true : false);
-      } else {
-        Assert.assertEquals("AccountId mismatch", accountId, deleteRecordBuf.getShort());
-        Assert.assertEquals("ContainerId mismatch", containerId, deleteRecordBuf.getShort());
-        Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, deleteRecordBuf.getLong());
-      }
-      crc = new Crc32();
-      crc.update(deleteRecordOutput, 0, deleteRecordSize - MessageFormatRecord.Crc_Size);
-      Assert.assertEquals(crc.getValue(), deleteRecordBuf.getLong());
+      UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
+      Assert.assertEquals("Type of update record not DELETE", UpdateRecord.Type.DELETE, updateRecord.getType());
+      Assert.assertNotNull("DeleteSubRecord should not be null", updateRecord.getDeleteSubRecord());
+      Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
+      Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
+      Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, updateRecord.getUpdateTimeInMs());
     }
+  }
+
+  /**
+   * Tests for {@link TtlUpdateMessageFormatInputStream} in different versions.
+   */
+  @Test
+  public void messageFormatTtlUpdateRecordTest() throws IOException, MessageFormatException {
+    StoreKey key = new MockId("id1");
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long ttlUpdateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    MessageFormatInputStream messageFormatStream =
+        new TtlUpdateMessageFormatInputStream(key, accountId, containerId, ttlUpdateTimeMs);
+    int ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+    Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
+
+    // check header
+    byte[] headerOutput = new byte[headerSize];
+    Assert.assertEquals("Did not read all bytes", headerSize, messageFormatStream.read(headerOutput));
+    ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
+    Assert.assertEquals(MessageFormatRecord.headerVersionToUse, headerBuf.getShort());
+    Assert.assertEquals(ttlUpdateRecordSize, headerBuf.getLong());
+    // read encryption key relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    // blob properties relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    // update record relative offset. This is the only relative offset with a valid value.
+    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+    // user metadata relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    // blob relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Crc32 crc = new Crc32();
+    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
+    Assert.assertEquals(crc.getValue(), headerBuf.getLong());
+
+    // verify handle
+    byte[] handleOutput = new byte[key.sizeInBytes()];
+    Assert.assertEquals("Did not read all bytes", handleOutput.length, messageFormatStream.read(handleOutput));
+    Assert.assertArrayEquals(handleOutput, key.toBytes());
+
+    // check ttl update record
+    UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
+    Assert.assertEquals("Type of update record not TTL_UPDATE", UpdateRecord.Type.TTL_UPDATE, updateRecord.getType());
+    Assert.assertNotNull("TtlUpdateSubRecord should not be null", updateRecord.getTtlUpdateSubRecord());
+    Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
+    Assert.assertEquals("UpdateTime mismatch", ttlUpdateTimeMs, updateRecord.getUpdateTimeInMs());
+    Assert.assertEquals("Updated expiry time mismatch", Utils.Infinite_Time,
+        updateRecord.getTtlUpdateSubRecord().getUpdatedExpiryTimeMs());
   }
 }

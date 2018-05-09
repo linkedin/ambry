@@ -224,7 +224,7 @@ public class IndexWritePerformance {
           // choose a random index
           int indexToUse = new Random().nextInt(indexesWithMetrics.size());
           // Does not matter what partition we use
-          PartitionId partition = map.getWritablePartitionIds().get(0);
+          PartitionId partition = map.getWritablePartitionIds(null).get(0);
           indexesWithMetrics.get(indexToUse)
               .addToIndexRandomData(new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, map.getLocalDatacenterId(),
                   Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partition, false));

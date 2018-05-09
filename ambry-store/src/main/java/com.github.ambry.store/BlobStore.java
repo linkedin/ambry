@@ -162,6 +162,9 @@ class BlobStore implements Store {
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
     this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
+    logger.debug(
+        "The enable state of writeStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
+        config.storeWriteStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
   }
 
   @Override
@@ -212,6 +215,7 @@ class BlobStore implements Store {
                 queueProcessingPeriodInMs, config.storeStatsWaitTimeoutInSecs, time, longLivedTaskScheduler,
                 taskScheduler, diskIOScheduler, metrics);
         checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+        logger.trace("The store {} is successfully started", storeId);
         started = true;
       } catch (Exception e) {
         metrics.storeStartFailure.inc();
@@ -306,16 +310,32 @@ class BlobStore implements Store {
    */
   private void checkCapacityAndUpdateWriteStatusDelegate(long totalCapacity, long usedCapacity) {
     if (writeStatusDelegate != null) {
+      logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
+          replicaId.getPartitionId());
       if (index.getLogUsedCapacity() > thresholdBytesHigh && !replicaId.isSealed()) {
         if (!writeStatusDelegate.seal(replicaId)) {
           metrics.sealSetError.inc();
+          logger.warn("Could not set the partition as read-only status on {}", replicaId);
+        } else {
+          metrics.sealDoneCount.inc();
+          logger.info(
+              "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : {} bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesHigh);
         }
       } else if (index.getLogUsedCapacity() <= thresholdBytesLow && replicaId.isSealed()) {
         if (!writeStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
+          logger.warn("Could not set the partition as read-write status on {}", replicaId);
+        } else {
+          metrics.unsealDoneCount.inc();
+          logger.info(
+              "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below ReadWrite threshold : {} bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesLow);
         }
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
+    } else {
+      logger.debug("The WriteStatusDelegate is not instantiated");
     }
   }
 
@@ -580,6 +600,7 @@ class BlobStore implements Store {
     checkStarted();
     compactor.compact(details);
     checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
+    logger.trace("One cycle of compaction is completed on the store {}", storeId);
   }
 
   /**

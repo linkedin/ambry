@@ -4,6 +4,7 @@
     "partitions": [
         {
             "id": 0,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [
@@ -26,6 +27,7 @@
         },
         {
             "id": 1,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [
@@ -48,6 +50,7 @@
         },
         {
             "id": 2,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [
@@ -70,6 +73,7 @@
         },
         {
             "id": 3,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [
@@ -92,6 +96,7 @@
         },
         {
             "id": 4,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [
@@ -114,6 +119,7 @@
         },
         {
             "id": 5,
+            "partitionClass": "max-replicas-all-datacenters",
             "partitionState": "READ_WRITE",
             "replicaCapacityInBytes": 10737418240,
             "replicas": [

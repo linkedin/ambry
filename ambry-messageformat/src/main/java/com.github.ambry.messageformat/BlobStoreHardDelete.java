@@ -87,9 +87,15 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds()),
             properties.getAccountId(), properties.getContainerId(), properties.getCreationTimeInMs());
       } else {
-        DeleteRecord deleteRecord = deserializeDeleteRecord(stream);
-        return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
-            deleteRecord.getAccountId(), deleteRecord.getContainerId(), deleteRecord.getDeletionTimeInMs());
+        UpdateRecord updateRecord = deserializeUpdateRecord(stream);
+        switch (updateRecord.getType()) {
+          case DELETE:
+            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
+                updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+          default:
+            // TODO (TTL update): handle TTL update
+            throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
+        }
       }
     } catch (MessageFormatException e) {
       // log in case where we were not able to parse a message.

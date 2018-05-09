@@ -45,8 +45,10 @@ public class MessageFormatRecord {
   public static final short Message_Header_Version_V1 = 1;
   public static final short Message_Header_Version_V2 = 2;
   public static final short BlobProperties_Version_V1 = 1;
-  public static final short Delete_Version_V1 = 1;
-  public static final short Delete_Version_V2 = 2;
+  public static final short Update_Version_V1 = 1;
+  public static final short Update_Version_V2 = 2;
+  public static final short Update_Version_V3 = 3;
+
   public static final short Blob_Encryption_Key_V1 = 1;
   public static final short UserMetadata_Version_V1 = 1;
   public static final short Blob_Version_V1 = 1;
@@ -55,6 +57,9 @@ public class MessageFormatRecord {
   public static final int Message_Header_Invalid_Relative_Offset = -1;
 
   static short headerVersionToUse = Message_Header_Version_V2;
+
+  private static final short Delete_Subrecord_Version_V1 = 1;
+  private static final short Ttl_Update_Subrecord_Version_V1 = 1;
 
   static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {
@@ -124,17 +129,19 @@ public class MessageFormatRecord {
     }
   }
 
-  public static DeleteRecord deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
+  public static UpdateRecord deserializeUpdateRecord(InputStream stream) throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
     switch (version) {
-      case Delete_Version_V1:
-        return Delete_Format_V1.deserializeDeleteRecord(crcStream);
-      case Delete_Version_V2:
-        return Delete_Format_V2.deserializeDeleteRecord(crcStream);
+      case Update_Version_V1:
+        return Update_Format_V1.deserialize(crcStream);
+      case Update_Version_V2:
+        return Update_Format_V2.deserialize(crcStream);
+      case Update_Version_V3:
+        return Update_Format_V3.deserialize(crcStream);
       default:
-        throw new MessageFormatException("delete record version not supported",
+        throw new MessageFormatException("update record version not supported: " + version,
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
   }
@@ -284,7 +291,7 @@ public class MessageFormatRecord {
 
     /**
      * @return if this is a put record, the relative offset of the Blob Properties Record from the end of the header. If
-     * this is a delete record, returns {@link #Message_Header_Invalid_Relative_Offset}
+     * this is an update record, returns {@link #Message_Header_Invalid_Relative_Offset}
      */
     int getBlobPropertiesRecordRelativeOffset();
 
@@ -294,10 +301,10 @@ public class MessageFormatRecord {
     int getBlobPropertiesRecordSize();
 
     /**
-     * @return if this is a delete record, the relative offset of the Delete Sub Record from the end of the header. If
-     * this is a put record, returns {@link #Message_Header_Invalid_Relative_Offset}
+     * @return if this is an update record, the relative offset of the Sub Record from the end of the header. If this is
+     * a put record, returns {@link #Message_Header_Invalid_Relative_Offset}
      */
-    int getDeleteRecordRelativeOffset();
+    int getUpdateRecordRelativeOffset();
 
     /**
      * @return if this is a put record with an encryption key sub record, the offset of the encryption key sub record
@@ -347,7 +354,7 @@ public class MessageFormatRecord {
     boolean hasEncryptionKeyRecord();
 
     /**
-     * @return true if this is a put record; false if this is a delete record.
+     * @return true if this is a put record; false if this is a update record.
      */
     boolean isPutRecord();
   }
@@ -356,7 +363,7 @@ public class MessageFormatRecord {
    *
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |              |               |           |               |           |           |
-   * | version | payload size | Blob Property | Delete    | User Metadata | Blob      | Crc       |
+   * | version | payload size | Blob Property | Update    | User Metadata | Blob      | Crc       |
    * |(2 bytes)|   (8 bytes)  | Relative      | Relative  | Relative      | Relative  | (8 bytes) |
    * |         |              | Offset        | Offset    | Offset        | Offset    |           |
    * |         |              | (4 bytes)     | (4 bytes) | (4 bytes)     | (4 bytes) |           |
@@ -366,13 +373,13 @@ public class MessageFormatRecord {
    *  version         - The version of the message header
    *
    *  payload size    - The size of the message payload.
-   *                    (Blob prop record size or delete record size) + user metadata size + blob size
+   *                    (Blob prop record size or update record size) + user metadata size + blob size
    *
    *  blob property   - The offset at which the blob property record is located relative to this message. Only one of
-   *  relative offset   blob property/delete relative offset field can exist. Non existence is indicated by -1
+   *  relative offset   blob property/update relative offset field can exist. Non existence is indicated by -1
    *
-   *  delete          - The offset at which the delete record is located relative to this message. Only one of blob
-   *  relative offset   property/delete relative offset field can exist. Non existence is indicated by -1
+   *  update          - The offset at which the update record is located relative to this message. Only one of blob
+   *  relative offset   property/update relative offset field can exist. Non existence is indicated by -1
    *
    *  user metadata   - The offset at which the user metadata record is located relative to this message. This exist
    *  relative offset   only when blob property record and blob record exist
@@ -397,10 +404,10 @@ public class MessageFormatRecord {
     public static final int Relative_Offset_Field_Sizes_In_Bytes = 4;
     public static final int BlobProperties_Relative_Offset_Field_Offset_In_Bytes =
         Total_Size_Field_Offset_In_Bytes + Total_Size_Field_Size_In_Bytes;
-    public static final int Delete_Relative_Offset_Field_Offset_In_Bytes =
+    public static final int Update_Relative_Offset_Field_Offset_In_Bytes =
         BlobProperties_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int UserMetadata_Relative_Offset_Field_Offset_In_Bytes =
-        Delete_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        Update_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int Blob_Relative_Offset_Field_Offset_In_Bytes =
         UserMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
@@ -414,35 +421,35 @@ public class MessageFormatRecord {
     }
 
     public static void serializeHeader(ByteBuffer outputBuffer, long totalSize, int blobPropertiesRecordRelativeOffset,
-        int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
+        int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
-      checkHeaderConstraints(totalSize, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
+      checkHeaderConstraints(totalSize, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
           userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Message_Header_Version_V1);
       outputBuffer.putLong(totalSize);
       outputBuffer.putInt(blobPropertiesRecordRelativeOffset);
-      outputBuffer.putInt(deleteRecordRelativeOffset);
+      outputBuffer.putInt(updateRecordRelativeOffset);
       outputBuffer.putInt(userMetadataRecordRelativeOffset);
       outputBuffer.putInt(blobRecordRelativeOffset);
       Crc32 crc = new Crc32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
       logger.trace("serializing header : version {} size {} blobpropertiesrecordrelativeoffset {} "
-              + "deleterecordrelativeoffset {} usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
-          Message_Header_Version_V1, totalSize, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
+              + "updaterecordrelativeoffset {} usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
+          Message_Header_Version_V1, totalSize, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
           userMetadataRecordRelativeOffset, blobPropertiesRecordRelativeOffset, crc.getValue());
     }
 
     // checks the following constraints
     // 1. totalSize is greater than 0
-    // 2. if blobPropertiesRecordRelativeOffset is greater than 0, ensures that deleteRecordRelativeOffset
+    // 2. if blobPropertiesRecordRelativeOffset is greater than 0, ensures that updateRecordRelativeOffset
     //    is set to Message_Header_Invalid_Relative_Offset and userMetadataRecordRelativeOffset
     //    and blobRecordRelativeOffset is positive
-    // 3. if deleteRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
+    // 3. if updateRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
     //    Message_Header_Invalid_Relative_Offset
     private static void checkHeaderConstraints(long totalSize, int blobPropertiesRecordRelativeOffset,
-        int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
+        int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
       // check constraints
       if (totalSize <= 0) {
@@ -452,23 +459,23 @@ public class MessageFormatRecord {
       }
 
       if (blobPropertiesRecordRelativeOffset > 0 && (
-          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset || userMetadataRecordRelativeOffset <= 0
+          updateRecordRelativeOffset != Message_Header_Invalid_Relative_Offset || userMetadataRecordRelativeOffset <= 0
               || blobRecordRelativeOffset <= 0)) {
         throw new MessageFormatException(
             "checkHeaderConstraints - blobPropertiesRecordRelativeOffset is greater than 0 "
                 + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
-                + blobPropertiesRecordRelativeOffset + " deleteRecordRelativeOffset " + deleteRecordRelativeOffset
+                + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
                 + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
                 + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
 
-      if (deleteRecordRelativeOffset > 0 && (
+      if (updateRecordRelativeOffset > 0 && (
           blobPropertiesRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
               || userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
               || blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset)) {
-        throw new MessageFormatException("checkHeaderConstraints - deleteRecordRelativeOffset is greater than 0 "
+        throw new MessageFormatException("checkHeaderConstraints - updateRecordRelativeOffset is greater than 0 "
             + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
-            + blobPropertiesRecordRelativeOffset + " deleteRecordRelativeOffset " + deleteRecordRelativeOffset
+            + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
             + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
             + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
@@ -490,7 +497,7 @@ public class MessageFormatRecord {
 
     @Override
     public int getPayloadRelativeOffset() {
-      return isPutRecord() ? getBlobPropertiesRecordRelativeOffset() : getDeleteRecordRelativeOffset();
+      return isPutRecord() ? getBlobPropertiesRecordRelativeOffset() : getUpdateRecordRelativeOffset();
     }
 
     @Override
@@ -509,8 +516,8 @@ public class MessageFormatRecord {
     }
 
     @Override
-    public int getDeleteRecordRelativeOffset() {
-      return buffer.getInt(Delete_Relative_Offset_Field_Offset_In_Bytes);
+    public int getUpdateRecordRelativeOffset() {
+      return buffer.getInt(Update_Relative_Offset_Field_Offset_In_Bytes);
     }
 
     @Override
@@ -557,7 +564,7 @@ public class MessageFormatRecord {
     @Override
     public void verifyHeader() throws MessageFormatException {
       verifyCrc();
-      checkHeaderConstraints(getMessageSize(), getBlobPropertiesRecordRelativeOffset(), getDeleteRecordRelativeOffset(),
+      checkHeaderConstraints(getMessageSize(), getBlobPropertiesRecordRelativeOffset(), getUpdateRecordRelativeOffset(),
           getUserMetadataRecordRelativeOffset(), getBlobRecordRelativeOffset());
     }
 
@@ -574,7 +581,7 @@ public class MessageFormatRecord {
    *
    *  - - - - - - - - - - - - - - - - - - -- - -- - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - -
    * |         |              |                 |               |           |               |           |           |
-   * | version | payload size | Blob Encryption | Blob Property | Delete    | User Metadata | Blob      | Crc       |
+   * | version | payload size | Blob Encryption | Blob Property | Update    | User Metadata | Blob      | Crc       |
    * |(2 bytes)|   (8 bytes)  | Key Relative    | Relative      | Relative  | Relative      | Relative  | (8 bytes) |
    * |         |              | Offset          | Offset        | Offset    | Offset        | Offset    |           |
    * |         |              | (4 bytes)       | (4 bytes)     | (4 bytes) | (4 bytes)     | (4 bytes) |           |
@@ -584,18 +591,18 @@ public class MessageFormatRecord {
    *  version         - The version of the message header
    *
    *  payload size    - The size of the message payload.
-   *                    Blob Encryption Key Record Size (if present) + (Blob prop record size or delete record size) +
+   *                    Blob Encryption Key Record Size (if present) + (Blob prop record size or update record size) +
    *                    user metadata size + blob size
    *
    *  Blob Encryption - The offset at which the blob encryption key record is located relative to this message.
    *  Key relative      Non-existence of blob key record is indicated by -1. Blob Keys are optionally present for Put
-   *  offset            records. Blob Keys will be absent for Delete records.
+   *  offset            records. Blob Keys will be absent for update records.
    *
    *  blob property   - The offset at which the blob property record is located relative to this message. Only one of
-   *  relative offset   blob property/delete relative offset field can exist. Non existence is indicated by -1
+   *  relative offset   blob property/update relative offset field can exist. Non existence is indicated by -1
    *
-   *  delete          - The offset at which the delete record is located relative to this message. Only one of blob
-   *  relative offset   property/delete relative offset field can exist. Non existence is indicated by -1
+   *  update          - The offset at which the update record is located relative to this message. Only one of blob
+   *  relative offset   property/update relative offset field can exist. Non existence is indicated by -1
    *
    *  user metadata   - The offset at which the user metadata record is located relative to this message. This exist
    *  relative offset   only when blob property record and blob record exist
@@ -621,10 +628,10 @@ public class MessageFormatRecord {
         Total_Size_Field_Offset_In_Bytes + Total_Size_Field_Size_In_Bytes;
     public static final int BlobProperties_Relative_Offset_Field_Offset_In_Bytes =
         Blob_Encryption_Key_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
-    public static final int Delete_Relative_Offset_Field_Offset_In_Bytes =
+    public static final int Update_Relative_Offset_Field_Offset_In_Bytes =
         BlobProperties_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int UserMetadata_Relative_Offset_Field_Offset_In_Bytes =
-        Delete_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
+        Update_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
     public static final int Blob_Relative_Offset_Field_Offset_In_Bytes =
         UserMetadata_Relative_Offset_Field_Offset_In_Bytes + Relative_Offset_Field_Sizes_In_Bytes;
 
@@ -639,16 +646,16 @@ public class MessageFormatRecord {
 
     public static void serializeHeader(ByteBuffer outputBuffer, long totalSize,
         int blobEncryptionKeyRecordRelativeOffset, int blobPropertiesRecordRelativeOffset,
-        int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
+        int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
       checkHeaderConstraints(totalSize, blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset,
-          deleteRecordRelativeOffset, userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
+          updateRecordRelativeOffset, userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Message_Header_Version_V2);
       outputBuffer.putLong(totalSize);
       outputBuffer.putInt(blobEncryptionKeyRecordRelativeOffset);
       outputBuffer.putInt(blobPropertiesRecordRelativeOffset);
-      outputBuffer.putInt(deleteRecordRelativeOffset);
+      outputBuffer.putInt(updateRecordRelativeOffset);
       outputBuffer.putInt(userMetadataRecordRelativeOffset);
       outputBuffer.putInt(blobRecordRelativeOffset);
       Crc32 crc = new Crc32();
@@ -656,21 +663,21 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
       logger.trace(
           "serializing header : version {} size {} blobencryptionkeyrecordrelativeoffset {} blobpropertiesrecordrelativeoffset {} "
-              + "deleterecordrelativeoffset {} usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
+              + "updaterecordrelativeoffset {} usermetadatarecordrelativeoffset {} blobrecordrelativeoffset {} crc {}",
           Message_Header_Version_V2, totalSize, blobEncryptionKeyRecordRelativeOffset,
-          blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset, userMetadataRecordRelativeOffset,
+          blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset, userMetadataRecordRelativeOffset,
           blobPropertiesRecordRelativeOffset, crc.getValue());
     }
 
     // checks the following constraints
     // 1. totalSize is greater than 0
-    // 2. if blobPropertiesRecordRelativeOffset is greater than 0, ensures that deleteRecordRelativeOffset
+    // 2. if blobPropertiesRecordRelativeOffset is greater than 0, ensures that updateRecordRelativeOffset
     //    is set to Message_Header_Invalid_Relative_Offset and userMetadataRecordRelativeOffset
     //    and blobRecordRelativeOffset is positive
-    // 3. if deleteRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
+    // 3. if updateRecordRelativeOffset is greater than 0, ensures that all the other offsets are set to
     //    Message_Header_Invalid_Relative_Offset
     private static void checkHeaderConstraints(long totalSize, int blobEncryptionKeyRecordRelativeOffset,
-        int blobPropertiesRecordRelativeOffset, int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset,
+        int blobPropertiesRecordRelativeOffset, int updateRecordRelativeOffset, int userMetadataRecordRelativeOffset,
         int blobRecordRelativeOffset) throws MessageFormatException {
       // check constraints
       if (totalSize <= 0) {
@@ -680,25 +687,25 @@ public class MessageFormatRecord {
       }
 
       if (blobPropertiesRecordRelativeOffset > 0 && (
-          deleteRecordRelativeOffset != Message_Header_Invalid_Relative_Offset || userMetadataRecordRelativeOffset <= 0
+          updateRecordRelativeOffset != Message_Header_Invalid_Relative_Offset || userMetadataRecordRelativeOffset <= 0
               || blobRecordRelativeOffset <= 0)) {
         throw new MessageFormatException(
             "checkHeaderConstraints - blobPropertiesRecordRelativeOffset is greater than 0 "
                 + " but other properties do not satisfy constraints" + " blobPropertiesRecordRelativeOffset "
-                + blobPropertiesRecordRelativeOffset + " deleteRecordRelativeOffset " + deleteRecordRelativeOffset
+                + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
                 + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
                 + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
 
-      if (deleteRecordRelativeOffset > 0 && (
+      if (updateRecordRelativeOffset > 0 && (
           blobEncryptionKeyRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
               || blobPropertiesRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
               || userMetadataRecordRelativeOffset != Message_Header_Invalid_Relative_Offset
               || blobRecordRelativeOffset != Message_Header_Invalid_Relative_Offset)) {
-        throw new MessageFormatException("checkHeaderConstraints - deleteRecordRelativeOffset is greater than 0 "
+        throw new MessageFormatException("checkHeaderConstraints - updateRecordRelativeOffset is greater than 0 "
             + " but other properties do not satisfy constraints" + " blobEncryptionKeyRelativeOffset "
             + blobEncryptionKeyRecordRelativeOffset + " blobPropertiesRecordRelativeOffset "
-            + blobPropertiesRecordRelativeOffset + " deleteRecordRelativeOffset " + deleteRecordRelativeOffset
+            + blobPropertiesRecordRelativeOffset + " updateRecordRelativeOffset " + updateRecordRelativeOffset
             + " userMetadataRecordRelativeOffset " + userMetadataRecordRelativeOffset + " blobRecordRelativeOffset "
             + blobRecordRelativeOffset, MessageFormatErrorCodes.Header_Constraint_Error);
       }
@@ -734,8 +741,8 @@ public class MessageFormatRecord {
     }
 
     @Override
-    public int getDeleteRecordRelativeOffset() {
-      return buffer.getInt(Delete_Relative_Offset_Field_Offset_In_Bytes);
+    public int getUpdateRecordRelativeOffset() {
+      return buffer.getInt(Update_Relative_Offset_Field_Offset_In_Bytes);
     }
 
     @Override
@@ -784,7 +791,7 @@ public class MessageFormatRecord {
         return hasEncryptionKeyRecord() ? getBlobEncryptionKeyRecordRelativeOffset()
             : getBlobPropertiesRecordRelativeOffset();
       } else {
-        return getDeleteRecordRelativeOffset();
+        return getUpdateRecordRelativeOffset();
       }
     }
 
@@ -797,7 +804,7 @@ public class MessageFormatRecord {
     public void verifyHeader() throws MessageFormatException {
       verifyCrc();
       checkHeaderConstraints(getMessageSize(), getBlobEncryptionKeyRecordRelativeOffset(),
-          getBlobPropertiesRecordRelativeOffset(), getDeleteRecordRelativeOffset(),
+          getBlobPropertiesRecordRelativeOffset(), getUpdateRecordRelativeOffset(),
           getUserMetadataRecordRelativeOffset(), getBlobRecordRelativeOffset());
     }
 
@@ -869,100 +876,297 @@ public class MessageFormatRecord {
    * |(2 bytes)|    (1 byte)   |  (8 bytes) |
    * |         |               |            |
    *  - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the delete record
+   *  version         - The version of the update record
    *
    *  delete byte     - Takes value 0 or 1. If it is set to 1, it signifies that the blob is deleted. The field
    *                    is required to be able to support undelete in the future if required.
    *
-   *  crc             - The crc of the delete record
+   *  crc             - The crc of the update record
    *
    */
-  public static class Delete_Format_V1 {
+  public static class Update_Format_V1 {
 
-    public static final int Delete_Field_Size_In_Bytes = 1;
-    private static Logger logger = LoggerFactory.getLogger(Delete_Format_V1.class);
+    private static final int Delete_Field_Size_In_Bytes = 1;
 
-    public static int getDeleteRecordSize() {
+    public static int getRecordSize() {
       return Version_Field_Size_In_Bytes + Delete_Field_Size_In_Bytes + Crc_Size;
     }
 
-    public static void serializeDeleteRecord(ByteBuffer outputBuffer, DeleteRecord deleteRecord) {
+    public static void serialize(ByteBuffer outputBuffer, UpdateRecord updateRecord) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort(Delete_Version_V1);
+      outputBuffer.putShort(Update_Version_V1);
       outputBuffer.put((byte) 1);
       Crc32 crc = new Crc32();
-      crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
+      crc.update(outputBuffer.array(), startOffset, getRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static DeleteRecord deserializeDeleteRecord(CrcInputStream crcStream)
-        throws IOException, MessageFormatException {
+    static UpdateRecord deserialize(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       boolean isDeleted = dataStream.readByte() == 1;
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger.error(
-            "corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
-        throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
+        throw new MessageFormatException(
+            "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
+            MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new DeleteRecord(UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time);
+      return new UpdateRecord(UNKNOWN_ACCOUNT_ID, UNKNOWN_CONTAINER_ID, Utils.Infinite_Time, new DeleteSubRecord());
     }
   }
 
   /**
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |               |               |               |             |
-   * | version |   AccountId   |  ContainerId  |  DeletionTime |     Crc     |
+   * | version |   AccountId   |  ContainerId  |  UpdateTime   |     Crc     |
    * |(2 bytes)|    (2 byte2)  |   (2 bytes)   |   (8 bytes)   |  (8 bytes)  |
    * |         |               |               |               |             |
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   *  version         - The version of the delete record
+   *  version       - The version of the update record
    *
    *  AccountId     - AccountId that the blob belongs to
    *
    *  ContainerId   - ContainerId that the blob belongs to
    *
-   *  Deletion Time - Time of deletion in Ms
+   *  UpdateTime    - Time of update in Ms
    *
-   *  Crc           - The crc of the delete record
+   *  Crc           - The crc of the update record
    *
    */
-  public static class Delete_Format_V2 {
+  public static class Update_Format_V2 {
 
-    public static final int ACCOUNT_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
-    public static final int CONTAINER_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
-    public static final int DELETION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
+    private static final int ACCOUNT_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    private static final int CONTAINER_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    private static final int UPDATE_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
 
-    public static int getDeleteRecordSize() {
+    public static int getRecordSize() {
       return Version_Field_Size_In_Bytes + ACCOUNT_ID_FIELD_SIZE_IN_BYTES + CONTAINER_ID_FIELD_SIZE_IN_BYTES
-          + DELETION_TIME_FIELD_SIZE_IN_BYTES + Crc_Size;
+          + UPDATE_TIME_FIELD_SIZE_IN_BYTES + Crc_Size;
     }
 
-    public static void serializeDeleteRecord(ByteBuffer outputBuffer, DeleteRecord deleteRecord) {
+    public static void serialize(ByteBuffer outputBuffer, UpdateRecord updateRecord) {
       int startOffset = outputBuffer.position();
-      outputBuffer.putShort(Delete_Version_V2);
-      outputBuffer.putShort(deleteRecord.getAccountId());
-      outputBuffer.putShort(deleteRecord.getContainerId());
-      outputBuffer.putLong(deleteRecord.getDeletionTimeInMs());
+      outputBuffer.putShort(Update_Version_V2);
+      outputBuffer.putShort(updateRecord.getAccountId());
+      outputBuffer.putShort(updateRecord.getContainerId());
+      outputBuffer.putLong(updateRecord.getUpdateTimeInMs());
       Crc32 crc = new Crc32();
-      crc.update(outputBuffer.array(), startOffset, getDeleteRecordSize() - Crc_Size);
+      crc.update(outputBuffer.array(), startOffset, getRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static DeleteRecord deserializeDeleteRecord(CrcInputStream crcStream)
-        throws IOException, MessageFormatException {
+    static UpdateRecord deserialize(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       short accountId = dataStream.readShort();
       short containerId = dataStream.readShort();
-      long deletionTimeInMs = dataStream.readLong();
+      long udpateTimeInMs = dataStream.readLong();
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        throw new MessageFormatException("delete record data is corrupt (mismatch in CRC) ",
+        throw new MessageFormatException(
+            "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
             MessageFormatErrorCodes.Data_Corrupt);
       }
-      return new DeleteRecord(accountId, containerId, deletionTimeInMs);
+      return new UpdateRecord(accountId, containerId, udpateTimeInMs, new DeleteSubRecord());
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -- - - - - - -
+   * |         |               |               |               |             |            |
+   * | version |   AccountId   |  ContainerId  |  UpdateTime   |  Sub record |    Crc     |
+   * |(2 bytes)|    (2 byte2)  |   (2 bytes)   |   (8 bytes)   |  (n bytes)  |  (8 bytes) |
+   * |         |               |               |               |             |            |
+   *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -- - - - - - -
+   *  version       - The version of the update record
+   *
+   *  AccountId     - AccountId that the blob belongs to
+   *
+   *  ContainerId   - ContainerId that the blob belongs to
+   *
+   *  UpdateTime    - Time of update in Ms
+   *
+   *  Sub record    - the sub record related to this update
+   *
+   *  Crc           - The crc of the update record
+   *
+   */
+  public static class Update_Format_V3 {
+
+    private static final int RECORD_TYPE_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    private static final int ACCOUNT_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    private static final int CONTAINER_ID_FIELD_SIZE_IN_BYTES = Short.BYTES;
+    private static final int UPDATE_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
+
+    /**
+     * @param type the type of the sub record in this update record.
+     * @return the size of the record if the record were serialized
+     */
+    public static int getRecordSize(UpdateRecord.Type type) {
+      int subRecordSize;
+      switch (type) {
+        case DELETE:
+          subRecordSize = Delete_Sub_Format_V1.getRecordSize();
+          break;
+        case TTL_UPDATE:
+          subRecordSize = Ttl_Update_Sub_Format_V1.getRecordSize();
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown update record type: " + type);
+      }
+      return Version_Field_Size_In_Bytes + ACCOUNT_ID_FIELD_SIZE_IN_BYTES + CONTAINER_ID_FIELD_SIZE_IN_BYTES
+          + UPDATE_TIME_FIELD_SIZE_IN_BYTES + RECORD_TYPE_FIELD_SIZE_IN_BYTES + subRecordSize + Crc_Size;
+    }
+
+    /**
+     * Serializes {@code updateRecord} into {@code outputBuffer} in version 3.
+     * @param outputBuffer the buffer to write the serialized bytes into.
+     * @param updateRecord the {@link UpdateRecord} to serialize.
+     */
+    public static void serialize(ByteBuffer outputBuffer, UpdateRecord updateRecord) {
+      int startOffset = outputBuffer.position();
+      outputBuffer.putShort(Update_Version_V3);
+      outputBuffer.putShort(updateRecord.getAccountId());
+      outputBuffer.putShort(updateRecord.getContainerId());
+      outputBuffer.putLong(updateRecord.getUpdateTimeInMs());
+      outputBuffer.putShort((short) updateRecord.getType().ordinal());
+      switch (updateRecord.getType()) {
+        case DELETE:
+          Delete_Sub_Format_V1.serialize(outputBuffer, updateRecord.getDeleteSubRecord());
+          break;
+        case TTL_UPDATE:
+          Ttl_Update_Sub_Format_V1.serialize(outputBuffer, updateRecord.getTtlUpdateSubRecord());
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown update record type: " + updateRecord.getType());
+      }
+      Crc32 crc = new Crc32();
+      crc.update(outputBuffer.array(), startOffset, getRecordSize(updateRecord.getType()) - Crc_Size);
+      outputBuffer.putLong(crc.getValue());
+    }
+
+    /**
+     * @param crcStream the stream that contains the serialized form of an {@link UpdateRecord} of version 3.
+     * @return the deserialized {@link UpdateRecord}
+     * @throws IOException if there are problems reading from stream.
+     * @throws MessageFormatException if the format of the message is unexpected.
+     */
+    static UpdateRecord deserialize(CrcInputStream crcStream) throws IOException, MessageFormatException {
+      UpdateRecord updateRecord;
+      DataInputStream dataStream = new DataInputStream(crcStream);
+      short accountId = dataStream.readShort();
+      short containerId = dataStream.readShort();
+      long updateTimeInMs = dataStream.readLong();
+      UpdateRecord.Type type = UpdateRecord.Type.values()[dataStream.readShort()];
+      switch (type) {
+        case DELETE:
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getDeleteSubRecord(dataStream));
+          break;
+        case TTL_UPDATE:
+          updateRecord = new UpdateRecord(accountId, containerId, updateTimeInMs, getTtlUpdateSubRecord(dataStream));
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown update record type: " + type);
+      }
+      long actualCRC = crcStream.getValue();
+      long expectedCRC = dataStream.readLong();
+      if (actualCRC != expectedCRC) {
+        throw new MessageFormatException(
+            "update record data is corrupt. Expected CRC: " + expectedCRC + ", Actual CRC: " + actualCRC,
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+      return updateRecord;
+    }
+
+    /**
+     * @param inputStream the stream that contains the serialized form of a {@link DeleteSubRecord}.
+     * @return the deserialized {@link DeleteSubRecord}
+     * @throws IOException if there are problems reading from stream.
+     * @throws MessageFormatException if the format of the message is unexpected.
+     */
+    private static DeleteSubRecord getDeleteSubRecord(DataInputStream inputStream)
+        throws IOException, MessageFormatException {
+      short version = inputStream.readShort();
+      switch (version) {
+        case Delete_Subrecord_Version_V1:
+          return Delete_Sub_Format_V1.deserialize(inputStream);
+        default:
+          throw new MessageFormatException("delete record version not supported: " + version,
+              MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+    }
+
+    /**
+     * @param inputStream the stream that contains the serialized form of a {@link TtlUpdateSubRecord}.
+     * @return the deserialized {@link TtlUpdateSubRecord}
+     * @throws IOException if there are problems reading from stream.
+     * @throws MessageFormatException if the format of the message is unexpected.
+     */
+    private static TtlUpdateSubRecord getTtlUpdateSubRecord(DataInputStream inputStream)
+        throws IOException, MessageFormatException {
+      short version = inputStream.readShort();
+      switch (version) {
+        case Ttl_Update_Subrecord_Version_V1:
+          return Ttl_Update_Sub_Format_V1.deserialize(inputStream);
+        default:
+          throw new MessageFormatException("ttl update record version not supported: " + version,
+              MessageFormatErrorCodes.Unknown_Format_Version);
+      }
+    }
+  }
+
+  /**
+   *  - - - - -
+   * |         |
+   * | version |
+   * |(2 bytes)|
+   * |         |
+   *  - - - - -
+   *  version         - The version of the delete record
+   */
+  private static class Delete_Sub_Format_V1 {
+
+    static int getRecordSize() {
+      return Version_Field_Size_In_Bytes;
+    }
+
+    static void serialize(ByteBuffer outputBuffer, DeleteSubRecord deleteSubRecord) {
+      outputBuffer.putShort(Delete_Subrecord_Version_V1);
+    }
+
+    static DeleteSubRecord deserialize(DataInputStream stream) {
+      return new DeleteSubRecord();
+    }
+  }
+
+  /**
+   *  - - - - - - - - - - - - - - -
+   * |         |                   |
+   * | version | UpdatedExpiryTime |
+   * |(2 bytes)|   (8 bytes)       |
+   * |         |                   |
+   *  - - - - - - - - - - - - - - -
+   *  version         - The version of the ttl update record
+   *
+   *  UpdatedExpiryTime  - Time in ms to which the expiry time was updated
+   *
+   */
+  private static class Ttl_Update_Sub_Format_V1 {
+
+    private static final int EXPIRE_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
+
+    static int getRecordSize() {
+      return Version_Field_Size_In_Bytes + EXPIRE_TIME_FIELD_SIZE_IN_BYTES;
+    }
+
+    static void serialize(ByteBuffer outputBuffer, TtlUpdateSubRecord ttlUpdateSubRecord) {
+      outputBuffer.putShort(Ttl_Update_Subrecord_Version_V1);
+      outputBuffer.putLong(ttlUpdateSubRecord.getUpdatedExpiryTimeMs());
+    }
+
+    static TtlUpdateSubRecord deserialize(DataInputStream stream) throws IOException {
+      long updatedExpiryTimeMs = stream.readLong();
+      return new TtlUpdateSubRecord(updatedExpiryTimeMs);
     }
   }
 

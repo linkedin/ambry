@@ -175,7 +175,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime);
+        cryptoService, cryptoJobHandler, mockTime, null);
   }
 
   private void setOperationParams() {
@@ -343,7 +343,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, kms, cryptoService, cryptoJobHandler, mockTime);
+        mockClusterMap, kms, cryptoService, cryptoJobHandler, mockTime, null);
 
     assertExpectedThreadCounts(2, 1);
 
@@ -418,7 +418,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime);
+        cryptoService, cryptoJobHandler, mockTime, null);
 
     setOperationParams();
 
@@ -488,7 +488,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime);
+        cryptoService, cryptoJobHandler, mockTime, null);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     String deleteServiceId = "delete-service";
@@ -576,7 +576,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime);
+        cryptoService, cryptoJobHandler, mockTime, null);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.deleteBlob(blobId, deleteServiceId, null).get();
@@ -666,7 +666,7 @@ public class NonBlockingRouterTest {
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", localKMS, cryptoService,
-        cryptoJobHandler, mockTime);
+        cryptoJobHandler, mockTime, null);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -935,8 +935,9 @@ public class NonBlockingRouterTest {
      * Submit a put, get or delete operation based on the associated {@link OperationType} of this object.
      * @param blobId the blobId to get or delete. For puts, this is ignored.
      * @return the {@link FutureResult} associated with the submitted operation.
+     * @throws RouterException if the blobIdStr is invalid.
      */
-    FutureResult submitOperation(BlobId blobId) {
+    FutureResult submitOperation(BlobId blobId) throws RouterException{
       FutureResult futureResult = null;
       switch (opType) {
         case PUT:
@@ -946,7 +947,7 @@ public class NonBlockingRouterTest {
           break;
         case GET:
           final FutureResult getFutureResult = new FutureResult<GetBlobResultInternal>();
-          getManager.submitGetBlobOperation(blobId, new GetBlobOptionsInternal(
+          getManager.submitGetBlobOperation(blobId.getID(), new GetBlobOptionsInternal(
               new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
               routerMetrics.ageAtGet), new Callback<GetBlobResultInternal>() {
             @Override
@@ -958,7 +959,7 @@ public class NonBlockingRouterTest {
           break;
         case DELETE:
           futureResult = new FutureResult<Void>();
-          deleteManager.submitDeleteBlobOperation(blobId, null, futureResult, null);
+          deleteManager.submitDeleteBlobOperation(blobId.getID(), null, futureResult, null);
           break;
       }
       NonBlockingRouter.currentOperationsCount.incrementAndGet();

@@ -431,7 +431,7 @@ public class GetManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime);
+        cryptoService, cryptoJobHandler, mockTime, null);
     return router;
   }
 

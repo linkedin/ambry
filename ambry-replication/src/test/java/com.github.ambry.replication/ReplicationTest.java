@@ -113,7 +113,7 @@ public class ReplicationTest {
     Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
     Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
 
-    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       // add  10 messages to the remote host only
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 10);
@@ -161,8 +161,8 @@ public class ReplicationTest {
     assertEquals("There should be no disabled partitions", 0, replicaThread.getReplicationDisabledPartitions().size());
     // wait to pause replication
     readyToPause.await(10, TimeUnit.SECONDS);
-    replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), false);
-    Set<PartitionId> expectedPaused = new HashSet<>(clusterMap.getAllPartitionIds());
+    replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(null), false);
+    Set<PartitionId> expectedPaused = new HashSet<>(clusterMap.getAllPartitionIds(null));
     assertEquals("Disabled partitions sets do not match", expectedPaused,
         replicaThread.getReplicationDisabledPartitions());
     // signal the replica thread to move forward
@@ -180,7 +180,7 @@ public class ReplicationTest {
     // reset limit
     reachedLimitLatch.set(new CountDownLatch(partitionIds.size() - 1));
     // unpause all partitions
-    replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), true);
+    replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(null), true);
     assertEquals("There should be no disabled partitions", 0, replicaThread.getReplicationDisabledPartitions().size());
     // wait until all catch up
     reachedLimitLatch.get().await(10, TimeUnit.SECONDS);
@@ -209,7 +209,7 @@ public class ReplicationTest {
     Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
     Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
 
-    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       // add  10 messages to the remote host only
       addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 10);
@@ -236,7 +236,7 @@ public class ReplicationTest {
             new ResponseHandler(clusterMap));
 
     Map<PartitionId, Integer> progressTracker = new HashMap<>();
-    PartitionId idToLeaveOut = clusterMap.getAllPartitionIds().get(0);
+    PartitionId idToLeaveOut = clusterMap.getAllPartitionIds(null).get(0);
     boolean allStopped = false;
     boolean onlyOneResumed = false;
     boolean allReenabled = false;
@@ -261,8 +261,8 @@ public class ReplicationTest {
         replicationDone = replicationDone && partDone;
       }
       if (!allStopped && !onlyOneResumed && !allReenabled) {
-        replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), false);
-        expectedPaused.addAll(clusterMap.getAllPartitionIds());
+        replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(null), false);
+        expectedPaused.addAll(clusterMap.getAllPartitionIds(null));
         assertEquals("Disabled partitions sets do not match", expectedPaused,
             replicaThread.getReplicationDisabledPartitions());
         allStopped = true;
@@ -276,7 +276,7 @@ public class ReplicationTest {
         onlyOneResumed = true;
       } else if (!allReenabled) {
         // not removing the first partition
-        replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(), true);
+        replicaThread.controlReplicationForPartitions(clusterMap.getAllPartitionIds(null), true);
         onlyOneResumed = false;
         allReenabled = true;
         expectedPaused.clear();
@@ -311,7 +311,7 @@ public class ReplicationTest {
     Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
 
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
-    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
     Map<PartitionId, List<StoreKey>> idsToBeIgnoredByPartition = new HashMap<>();
     for (int i = 0; i < partitionIds.size(); i++) {
       List<StoreKey> idsToBeIgnored = new ArrayList<>();

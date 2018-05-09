@@ -23,6 +23,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.bootstrap.Bootstrap;
@@ -55,6 +56,7 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -91,6 +93,7 @@ public class NettyPerfClient {
   private final String serviceId;
   private final String targetAccountName;
   private final String targetContainerName;
+  private final List<Pair<String, String>> customHeaders = new ArrayList<>();
   private final Bootstrap b = new Bootstrap();
   private final ChannelConnectListener channelConnectListener = new ChannelConnectListener();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -117,6 +120,7 @@ public class NettyPerfClient {
     final Integer postBlobChunkSize;
     final String targetAccountName;
     final String targetContainerName;
+    final List<String> customHeaders;
     final String serviceId;
     final Integer testTime;
     final String sslPropsFilePath;
@@ -174,6 +178,11 @@ public class NettyPerfClient {
               .withOptionalArg()
               .describedAs("targetContainerName")
               .ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> customHeader =
+          parser.accepts("customHeader", "Add http header for the request. HeaderName:HeaderValue")
+              .withOptionalArg()
+              .describedAs("customHeader")
+              .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> serviceId = parser.accepts("serviceId", "serviceId representing the caller")
           .withOptionalArg()
           .describedAs("serviceId")
@@ -200,6 +209,7 @@ public class NettyPerfClient {
       this.postBlobChunkSize = options.valueOf(postBlobChunkSize);
       this.targetAccountName = options.valueOf(targetAccountName);
       this.targetContainerName = options.valueOf(targetContainerName);
+      this.customHeaders = options.valuesOf(customHeader);
       this.serviceId = options.valueOf(serviceId);
       this.testTime = options.valueOf(testTime);
       this.sslPropsFilePath = options.valueOf(sslPropsFilePath);
@@ -213,6 +223,7 @@ public class NettyPerfClient {
       logger.info("Post blob total size: {}", this.postBlobTotalSize);
       logger.info("Post blob chunk size: {}", this.postBlobChunkSize);
       logger.info("SSL properties file path: {}", this.sslPropsFilePath);
+      logger.info("Custom Headers: {}", this.customHeaders);
     }
 
     /**
@@ -247,7 +258,8 @@ public class NettyPerfClient {
       final NettyPerfClient nettyPerfClient =
           new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
               clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
-              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName);
+              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName,
+              clientArgs.customHeaders);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         logger.info("Received shutdown signal. Requesting NettyPerfClient shutdown");
@@ -277,12 +289,13 @@ public class NettyPerfClient {
    * @param serviceId serviceId of the caller to represent the identity
    * @param targetAccountName target account name for POST
    * @param targetContainerName target container name for POST
+   * @param customHeaders list of http headers name:value to be added.
    * @throws IOException
    * @throws GeneralSecurityException
    */
   private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
-      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName)
-      throws Exception {
+      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName,
+      List<String> customHeaders) throws Exception {
     this.host = host;
     this.port = port;
     this.path = path;
@@ -300,6 +313,12 @@ public class NettyPerfClient {
     this.serviceId = serviceId;
     this.targetAccountName = targetAccountName;
     this.targetContainerName = targetContainerName;
+    if (customHeaders != null && customHeaders.size() > 0) {
+      for (String customHeader : customHeaders) {
+        String[] customHeaderNameValue = customHeader.split(":");
+        this.customHeaders.add(new Pair<>(customHeaderNameValue[0], customHeaderNameValue[1]));
+      }
+    }
     logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, path {} with concurrency {}",
         this.host, this.port, this.path, this.concurrency);
   }
@@ -430,7 +449,8 @@ public class NettyPerfClient {
             ctx.close();
           } else {
             perfClientMetrics.requestResponseError.inc();
-            logger.error("Channel {} not kept alive. Last response status was {}", ctx.channel(), response.status());
+            logger.error("Channel {} not kept alive. Last response status was {} and header was {}", ctx.channel(),
+                response.status(), response.headers());
             ctx.close();
           }
         }
@@ -492,6 +512,9 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
       } else {
         request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
+      }
+      for (Pair<String, String> headerNameValue : customHeaders) {
+        request.headers().add(headerNameValue.getFirst(), headerNameValue.getSecond());
       }
       chunksReceived = 0;
       sizeReceived = 0;

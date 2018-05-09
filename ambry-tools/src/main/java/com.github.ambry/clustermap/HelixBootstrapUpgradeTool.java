@@ -19,6 +19,7 @@ import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import joptsimple.OptionSpecBuilder;
 
 
 /**
@@ -90,14 +91,19 @@ public class HelixBootstrapUpgradeTool {
   public static void main(String args[]) throws Exception {
     OptionParser parser = new OptionParser();
 
+    OptionSpec dropClusterOpt = parser.accepts("dropCluster",
+        "(Optional argument) If present, must be accompanied with and only with the clusterName argument");
+
     ArgumentAcceptingOptionSpec<String> hardwareLayoutPathOpt =
         parser.accepts("hardwareLayoutPath", "The path to the hardware layout json file")
+            .requiredUnless(dropClusterOpt)
             .withRequiredArg()
             .describedAs("hardware_layout_path")
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> partitionLayoutPathOpt =
         parser.accepts("partitionLayoutPath", "The path to the partition layout json file")
+            .requiredUnless(dropClusterOpt)
             .withRequiredArg()
             .describedAs("partition_layout_path")
             .ofType(String.class);
@@ -108,7 +114,7 @@ public class HelixBootstrapUpgradeTool {
             + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
             + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
             + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
-            + "     }\n" + "  ]\n" + "}").
+            + "     }\n" + "  ]\n" + "}").requiredUnless(dropClusterOpt).
         withRequiredArg().
         describedAs("zk_connect_info_path").
         ofType(String.class);
@@ -119,33 +125,49 @@ public class HelixBootstrapUpgradeTool {
             .describedAs("cluster_name_prefix")
             .ofType(String.class);
 
-    ArgumentAcceptingOptionSpec<String> localDcOpt =
-        parser.accepts("localDc", "(Optional argument) The local datacenter name")
+    ArgumentAcceptingOptionSpec<String> clusterNameOpt =
+        parser.accepts("clusterName", "The cluster in Helix to drop. This should accompany the dropCluster option")
+            .requiredIf(dropClusterOpt)
             .withRequiredArg()
-            .describedAs("local_dc")
+            .describedAs("cluster_name")
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
         "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource")
+        .requiredUnless(dropClusterOpt)
         .withRequiredArg()
         .describedAs("max_partitions_in_one_resource")
         .ofType(String.class);
+
+    OptionSpecBuilder dryRun =
+        parser.accepts("dryRun", "(Optional argument) Dry run, do not modify the cluster map in Helix.");
 
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
     String clusterNamePrefix = options.valueOf(clusterNamePrefixOpt);
+    String clusterName = options.valueOf(clusterNameOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
     listOpt.add(zkLayoutPathOpt);
     listOpt.add(clusterNamePrefixOpt);
-    ToolUtils.ensureOrExit(listOpt, options, parser);
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        clusterNamePrefix, options.valueOf(localDcOpt),
-        options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
-            : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), new HelixAdminFactory());
+    if (options.has(dropClusterOpt)) {
+      ArrayList<OptionSpec<?>> expectedOpts = new ArrayList<>();
+      expectedOpts.add(dropClusterOpt);
+      expectedOpts.add(clusterNameOpt);
+      expectedOpts.add(zkLayoutPathOpt);
+      ToolUtils.ensureExactOrExit(expectedOpts, options.specs(), parser);
+      HelixBootstrapUpgradeUtil.dropCluster(zkLayoutPath, clusterName, new HelixAdminFactory());
+    } else {
+      ToolUtils.ensureOrExit(listOpt, options, parser);
+      HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+          clusterNamePrefix,
+          options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
+              : Integer.valueOf(options.valueOf(maxPartitionsInOneResourceOpt)), options.has(dryRun),
+          new HelixAdminFactory());
+    }
   }
 }
 

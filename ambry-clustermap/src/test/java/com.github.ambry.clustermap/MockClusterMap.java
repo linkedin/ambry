@@ -21,28 +21,34 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 
 /**
  * Mock cluster map for unit tests.
  */
 public class MockClusterMap implements ClusterMap {
+  public static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
 
   protected final boolean enableSSLPorts;
   protected final Map<Long, PartitionId> partitions;
   protected final List<MockDataNodeId> dataNodes;
   protected final int numMountPointsPerNode;
   protected final int numStoresPerMountPoint;
-  protected final HashSet<String> dataCentersInClusterMap = new HashSet<>();
+  protected final List<String> dataCentersInClusterMap = new ArrayList<>();
+  private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
   protected boolean partitionsUnavailable = false;
   private boolean createNewRegistry = true;
   private MetricRegistry metricRegistry;
+  // needs to be thread safe
+  private List<String> lastRequestedPartitionClasses = new CopyOnWriteArrayList<>();
+
+  // allow this to be changed to support some tests
+  private String localDatacenterName;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 partitions/replicas per
@@ -102,6 +108,7 @@ public class MockClusterMap implements ClusterMap {
       } else {
         dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++), dcName));
       }
+      localDatacenterName = dcName;
     }
     partitions = new HashMap<Long, PartitionId>();
 
@@ -109,11 +116,13 @@ public class MockClusterMap implements ClusterMap {
     long partitionId = 0;
     for (int i = 0; i < dataNodes.get(0).getMountPaths().size(); i++) {
       for (int j = 0; j < numStoresPerMountPoint; j++) {
-        PartitionId id = new MockPartitionId(partitionId, dataNodes, i);
+        // TODO: allow partition class to be set for testing
+        PartitionId id = new MockPartitionId(partitionId, DEFAULT_PARTITION_CLASS, dataNodes, i);
         partitions.put(partitionId, id);
         partitionId++;
       }
     }
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
   }
 
   protected ArrayList<Port> getListOfPorts(int port) {
@@ -167,19 +176,19 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public List<PartitionId> getWritablePartitionIds() {
-    List<PartitionId> partitionIdList = new ArrayList<PartitionId>();
+  public List<PartitionId> getWritablePartitionIds(String partitionClass) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    List<PartitionId> partitionIdList = Collections.emptyList();
     if (!partitionsUnavailable) {
-      for (PartitionId partitionId : partitions.values()) {
-        partitionIdList.add(partitionId);
-      }
+      partitionIdList = partitionSelectionHelper.getWritablePartitions(partitionClass);
     }
     return partitionIdList;
   }
 
   @Override
-  public List<PartitionId> getAllPartitionIds() {
-    return new ArrayList<>(partitions.values());
+  public List<PartitionId> getAllPartitionIds(String partitionClass) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    return partitionSelectionHelper.getPartitions(partitionClass);
   }
 
   @Override
@@ -189,7 +198,7 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public byte getLocalDatacenterId() {
-    return UNKNOWN_DATACENTER_ID;
+    return (byte) dataCentersInClusterMap.indexOf(localDatacenterName);
   }
 
   @Override
@@ -317,6 +326,33 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public void close() {
     // No-op.
+  }
+
+  /**
+   * Sets the local datacenter name and changes the views of the partition classes. Not thread safe.
+   * @param localDatacenterName the name of the local datacenter
+   */
+  public void setLocalDatacenterName(String localDatacenterName) {
+    if (!hasDatacenter(localDatacenterName)) {
+      throw new IllegalArgumentException("Clustermap has no DC named " + localDatacenterName);
+    }
+    this.localDatacenterName = localDatacenterName;
+    partitionSelectionHelper.updatePartitions(partitions.values(), localDatacenterName);
+  }
+
+  /**
+   * @return the partition classes requested for in the late N calls to {@link #getAllPartitionIds(String)} or
+   * {@link #getWritablePartitionIds(String)}.
+   */
+  public List<String> getLastNRequestedPartitionClasses() {
+    return lastRequestedPartitionClasses;
+  }
+
+  /**
+   * Sets the last request partition class to {@code null}. Not thread safe.
+   */
+  public void clearLastNRequestedPartitionClasses() {
+    lastRequestedPartitionClasses.clear();
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -11,23 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.protocol;
+package com.github.ambry.messageformat;
 
 /**
- * Type of request response. Do not change this order. Add
- * new entries to the end of the list.
+ * Contains the delete sub-record info
  */
-public enum RequestOrResponseType {
-  PutRequest,
-  PutResponse,
-  GetRequest,
-  GetResponse,
-  DeleteRequest,
-  DeleteResponse,
-  TtlUpdateRequest,
-  TtlUpdateResponse,
-  ReplicaMetadataRequest,
-  ReplicaMetadataResponse,
-  AdminRequest,
-  AdminResponse
+public class DeleteSubRecord {
+
 }

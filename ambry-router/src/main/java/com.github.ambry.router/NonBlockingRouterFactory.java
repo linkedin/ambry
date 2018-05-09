@@ -49,6 +49,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
+  private final String defaultPartitionClass;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -66,7 +67,8 @@ public class NonBlockingRouterFactory implements RouterFactory {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null argument passed in");
     }
-    if (sslFactory == null && new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    if (sslFactory == null && clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0) {
       throw new IllegalArgumentException("NonBlockingRouter requires SSL, but sslFactory is null");
     }
     routerConfig = new RouterConfig(verifiableProperties);
@@ -92,6 +94,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
         Utils.getObj(routerConfig.routerCryptoServiceFactory, verifiableProperties, registry);
     cryptoService = cryptoServiceFactory.getCryptoService();
     cryptoJobHandler = new CryptoJobHandler(routerConfig.routerCryptoJobsWorkerCount);
+    defaultPartitionClass = clusterMapConfig.clusterMapDefaultPartitionClass;
     logger.trace("Instantiated NonBlockingRouterFactory");
   }
 
@@ -103,7 +106,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter() {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, time);
+          kms, cryptoService, cryptoJobHandler, time, defaultPartitionClass);
     } catch (IOException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

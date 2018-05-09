@@ -13,7 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.Meter;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -30,6 +32,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -111,22 +114,59 @@ class GetManager {
 
   /**
    * Submit an operation to get a blob asynchronously.
-   * @param blobId The {@link BlobId} associated with the request.
+   * @param blobIdStr The ID of the blob for which blob data is requested.
    * @param options The {@link GetBlobOptionsInternal} associated with the operation.
    * @param callback The {@link Callback} object to be called on completion of the operation.
+   * @throws RouterException if the blobIdStr is invalid.
    */
-  void submitGetBlobOperation(BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback) {
+  void submitGetBlobOperation(String blobIdStr, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> callback) throws RouterException {
     GetOperation getOperation;
+    BlobId blobId = RouterUtils.getBlobIdFromString(blobIdStr, clusterMap);
+    boolean isEncrypted = false;
+    try {
+      BlobId.isEncrypted(blobIdStr);
+    } catch (IOException e) {
+      logger.warn(
+          "This shouldn't happen because getBlobIdFromString() should have thrown RouterException for this case.", e);
+    }
+    if (blobId.getDatacenterId() != ClusterMapUtils.UNKNOWN_DATACENTER_ID
+        && blobId.getDatacenterId() != clusterMap.getLocalDatacenterId()) {
+      routerMetrics.getBlobNotOriginateLocalOperationRate.mark();
+    }
+    trackGetBlobRateMetrics(options.getBlobOptions, isEncrypted);
     if (options.getBlobOptions.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
       getOperation =
           new GetBlobInfoOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, kms, cryptoService, cryptoJobHandler, time);
+              routerCallback, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     } else {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
-              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time);
+              routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     }
     getOperations.add(getOperation);
+  }
+
+  /**
+   * Track get blob rate metrics based on the {@link GetBlobOptions} and whether the blob is encrypted or not
+   * @param options {@link GetBlobOptions} instance to use
+   * @param isEncrypted {@code true} if the blob is encrypted, {@code false} otherwise
+   */
+  private void trackGetBlobRateMetrics(GetBlobOptions options, boolean isEncrypted) {
+    if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
+      Meter blobInfoOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobInfoOperationRate : routerMetrics.getBlobInfoOperationRate;
+      blobInfoOperationRate.mark();
+    } else {
+      Meter blobOperationRate =
+          isEncrypted ? routerMetrics.getEncryptedBlobOperationRate : routerMetrics.getBlobOperationRate;
+      blobOperationRate.mark();
+    }
+    if (options.getRange() != null) {
+      Meter blobWithRangeOperationRate = isEncrypted ? routerMetrics.getEncryptedBlobWithRangeOperationRate
+          : routerMetrics.getBlobWithRangeOperationRate;
+      blobWithRangeOperationRate.mark();
+    }
   }
 
   /**
@@ -247,7 +287,7 @@ class GetManager {
     if (remove(op)) {
       op.abort(abortCause);
       routerMetrics.operationAbortCount.inc();
-      routerMetrics.onGetBlobError(abortCause, op.getOptions(), op.blobId != null && op.blobId.isEncrypted());
+      routerMetrics.onGetBlobError(abortCause, op.getOptions(), op.isEncrypted);
     }
   }
 }

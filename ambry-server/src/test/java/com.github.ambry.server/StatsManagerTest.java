@@ -15,6 +15,7 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.DiskManagerConfig;
@@ -96,9 +97,11 @@ public class StatsManagerTest {
     Pair<StatsSnapshot, StatsSnapshot> baseSliceAndNewSlice = new Pair<>(preAggregatedSnapshot, null);
     for (int i = 0; i < 2; i++) {
       baseSliceAndNewSlice = decomposeSnapshot(baseSliceAndNewSlice.getFirst());
-      storeMap.put(new MockPartitionId(i), new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
+      storeMap.put(new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS),
+          new MockStore(new MockStoreStats(baseSliceAndNewSlice.getSecond(), false)));
     }
-    storeMap.put(new MockPartitionId(2), new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
+    storeMap.put(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS),
+        new MockStore(new MockStoreStats(baseSliceAndNewSlice.getFirst(), false)));
     StorageManager storageManager = new MockStorageManager(storeMap);
     Properties properties = new Properties();
     properties.put("stats.output.file.path", outputFileString);
@@ -143,9 +146,9 @@ public class StatsManagerTest {
   @Test
   public void testStatsManagerWithProblematicStores() throws StoreException, IOException {
     Map<PartitionId, Store> problematicStoreMap = new HashMap<>();
-    problematicStoreMap.put(new MockPartitionId(1), null);
+    problematicStoreMap.put(new MockPartitionId(1, MockClusterMap.DEFAULT_PARTITION_CLASS), null);
     Store exceptionStore = new MockStore(new MockStoreStats(null, true));
-    problematicStoreMap.put(new MockPartitionId(2), exceptionStore);
+    problematicStoreMap.put(new MockPartitionId(2, MockClusterMap.DEFAULT_PARTITION_CLASS), exceptionStore);
     StatsManager testStatsManager =
         new StatsManager(new MockStorageManager(problematicStoreMap), new ArrayList<>(problematicStoreMap.keySet()),
             new MetricRegistry(), config, new MockTime());
@@ -159,8 +162,8 @@ public class StatsManagerTest {
     // test for the scenario where some stores are healthy and some are bad
     Map<PartitionId, Store> mixedStoreMap = new HashMap<>(storeMap);
     unreachableStores.clear();
-    mixedStoreMap.put(new MockPartitionId(3), null);
-    mixedStoreMap.put(new MockPartitionId(4), exceptionStore);
+    mixedStoreMap.put(new MockPartitionId(3, MockClusterMap.DEFAULT_PARTITION_CLASS), null);
+    mixedStoreMap.put(new MockPartitionId(4, MockClusterMap.DEFAULT_PARTITION_CLASS), exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap), new ArrayList<>(mixedStoreMap.keySet()),
         new MetricRegistry(), config, new MockTime());
     actualSnapshot = new StatsSnapshot(0L, null);
