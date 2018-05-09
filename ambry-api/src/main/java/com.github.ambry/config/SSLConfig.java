@@ -53,7 +53,9 @@ public class SSLConfig {
   public final String sslClientAuthentication;
 
   /**
-   * The SSL keymanager algorithm
+   * The SSL keymanager algorithm.
+   * This is only honored by {@code JdkSslFactory}. {@code NettySslFactory} always uses the default value to maintain
+   * compatibility with the OpenSSL-based engine.
    */
   @Config("ssl.keymanager.algorithm")
   @Default("")
@@ -61,6 +63,8 @@ public class SSLConfig {
 
   /**
    * The SSL trustmanager algorithm
+   * This is only honored by {@code JdkSslFactory}. {@code NettySslFactory} always uses the default value to maintain
+   * compatibility with the OpenSSL-based engine.
    */
   @Config("ssl.trustmanager.algorithm")
   @Default("")

@@ -137,7 +137,7 @@ public class FrontendIntegrationTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     List<Object[]> parameters = new ArrayList<>();
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < 5; i++) {
       parameters.add(new Object[]{false});
       parameters.add(new Object[]{true});
     }

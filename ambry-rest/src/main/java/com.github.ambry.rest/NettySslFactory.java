@@ -20,8 +20,10 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.ClientAuth;
+import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -73,8 +75,6 @@ public class NettySslFactory implements SSLFactory {
       sslParams.setEndpointIdentificationAlgorithm(endpointIdentification);
       sslEngine.setSSLParameters(sslParams);
     }
-    String[] ciphers = sslEngine.getEnabledCipherSuites();
-    System.out.println(Arrays.toString(ciphers));
     return sslEngine;
   }
 
@@ -92,9 +92,10 @@ public class NettySslFactory implements SSLFactory {
   private static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
     return SslContextBuilder.forServer(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
+        .sslProvider(SslProvider.JDK)
         .ciphers(getCipherSuites(config))
         .protocols(getEnabledProtocols(config))
-        .clientAuth(getClientAuth(config))
+        .clientAuth(ClientAuth.REQUIRE)
         .build();
   }
 
@@ -108,9 +109,9 @@ public class NettySslFactory implements SSLFactory {
     return SslContextBuilder.forClient()
         .keyManager(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
+        .sslProvider(SslProvider.OPENSSL)
         .ciphers(getCipherSuites(config))
         .protocols(getEnabledProtocols(config))
-        .clientAuth(getClientAuth(config))
         .build();
   }
 
@@ -139,9 +140,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws IOException
    */
   private static KeyManagerFactory getKeyManagerFactory(SSLConfig config) throws GeneralSecurityException, IOException {
-    String kmfAlgorithm = config.sslKeymanagerAlgorithm.isEmpty() ? KeyManagerFactory.getDefaultAlgorithm()
-        : config.sslKeymanagerAlgorithm;
-    KeyManagerFactory kmf = KeyManagerFactory.getInstance(kmfAlgorithm);
+    KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslKeystorePath, config.sslKeystoreType, config.sslKeystorePassword);
     String keyPassword = config.sslKeyPassword.isEmpty() ? config.sslKeystorePassword : config.sslKeyPassword;
     kmf.init(ks, keyPassword.toCharArray());
@@ -156,9 +155,7 @@ public class NettySslFactory implements SSLFactory {
    */
   private static TrustManagerFactory getTrustManagerFactory(SSLConfig config)
       throws GeneralSecurityException, IOException {
-    String tmfAlgorithm = config.sslTrustmanagerAlgorithm.isEmpty() ? TrustManagerFactory.getDefaultAlgorithm()
-        : config.sslTrustmanagerAlgorithm;
-    TrustManagerFactory tmf = TrustManagerFactory.getInstance(tmfAlgorithm);
+    TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     KeyStore ks = loadKeyStore(config.sslTruststorePath, config.sslTruststoreType, config.sslTruststorePassword);
     tmf.init(ks);
     return tmf;
