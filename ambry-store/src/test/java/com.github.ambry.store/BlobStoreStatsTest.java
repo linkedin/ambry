@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Random;
-import java.util.TreeMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -279,8 +278,9 @@ public class BlobStoreStatsTest {
   public void testValidDataSizeAfterDeletes() throws InterruptedException, StoreException, IOException {
     assumeTrue(!bucketingEnabled);
     BlobStoreStats blobStoreStats = setupBlobStoreStats(0, 0);
-    int numEntries = CuratedLogIndexState.MAX_IN_MEM_ELEMENTS - state.referenceIndex.lastEntry().getValue().size()
-        + CuratedLogIndexState.MAX_IN_MEM_ELEMENTS - 2;
+    int numEntries =
+        state.getMaxInMemElements() - state.referenceIndex.lastEntry().getValue().size() + state.getMaxInMemElements()
+            - 2;
     state.addPutEntries(numEntries, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
 
     long timeInMsBeforeDeletes = state.time.milliseconds();
@@ -958,9 +958,9 @@ public class BlobStoreStatsTest {
    */
   private Map<String, Map<String, Long>> getValidSizeByContainer(long deleteAndExpirationRefTimeInMs) {
     Map<String, Map<String, Long>> containerValidSizeMap = new HashMap<>();
-    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> segmentEntry : state.referenceIndex.entrySet()) {
+    for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
       List<IndexEntry> validEntries =
-          state.getValidIndexEntriesForIndexSegment(segmentEntry.getKey(), deleteAndExpirationRefTimeInMs,
+          state.getValidIndexEntriesForIndexSegment(indSegStartOffset, deleteAndExpirationRefTimeInMs,
               deleteAndExpirationRefTimeInMs);
       for (IndexEntry indexEntry : validEntries) {
         IndexValue indexValue = indexEntry.getValue();

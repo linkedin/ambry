@@ -437,7 +437,7 @@ public class DumpIndexTool {
     List<IndexEntry> entries = new ArrayList<>();
     final Timer.Context context = metrics.findAllEntriesPerIndexTimeMs.time();
     try {
-      segment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
+      segment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), true);
     } finally {
       context.stop();
     }

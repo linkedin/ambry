@@ -228,7 +228,7 @@ public class DumpDataTool {
       segment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0));
       for (MessageInfo entry : entries) {
         StoreKey key = entry.getStoreKey();
-        IndexValue value = segment.find(key);
+        IndexValue value = segment.find(key).last();
         boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index);
         if (value.getOffset().getOffset() < logFileSize) {
           boolean success = readFromLogAndVerify(randomAccessFile, key.getID(), value, coveredRanges);
