@@ -809,6 +809,14 @@ class IndexSegment {
             bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
           }
           // add to the journal
+          long oMsgOff = blobValue.getOriginalMessageOffset();
+          if (oMsgOff != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
+              && oMsgOff >= startOffset.getOffset()
+              && journal.getKeyAtOffset(new Offset(startOffset.getName(), oMsgOff)) == null) {
+            // we add an entry for the original message offset if it is within the same index segment and
+            // an entry is not already in the journal
+            journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
+          }
           journal.addEntry(blobValue.getOffset(), key);
           // sizeWritten is only used for in-memory segments, and for those the padding does not come into picture.
           sizeWritten.addAndGet(key.sizeInBytes() + valueSize);
