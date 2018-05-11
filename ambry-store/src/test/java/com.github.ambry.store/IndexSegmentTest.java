@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -108,7 +107,7 @@ public class IndexSegmentTest {
    * Comprehensive tests for {@link IndexSegment}
    */
   @Test
-  public void comprehensiveTest() throws IOException, StoreException, InterruptedException {
+  public void comprehensiveTest() throws IOException, StoreException {
     if (version == PersistentIndex.VERSION_2) {
       for (boolean includeSmall : new boolean[]{false, true}) {
         for (boolean includeLarge : new boolean[]{false, true}) {
@@ -313,7 +312,7 @@ public class IndexSegmentTest {
    * @throws StoreException
    */
   private void doComprehensiveTest(short version, boolean includeSmallKeys, boolean includeLargeKeys)
-      throws IOException, StoreException, InterruptedException {
+      throws IOException, StoreException {
     String[] logSegmentNames = {LogSegmentNameHelper.generateFirstSegmentName(false), generateRandomLogSegmentName()};
     int valueSize = version == PersistentIndex.VERSION_0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0
         : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1;
@@ -362,7 +361,7 @@ public class IndexSegmentTest {
 
       int extraIdsToDelete = 10;
       Set<MockId> idsToDelete = getIdsToDelete(referenceIndex, extraIdsToDelete);
-      Map<Offset, MockId> extraOffsetsToCheck = addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
+      addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
       endOffset += idsToDelete.size() * DELETE_FILE_SPAN_SIZE;
       numItems += idsToDelete.size();
       for (MockId id : idsToDelete) {
@@ -374,7 +373,7 @@ public class IndexSegmentTest {
       verifyGetEntriesSince(referenceIndex, indexSegment);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey, extraOffsetsToCheck);
+          time.milliseconds(), resetKey);
     }
   }
 
@@ -541,10 +540,9 @@ public class IndexSegmentTest {
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
    * @throws IOException
-   * @throws StoreException
    */
   private void verifyGetEntriesSince(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
-      IndexSegment segment) throws IOException, StoreException {
+      IndexSegment segment) throws IOException {
     // index segment is "too" recent
     FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTimeSecs() - 1);
     List<MessageInfo> entries = new ArrayList<>();
@@ -711,13 +709,10 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to add the entries to.
    * @param referenceIndex the {@link NavigableMap} to add all the entries to. This repreents the source of truth for
    *                       all checks.
-   * @return a {@link Map} that defines the put record offsets of keys whose index entries have been replaced by delete
-   * entries owing to the fact that the put and delete both occurred in the same index segment.
    * @throws StoreException
    */
-  private Map<Offset, MockId> addDeleteEntries(Set<MockId> idsToDelete, IndexSegment segment,
+  private void addDeleteEntries(Set<MockId> idsToDelete, IndexSegment segment,
       NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex) throws StoreException {
-    Map<Offset, MockId> putRecordOffsets = new HashMap<>();
     for (MockId id : idsToDelete) {
       Offset offset = segment.getEndOffset();
       NavigableSet<IndexValue> values = segment.find(id);
@@ -731,8 +726,6 @@ public class IndexSegmentTest {
         throw new IllegalArgumentException(id + " is already deleted");
       } else {
         value = values.last();
-        // if in this segment, add to putRecordOffsets so that journal can verify these later
-        putRecordOffsets.put(value.getOffset(), id);
       }
       IndexValue newValue = IndexValueTest.getIndexValue(value, version);
       newValue.setFlag(IndexValue.Flags.Delete_Index);
@@ -742,7 +735,6 @@ public class IndexSegmentTest {
           new Offset(offset.getName(), offset.getOffset() + DELETE_FILE_SPAN_SIZE));
       referenceIndex.computeIfAbsent(id, k -> new TreeSet<>(IndexSegment.INDEX_VALUE_COMPARATOR)).add(newValue);
     }
-    return putRecordOffsets;
   }
 
   /**
@@ -755,15 +747,12 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
-   * @param extraOffsetsToCheck a {@link Map} that defines the put record offsets of keys whose presence needs to be
-   *                            verified in the {@link Journal}.
    * @throws IOException
    * @throws StoreException
    */
   private void verifyReadFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, File file,
       Offset startOffset, int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey, Map<Offset, MockId> extraOffsetsToCheck)
-      throws IOException, StoreException {
+      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws IOException, StoreException {
     // read from file (unmapped) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
@@ -772,7 +761,7 @@ public class IndexSegmentTest {
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
     // journal should contain all the entries
-    verifyJournal(referenceIndex, startOffset, journal, extraOffsetsToCheck);
+    verifyJournal(referenceIndex, journal);
     fromDisk.map(true);
 
     // read from file (mapped) and verify that everything is ok
@@ -789,36 +778,19 @@ public class IndexSegmentTest {
   /**
    * Verfies that the journal has all and only expected entries.
    * @param referenceIndex the index entries to be used as reference.
-   * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} that filled the journal.
    * @param journal the {@link Journal} to check.
-   * @param extraOffsetsToCheck a {@link Map} that defines the put record offsets of keys whose presence needs to be
-   *                            verified in the {@link Journal}.
    */
-  private void verifyJournal(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
-      Offset indexSegmentStartOffset, Journal journal, Map<Offset, MockId> extraOffsetsToCheck) {
-    // TODO: change impl
-    Set<StoreKey> seenKeys = new TreeSet<>();
-    Map<Offset, Boolean> extraEntriesCheckState = null;
-    if (extraOffsetsToCheck != null) {
-      extraEntriesCheckState = new HashMap<>();
-      for (Map.Entry<Offset, MockId> extra : extraOffsetsToCheck.entrySet()) {
-        extraEntriesCheckState.put(extra.getKey(), false);
-      }
-    }
-    List<JournalEntry> entries = journal.getEntriesSince(indexSegmentStartOffset, true);
+  private void verifyJournal(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, Journal journal) {
+    // order all available IndexValue by offset
+    final TreeMap<Offset, MockId> allIdsByOffset = new TreeMap<>();
+    referenceIndex.forEach(
+        (key, value) -> value.forEach(indexValue -> allIdsByOffset.put(indexValue.getOffset(), key)));
+    List<JournalEntry> entries = journal.getEntriesSince(allIdsByOffset.firstKey(), true);
+    assertEquals("Size of entries returned from journal not as expected", allIdsByOffset.size(), entries.size());
     for (JournalEntry entry : entries) {
       StoreKey key = entry.getKey();
       Offset offset = entry.getOffset();
-      seenKeys.add(key);
-      if (extraOffsetsToCheck != null && extraOffsetsToCheck.containsKey(offset) && extraOffsetsToCheck.get(offset)
-          .equals(key)) {
-        extraEntriesCheckState.put(offset, true);
-      }
-    }
-    assertEquals("Keys seen does not match keys in reference index", seenKeys.size(), referenceIndex.size());
-    seenKeys.containsAll(referenceIndex.keySet());
-    if (extraEntriesCheckState != null) {
-      assertFalse("One of the extraOffsetsToCheck was not found", extraEntriesCheckState.values().contains(false));
+      assertEquals("Key not as expected", key, allIdsByOffset.get(offset));
     }
   }
 

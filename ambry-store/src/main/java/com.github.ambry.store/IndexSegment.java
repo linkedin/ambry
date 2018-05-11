@@ -914,7 +914,7 @@ class IndexSegment {
         }
       } else {
         logger.error("IndexSegment : " + indexFile.getAbsolutePath() + " index not found for key " + key);
-        // TODO: metric here?
+        metrics.keyInFindEntriesAbsent.inc();
       }
     } else if (key == null || index.containsKey(key)) {
       ConcurrentNavigableMap<StoreKey, NavigableSet<IndexValue>> tempMap = index;
@@ -936,7 +936,7 @@ class IndexSegment {
       }
     } else {
       logger.error("IndexSegment : " + indexFile.getAbsolutePath() + " key not found: " + key);
-      // TODO: metric here?
+      metrics.keyInFindEntriesAbsent.inc();
     }
     if (oneEntryPerKey) {
       eliminateDuplicates(entriesLocal);

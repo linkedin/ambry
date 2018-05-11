@@ -67,6 +67,7 @@ public class StoreMetrics {
   public final Counter identicalPutAttemptCount;
   public final Counter getAuthorizationFailureCount;
   public final Counter deleteAuthorizationFailureCount;
+  public final Counter keyInFindEntriesAbsent;
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -146,6 +147,7 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "GetAuthorizationFailureCount"));
     deleteAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "DeleteAuthorizationFailureCount"));
+    keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =
