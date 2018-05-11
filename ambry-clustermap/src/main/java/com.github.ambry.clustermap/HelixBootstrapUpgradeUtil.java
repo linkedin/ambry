@@ -495,36 +495,38 @@ class HelixBootstrapUpgradeUtil {
 
     List<String> sealedPartitionsList = new ArrayList<>();
 
-    Map<String, Map<String, String>> diskInfos = new HashMap<>();
-    for (HashMap.Entry<DiskId, SortedSet<Replica>> diskToReplicas : instanceToDiskReplicasMap.get(instanceName)
-        .entrySet()) {
-      DiskId disk = diskToReplicas.getKey();
-      SortedSet<Replica> replicasInDisk = diskToReplicas.getValue();
-      // Note: An instance config has to contain the information for each disk about the replicas it hosts.
-      // This information will be initialized to the empty string - but will be updated whenever the partition
-      // is added to the cluster.
-      StringBuilder replicasStrBuilder = new StringBuilder();
-      for (ReplicaId replicaId : replicasInDisk) {
-        Replica replica = (Replica) replicaId;
-        replicasStrBuilder.append(replica.getPartition().getId())
-            .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
-            .append(replica.getCapacityInBytes())
-            .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
-            .append(replica.getPartition().getPartitionClass())
-            .append(ClusterMapUtils.REPLICAS_DELIM_STR);
-        if (replica.isSealed()) {
-          sealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
+    if (instanceToDiskReplicasMap.containsKey(instanceName)) {
+      Map<String, Map<String, String>> diskInfos = new HashMap<>();
+      for (HashMap.Entry<DiskId, SortedSet<Replica>> diskToReplicas : instanceToDiskReplicasMap.get(instanceName)
+          .entrySet()) {
+        DiskId disk = diskToReplicas.getKey();
+        SortedSet<Replica> replicasInDisk = diskToReplicas.getValue();
+        // Note: An instance config has to contain the information for each disk about the replicas it hosts.
+        // This information will be initialized to the empty string - but will be updated whenever the partition
+        // is added to the cluster.
+        StringBuilder replicasStrBuilder = new StringBuilder();
+        for (ReplicaId replicaId : replicasInDisk) {
+          Replica replica = (Replica) replicaId;
+          replicasStrBuilder.append(replica.getPartition().getId())
+              .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
+              .append(replica.getCapacityInBytes())
+              .append(ClusterMapUtils.REPLICAS_STR_SEPARATOR)
+              .append(replica.getPartition().getPartitionClass())
+              .append(ClusterMapUtils.REPLICAS_DELIM_STR);
+          if (replica.isSealed()) {
+            sealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
+          }
+          partitionToInstances.computeIfAbsent(Long.toString(replica.getPartition().getId()), k -> new HashSet<>())
+              .add(instanceName);
         }
-        partitionToInstances.computeIfAbsent(Long.toString(replica.getPartition().getId()), k -> new HashSet<>())
-            .add(instanceName);
+        Map<String, String> diskInfo = new HashMap<>();
+        diskInfo.put(ClusterMapUtils.DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
+        diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
+        diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStrBuilder.toString());
+        diskInfos.put(disk.getMountPath(), diskInfo);
       }
-      Map<String, String> diskInfo = new HashMap<>();
-      diskInfo.put(ClusterMapUtils.DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
-      diskInfo.put(ClusterMapUtils.DISK_STATE, ClusterMapUtils.AVAILABLE_STR);
-      diskInfo.put(ClusterMapUtils.REPLICAS_STR, replicasStrBuilder.toString());
-      diskInfos.put(disk.getMountPath(), diskInfo);
+      instanceConfig.getRecord().setMapFields(diskInfos);
     }
-    instanceConfig.getRecord().setMapFields(diskInfos);
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedPartitionsList);
     return instanceConfig;
   }
@@ -736,8 +738,6 @@ class HelixBootstrapUpgradeUtil {
         ensureOrThrow(replicaHostsInHelix.isEmpty(),
             "More instances in Helix than in clustermap for partition: " + partitionName + ", expected: "
                 + expectedInHelix + ", found additional instances: " + replicaHostsInHelix);
-      } else {
-        info("*** Helix may have more replicas than in the given clustermap as removals were not forced.");
       }
     }
     if (!expectMoreInHelixDuringValidate) {
@@ -745,7 +745,7 @@ class HelixBootstrapUpgradeUtil {
           "More partitions in Helix than in clustermap, additional partitions: "
               + allPartitionsToInstancesInHelix.keySet());
     } else {
-      info("*** Helix may have more partitions than in the given clustermap as removals were not forced.");
+      info("*** Helix may have more partitions or replicas than in the given clustermap as removals were not forced.");
     }
     info("Successfully verified resources and partitions equivalency in dc {}", dcName);
   }
