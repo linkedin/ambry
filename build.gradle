@@ -129,8 +129,6 @@ project(':ambry-clustermap') {
                 project(':ambry-utils')
         compile "org.apache.helix:helix-core:$helixVersion"
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
-        compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
-        compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
     }

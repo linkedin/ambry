@@ -55,7 +55,7 @@ public class StatsSnapshot {
 
   public StatsSnapshot(Long value, Map<String, StatsSnapshot> subMap) {
     this.value = value;
-    this.subMap = subMap;// == null ? new HashMap<>() : subMap;
+    this.subMap = subMap;
   }
 
   public StatsSnapshot() {
