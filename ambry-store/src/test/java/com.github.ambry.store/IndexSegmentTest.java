@@ -188,7 +188,7 @@ public class IndexSegmentTest {
     Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
     IndexSegment fromDisk =
         new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
-    //assertEquals("Number of items incorrect", 4, fromDisk.getNumberOfItems());
+    assertEquals("Number of items incorrect", 4, fromDisk.getNumberOfItems());
     for (MockId id : new MockId[]{id1, id2, id3}) {
       verifyValues(fromDisk, id, id.equals(id2) ? 2 : 1, id.equals(id2));
     }
