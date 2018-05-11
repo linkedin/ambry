@@ -395,33 +395,19 @@ class IndexSegment {
     byte[] buf = new byte[valueSize];
     // add the value at the positive match and anything after that matches
     int end = positiveMatchInd;
-    StoreKey found;
-    do {
+    for (; end < totalEntries && getKeyAt(mmap, end).equals(keyToFind); end++) {
+      logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, end);
       mmap.get(buf);
       values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
-      end++;
-      if (end < totalEntries) {
-        found = getKeyAt(mmap, end);
-        logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), found, end);
-      } else {
-        break;
-      }
-    } while (found.equals(keyToFind));
+    }
     end--;
 
     // add any values before the match
-    int start = positiveMatchInd;
-    while (start > 0) {
-      found = getKeyAt(mmap, --start);
-      logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), found, start);
-      if (found.equals(keyToFind)) {
-        mmap.get(buf);
-        values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
-      } else {
-        // we have reached the end of the matches
-        start++;
-        break;
-      }
+    int start = positiveMatchInd - 1;
+    for (; start >= 0 && getKeyAt(mmap, start).equals(keyToFind); start--) {
+      logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, start);
+      mmap.get(buf);
+      values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
     }
     return new Pair<>(start, end);
   }

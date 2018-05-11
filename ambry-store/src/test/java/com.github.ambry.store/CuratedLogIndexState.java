@@ -869,10 +869,6 @@ class CuratedLogIndexState {
           realIndexEntry.getKey());
       TreeMap<MockId, TreeSet<IndexValue>> referenceIndexSegment = referenceIndexEntry.getValue();
       IndexSegment realIndexSegment = realIndexEntry.getValue();
-      List<MessageInfo> messageInfos = new ArrayList<>();
-      assertTrue("There should have been entries returned from the index segment",
-          realIndexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), messageInfos,
-              new AtomicLong(0)));
       for (Map.Entry<MockId, TreeSet<IndexValue>> referenceIndexSegmentEntry : referenceIndexSegment.entrySet()) {
         MockId id = referenceIndexSegmentEntry.getKey();
         NavigableSet<IndexValue> referenceValues = referenceIndexSegmentEntry.getValue();
