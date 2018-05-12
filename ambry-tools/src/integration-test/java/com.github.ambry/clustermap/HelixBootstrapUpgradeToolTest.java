@@ -163,8 +163,18 @@ public class HelixBootstrapUpgradeToolTest {
     Partition partition2 = (Partition) testPartitionLayout.getPartitionLayout()
         .getPartitions(null)
         .get(RANDOM.nextInt(testPartitionLayout.getPartitionCount()));
-    // Add a replica to partition1.
-    partition1.addReplica(new Replica(partition1, testHardwareLayout.getRandomDisk()));
+
+    // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
+    HashSet<DataNodeId> partition1Nodes = new HashSet<>();
+    for (Replica replica : partition1.getReplicas()) {
+      partition1Nodes.add(replica.getDataNodeId());
+    }
+    Disk diskForNewReplica;
+    do {
+      diskForNewReplica = testHardwareLayout.getRandomDisk();
+    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
+
+    partition1.addReplica(new Replica(partition1, diskForNewReplica));
     // Remove a replica from partition2.
     partition2.getReplicas().remove(0);
     writeBootstrapOrUpgrade(expectedResourceCount, false);

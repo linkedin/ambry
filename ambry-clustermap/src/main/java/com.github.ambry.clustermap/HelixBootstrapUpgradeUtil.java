@@ -290,8 +290,8 @@ class HelixBootstrapUpgradeUtil {
     maybeAddCluster();
     info("Initialized");
     info("Populating resources and partitions set");
-    info("Populated resources and partitions set");
     populateInstancesAndPartitionsMap();
+    info("Populated resources and partitions set");
     for (Datacenter dc : staticClusterMap.hardwareLayout.getDatacenters()) {
       info("\n=======Starting datacenter: {}=========\n", dc.getName());
       Map<String, Set<String>> partitionsToInstancesInDc = new HashMap<>();
@@ -441,7 +441,7 @@ class HelixBootstrapUpgradeUtil {
       fromIndex = toIndex;
       IdealState idealState = new IdealState(resourceName);
       idealState.setStateModelDefRef(LeaderStandbySMD.name);
-      info("Adding partitions for instances in " + dcName);
+      info("Adding partitions for next resource in {}", dcName);
       for (Map.Entry<String, Set<String>> entry : partitionsUnderNextResource) {
         String partitionName = entry.getKey();
         ArrayList<String> instances = new ArrayList<>(entry.getValue());
@@ -457,8 +457,8 @@ class HelixBootstrapUpgradeUtil {
         dcAdmin.addResource(clusterName, resourceName, idealState);
         resourcesAdded++;
       }
-      info("Added " + partitionsUnderNextResource.size() + " new partitions under resource " + resourceName
-          + " in datacenter " + dcName);
+      info("Added {} new partitions under resource {} in datacenter {}", partitionsUnderNextResource.size(),
+          resourceName, dcName);
     }
   }
 
