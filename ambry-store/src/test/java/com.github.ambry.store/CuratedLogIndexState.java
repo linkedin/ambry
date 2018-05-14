@@ -574,16 +574,15 @@ class CuratedLogIndexState {
         assertEquals("There are offsets in the log not accounted for in index", segment.getStartOffset(),
             indexSegmentStartOffset.getOffset());
       }
-      NavigableSet<IndexEntry> indexEntries = new TreeSet<>(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
-      List<MessageInfo> infos = new ArrayList<>();
-      indexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), infos, new AtomicLong(0));
 
-      for (MessageInfo info : infos) {
-        MockId id = (MockId) info.getStoreKey();
-        IndexValue value = indexSegment.find(id).last();
-        indexEntries.add(new IndexEntry(id, value));
+      List<IndexEntry> indexEntries = new ArrayList<>();
+      indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries, new AtomicLong(0),
+          false);
+      for (IndexEntry entry : indexEntries) {
+        MockId id = (MockId) entry.getKey();
+        IndexValue value = entry.getValue();
         Boolean deleteSeen = keyToDeleteSeenMap.get(id);
-        if (info.isDeleted()) {
+        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
           if (deleteSeen != null) {
             assertFalse("Duplicated DELETE record for " + id, deleteSeen);
           }
@@ -600,19 +599,10 @@ class CuratedLogIndexState {
         }
       }
       long expectedOffset = indexSegmentStartOffset.getOffset();
-      for (IndexEntry entry : indexEntries) {
+      NavigableSet<IndexEntry> indexEntriesByOffset = new TreeSet<>(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
+      indexEntriesByOffset.addAll(indexEntries);
+      for (IndexEntry entry : indexEntriesByOffset) {
         IndexValue value = entry.getValue();
-        while (expectedOffset < indexSegment.getEndOffset().getOffset() && expectedOffset != value.getOffset()
-            .getOffset()) {
-          // this might be because a PUT and DELETE entry are in the same segment.
-          // find the record that should have been there
-          // NOTE: This is NOT built to work after compaction (like the rest of this class). It will fail on a very
-          // NOTE: specific corner case - where the PUT and DELETE entry for a blob ended up in the same index
-          // NOTE: segment after compaction (the DELETE wasn't eligible to be "counted").
-          Offset offset = new Offset(indexSegment.getLogSegmentName(), expectedOffset);
-          IndexValue putValue = logOrder.get(offset).getSecond().indexValue;
-          expectedOffset += putValue.getSize();
-        }
         assertEquals("There are offsets in the log not accounted for in index", expectedOffset,
             value.getOffset().getOffset());
         expectedOffset += value.getSize();
