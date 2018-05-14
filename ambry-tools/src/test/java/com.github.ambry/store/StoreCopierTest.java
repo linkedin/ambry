@@ -108,11 +108,10 @@ public class StoreCopierTest {
 
   /**
    * Tests {@link StoreCopier#copy(FindToken)}.
-   * @throws IOException
-   * @throws StoreException
+   * @throws Exception
    */
   @Test
-  public void copyTest() throws IOException, StoreException {
+  public void copyTest() throws Exception {
     storeCopier.copy(new StoreFindTokenFactory(STORE_KEY_FACTORY).getNewFindToken());
     storeCopier.close();
     // copy the store descriptor file over
