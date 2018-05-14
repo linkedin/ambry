@@ -100,7 +100,14 @@ public class StoreCopier implements Closeable {
      * @param message the input {@link Message} to change.
      * @return the output {@link Message}.
      */
-    Message transform(Message message);
+
+    /**
+     * Transforms the input {@link Message} into an output {@link Message}.
+     * @param message the input {@link Message} to change.
+     * @return the output {@link Message}.
+     * @throws IOException if transform encounters IO issue when transforming a message
+     */
+    Message transform(Message message) throws IOException;
   }
 
   /**
