@@ -67,7 +67,7 @@ public class StatsBasedCompactionPolicyTest {
     // normal case where in some log segments are non overlapping with journal
     long maxLogSegmentCapacity = blobStore.segmentCapacity - blobStore.segmentHeaderSize - DEFAULT_MAX_BLOB_SIZE;
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
-    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomStrings((int) logSegmentCount);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
     for (int k = 0; k < 5; k++) {
       for (int i = 0; i < logSegmentCount; i++) {
         for (int j = i; j < logSegmentCount; j++) {
@@ -125,7 +125,7 @@ public class StatsBasedCompactionPolicyTest {
   public void testGetCompactionDetailsZeroCostTest() throws StoreException, InterruptedException {
     long maxLogSegmentCapacity = blobStore.segmentCapacity - blobStore.segmentHeaderSize - DEFAULT_MAX_BLOB_SIZE;
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
-    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomStrings((int) logSegmentCount);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
     for (int i = 0; i < logSegmentCount; i++) {
       for (int j = i; j < logSegmentCount; j++) {
         List<String> bestCandidates = blobStore.logSegmentsNotInJournal.subList(i, j + 1);
@@ -148,7 +148,7 @@ public class StatsBasedCompactionPolicyTest {
   public void testLogSegmentsNotInJournal() throws StoreException {
     long maxLogSegmentCapacity = blobStore.segmentCapacity - blobStore.segmentHeaderSize - DEFAULT_MAX_BLOB_SIZE;
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
-    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomStrings((int) logSegmentCount);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
 
     // case 1: 1st best(index_0 to index_3) is in journal, 2nd not in journal
     List<String> bestCandidates = blobStore.logSegmentsNotInJournal.subList(0, 4);
@@ -178,7 +178,7 @@ public class StatsBasedCompactionPolicyTest {
         compactionPolicy);
 
     // case 2: only one potential candidate(index_5 to index_7) to compact which is overlaps with the journal
-    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomStrings((int) logSegmentCount);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
     bestCandidates = blobStore.logSegmentsNotInJournal.subList(5, 8);
     bestCost = maxLogSegmentCapacity / bestCandidates.size();
     // this best cost is to ensure that no of segments reclaimed will be "bestCandidates" count - 1
@@ -191,7 +191,7 @@ public class StatsBasedCompactionPolicyTest {
 
     // case 3: best candidate's first few segments(index_2 to index7) are non overlapping and the rest are overlapping
     // with journal
-    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomStrings((int) logSegmentCount);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
     bestCandidates = blobStore.logSegmentsNotInJournal.subList(2, 8);
     bestCost = maxLogSegmentCapacity / bestCandidates.size();
     validDataSize =

@@ -21,7 +21,6 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -95,7 +94,7 @@ public class CompactionPolicyTest {
     if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
       bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
     } else if (compactionPolicy instanceof CompactAllPolicy) {
-      blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
+      blobStore.logSegmentsNotInJournal = generateRandomLogSegmentName(3);
       bestCandidates = blobStore.logSegmentsNotInJournal;
     }
 
@@ -133,7 +132,7 @@ public class CompactionPolicyTest {
       if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
         bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
       } else if (compactionPolicy instanceof CompactAllPolicy) {
-        blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
+        blobStore.logSegmentsNotInJournal = generateRandomLogSegmentName(3);
         bestCandidates = blobStore.logSegmentsNotInJournal;
       }
       if (blobStore.usedCapacity < (config.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0
@@ -162,7 +161,7 @@ public class CompactionPolicyTest {
         bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
         compactionPolicy = new StatsBasedCompactionPolicy(initState.getSecond(), time);
       } else if (compactionPolicy instanceof CompactAllPolicy) {
-        blobStore.logSegmentsNotInJournal = generateRandomStrings(3);
+        blobStore.logSegmentsNotInJournal = generateRandomLogSegmentName(3);
         bestCandidates = blobStore.logSegmentsNotInJournal;
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);
       }
@@ -213,7 +212,7 @@ public class CompactionPolicyTest {
     long maxLogSegmentCapacity =
         blobStore.segmentCapacity - blobStore.segmentHeaderSize - mockBlobStoreStats.getMaxBlobSize();
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
-    blobStore.logSegmentsNotInJournal = generateRandomStrings((int) logSegmentCount);
+    blobStore.logSegmentsNotInJournal = generateRandomLogSegmentName((int) logSegmentCount);
 
     int bestCandidateRange = 3 + TestUtils.RANDOM.nextInt((int) logSegmentCount - 2);
     int bestCandidateStartIndex = TestUtils.RANDOM.nextInt((int) logSegmentCount - bestCandidateRange + 1);
@@ -230,17 +229,21 @@ public class CompactionPolicyTest {
   }
 
   /**
-   * Generates random strings
-   * @param count the total number of random strings that needs to be generated
-   * @return a {@link List} of random strings of size {@code count}
+   * Generates random log segment names
+   * @param count the total number of random log segment names that needs to be generated
+   * @return a {@link List} of random log segment name of size {@code count}
    */
-  static List<String> generateRandomStrings(int count) {
-    List<String> randomStrings = new ArrayList<>();
-    for (int i = 0; i < count; i++) {
-      randomStrings.add(UtilsTest.getRandomString(5));
+  static List<String> generateRandomLogSegmentName(int count) {
+    List<String> randomLogSegmentNames = new ArrayList<>();
+    while (randomLogSegmentNames.size() < count) {
+      String logSegmentName =
+          LogSegmentNameHelper.getName(TestUtils.RANDOM.nextInt(count * 1000), TestUtils.RANDOM.nextInt(count * 1000));
+      if (!randomLogSegmentNames.contains(logSegmentName)) {
+        randomLogSegmentNames.add(logSegmentName);
+      }
     }
-    Collections.sort(randomStrings);
-    return randomStrings;
+    Collections.sort(randomLogSegmentNames, LogSegmentNameHelper.COMPARATOR);
+    return randomLogSegmentNames;
   }
 
   /**
@@ -252,7 +255,7 @@ public class CompactionPolicyTest {
    */
   static NavigableMap<String, Long> generateValidDataSize(List<String> logSegmentNames, List<String> bestCandidates,
       long validDataSizeForBest, long maxLogSegmentCapacity) {
-    NavigableMap<String, Long> validDataSize = new TreeMap<>();
+    NavigableMap<String, Long> validDataSize = new TreeMap<>(LogSegmentNameHelper.COMPARATOR);
     for (String logSegmentName : logSegmentNames) {
       if (bestCandidates.contains(logSegmentName)) {
         validDataSize.put(logSegmentName, validDataSizeForBest);

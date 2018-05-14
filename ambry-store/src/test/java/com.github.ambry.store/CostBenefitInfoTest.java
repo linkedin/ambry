@@ -32,7 +32,7 @@ public class CostBenefitInfoTest {
   @Test
   public void testCostBenefitInfo() {
     for (int i = 0; i < 5; i++) {
-      List<String> randomSegments = CompactionPolicyTest.generateRandomStrings(3);
+      List<String> randomSegments = CompactionPolicyTest.generateRandomLogSegmentName(3);
       long cost = getRandomCost();
       int benefit = 1 + TestUtils.RANDOM.nextInt(Integer.MAX_VALUE);
       CostBenefitInfo actual = new CostBenefitInfo(randomSegments, cost, benefit);
@@ -45,7 +45,7 @@ public class CostBenefitInfoTest {
    */
   @Test
   public void testCostBenefitInfoForZeroBenefit() {
-    List<String> randomSegments = CompactionPolicyTest.generateRandomStrings(3);
+    List<String> randomSegments = CompactionPolicyTest.generateRandomLogSegmentName(3);
     long cost = getRandomCost();
     int benefit = 0;
     CostBenefitInfo actual = new CostBenefitInfo(randomSegments, cost, benefit);
@@ -57,7 +57,7 @@ public class CostBenefitInfoTest {
    */
   @Test
   public void testCostBenefitInfoComparison() {
-    List<String> randomSegments = CompactionPolicyTest.generateRandomStrings(3);
+    List<String> randomSegments = CompactionPolicyTest.generateRandomLogSegmentName(3);
     long cost = getRandomCost();
     int benefit = 1 + TestUtils.RANDOM.nextInt(Integer.MAX_VALUE - 1);
     CostBenefitInfo one = new CostBenefitInfo(randomSegments, cost, benefit);
