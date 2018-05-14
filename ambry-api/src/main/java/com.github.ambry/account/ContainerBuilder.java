@@ -31,10 +31,10 @@ public class ContainerBuilder {
   private short parentAccountId;
 
   // optional
-  private boolean encrypted = false;
-  private boolean previouslyEncrypted = false;
-  private boolean cacheable = false;
-  private boolean mediaScanDisabled = false;
+  private boolean encrypted = ENCRYPTED_DEFAULT_VALUE;
+  private boolean previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
+  private boolean cacheable = CACHEABLE_DEFAULT_VALUE;
+  private boolean mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
   private String replicationPolicy = null;
 
   /**

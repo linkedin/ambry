@@ -883,7 +883,11 @@ public class AccountContainerTest {
       refContainerPreviousEncryptionValues.add(previouslyEncrypted);
       refContainerCachingValues.add(random.nextBoolean());
       refContainerMediaScanDisabledValues.add(random.nextBoolean());
-      refContainerReplicationPolicyValues.add(UtilsTest.getRandomString(10));
+      if (refContainerReplicationPolicyValues.contains(null)) {
+        refContainerReplicationPolicyValues.add(UtilsTest.getRandomString(10));
+      } else {
+        refContainerReplicationPolicyValues.add(null);
+      }
       refContainers.add(new Container(refContainerIds.get(i), refContainerNames.get(i), refContainerStatuses.get(i),
           refContainerDescriptions.get(i), refContainerEncryptionValues.get(i),
           refContainerPreviousEncryptionValues.get(i), refContainerCachingValues.get(i),
