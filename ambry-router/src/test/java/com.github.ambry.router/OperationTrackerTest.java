@@ -368,7 +368,7 @@ public class OperationTrackerTest {
   }
 
   /**
-   * Test to ensure that replicas are exactly 6 when includeNonOriginatingDcReplicas.
+   * Test to ensure that replicas are exactly 6 when includeNonOriginatingDcReplicas is false.
    * 3 local replicas in the beginning and 3 originating replicas afterwards.
    */
   @Test
