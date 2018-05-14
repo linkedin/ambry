@@ -94,7 +94,7 @@ public class StoreCopier implements Closeable {
    * Needs to be thread safe.
    */
   public interface Transformer {
-    
+
     /**
      * Transforms the input {@link Message} into an output {@link Message}.
      * @param message the input {@link Message} to change.
