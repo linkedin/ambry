@@ -20,6 +20,8 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.MockTime;
@@ -31,6 +33,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -331,13 +334,18 @@ public class OperationTrackerTest {
   public void replicasOrderingTestOriginatingIsLocal() {
     initialize();
     originatingDcName = localDcName;
-    OperationTracker ot = getOperationTracker(true, 3, 3, true, Integer.MAX_VALUE);
+    RouterConfig routerConfig = getRouterConfig(localDcName, "true", "3", "3", "false", "6");
+    OperationTracker ot =
+        getOperationTracker(routerConfig.routerGetCrossDcEnabled, routerConfig.routerDeleteSuccessTarget,
+            routerConfig.routerGetRequestParallelism, routerConfig.routerGetIncludeNonOriginatingDcReplicas,
+            routerConfig.routerGetReplicasRequired);
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
       ot.onResponse(replica, true);
       assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
+    assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
@@ -349,7 +357,11 @@ public class OperationTrackerTest {
   public void replicasOrderingTestOriginatingNotLocal() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
-    OperationTracker ot = getOperationTracker(true, 3, 6, true, Integer.MAX_VALUE);
+    RouterConfig routerConfig = getRouterConfig(localDcName, "true", "3", "6", "false", "6");
+    OperationTracker ot =
+        getOperationTracker(routerConfig.routerGetCrossDcEnabled, routerConfig.routerDeleteSuccessTarget,
+            routerConfig.routerGetRequestParallelism, routerConfig.routerGetIncludeNonOriginatingDcReplicas,
+            routerConfig.routerGetReplicasRequired);
     sendRequests(ot, 6, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
@@ -363,6 +375,7 @@ public class OperationTrackerTest {
       ot.onResponse(replica, true);
       assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
+    assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
@@ -375,7 +388,12 @@ public class OperationTrackerTest {
   public void replicasOrderTestOriginatingDcOnly() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
-    OperationTracker ot = getOperationTracker(true, 3, 6, false, 6);
+    System.out.println(originatingDcName);
+    RouterConfig routerConfig = getRouterConfig(localDcName, "true", "3", "9", "false", "6");
+    OperationTracker ot =
+        getOperationTracker(routerConfig.routerGetCrossDcEnabled, routerConfig.routerDeleteSuccessTarget,
+            routerConfig.routerGetRequestParallelism, routerConfig.routerGetIncludeNonOriginatingDcReplicas,
+            routerConfig.routerGetReplicasRequired);
     sendRequests(ot, 6, false);
     assertEquals("Should have 6 replicas", 6, inflightReplicas.size());
     for (int i = 0; i < 3; i++) {
@@ -390,6 +408,7 @@ public class OperationTrackerTest {
       ot.onResponse(replica, true);
       assertEquals("Should be originating DC", originatingDcName, replica.getDataNodeId().getDatacenterName());
     }
+    assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
     assertTrue("Operation should have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
   }
@@ -539,5 +558,31 @@ public class OperationTrackerTest {
       count++;
     }
     assertEquals("Total replica count did not match expected", totalReplicaCount, count);
+  }
+
+  /**
+   * Helper function to generate {@link RouterConfig}
+   * @param datacenterName
+   * @param crossColoEnabled Whether get operations are allowed to make requests to nodes in remote data centers
+   * @param successTarget The minimum number of successful responses required for a get operation on a chunk
+   * @param parallelism The maximum number of parallel requests issued at a time by the get manager for a get operation
+   *                    on a chunk.
+   * @param includeNonOriginatingDcReplicas  whether get operations are allowed to make requests to nodes in
+   *                                         non-originating remote data centers
+   * @param replicasRequired Number of replicas required for GET OperationTracker when
+   *                         routerGetIncludeNonOriginatingDcReplicas is False
+   */
+  private RouterConfig getRouterConfig(String datacenterName, String crossColoEnabled, String successTarget,
+      String parallelism, String includeNonOriginatingDcReplicas, String replicasRequired) {
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", datacenterName);
+    properties.setProperty("router.get.cross.dc.enabled", crossColoEnabled);
+    properties.setProperty("router.get.success.target", successTarget);
+    properties.setProperty("router.get.request.parallelism", parallelism);
+    properties.setProperty("router.get.include.non.originating.dc.replicas", includeNonOriginatingDcReplicas);
+    properties.setProperty("router.get.replicas.required", replicasRequired);
+    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
+    return routerConfig;
   }
 }
