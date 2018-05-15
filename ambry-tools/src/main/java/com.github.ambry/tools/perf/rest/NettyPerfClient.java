@@ -266,11 +266,14 @@ public class NettyPerfClient {
         nettyPerfClient.shutdown();
       }));
       nettyPerfClient.start();
+      ScheduledExecutorService scheduler = null;
       if (clientArgs.testTime != null) {
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.schedule(nettyPerfClient::shutdown, clientArgs.testTime, TimeUnit.SECONDS);
-        nettyPerfClient.awaitShutdown();
-        scheduler.shutdownNow();
+      }
+      nettyPerfClient.awaitShutdown();
+      if (scheduler != null) {
+        Utils.shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
       }
     } catch (Exception e) {
       logger.error("Exception during execution of NettyPerfClient", e);

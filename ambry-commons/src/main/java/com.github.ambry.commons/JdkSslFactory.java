@@ -61,17 +61,17 @@ public class JdkSslFactory implements SSLFactory {
   public JdkSslFactory(SSLConfig sslConfig) throws GeneralSecurityException, IOException {
 
     this.protocol = sslConfig.sslContextProtocol;
-    if (sslConfig.sslContextProvider.length() > 0) {
+    if (!sslConfig.sslContextProvider.isEmpty()) {
       this.provider = sslConfig.sslContextProvider;
     }
 
     ArrayList<String> cipherSuitesList = Utils.splitString(sslConfig.sslCipherSuites, ",");
-    if (cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).equals(""))) {
+    if (cipherSuitesList.size() > 0 && !(cipherSuitesList.size() == 1 && cipherSuitesList.get(0).isEmpty())) {
       this.cipherSuites = cipherSuitesList.toArray(new String[cipherSuitesList.size()]);
     }
 
     ArrayList<String> protocolsList = Utils.splitString(sslConfig.sslEnabledProtocols, ",");
-    if (protocolsList.size() > 0 && !(protocolsList.size() == 1 && protocolsList.get(0).equals(""))) {
+    if (protocolsList.size() > 0 && !(protocolsList.size() == 1 && protocolsList.get(0).isEmpty())) {
       this.enabledProtocols = protocolsList.toArray(new String[protocolsList.size()]);
     }
 
@@ -85,11 +85,11 @@ public class JdkSslFactory implements SSLFactory {
       this.wantClientAuth = true;
     }
 
-    if (sslConfig.sslKeymanagerAlgorithm.length() > 0) {
+    if (!sslConfig.sslKeymanagerAlgorithm.isEmpty()) {
       this.kmfAlgorithm = sslConfig.sslKeymanagerAlgorithm;
     }
 
-    if (sslConfig.sslTrustmanagerAlgorithm.length() > 0) {
+    if (!sslConfig.sslTrustmanagerAlgorithm.isEmpty()) {
       this.tmfAlgorithm = sslConfig.sslTrustmanagerAlgorithm;
     }
 

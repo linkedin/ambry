@@ -92,10 +92,9 @@ public class NettySslFactory implements SSLFactory {
   private static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
     return SslContextBuilder.forServer(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
-        .sslProvider(SslProvider.JDK)
         .ciphers(getCipherSuites(config))
         .protocols(getEnabledProtocols(config))
-        .clientAuth(ClientAuth.REQUIRE)
+        .clientAuth(getClientAuth(config))
         .build();
   }
 
@@ -109,7 +108,6 @@ public class NettySslFactory implements SSLFactory {
     return SslContextBuilder.forClient()
         .keyManager(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
-        .sslProvider(SslProvider.OPENSSL)
         .ciphers(getCipherSuites(config))
         .protocols(getEnabledProtocols(config))
         .build();
