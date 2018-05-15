@@ -220,7 +220,7 @@ public class RouterConfig {
     routerGetSuccessTarget = verifiableProperties.getIntInRange("router.get.success.target", 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
     routerGetIncludeNonOriginatingDcReplicas =
-        verifiableProperties.getBoolean("router.get.include.non.originating.dc", true);
+        verifiableProperties.getBoolean("router.get.include.non.originating.dc.replicas", true);
     routerGetReplicasRequired =
         verifiableProperties.getIntInRange("router.get.replicas.required", 6, 1, Integer.MAX_VALUE);
     routerGetOperationTrackerType =

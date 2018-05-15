@@ -243,6 +243,31 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test config router.get.include.non.originating.dc.replicas to be true or false.
+   */
+  @Test
+  public void testRouterGetIncludeNonOriginatingDcReplicasConfig() throws Exception {
+    Properties props = getNonBlockingRouterProperties("DC1");
+    for (String configValue : new String[]{"true", "false"}) {
+      setOperationParams();
+      props.setProperty("router.get.include.non.originating.dc.replicas", configValue);
+      VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+      routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
+      router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
+          new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+              CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
+          mockClusterMap, kms, cryptoService, cryptoJobHandler, mockTime);
+
+      // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
+      // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
+          .get();
+    }
+  }
+
+  /**
    * Test behavior with various null inputs to router methods.
    * @throws Exception
    */
