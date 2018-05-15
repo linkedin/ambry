@@ -256,6 +256,36 @@ public class StorageManagerTest {
   }
 
   /**
+   * Test add BlobStore with given {@link ReplicaId} {@code replica}.
+   */
+  @Test
+  public void addBlobStoreTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    storageManager.start();
+    List<MockDataNodeId> dataNodes = Collections.singletonList(dataNode);
+    List<String> mountPaths = dataNode.getMountPaths();
+    mountPaths.add(createMountPath());
+    MockPartitionId partition = new MockPartitionId(Long.MAX_VALUE - 1, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes,
+        mountPaths.size() - 1);
+    ReplicaId replica = partition.getReplicaIds().get(0);
+    // test add a new replica
+    assertTrue("Add should succeed on given replica", storageManager.addBlobStore(replica));
+    assertNotNull("Store should be accessible", storageManager.getStore(partition));
+    // test add a duplicated replica
+    assertFalse("Add should fail on duplicated replica", storageManager.addBlobStore(replica));
+    // test add a bad replica which is failed to start
+    MockPartitionId badPartition = new MockPartitionId(Long.MAX_VALUE - 2, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes,
+        mountPaths.size() - 1);
+    ReplicaId badReplica = badPartition.getReplicaIds().get(0);
+    new File(badReplica.getReplicaPath()).setReadable(false);
+    assertFalse("Add should fail on given replica which is failed to start", storageManager.addBlobStore(badReplica));
+    new File(badReplica.getReplicaPath()).setReadable(true);
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  /**
    * Tests that {@link StorageManager} can start even when certain stores cannot be started. Checks that these stores
    * are not accessible. We can make the replica path non-readable to induce a store starting failure.
    * @throws Exception
@@ -515,6 +545,16 @@ public class StorageManagerTest {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
+  }
+
+  /**
+   * @return A temporary mount path.
+   */
+  private String createMountPath() throws IOException {
+    File f = File.createTempFile("ambry", ".tmp");
+    MockClusterMap.deleteFileOrDirectory(f);
+    f.mkdir();
+    return f.getAbsolutePath();
   }
 }
 

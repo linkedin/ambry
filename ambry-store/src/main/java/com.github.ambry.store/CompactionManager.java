@@ -16,11 +16,13 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -62,7 +64,7 @@ class CompactionManager {
       StorageManagerMetrics metrics, Time time) {
     this.mountPath = mountPath;
     this.storeConfig = storeConfig;
-    this.stores = stores;
+    this.stores = new CopyOnWriteArrayList<>(stores);
     this.time = time;
     this.metrics = metrics;
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
@@ -153,6 +155,14 @@ class CompactionManager {
   }
 
   /**
+   * Add the given {@code store} for compaction.
+   * @param store the {@link BlobStore} to be added.
+   */
+  void addBlobStore(BlobStore store) {
+    stores.add(store);
+  }
+
+  /**
    * Get compaction details for a given {@link BlobStore} if any
    * @param blobStore the {@link BlobStore} for which compation details are requested
    * @return the {@link CompactionDetails} containing the details about log segments that needs to be compacted.
@@ -196,6 +206,7 @@ class CompactionManager {
       isRunning = true;
       try {
         logger.info("Starting compaction thread for {}", mountPath);
+        Collection<BlobStore> stores = new ArrayList<>(CompactionManager.this.stores);
         // complete any compactions in progress
         for (BlobStore store : stores) {
           logger.trace("{} being checked for resume", store);

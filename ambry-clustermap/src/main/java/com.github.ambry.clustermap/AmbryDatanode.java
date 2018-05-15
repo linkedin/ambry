@@ -149,6 +149,30 @@ class AmbryDataNode extends DataNodeId implements Resource {
   }
 
   @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    AmbryDataNode dataNode = (AmbryDataNode) o;
+
+    if (plainTextPort.getPort() != dataNode.plainTextPort.getPort()) {
+      return false;
+    }
+    return hostName.equals(dataNode.hostName);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = hostName.hashCode();
+    result = 31 * result + plainTextPort.getPort();
+    return result;
+  }
+
+  @Override
   public String toString() {
     return "DataNode[" + getHostname() + ":" + getPort() + "]";
   }

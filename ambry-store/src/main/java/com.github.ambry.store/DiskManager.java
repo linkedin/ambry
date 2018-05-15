@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,7 +42,8 @@ import org.slf4j.LoggerFactory;
 class DiskManager {
   static final String CLEANUP_OPS_JOB_NAME = "cleanupOps";
 
-  private final Map<PartitionId, BlobStore> stores = new HashMap<>();
+  private final Map<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final BlobStoreFactory blobStoreFactory;
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -80,12 +82,13 @@ class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
+    blobStoreFactory = replica ->
+        new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+            storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate,
+            time);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        BlobStore store =
-            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate,
-                time);
+        BlobStore store = blobStoreFactory.getBlobStore(replica);
         stores.put(replica.getPartitionId(), store);
       }
     }
@@ -125,16 +128,7 @@ class DiskManager {
 
       // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
       // from each store.
-      List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
-      for (BlobStore blobStore : stores.values()) {
-        if (blobStore.isStarted()) {
-          DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
-          if (requirements != null) {
-            requirementsList.add(requirements);
-          }
-        }
-      }
-      diskSpaceAllocator.initializePool(requirementsList);
+      initializeDiskSpaceAllocatorPool();
 
       compactionManager.enable();
 
@@ -283,6 +277,60 @@ class DiskManager {
   }
 
   /**
+   * Add BlobStore with given {@link ReplicaId} {@code replica}. The added BlobStore will be also started.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if the BlobStore does not exists before, and started successfully. {@code false} if not.
+   */
+  boolean addBlobStore(ReplicaId replica) {
+    if (!running) {
+      return false;
+    }
+    if (!disk.equals(replica.getDiskId())) {
+      return false;
+    }
+
+    PartitionId partition = replica.getPartitionId();
+    if (stores.containsKey(partition)) {
+      return false;
+    }
+    BlobStore blobStore = blobStoreFactory.getBlobStore(replica);
+    if (stores.putIfAbsent(partition, blobStore) != null) {
+      return false;
+    }
+    if (!startBlobStore(partition)) {
+      return false;
+    }
+
+    try {
+      initializeDiskSpaceAllocatorPool();
+    } catch (StoreException e) {
+      logger.error("Error while initializing DiskSpaceAllocatorPool for " + disk.getMountPath(), e);
+      return false;
+    }
+
+    compactionManager.addBlobStore(blobStore);
+
+    return true;
+  }
+
+  /**
+   * Initialize the pool of {@link DiskSpaceAllocator} such that it matches the requirements of all stores.
+   * @throws StoreException if the pool could not be allocated to meet the provided requirements.
+   */
+  private void initializeDiskSpaceAllocatorPool() throws StoreException {
+    List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
+    for (BlobStore blobStore : stores.values()) {
+      if (blobStore.isStarted()) {
+        DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
+        if (requirements != null) {
+          requirementsList.add(requirements);
+        }
+      }
+    }
+    diskSpaceAllocator.initializePool(requirementsList);
+  }
+
+  /**
    * Gets all the throttlers that the {@link DiskIOScheduler} will be constructed with.
    * @param config the {@link StoreConfig} with configuration values.
    * @param time the {@link Time} instance to use in the throttlers
@@ -309,5 +357,11 @@ class DiskManager {
       throw new StoreException("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk",
           StoreErrorCodes.Initialization_Error);
     }
+  }
+
+  @FunctionalInterface
+  private interface BlobStoreFactory {
+
+    BlobStore getBlobStore(ReplicaId replica);
   }
 }

@@ -101,6 +101,24 @@ class AmbryPartition extends PartitionId {
   }
 
   @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    AmbryPartition partition = (AmbryPartition) o;
+    return id.equals(partition.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return (int) (id ^ (id >>> 32));
+  }
+
+  @Override
   public int compareTo(PartitionId o) {
     AmbryPartition other = (AmbryPartition) o;
     return id.compareTo(other.id);

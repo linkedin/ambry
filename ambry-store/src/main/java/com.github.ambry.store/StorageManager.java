@@ -24,9 +24,11 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -38,8 +40,9 @@ import org.slf4j.LoggerFactory;
  * {@link DiskManager}
  */
 public class StorageManager {
-  private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
-  private final List<DiskManager> diskManagers = new ArrayList<>();
+  private final Map<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  private final Map<DiskId, DiskManager> diskManagers = new ConcurrentHashMap<>();
+  private final DiskManagerFactory diskManagerFactory;
   private final StorageManagerMetrics metrics;
   private final Time time;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
@@ -65,6 +68,9 @@ public class StorageManager {
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
     StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
     this.time = time;
+    diskManagerFactory = (disk, replicasForDisk) ->
+        new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
+            storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate, time);
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
       DiskId disk = replica.getDiskId();
@@ -73,10 +79,8 @@ public class StorageManager {
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
-      DiskManager diskManager =
-          new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
-              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate, time);
-      diskManagers.add(diskManager);
+      DiskManager diskManager = diskManagerFactory.getDiskManager(disk, replicasForDisk);
+      diskManagers.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
       }
@@ -112,7 +116,7 @@ public class StorageManager {
     try {
       logger.info("Starting storage manager");
       List<Thread> startupThreads = new ArrayList<>();
-      for (final DiskManager diskManager : diskManagers) {
+      for (final DiskManager diskManager : diskManagers.values()) {
         Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), () -> {
           try {
             diskManager.start();
@@ -184,7 +188,7 @@ public class StorageManager {
     try {
       logger.info("Shutting down storage manager");
       List<Thread> shutdownThreads = new ArrayList<>();
-      for (final DiskManager diskManager : diskManagers) {
+      for (final DiskManager diskManager : diskManagers.values()) {
         Thread thread = Utils.newThread("disk-manager-shutdown-" + diskManager.getDisk(), () -> {
           try {
             diskManager.shutdown();
@@ -224,15 +228,48 @@ public class StorageManager {
   }
 
   /**
+   * Add BlobStore with given {@link ReplicaId} {@code replica}, and the corresponding DiskManager will be added too if
+   * it is absent. The added BlobStore will be also started.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if the BlobStore does not exists before, and started successfully. {@code false} if not.
+   */
+  public boolean addBlobStore(ReplicaId replica) {
+    DiskManager diskManager = diskManagers.computeIfAbsent(replica.getDiskId(), disk -> {
+      DiskManager newDiskManager = diskManagerFactory.getDiskManager(disk, Collections.emptyList());
+      try {
+        newDiskManager.start();
+      } catch (Exception e) {
+        logger.error("Error while starting the DiskManager for " + disk.getMountPath(), e);
+        return null;
+      }
+      return newDiskManager;
+    });
+    if (diskManager == null) {
+      return false;
+    }
+
+    if (partitionToDiskManager.putIfAbsent(replica.getPartitionId(), diskManager) != null) {
+      return false;
+    }
+    return diskManager.addBlobStore(replica);
+  }
+
+  /**
    * @return the number of compaction threads running.
    */
   int getCompactionThreadCount() {
     int count = 0;
-    for (DiskManager diskManager : diskManagers) {
+    for (DiskManager diskManager : diskManagers.values()) {
       if (diskManager.isCompactionExecutorRunning()) {
         count++;
       }
     }
     return count;
+  }
+
+  @FunctionalInterface
+  private interface DiskManagerFactory {
+
+    DiskManager getDiskManager(DiskId disk, List<ReplicaId> replicasForDisk);
   }
 }

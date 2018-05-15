@@ -275,7 +275,7 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  protected static boolean deleteFileOrDirectory(File f) throws IOException {
+  public static boolean deleteFileOrDirectory(File f) throws IOException {
     if (f.exists()) {
       if (f.isDirectory()) {
         File[] children = f.listFiles();

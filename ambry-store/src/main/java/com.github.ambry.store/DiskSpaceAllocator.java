@@ -59,7 +59,7 @@ class DiskSpaceAllocator {
   private final long requiredSwapSegmentsPerSize;
   private final StorageManagerMetrics metrics;
   private final ReserveFileMap reserveFiles = new ReserveFileMap();
-  private PoolState poolState = PoolState.NOT_INVENTORIED;
+  private volatile PoolState poolState = PoolState.NOT_INVENTORIED;
   private Exception inventoryException = null;
 
   /**
@@ -289,7 +289,7 @@ class DiskSpaceAllocator {
       } else {
         while (reserveFiles.getCount(sizeInBytes) > segmentsNeeded) {
           File fileToDelete = reserveFiles.remove(sizeInBytes);
-          if (!fileToDelete.delete()) {
+          if (fileToDelete != null && !fileToDelete.delete()) {
             throw new IOException("Could not delete the following reserve file: " + fileToDelete.getAbsolutePath());
           }
         }
