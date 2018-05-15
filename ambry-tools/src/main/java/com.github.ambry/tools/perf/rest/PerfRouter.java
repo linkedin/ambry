@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
  * DeleteBlob: No op.
  */
 class PerfRouter implements Router {
-  protected final static String BLOB_ID = "perf-blob-id";
+  protected final static String BLOB_ID = "AAEAAQAAAAAAAAAAAAAAJGYwNWFkMDc4LWNlNGEtNDY3NS04N2RkLTllZjliMzNlYjYzOA";
 
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   private static final Random random = new Random();

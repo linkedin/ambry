@@ -74,13 +74,13 @@ public class ServerSSLTest {
     sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
-    sslFactory = new SSLFactory(clientSSLConfig1);
+    sslFactory = SSLFactory.getNewInstance(clientSSLConfig1);
     SSLContext sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory1 = sslContext.getSocketFactory();
-    sslFactory = new SSLFactory(clientSSLConfig2);
+    sslFactory = SSLFactory.getNewInstance(clientSSLConfig2);
     sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory2 = sslContext.getSocketFactory();
-    sslFactory = new SSLFactory(clientSSLConfig3);
+    sslFactory = SSLFactory.getNewInstance(clientSSLConfig3);
     sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory3 = sslContext.getSocketFactory();
   }

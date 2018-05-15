@@ -17,6 +17,7 @@ ext {
     commonsVersion = "1.5"
     bouncycastleVersion = "1.52"
     javaxVersion = "3.0.1"
-    nettyVersion = "4.1.6.Final"
+    nettyVersion = "4.1.19.Final"
+    nettyTcnativeVersion = "2.0.7.Final"
     helixVersion = "0.6.9"
 }

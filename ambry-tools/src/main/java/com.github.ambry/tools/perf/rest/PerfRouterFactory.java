@@ -42,7 +42,7 @@ public class PerfRouterFactory implements RouterFactory {
    * @param clusterMap the {@link ClusterMap} whose {@link MetricRegistry} needs to be used.
    * @param notificationSystem the {@link NotificationSystem} to use (can be {@code null}).
    * @param sslFactory the {@link SSLFactory} to use (can be {@code null}).
-   *@throws IllegalArgumentException if any of the required arguments are null.
+   * @throws IllegalArgumentException if any of the required arguments are null.
    */
   public PerfRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       NotificationSystem notificationSystem, SSLFactory sslFactory) {

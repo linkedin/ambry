@@ -265,7 +265,7 @@ public class ServerAdminTool implements Closeable {
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new SSLFactory(
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
         new SSLConfig(verifiableProperties)) : null;
     ServerAdminTool serverAdminTool =
         new ServerAdminTool(clusterMap.getMetricRegistry(), sslFactory, verifiableProperties);

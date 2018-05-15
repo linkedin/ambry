@@ -79,7 +79,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -1965,12 +1964,10 @@ public final class ServerTestUtil {
    * Create an {@link SSLFactory} if there are SSL enabled datacenters in the properties
    * @param verifiableProperties the {@link VerifiableProperties} to use.
    * @return an {@link SSLFactory}, or {@code null}, if no {@link SSLFactory} is required.
-   * @throws GeneralSecurityException
-   * @throws IOException
+   * @throws Exception
    */
-  static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
-      throws GeneralSecurityException, IOException {
+  static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
     boolean requiresSSL = new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    return requiresSSL ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
+    return requiresSSL ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
   }
 }

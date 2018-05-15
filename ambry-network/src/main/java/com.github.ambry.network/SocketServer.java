@@ -100,7 +100,7 @@ public class SocketServer implements NetworkServer {
   private void initializeSSLFactory(SSLConfig sslConfig) {
     if (ports.get(PortType.SSL) != null) {
       try {
-        this.sslFactory = new SSLFactory(sslConfig);
+        this.sslFactory = SSLFactory.getNewInstance(sslConfig);
         metrics.sslFactoryInitializationCount.inc();
       } catch (Exception e) {
         metrics.sslFactoryInitializationErrorCount.inc();

@@ -151,11 +151,11 @@ public class FrontendIntegrationTest {
   @BeforeClass
   public static void setup() throws Exception {
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        new SSLFactory(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
+        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
-    sslNettyClient =
-        new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactory(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
+    sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT,
+        SSLFactory.getNewInstance(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
   }
 
   /**
