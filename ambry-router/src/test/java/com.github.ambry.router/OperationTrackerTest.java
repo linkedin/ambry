@@ -105,7 +105,7 @@ public class OperationTrackerTest {
   @Test
   public void localSucceedTest() {
     initialize();
-    OperationTracker ot = getOperationTracker(false, 2, 3);
+    OperationTracker ot = getOperationTracker(false, 2, 3, true, Integer.MAX_VALUE);
     // 3-0-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
     sendRequests(ot, 3, false);
@@ -135,7 +135,7 @@ public class OperationTrackerTest {
   @Test
   public void localFailTest() {
     initialize();
-    OperationTracker ot = getOperationTracker(false, 2, 3);
+    OperationTracker ot = getOperationTracker(false, 2, 3, true, Integer.MAX_VALUE);
     // 3-0-0-0; 9-0-0-0
     assertFalse("Operation should not have been done.", ot.isDone());
     sendRequests(ot, 3, false);
@@ -165,7 +165,7 @@ public class OperationTrackerTest {
   @Test
   public void localSucceedWithDifferentParameterTest() {
     initialize();
-    OperationTracker ot = getOperationTracker(true, 1, 2);
+    OperationTracker ot = getOperationTracker(true, 1, 2, true, Integer.MAX_VALUE);
     // 3-0-0-0; 9-0-0-0
     sendRequests(ot, 2, false);
     // 1-2-0-0; 9-0-0-0
@@ -203,7 +203,7 @@ public class OperationTrackerTest {
   @Test
   public void remoteReplicaTest() {
     initialize();
-    OperationTracker ot = getOperationTracker(true, 1, 2);
+    OperationTracker ot = getOperationTracker(true, 1, 2, true, Integer.MAX_VALUE);
     // 3-0-0-0; 9-0-0-0
     sendRequests(ot, 2, false);
     // 1-2-0-0; 9-0-0-0
@@ -255,7 +255,7 @@ public class OperationTrackerTest {
   @Test
   public void fullSuccessTargetTest() {
     initialize();
-    OperationTracker ot = getOperationTracker(true, 12, 3);
+    OperationTracker ot = getOperationTracker(true, 12, 3, true, Integer.MAX_VALUE);
     while (!ot.hasSucceeded()) {
       sendRequests(ot, 3, false);
       for (int i = 0; i < 3; i++) {
@@ -290,7 +290,7 @@ public class OperationTrackerTest {
     mockPartition = new MockPartitionId();
     populateReplicaList(replicaCount);
     localDcName = datanodes.get(0).getDatacenterName();
-    OperationTracker ot = getOperationTracker(true, 1, 2);
+    OperationTracker ot = getOperationTracker(true, 1, 2, true, Integer.MAX_VALUE);
     sendRequests(ot, 2, true);
     ot.onResponse(inflightReplicas.poll(), false);
     ot.onResponse(inflightReplicas.poll(), false);
@@ -331,7 +331,7 @@ public class OperationTrackerTest {
   public void replicasOrderingTestOriginatingIsLocal() {
     initialize();
     originatingDcName = localDcName;
-    OperationTracker ot = getOperationTracker(true, 3, 3);
+    OperationTracker ot = getOperationTracker(true, 3, 3, true, Integer.MAX_VALUE);
     sendRequests(ot, 3, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
@@ -349,7 +349,7 @@ public class OperationTrackerTest {
   public void replicasOrderingTestOriginatingNotLocal() {
     initialize();
     originatingDcName = datanodes.get(datanodes.size() - 1).getDatacenterName();
-    OperationTracker ot = getOperationTracker(true, 3, 6);
+    OperationTracker ot = getOperationTracker(true, 3, 6, true, Integer.MAX_VALUE);
     sendRequests(ot, 6, false);
     for (int i = 0; i < 3; i++) {
       ReplicaId replica = inflightReplicas.poll();
@@ -401,7 +401,7 @@ public class OperationTrackerTest {
   public void notEnoughReplicasToMeetTargetTest() {
     initialize();
     try {
-      getOperationTracker(true, 13, 3);
+      getOperationTracker(true, 13, 3, true, Integer.MAX_VALUE);
       fail("Should have failed to construct tracker because success target > replica count");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -416,7 +416,7 @@ public class OperationTrackerTest {
     initialize();
     for (int parallelism : Arrays.asList(0, -1)) {
       try {
-        getOperationTracker(true, 13, 0);
+        getOperationTracker(true, 13, 0, true, Integer.MAX_VALUE);
         fail("Should have failed to construct tracker because parallelism is " + parallelism);
       } catch (IllegalArgumentException e) {
         // expected. Nothing to do.
@@ -455,31 +455,8 @@ public class OperationTrackerTest {
    * @param crossColoEnabled {@code true} if cross colo needs to be enabled. {@code false} otherwise.
    * @param successTarget the number of successful responses required for the operation to succeed.
    * @param parallelism the number of parallel requests that can be in flight.
-   * @return the right {@link OperationTracker} based on {@link #operationTrackerType}.
-   */
-  private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism) {
-    OperationTracker tracker;
-    switch (operationTrackerType) {
-      case SIMPLE_OP_TRACKER:
-        tracker = new SimpleOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName, true,
-            Integer.MAX_VALUE, successTarget, parallelism);
-        break;
-      case ADAPTIVE_OP_TRACKER:
-        tracker = new AdaptiveOperationTracker(localDcName, mockPartition, crossColoEnabled, originatingDcName, true,
-            Integer.MAX_VALUE, successTarget, parallelism, time, localColoTracker,
-            crossColoEnabled ? crossColoTracker : null, pastDueCounter, QUANTILE);
-        break;
-      default:
-        throw new IllegalArgumentException("Unrecognized operation tracker type - " + operationTrackerType);
-    }
-    return tracker;
-  }
-
-  /**
-   * Returns the right {@link OperationTracker} based on {@link #operationTrackerType}.
-   * @param crossColoEnabled {@code true} if cross colo needs to be enabled. {@code false} otherwise.
-   * @param successTarget the number of successful responses required for the operation to succeed.
-   * @param parallelism the number of parallel requests that can be in flight.
+   * @param includeNonOriginatingDcReplicas if take the option to include remote non originating DC replicas.
+   * @param replicasRequired The number of replicas required for the operation.
    * @return the right {@link OperationTracker} based on {@link #operationTrackerType}.
    */
   private OperationTracker getOperationTracker(boolean crossColoEnabled, int successTarget, int parallelism,
@@ -547,7 +524,7 @@ public class OperationTrackerTest {
       ((MockReplicaId) mockReplicaIds.get(i)).markReplicaDownStatus(downStatus.get(i));
     }
     localDcName = datanodes.get(0).getDatacenterName();
-    OperationTracker ot = getOperationTracker(true, 2, 3);
+    OperationTracker ot = getOperationTracker(true, 2, 3, true, Integer.MAX_VALUE);
     // The iterator should return all replicas, with the first half being the up replicas
     // and the last half being the down replicas.
     Iterator<ReplicaId> itr = ot.getReplicaIterator();
