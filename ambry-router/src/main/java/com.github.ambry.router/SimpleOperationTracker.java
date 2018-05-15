@@ -124,7 +124,7 @@ class SimpleOperationTracker implements OperationTracker {
       replicaPool.addAll(downReplicas);
     } else {
       // This is for get request only. Take replicasRequired copy of replicas to do the request
-      // Please note replicasRequired is 6 currently, as local + originating always <= 6.
+      // Please note replicasRequired is 6 because total number of local and originating replicas is always <= 6.
       // This may no longer be true with partition classes and flexible replication.
       while (replicaPool.size() < replicasRequired && backupReplicas.size() > 0) {
         replicaPool.add(backupReplicas.pollFirst());

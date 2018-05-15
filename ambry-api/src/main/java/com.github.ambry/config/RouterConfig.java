@@ -140,7 +140,7 @@ public class RouterConfig {
 
   /**
    * Number of replicas required to do get when routerGetIncludeNonOriginatingDcReplicas is False.
-   * Please note replicasRequired is 6 because local + originating always <= 6.
+   * Please note replicasRequired is 6 because total number of local and originating replicas is always <= 6.
    * This may no longer be true with partition classes and flexible replication.
    */
   @Config("router.get.replicas.required")
