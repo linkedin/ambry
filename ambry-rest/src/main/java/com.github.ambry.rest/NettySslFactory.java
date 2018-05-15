@@ -20,21 +20,20 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.util.ArrayList;
-import java.util.Arrays;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -43,6 +42,7 @@ import javax.net.ssl.TrustManagerFactory;
  * significant performance enhancements over the JDK implementation.
  */
 public class NettySslFactory implements SSLFactory {
+  private static final Logger logger = LoggerFactory.getLogger(NettySslFactory.class);
   private final SslContext nettyServerSslContext;
   private final SslContext nettyClientSslContext;
   private final SSLContext jdkSslContext;
@@ -90,6 +90,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws IOException
    */
   private static SslContext getServerSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
+    logger.info("Using {} provider for server SslContext", SslContext.defaultServerProvider());
     return SslContextBuilder.forServer(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
         .ciphers(getCipherSuites(config))
@@ -105,6 +106,7 @@ public class NettySslFactory implements SSLFactory {
    * @throws IOException
    */
   private static SslContext getClientSslContext(SSLConfig config) throws GeneralSecurityException, IOException {
+    logger.info("Using {} provider for client SslContext", SslContext.defaultClientProvider());
     return SslContextBuilder.forClient()
         .keyManager(getKeyManagerFactory(config))
         .trustManager(getTrustManagerFactory(config))
