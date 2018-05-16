@@ -15,6 +15,7 @@ package com.github.ambry.account;
 
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -125,9 +126,14 @@ class AccountTestUtils {
         boolean containerEncryption = random.nextBoolean();
         boolean containerPreviousEncryption = containerEncryption || random.nextBoolean();
         boolean mediaScanDisabled = random.nextBoolean();
-        Container container =
-            new ContainerBuilder(containerId, containerName, containerStatus, containerDescription, containerEncryption,
-                containerPreviousEncryption, containerCaching, mediaScanDisabled, accountId).build();
+        String replicationPolicy = UtilsTest.getRandomString(10);
+        Container container = new ContainerBuilder(containerId, containerName, containerStatus, containerDescription,
+            accountId).setEncrypted(containerEncryption)
+            .setPreviouslyEncrypted(containerPreviousEncryption)
+            .setCacheable(containerCaching)
+            .setMediaScanDisabled(mediaScanDisabled)
+            .setReplicationPolicy(replicationPolicy)
+            .build();
         containers.add(container);
         idToContainers.put(containerId, container);
       }
