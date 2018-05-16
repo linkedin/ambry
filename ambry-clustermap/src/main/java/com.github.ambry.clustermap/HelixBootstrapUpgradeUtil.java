@@ -87,12 +87,14 @@ class HelixBootstrapUpgradeUtil {
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
   private final HashMap<String, HashMap<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap = new HashMap<>();
   private final HashMap<String, HashMap<String, DataNodeId>> dcToInstanceNameToDataNodeId = new HashMap<>();
-  private int maxResource = -1;
-  final String clusterName;
   private final int maxPartitionsInOneResource;
   private final boolean dryRun;
   private final boolean forceRemove;
+  private int maxResource = -1;
+  final String clusterName;
   private boolean expectMoreInHelixDuringValidate = false;
+  private Map<String, Set<String>> instancesNotForceRemovedByDc = new HashMap<>();
+  private Map<String, Set<String>> partitionsNotForceRemovedByDc = new HashMap<>();
   private int instancesAdded = 0;
   private int instancesUpdated = 0;
   private int instancesDropped = 0;
@@ -339,7 +341,7 @@ class HelixBootstrapUpgradeUtil {
             instanceName, --totalInstances);
         // Continuing on the note above, if there is indeed a change, we must make a call on whether RO/RW, replica
         // availability and so on should be updated at all (if not, instanceConfigFromStatic should be replaced with
-        // the appropriate instanceConfig that is constructed with the correct values from both.
+        // the appropriate instanceConfig that is constructed with the correct values from both).
         if (!dryRun) {
           dcAdmin.setInstanceConfig(clusterName, instanceName, instanceConfigFromStatic);
           instancesUpdated++;
@@ -371,6 +373,7 @@ class HelixBootstrapUpgradeUtil {
         info("Instance {} is in Helix, but not in static. Ignoring for now (use --forceRemove to forcefully remove). "
             + "Remaining instances: {}", instanceName, --totalInstances);
         expectMoreInHelixDuringValidate = true;
+        instancesNotForceRemovedByDc.computeIfAbsent(dcName, k -> new HashSet<>()).add(instanceName);
       }
     }
   }
@@ -410,6 +413,7 @@ class HelixBootstrapUpgradeUtil {
             info(
                 "*** forceRemove option not provided, resources will not be removed (use --forceRemove to forcefully remove)");
             expectMoreInHelixDuringValidate = true;
+            partitionsNotForceRemovedByDc.computeIfAbsent(dcName, k -> new HashSet<>()).add(partitionName);
           }
         } else if (!instanceSetInStatic.equals(instanceSetInHelix)) {
           info("Different instance sets for partition {} under resource {}. Updating Helix using static.",
@@ -611,7 +615,7 @@ class HelixBootstrapUpgradeUtil {
     StaticClusterManager staticClusterMap =
         (new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout)).getClusterMap();
     HelixAdmin admin = adminForDc.get(dc.getName());
-    List<String> allInstancesInHelix = admin.getInstancesInCluster(clusterName);
+    Set<String> allInstancesInHelix = new HashSet<>(admin.getInstancesInCluster(clusterName));
     for (DataNodeId dataNodeId : dc.getDataNodes()) {
       Map<String, Map<String, Replica>> mountPathToReplicas = getMountPathToReplicas(staticClusterMap, dataNodeId);
       DataNode dataNode = (DataNode) dataNodeId;
@@ -685,11 +689,14 @@ class HelixBootstrapUpgradeUtil {
       ensureOrThrow(sealedReplicasInClusterMap.equals(sealedReplicasInHelix),
           "Sealed replicas info mismatch for " + "instance " + instanceName);
     }
-    if (!expectMoreInHelixDuringValidate) {
+    if (expectMoreInHelixDuringValidate) {
+      ensureOrThrow(allInstancesInHelix.equals(instancesNotForceRemovedByDc.get(dc.getName())),
+          "Additional instances in Helix: " + allInstancesInHelix + " not what is expected "
+              + instancesNotForceRemovedByDc.get(dc.getName()));
+      info("*** Helix may have more instances than in the given clustermap as removals were not forced.");
+    } else {
       ensureOrThrow(allInstancesInHelix.isEmpty(),
           "Following instances in Helix not found in the clustermap " + allInstancesInHelix);
-    } else {
-      info("*** Helix may have more instances than in the given clustermap as removals were not forced.");
     }
     info("Successfully verified datanode and disk equivalency in dc {}", dc.getName());
   }
@@ -740,12 +747,15 @@ class HelixBootstrapUpgradeUtil {
                 + expectedInHelix + ", found additional instances: " + replicaHostsInHelix);
       }
     }
-    if (!expectMoreInHelixDuringValidate) {
+    if (expectMoreInHelixDuringValidate) {
+      ensureOrThrow(allPartitionsToInstancesInHelix.keySet().equals(partitionsNotForceRemovedByDc.get(dcName)),
+          "Additional partitions in Helix: " + allPartitionsToInstancesInHelix.keySet() + " not what is expected "
+              + partitionsNotForceRemovedByDc.get(dcName));
+      info("*** Helix may have more partitions or replicas than in the given clustermap as removals were not forced.");
+    } else {
       ensureOrThrow(allPartitionsToInstancesInHelix.isEmpty(),
           "More partitions in Helix than in clustermap, additional partitions: "
               + allPartitionsToInstancesInHelix.keySet());
-    } else {
-      info("*** Helix may have more partitions or replicas than in the given clustermap as removals were not forced.");
     }
     info("Successfully verified resources and partitions equivalency in dc {}", dcName);
   }
