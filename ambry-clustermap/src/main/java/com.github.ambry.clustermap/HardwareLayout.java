@@ -123,6 +123,10 @@ class HardwareLayout {
     return dataNodeInHardStateCount.get(hardwareState);
   }
 
+  ClusterMapConfig getClusterMapConfig() {
+    return clusterMapConfig;
+  }
+
   private Map<HardwareState, Long> calculateDataNodeInHardStateCount() {
     Map<HardwareState, Long> dataNodeInStateCount = new HashMap<HardwareState, Long>();
     for (HardwareState hardwareState : HardwareState.values()) {
