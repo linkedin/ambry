@@ -601,7 +601,7 @@ public class ReplicationTest {
     ByteBuffer buffer = getDeleteMessage(id, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs);
     for (Host host : hosts) {
       host.addMessage(partitionId,
-          new MessageInfo(id, buffer.remaining(), true, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs),
+          new MessageInfo(id, buffer.remaining(), true, false, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs),
           buffer.duplicate());
     }
   }
@@ -980,8 +980,7 @@ public class ReplicationTest {
         } catch (IOException e) {
           throw new IllegalStateException(e);
         }
-        messageInfos.add(new MessageInfo(deleteInfo.getStoreKey(), deleteInfo.getSize(), true,
-            messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
+        messageInfos.add(new MessageInfo(deleteInfo.getStoreKey(), deleteInfo.getSize(), true, false, messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
             messageInfoFound.getContainerId(), System.currentTimeMillis()));
       }
     }

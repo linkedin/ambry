@@ -266,7 +266,7 @@ public class StoreMessageReadSetTest {
         boolean deleted = TestUtils.RANDOM.nextBoolean();
         // basic test
         MessageInfo info =
-            new MessageInfo(id, size, deleted, expiresAtMs, crc, accountId, containerId, operationTimeMs);
+            new MessageInfo(id, size, deleted, false, expiresAtMs, crc, accountId, containerId, operationTimeMs);
         BlobReadOptions options = new BlobReadOptions(log, new Offset(firstSegment.getName(), offset), info);
         assertEquals("Ref count of log segment should have increased", 1, firstSegment.refCount());
         verifyGetters(options, firstSegment, offset, true, info);

@@ -672,7 +672,7 @@ public class IndexTest {
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a DELETE for a key that has been deleted
-    info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true,
+    info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
     doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
     // recovery info that contains a PUT beyond the end offset of the log segment
@@ -1599,7 +1599,8 @@ public class IndexTest {
     // 1 DELETE record for the PUT in the previous segment
     state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     nextSegmentInfos.add(
-        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, accountId,
+        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
+            accountId,
             containerId, state.time.milliseconds()));
     final AtomicInteger returnTracker = new AtomicInteger(0);
     state.recovery = new MessageStoreRecovery() {
@@ -1646,7 +1647,7 @@ public class IndexTest {
     // 1 DELETE for a PUT not in the infos
     MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
     IndexValue putValue = state.getExpectedValue(idToDelete, true);
-    infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, putValue.getAccountId(),
+    infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, putValue.getAccountId(),
         putValue.getContainerId(), state.time.milliseconds()));
     // 3 PUT
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -1659,14 +1660,13 @@ public class IndexTest {
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
     // 1 DELETE for a PUT in the infos
     infos.add(
-        new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, accountId, containerId,
+        new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId, containerId,
             state.time.milliseconds()));
     // 1 expired PUT
     infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE, 0,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
     // 1 delete for PUT that does not exist in the index
-    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
+    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
     return infos;
   }
 

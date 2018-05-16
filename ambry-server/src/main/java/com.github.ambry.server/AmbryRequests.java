@@ -189,7 +189,7 @@ public class AmbryRequests implements RequestAPI {
             new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
                 receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
                 receivedRequest.getBlobSize(), receivedRequest.getBlobType());
-        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), false,
+        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), false, false,
             Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
                 receivedRequest.getBlobProperties().getTimeToLiveInSeconds()), receivedRequest.getCrc(),
             receivedRequest.getBlobProperties().getAccountId(), receivedRequest.getBlobProperties().getContainerId(),
