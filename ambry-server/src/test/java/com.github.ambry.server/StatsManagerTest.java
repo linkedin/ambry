@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.After;
 import org.junit.Test;
 
@@ -71,6 +72,7 @@ public class StatsManagerTest {
   private final Map<PartitionId, Store> storeMap;
   private final Random random = new Random();
   private final StatsManagerConfig config;
+  private final ObjectMapper mapper = new ObjectMapper();
 
   /**
    * Deletes the temporary directory.
@@ -176,6 +178,24 @@ public class StatsManagerTest {
   }
 
   /**
+   * Test adding partition to {@link StatsManager}, and verify via {@code getNodeStatsInJSON}.
+   */
+  @Test
+  public void testAddPartition() throws Exception {
+    StorageManager storageManager = new MockStorageManager(storeMap);
+    List<PartitionId> partitions = new ArrayList<>(storeMap.keySet());
+    PartitionId firstPartition = partitions.get(0);
+    PartitionId secondPartition = partitions.get(1);
+    StatsManager testStatsManager = new StatsManager(storageManager, Collections.singletonList(firstPartition),
+        new MetricRegistry(), config, new MockTime());
+    assertFalse("StatsManager should not contain the partition which is not added",
+        getNodeStats(testStatsManager).getSnapshot().getSubMap().containsKey(secondPartition.toString()));
+    testStatsManager.addPartition(secondPartition);
+    assertTrue("StatsManager should contain the added partition",
+        getNodeStats(testStatsManager).getSnapshot().getSubMap().containsKey(secondPartition.toString()));
+  }
+
+  /**
    * Test to verify {@link StatsManager} can start and shutdown properly.
    * @throws InterruptedException
    */
@@ -256,6 +276,11 @@ public class StatsManagerTest {
     }
     return new Pair<>(new StatsSnapshot(baseSnapshot.getValue() - partialTotalSize, accountMap1),
         new StatsSnapshot(partialTotalSize, accountMap2));
+  }
+
+  private StatsWrapper getNodeStats(StatsManager statsManager) throws IOException {
+    String statsWrapperJSON = statsManager.getNodeStatsInJSON();
+    return mapper.readValue(statsWrapperJSON, StatsWrapper.class);
   }
 
   /**

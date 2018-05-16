@@ -45,11 +45,47 @@ public class StatsHeader {
     // empty constructor for Jackson deserialization
   }
 
+  public StatsDescription getDescription() {
+    return description;
+  }
+
+  public void setDescription(StatsDescription description) {
+    this.description = description;
+  }
+
   /**
    * Returns the reference timestamp at which the the stats are collected
    * @return the reference timestamp at which the the stats are collected
    */
   public long getTimestamp() {
     return timestamp;
+  }
+
+  public void setTimestamp(long timestamp) {
+    this.timestamp = timestamp;
+  }
+
+  public int getStoresContactedCount() {
+    return storesContactedCount;
+  }
+
+  public void setStoresContactedCount(int storesContactedCount) {
+    this.storesContactedCount = storesContactedCount;
+  }
+
+  public int getStoresRespondedCount() {
+    return storesRespondedCount;
+  }
+
+  public void setStoresRespondedCount(int storesRespondedCount) {
+    this.storesRespondedCount = storesRespondedCount;
+  }
+
+  public List<String> getUnreachableStores() {
+    return unreachableStores;
+  }
+
+  public void setUnreachableStores(List<String> unreachableStores) {
+    this.unreachableStores = unreachableStores;
   }
 }

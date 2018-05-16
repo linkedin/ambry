@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -69,7 +70,7 @@ class StatsManager {
   StatsManager(StorageManager storageManager, List<PartitionId> partitionIds, MetricRegistry registry,
       StatsManagerConfig config, Time time) throws IOException {
     this.storageManager = storageManager;
-    totalPartitionIds = partitionIds;
+    totalPartitionIds = new CopyOnWriteArrayList<>(partitionIds);
     statsOutputFile = new File(config.outputFilePath);
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
@@ -175,6 +176,7 @@ class StatsManager {
       StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
       long totalValue = 0;
       List<String> unreachableStores = new ArrayList<>();
+      List<PartitionId> totalPartitionIds = new ArrayList<>(this.totalPartitionIds);
       Iterator<PartitionId> iterator = totalPartitionIds.iterator();
       while (iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
@@ -199,6 +201,10 @@ class StatsManager {
     return statsWrapperJSON;
   }
 
+  void addPartition(PartitionId partition) {
+    totalPartitionIds.add(partition);
+  }
+
   /**
    * Runnable class that collects, aggregate and publish stats via methods in StatsManager.
    */
@@ -212,6 +218,7 @@ class StatsManager {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
         List<String> unreachableStores = new ArrayList<>();
+        List<PartitionId> totalPartitionIds = new ArrayList<>(StatsManager.this.totalPartitionIds);
         Iterator<PartitionId> iterator = totalPartitionIds.iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();

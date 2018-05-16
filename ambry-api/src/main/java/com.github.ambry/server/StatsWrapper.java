@@ -35,7 +35,15 @@ public class StatsWrapper {
     return header;
   }
 
+  public void setHeader(StatsHeader header) {
+    this.header = header;
+  }
+
   public StatsSnapshot getSnapshot() {
     return snapshot;
+  }
+
+  public void setSnapshot(StatsSnapshot snapshot) {
+    this.snapshot = snapshot;
   }
 }
