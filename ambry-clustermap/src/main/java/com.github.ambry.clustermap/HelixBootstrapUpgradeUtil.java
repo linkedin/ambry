@@ -85,13 +85,13 @@ import org.slf4j.LoggerFactory;
 class HelixBootstrapUpgradeUtil {
   private final StaticClusterManager staticClusterMap;
   private final Map<String, HelixAdmin> adminForDc = new HashMap<>();
-  private final HashMap<String, HashMap<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap = new HashMap<>();
-  private final HashMap<String, HashMap<String, DataNodeId>> dcToInstanceNameToDataNodeId = new HashMap<>();
+  private final Map<String, Map<DiskId, SortedSet<Replica>>> instanceToDiskReplicasMap = new HashMap<>();
+  private final Map<String, Map<String, DataNodeId>> dcToInstanceNameToDataNodeId = new HashMap<>();
   private final int maxPartitionsInOneResource;
   private final boolean dryRun;
   private final boolean forceRemove;
   private int maxResource = -1;
-  final String clusterName;
+  private final String clusterName;
   private boolean expectMoreInHelixDuringValidate = false;
   private Map<String, Set<String>> instancesNotForceRemovedByDc = new HashMap<>();
   private Map<String, Set<String>> partitionsNotForceRemovedByDc = new HashMap<>();
