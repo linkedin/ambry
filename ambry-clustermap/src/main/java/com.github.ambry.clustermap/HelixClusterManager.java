@@ -133,6 +133,10 @@ class HelixClusterManager implements ClusterMap {
       initializationException.compareAndSet(null, e);
     }
     if (initializationException.get() == null) {
+      // resolve the status of all partitions before completing initialization
+      for (AmbryPartition partition : partitionMap.values()) {
+        partition.resolvePartitionState();
+      }
       initializeCapacityStats();
       helixClusterManagerMetrics.initializeInstantiationMetric(true);
       helixClusterManagerMetrics.initializeDatacenterMetrics();
