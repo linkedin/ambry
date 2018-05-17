@@ -66,27 +66,7 @@ class AmbryPartition extends PartitionId {
 
   @Override
   public PartitionState getPartitionState() {
-    // If there was a change to the sealed state of replicas in the cluster manager since the last check, refresh the
-    // state of this partition. We do this to avoid querying every time this method is called, considering how
-    // update to sealed states of replicas are relatively rare.
-    long currentCounterValue = clusterManagerCallback.getSealedStateChangeCounter();
-    // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
-    // state in that case.
-    if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
-      try {
-        lastUpdatedSealedStateChangeCounter = currentCounterValue;
-        boolean isSealed = false;
-        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
-          if (replica.isSealed()) {
-            isSealed = true;
-            break;
-          }
-        }
-        state = isSealed ? PartitionState.READ_ONLY : PartitionState.READ_WRITE;
-      } finally {
-        stateChangeLock.unlock();
-      }
-    }
+    resolvePartitionState();
     return state;
   }
 
@@ -136,6 +116,33 @@ class AmbryPartition extends PartitionId {
   void onPartitionReadOnly() {
     // no-op. The static manager does not deal with this. In the dynamic world, the cluster manager will rely
     // entirely on Helix for this.
+  }
+
+  /**
+   * Resolves the {@link PartitionState} based on the state of the replicas.
+   */
+  void resolvePartitionState() {
+    // If there was a change to the sealed state of replicas in the cluster manager since the last check, refresh the
+    // state of this partition. We do this to avoid querying every time this method is called, considering how
+    // update to sealed states of replicas are relatively rare.
+    long currentCounterValue = clusterManagerCallback.getSealedStateChangeCounter();
+    // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
+    // state in that case.
+    if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
+      try {
+        lastUpdatedSealedStateChangeCounter = currentCounterValue;
+        boolean isSealed = false;
+        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
+          if (replica.isSealed()) {
+            isSealed = true;
+            break;
+          }
+        }
+        state = isSealed ? PartitionState.READ_ONLY : PartitionState.READ_WRITE;
+      } finally {
+        stateChangeLock.unlock();
+      }
+    }
   }
 }
 
