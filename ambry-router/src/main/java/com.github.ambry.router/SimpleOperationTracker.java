@@ -119,13 +119,14 @@ class SimpleOperationTracker implements OperationTracker {
         }
       }
     }
-    if (includeNonOriginatingDcReplicas) {
+    if (includeNonOriginatingDcReplicas || originatingDcName == null) {
       replicaPool.addAll(backupReplicas);
       replicaPool.addAll(downReplicas);
     } else {
       // This is for get request only. Take replicasRequired copy of replicas to do the request
       // Please note replicasRequired is 6 because total number of local and originating replicas is always <= 6.
       // This may no longer be true with partition classes and flexible replication.
+      // Don't do this if originatingDcName is unknown.
       while (replicaPool.size() < replicasRequired && backupReplicas.size() > 0) {
         replicaPool.add(backupReplicas.pollFirst());
       }
