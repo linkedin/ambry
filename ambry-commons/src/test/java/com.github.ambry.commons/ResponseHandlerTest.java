@@ -79,6 +79,11 @@ public class ResponseHandlerTest {
     }
 
     @Override
+    public String getDatacenterName(byte id) {
+      return null;
+    }
+
+    @Override
     public DataNodeId getDataNodeId(String hostname, int port) {
       return null;
     }

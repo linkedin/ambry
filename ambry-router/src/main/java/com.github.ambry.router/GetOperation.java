@@ -250,18 +250,21 @@ abstract class GetOperation {
    * @param partitionId the {@link PartitionId} for which a tracker is required.
    * @return an {@link OperationTracker} based on the config and {@code partitionId}.
    */
-  protected OperationTracker getOperationTracker(PartitionId partitionId) {
+  protected OperationTracker getOperationTracker(PartitionId partitionId, byte datacenterId) {
     OperationTracker operationTracker;
     String trackerType = routerConfig.routerGetOperationTrackerType;
+    String originatingDcName = clusterMap.getDatacenterName(datacenterId);
     if (trackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
       operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
-          routerConfig.routerGetRequestParallelism);
+          routerConfig.routerGetCrossDcEnabled, originatingDcName,
+          routerConfig.routerGetIncludeNonOriginatingDcReplicas, routerConfig.routerGetReplicasRequired,
+          routerConfig.routerGetSuccessTarget, routerConfig.routerGetRequestParallelism);
     } else if (trackerType.equals(AdaptiveOperationTracker.class.getSimpleName())) {
       operationTracker = new AdaptiveOperationTracker(routerConfig.routerDatacenterName, partitionId,
-          routerConfig.routerGetCrossDcEnabled, routerConfig.routerGetSuccessTarget,
-          routerConfig.routerGetRequestParallelism, time, localColoTracker, crossColoTracker, pastDueCounter,
-          routerConfig.routerLatencyToleranceQuantile);
+          routerConfig.routerGetCrossDcEnabled, originatingDcName,
+          routerConfig.routerGetIncludeNonOriginatingDcReplicas, routerConfig.routerGetReplicasRequired,
+          routerConfig.routerGetSuccessTarget, routerConfig.routerGetRequestParallelism, time, localColoTracker,
+          crossColoTracker, pastDueCounter, routerConfig.routerLatencyToleranceQuantile);
     } else {
       throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
     }

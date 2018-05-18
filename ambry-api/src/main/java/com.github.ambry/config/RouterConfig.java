@@ -132,6 +132,21 @@ public class RouterConfig {
   public final boolean routerGetCrossDcEnabled;
 
   /**
+   * Indicates whether get operations are allowed to make requests to nodes in non-originating remote data centers.
+   */
+  @Config("router.get.include.non.originating.dc.replicas")
+  @Default("true")
+  public final boolean routerGetIncludeNonOriginatingDcReplicas;
+
+  /**
+   * Number of replicas required for GET OperationTracker when routerGetIncludeNonOriginatingDcReplicas is False.
+   * Please note routerGetReplicasRequired is 6 because total number of local and originating replicas is always <= 6.
+   * This may no longer be true with partition classes and flexible replication.
+   */
+  @Config("router.get.replicas.required")
+  @Default("6")
+  public final int routerGetReplicasRequired;
+  /**
    * The OperationTracker to use for GET operations.
    */
   @Config("router.get.operation.tracker.type")
@@ -204,6 +219,10 @@ public class RouterConfig {
         verifiableProperties.getIntInRange("router.get.request.parallelism", 2, 1, Integer.MAX_VALUE);
     routerGetSuccessTarget = verifiableProperties.getIntInRange("router.get.success.target", 1, 1, Integer.MAX_VALUE);
     routerGetCrossDcEnabled = verifiableProperties.getBoolean("router.get.cross.dc.enabled", true);
+    routerGetIncludeNonOriginatingDcReplicas =
+        verifiableProperties.getBoolean("router.get.include.non.originating.dc.replicas", true);
+    routerGetReplicasRequired =
+        verifiableProperties.getIntInRange("router.get.replicas.required", 6, 1, Integer.MAX_VALUE);
     routerGetOperationTrackerType =
         verifiableProperties.getString("router.get.operation.tracker.type", "SimpleOperationTracker");
     routerLatencyToleranceQuantile =
