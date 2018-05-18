@@ -325,6 +325,37 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test to ensure all replicas are candidates if originatingDcName is unknown.
+   */
+  @Test
+  public void replicasOrderingTestOriginatingUnknown() {
+    initialize();
+    originatingDcName = null;
+    OperationTracker ot = getOperationTracker(true, 3, 3, false, 6);
+    sendRequests(ot, 3, false);
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, false);
+    }
+    sendRequests(ot, 3, false);
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, false);
+    }
+    assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
+    assertFalse("Operation should have not succeeded", ot.hasSucceeded());
+    assertFalse("Operation should have not been done", ot.isDone());
+    sendRequests(ot, 3, false);
+    for (int i = 0; i < 3; i++) {
+      ReplicaId replica = inflightReplicas.poll();
+      ot.onResponse(replica, true);
+    }
+    assertEquals("Should have 0 replica in flight.", 0, inflightReplicas.size());
+    assertTrue("Operation should have succeeded", ot.hasSucceeded());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
    * Test to ensure that replicas in originating DC are first priority when originating DC is local DC.
    */
   @Test
