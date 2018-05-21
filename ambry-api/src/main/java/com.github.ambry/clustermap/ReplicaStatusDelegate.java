@@ -20,11 +20,11 @@ import com.github.ambry.store.Store;
 /**
  * Delegate class allowing BlobStore to set the replica sealed/stopped status
  */
-public class WriteStatusDelegate {
+public class ReplicaStatusDelegate {
 
   private final ClusterParticipant clusterParticipant;
 
-  public WriteStatusDelegate(ClusterParticipant clusterParticipant) {
+  public ReplicaStatusDelegate(ClusterParticipant clusterParticipant) {
     this.clusterParticipant = clusterParticipant;
   }
 
@@ -50,7 +50,7 @@ public class WriteStatusDelegate {
    * @param isStopped whether to mark the store as stopped ({@code true}).
    * @return {@code true} if state is successful set. {@code false} if not.
    */
-  public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped){
+  public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
     return clusterParticipant.setReplicaStoppedState(replicaId, isStopped);
   }
 }

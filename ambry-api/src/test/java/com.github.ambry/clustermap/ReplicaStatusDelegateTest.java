@@ -19,17 +19,17 @@ import org.junit.Test;
 import static org.mockito.Mockito.*;
 
 
-public class WriteStatusDelegateTest {
+public class ReplicaStatusDelegateTest {
 
   /**
-   * Tests WriteStatusDelegate
+   * Tests ReplicaStatusDelegate
    */
   @Test
   public void testDelegate() {
     //Initializes delegate and arguments
     ClusterParticipant clusterParticipant = mock(ClusterParticipant.class);
     ReplicaId replicaId = mock(ReplicaId.class);
-    WriteStatusDelegate delegate = new WriteStatusDelegate(clusterParticipant);
+    ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(clusterParticipant);
 
     //Checks that the right underlying ClusterParticipant methods are called
     verifyZeroInteractions(clusterParticipant);
@@ -38,6 +38,12 @@ public class WriteStatusDelegateTest {
     verifyNoMoreInteractions(clusterParticipant);
     delegate.unseal(replicaId);
     verify(clusterParticipant).setReplicaSealedState(replicaId, false);
+    verifyNoMoreInteractions(clusterParticipant);
+    delegate.setReplicaStoppedState(replicaId, true);
+    verify(clusterParticipant).setReplicaStoppedState(replicaId, true);
+    verifyNoMoreInteractions(clusterParticipant);
+    delegate.setReplicaStoppedState(replicaId, false);
+    verify(clusterParticipant).setReplicaStoppedState(replicaId, false);
     verifyNoMoreInteractions(clusterParticipant);
   }
 }

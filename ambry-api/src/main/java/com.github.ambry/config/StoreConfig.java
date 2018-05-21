@@ -197,12 +197,12 @@ public class StoreConfig {
   public final boolean storeValidateAuthorization;
 
   /**
-   * Enables or disables dynamic sealing/unsealing
+   * Enables or disables ReplicaStatusDelegate to dynamically set the replica sealed/stopped status
    */
-  @Config(storeWriteStatusDelegateEnableName)
+  @Config(storeReplicaStatusDelegateEnableName)
   @Default("false")
-  public final boolean storeWriteStatusDelegateEnable;
-  public static final String storeWriteStatusDelegateEnableName = "store.write.status.delegate.enable";
+  public final boolean storeReplicaStatusDelegateEnable;
+  public static final String storeReplicaStatusDelegateEnableName = "store.replica.status.delegate.enable";
 
   /**
    * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW
@@ -263,7 +263,7 @@ public class StoreConfig {
     storeStatsIndexEntriesPerSecond =
         verifiableProperties.getIntInRange("store.stats.index.entries.per.second", 240000, 1, Integer.MAX_VALUE);
     storeIndexPersistedEntryMinBytes = verifiableProperties.getInt("store.index.persisted.entry.min.bytes", 115);
-    storeWriteStatusDelegateEnable = verifiableProperties.getBoolean(storeWriteStatusDelegateEnableName, false);
+    storeReplicaStatusDelegateEnable = verifiableProperties.getBoolean(storeReplicaStatusDelegateEnableName, false);
     storeReadOnlyEnableSizeThresholdPercentage =
         verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
     storeReadWriteEnableSizeThresholdPercentageDelta =

@@ -22,7 +22,7 @@ import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.WriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -277,11 +277,11 @@ public class StorageManagerTest {
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
-    // test set the state of store whose writeStatusDelegate is null
+    // test set the state of store whose replicaStatusDelegate is null
     ReplicaId replica = replicas.get(0);
     PartitionId id = replica.getPartitionId();
     storageManager.getDiskManager(id).shutdown();
-    assertFalse("Set store stopped state should fail on given store whose writeStatusDelegate is null",
+    assertFalse("Set store stopped state should fail on given store whose replicaStatusDelegate is null",
         storageManager.setBlobStoreStoppedState(id, true));
     // test invalid partition case (where diskManager == null)
     replica = invalidPartitionReplicas.get(0);
@@ -300,8 +300,8 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
-    // test set the state of store with instantiated writeStatusDelegate
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, new MockWriteStatusDelegate());
+    // test set the state of store with instantiated replicaStatusDelegate
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, new MockReplicaStatusDelegate());
     storageManager.start();
     for (int i = 1; i < replicas.size(); i++) {
       ReplicaId replica = replicas.get(i);
@@ -481,11 +481,11 @@ public class StorageManagerTest {
    * @throws StoreException
    */
   private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry,
-      WriteStatusDelegate writeStatusDelegate) throws StoreException, InterruptedException {
+      ReplicaStatusDelegate replicaStatusDelegate) throws StoreException, InterruptedException {
     StorageManager storageManager =
         new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
             new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
-            writeStatusDelegate, SystemTime.getInstance());
+            replicaStatusDelegate, SystemTime.getInstance());
     return storageManager;
   }
 
@@ -566,7 +566,7 @@ public class StorageManagerTest {
     Properties properties = new Properties();
     properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
-    properties.put("store.write.status.delegate.enable", "true");
+    properties.put("store.replica.status.delegate.enable", "true");
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
@@ -577,10 +577,10 @@ public class StorageManagerTest {
   }
 
   /**
-   * An extension of {@link WriteStatusDelegate} to help with tests.
+   * An extension of {@link ReplicaStatusDelegate} to help with tests.
    */
-  private static class MockWriteStatusDelegate extends WriteStatusDelegate {
-    public MockWriteStatusDelegate() {
+  private static class MockReplicaStatusDelegate extends ReplicaStatusDelegate {
+    public MockReplicaStatusDelegate() {
       super(new ClusterParticipant() {
         @Override
         public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
