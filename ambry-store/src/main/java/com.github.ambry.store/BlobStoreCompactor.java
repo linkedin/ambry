@@ -14,12 +14,15 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,6 +31,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
@@ -733,52 +737,80 @@ class BlobStoreCompactor {
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
-      for (IndexEntry srcIndexEntry : srcIndexEntries) {
-        IndexValue srcValue = srcIndexEntry.getValue();
-        long usedCapacity = tgtIndex.getLogUsedCapacity();
-        if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
-          fileChannel.position(srcValue.getOffset().getOffset());
-          Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
-          // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
-          diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME, writtenLastTime);
-          tgtLog.appendFrom(fileChannel, srcValue.getSize());
-          FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
-          if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-            IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
-            if (putValue != null) {
-              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
+      ListIterator<IndexEntry> srcIndexEntryIterator = srcIndexEntries.listIterator();
+      while (srcIndexEntryIterator.hasNext()) {
+        // reset startOffset to begin a new bundle read.
+        long startOffset = -1;
+        List<IndexEntry> readyEntries = new ArrayList<>();
+        ByteBuffer buffer = null;
+        // get entries as many as possible and do a bunch read.
+        while (srcIndexEntryIterator.hasNext()) {
+          IndexEntry currentEntry = srcIndexEntryIterator.next();
+          if (startOffset == -1) {
+            startOffset = currentEntry.getValue().getOffset().getOffset();
+            readyEntries.clear();
+          }
+          readyEntries.add(currentEntry);
+          long totalSize =
+              currentEntry.getValue().getOffset().getOffset() + currentEntry.getValue().getSize() - startOffset;
+          if (totalSize > config.storeCleanupOperationsBytesPerSec || !srcIndexEntryIterator.hasNext()) {
+            // ready to read this chunk into buffer.
+            buffer = ByteBuffer.allocate((int) totalSize);
+            fileChannel.read(buffer, startOffset);
+            break;
+          }
+        }
+        // copy from buffer to tgtLog
+        for (IndexEntry srcIndexEntry : readyEntries) {
+          IndexValue srcValue = srcIndexEntry.getValue();
+          long usedCapacity = tgtIndex.getLogUsedCapacity();
+          if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
+            fileChannel.position(srcValue.getOffset().getOffset());
+            Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
+            // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
+            diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME,
+                writtenLastTime);
+            buffer.position((int) (srcValue.getOffset().getOffset() - startOffset));
+            buffer.limit(buffer.capacity());
+            tgtLog.appendFrom(Channels.newChannel(new ByteBufferInputStream(buffer)), srcValue.getSize());
+            FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
+            if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
+              if (putValue != null) {
+                tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
+              } else {
+                IndexValue tgtValue =
+                    new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+                        srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
+                tgtValue.setFlag(IndexValue.Flags.Delete_Index);
+                tgtValue.clearOriginalMessageOffset();
+                tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+              }
             } else {
               IndexValue tgtValue =
                   new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
                       srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
-              tgtValue.setFlag(IndexValue.Flags.Delete_Index);
-              tgtValue.clearOriginalMessageOffset();
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             }
+            long lastModifiedTimeSecsToSet =
+                srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
+                    : lastModifiedTimeSecs;
+            tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
+            writtenLastTime = srcValue.getSize();
+            srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
+          } else if (!isActive) {
+            logger.info("Stopping copying in {} because shutdown is in progress", storeId);
+            copiedAll = false;
+            break;
           } else {
-            IndexValue tgtValue =
-                new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                    srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
-            tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+            // this is the extra segment, so it is ok to run out of space.
+            logger.info(
+                "There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
+                    + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity,
+                logSegmentToCopy.getName());
+            copiedAll = false;
+            break;
           }
-          long lastModifiedTimeSecsToSet =
-              srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
-                  : lastModifiedTimeSecs;
-          tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
-          writtenLastTime = srcValue.getSize();
-          srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
-        } else if (!isActive) {
-          logger.info("Stopping copying in {} because shutdown is in progress", storeId);
-          copiedAll = false;
-          break;
-        } else {
-          // this is the extra segment, so it is ok to run out of space.
-          logger.info(
-              "There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
-                  + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity,
-              logSegmentToCopy.getName());
-          copiedAll = false;
-          break;
         }
       }
     } finally {
