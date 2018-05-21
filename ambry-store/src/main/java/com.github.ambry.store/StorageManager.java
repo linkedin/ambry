@@ -225,7 +225,9 @@ public class StorageManager {
 
   /**
    * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
+   * @param id the {@link PartitionId} of the {@link Store} whose stopped state should be set.
+   * @param isStopped whether to mark BlobStore as stopped ({@code true}) or started.
+   * @return {@code true} if set stopped state of store was successful. {@code false} if not.
    */
   public boolean setBlobStoreStoppedState(PartitionId id, boolean isStopped) {
     DiskManager diskManager = partitionToDiskManager.get(id);

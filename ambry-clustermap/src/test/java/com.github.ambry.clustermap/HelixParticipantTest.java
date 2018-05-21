@@ -250,7 +250,7 @@ public class HelixParticipantTest {
     listIsExpectedSize(stoppedReplicas, 1, listName);
     assertTrue(stoppedReplicas.contains(partitionId2));
 
-    //Removing all replicas yields expected behavior (and removal works by partitionId, not replicaId itself)
+    //Removing all replicas yields expected behavior
     helixParticipant.setReplicaStoppedState(replicaId2, false);
     stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(stoppedReplicas, 0, listName);

@@ -243,6 +243,7 @@ class DiskManager {
   /**
    * Start the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be started.
+   * @return {@code true} if start store was successful. {@code false} if not.
    */
   boolean startBlobStore(PartitionId id) {
     BlobStore store = stores.get(id);
@@ -264,6 +265,7 @@ class DiskManager {
   /**
    * Shutdown the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
+   * @return {@code true} if shutdown store was successful. {@code false} if not.
    */
   boolean shutdownBlobStore(PartitionId id) {
     BlobStore store = stores.get(id);
@@ -282,6 +284,12 @@ class DiskManager {
     }
   }
 
+  /**
+   * Set the BlobStore stopped state with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link BlobStore} whose stopped state should be set.
+   * @param isStopped whether to mark BlobStore as stopped ({@code true}) or started.
+   * @return {@code true} if set stopped state of store was successful. {@code false} if not.
+   */
   boolean setBlobStoreStoppedState(PartitionId id, boolean isStopped) {
     BlobStore store = stores.get(id);
     if (store == null) {

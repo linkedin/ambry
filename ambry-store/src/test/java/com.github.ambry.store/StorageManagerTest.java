@@ -263,6 +263,9 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
+  /**
+   * Test set stopped state of blobstore with given {@link PartitionId} {@code id} in failure cases.
+   */
   @Test
   public void setBlobStoreStoppedStateFailureTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
@@ -288,6 +291,9 @@ public class StorageManagerTest {
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
+  /**
+   * Test successfully set stopped state of blobstore with given {@link PartitionId} {@code id}.
+   */
   @Test
   public void setBlobStoreStateSuccessTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);

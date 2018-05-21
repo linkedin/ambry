@@ -353,8 +353,8 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests blob store use of {@link WriteStatusDelegate}
-   * @throws StoreException
+   * Tests update stopped state of blob store via {@link WriteStatusDelegate}
+   * Add/remove store into/from stopped replicas list.
    */
   @Test
   public void updateStoppedReplicasListTest() {
