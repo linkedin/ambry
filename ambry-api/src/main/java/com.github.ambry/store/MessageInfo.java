@@ -137,7 +137,7 @@ public class MessageInfo {
   }
 
   /**
-   * @return @code true} if the message's ttl has been updated, {@code false} otherwise
+   * @return {@code true} if the message's ttl has been updated, {@code false} otherwise
    */
   public boolean isTtlUpdated() {
     return isTtlUpdated;
