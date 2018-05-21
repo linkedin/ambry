@@ -39,6 +39,13 @@ public interface ClusterParticipant extends AutoCloseable {
   boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed);
 
   /**
+   * Set or reset the stopped state of the given replica.
+   * @param replicaId the {@link ReplicaId}
+   * @param isStopped if true, the replica will be marked as stopped; otherwise it will be marked as started.
+   */
+  boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped);
+
+  /**
    * Terminate the participant.
    */
   @Override

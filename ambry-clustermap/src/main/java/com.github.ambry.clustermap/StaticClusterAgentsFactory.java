@@ -88,6 +88,11 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
           return false;
         }
+
+        @Override
+        public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
+          return false;
+        }
       };
     }
     return clusterParticipant;

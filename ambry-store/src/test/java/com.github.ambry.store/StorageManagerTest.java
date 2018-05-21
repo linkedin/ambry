@@ -16,14 +16,17 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -95,7 +98,7 @@ public class StorageManagerTest {
       }
     }
     Utils.deleteFileOrDirectory(new File(mountPathToDelete));
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals("DiskSpaceAllocator should not have failed to start.", 0,
@@ -128,7 +131,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
     // add invalid replica id
     replicas.add(invalidPartitionReplicas.get(0));
@@ -170,7 +173,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     PartitionId id = null;
     storageManager.start();
     // shutdown all the replicas first
@@ -208,12 +211,12 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     PartitionId id = null;
     storageManager.start();
     for (ReplicaId replica : replicas) {
       id = replica.getPartitionId();
-      assertNotNull("DiskManager should not be for valid replica", storageManager.getDiskManager(id));
+      assertNotNull("DiskManager should not be null for valid replica", storageManager.getDiskManager(id));
     }
     // test invalid partition
     ReplicaId replica = invalidPartitionReplicas.get(0);
@@ -234,7 +237,7 @@ public class StorageManagerTest {
     MockPartitionId invalidPartition =
         new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
     for (int i = 1; i < replicas.size() - 1; i++) {
       ReplicaId replica = replicas.get(i);
@@ -247,7 +250,7 @@ public class StorageManagerTest {
     Store store = storageManager.getStore(id);
     store.shutdown();
     assertTrue("Shutdown should succeed on the store which is not started", storageManager.shutdownBlobStore(id));
-    // test start the store whose DiskManager is not running
+    // test shutdown the store whose DiskManager is not running
     replica = replicas.get(0);
     id = replica.getPartitionId();
     storageManager.getDiskManager(id).shutdown();
@@ -257,6 +260,49 @@ public class StorageManagerTest {
     replica = invalidPartitionReplicas.get(0);
     id = replica.getPartitionId();
     assertFalse("Shutdown should fail on given invalid replica", storageManager.shutdownBlobStore(id));
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  @Test
+  public void setBlobStoreStoppedStateFailureTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<MockDataNodeId> dataNodes = new ArrayList<>();
+    dataNodes.add(dataNode);
+    MockPartitionId invalidPartition =
+        new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
+    List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
+    storageManager.start();
+    // test set the state of store whose writeStatusDelegate is null
+    ReplicaId replica = replicas.get(0);
+    PartitionId id = replica.getPartitionId();
+    storageManager.getDiskManager(id).shutdown();
+    assertFalse("Set store stopped state should fail on given store whose writeStatusDelegate is null",
+        storageManager.setBlobStoreStoppedState(id, true));
+    // test invalid partition case (where diskManager == null)
+    replica = invalidPartitionReplicas.get(0);
+    id = replica.getPartitionId();
+    assertFalse("Set store stopped state should fail on given invalid replica",
+        storageManager.setBlobStoreStoppedState(id, true));
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  @Test
+  public void setBlobStoreStateSuccessTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<MockDataNodeId> dataNodes = new ArrayList<>();
+    dataNodes.add(dataNode);
+    // test set the state of store with instantiated writeStatusDelegate
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, new MockWriteStatusDelegate());
+    storageManager.start();
+    for (int i = 1; i < replicas.size(); i++) {
+      ReplicaId replica = replicas.get(i);
+      PartitionId id = replica.getPartitionId();
+      assertTrue("Mark store as stopped should succeed", storageManager.setBlobStoreStoppedState(id, true));
+      assertTrue("Mark store as started should succeed", storageManager.setBlobStoreStoppedState(id, false));
+    }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
@@ -273,7 +319,7 @@ public class StorageManagerTest {
     for (Integer badReplicaIndex : badReplicaIndexes) {
       new File(replicas.get(badReplicaIndex).getReplicaPath()).setReadable(false);
     }
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(0,
@@ -320,7 +366,7 @@ public class StorageManagerTest {
         downReplicaCount++;
       }
     }
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
     Map<String, Counter> counters = metricRegistry.getCounters();
     assertEquals(0,
@@ -355,7 +401,7 @@ public class StorageManagerTest {
     // Startup/shutdown one more time to verify the restart scenario.
     for (int i = 0; i < 2; i++) {
       metricRegistry = new MetricRegistry();
-      StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+      StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
       storageManager.start();
       checkStoreAccessibility(replicas, null, storageManager);
       Map<String, Counter> counters = metricRegistry.getCounters();
@@ -384,7 +430,7 @@ public class StorageManagerTest {
     File fileSizeDir =
         new File(reservePoolDir, DiskSpaceAllocator.generateFileSizeDirName(storeConfig.storeSegmentSizeInBytes));
     Utils.deleteFileOrDirectory(fileSizeDir);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     assertTrue("File creation should have succeeded", fileSizeDir.createNewFile());
     storageManager.start();
     checkStoreAccessibility(replicas, diskToFail, storageManager);
@@ -402,7 +448,7 @@ public class StorageManagerTest {
   public void successfulStartupShutdownTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, null);
     storageManager.start();
     checkStoreAccessibility(replicas, null, storageManager);
     Map<String, Counter> counters = metricRegistry.getCounters();
@@ -428,12 +474,12 @@ public class StorageManagerTest {
    * @return a started {@link StorageManager}
    * @throws StoreException
    */
-  private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry)
-      throws StoreException, InterruptedException {
+  private StorageManager createStorageManager(List<ReplicaId> replicas, MetricRegistry metricRegistry,
+      WriteStatusDelegate writeStatusDelegate) throws StoreException, InterruptedException {
     StorageManager storageManager =
         new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry, replicas,
-            new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(), null,
-            SystemTime.getInstance());
+            new MockIdFactory(), new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
+            writeStatusDelegate, SystemTime.getInstance());
     return storageManager;
   }
 
@@ -514,6 +560,7 @@ public class StorageManagerTest {
     Properties properties = new Properties();
     properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
+    properties.put("store.write.status.delegate.enable", "true");
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
@@ -521,6 +568,40 @@ public class StorageManagerTest {
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
+  }
+
+  /**
+   * An extension of {@link WriteStatusDelegate} to help with tests.
+   */
+  private static class MockWriteStatusDelegate extends WriteStatusDelegate {
+    public MockWriteStatusDelegate() {
+      super(new ClusterParticipant() {
+        @Override
+        public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
+
+        }
+
+        @Override
+        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+          return false;
+        }
+
+        @Override
+        public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
+          return false;
+        }
+
+        @Override
+        public void close() {
+
+        }
+      });
+    }
+
+    @Override
+    public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
+      return true;
+    }
   }
 }
 

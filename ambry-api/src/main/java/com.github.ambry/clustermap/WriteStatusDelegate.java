@@ -14,8 +14,11 @@
 
 package com.github.ambry.clustermap;
 
+import com.github.ambry.store.Store;
+
+
 /**
- * Delegate class allowing BlobStore to set the replica sealed status
+ * Delegate class allowing BlobStore to set the replica sealed/stopped status
  */
 public class WriteStatusDelegate {
 
@@ -39,5 +42,15 @@ public class WriteStatusDelegate {
    */
   public boolean unseal(ReplicaId replicaId) {
     return clusterParticipant.setReplicaSealedState(replicaId, false);
+  }
+
+  /**
+   * Sets stopped status of given store
+   * @param replicaId the {@link ReplicaId} of the {@link Store} of which the stopped state would be set.
+   * @param isStopped whether to mark the store as stopped ({@code true}).
+   * @return {@code true} if state is successful set. {@code false} if not.
+   */
+  public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped){
+    return clusterParticipant.setReplicaStoppedState(replicaId, isStopped);
   }
 }

@@ -340,6 +340,20 @@ class BlobStore implements Store {
     }
   }
 
+  /**
+   * Update the stopped replicas list based on the state of this store.
+   * @param isStopped whether the store is stopped ({@code true}) or started.
+   * @return {@code true} if StoppedReplicas list has been updated successfully.
+   */
+  public boolean updateStoppedReplicasList(boolean isStopped) {
+    if (writeStatusDelegate != null) {
+      logger.info("Setting replica stopped state via WriteStatusDelegate on replica {}", replicaId);
+      return writeStatusDelegate.setReplicaStoppedState(replicaId, isStopped);
+    }
+    logger.error("The WriteStatusDelegate is not instantiated");
+    return false;
+  }
+
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     checkStarted();

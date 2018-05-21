@@ -43,6 +43,7 @@ public class ClusterMapUtils {
   static final String SSLPORT_STR = "sslPort";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
+  static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String ZKCONNECTSTR_STR = "zkConnectStr";
@@ -138,6 +139,15 @@ public class ClusterMapUtils {
    */
   static List<String> getSealedReplicas(InstanceConfig instanceConfig) {
     return instanceConfig.getRecord().getListField(ClusterMapUtils.SEALED_STR);
+  }
+
+  /**
+   * Get the list of stopped replicas on a given instance.
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the list of stopped replicas.
+   */
+  static List<String> getStoppedReplicas(InstanceConfig instanceConfig) {
+    return instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
   }
 
   /**

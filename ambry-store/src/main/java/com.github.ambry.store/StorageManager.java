@@ -224,6 +224,15 @@ public class StorageManager {
   }
 
   /**
+   * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
+   * @param id the {@link PartitionId} of the {@link Store} which would be shutdown.
+   */
+  public boolean setBlobStoreStoppedState(PartitionId id, boolean isStopped) {
+    DiskManager diskManager = partitionToDiskManager.get(id);
+    return diskManager != null && diskManager.setBlobStoreStoppedState(id, isStopped);
+  }
+
+  /**
    * @return the number of compaction threads running.
    */
   int getCompactionThreadCount() {

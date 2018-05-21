@@ -806,6 +806,9 @@ public class AmbryRequests implements RequestAPI {
               if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
                 error = ServerErrorCode.No_Error;
                 logger.info("Store is successfully started and functional for partition: {}", partitionId);
+                if (!storageManager.setBlobStoreStoppedState(partitionId, false)) {
+                  logger.info("Fail to remove BlobStore {} from stoppedReplicas list after it is started", partitionId);
+                }
               } else {
                 error = ServerErrorCode.Unknown_Error;
                 logger.error("Enable compaction fails on given BlobStore {}", partitionId);
@@ -843,6 +846,9 @@ public class AmbryRequests implements RequestAPI {
                   if (storageManager.shutdownBlobStore(partitionId)) {
                     error = ServerErrorCode.No_Error;
                     logger.info("Store is successfully shutdown for partition: {}", partitionId);
+                    if (!storageManager.setBlobStoreStoppedState(partitionId, true)) {
+                      logger.info("Fail to add BlobStore {} to stoppedReplicas list after it is stopped", partitionId);
+                    }
                   } else {
                     error = ServerErrorCode.Unknown_Error;
                     logger.error("Shutting down BlobStore fails on {}", partitionId);

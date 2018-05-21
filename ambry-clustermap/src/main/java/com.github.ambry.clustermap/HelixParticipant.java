@@ -136,6 +136,33 @@ class HelixParticipant implements ClusterParticipant {
     }
   }
 
+  @Override
+  public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
+    if (!(replicaId instanceof AmbryReplica)) {
+      throw new IllegalArgumentException(
+          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+    }
+    String partitionId = replicaId.getPartitionId().toPathString();
+    synchronized (helixAdministrationLock) {
+      logger.trace("Getting stopped replicas from instanceConfig for partition {}", partitionId);
+      List<String> stoppedReplicas = getStoppedReplicas();
+      if (stoppedReplicas == null) {
+        stoppedReplicas = new ArrayList<>();
+      }
+      if (!isStopped && stoppedReplicas.contains(partitionId)) {
+        logger.info("Removing replica {} from stopped list", partitionId);
+        stoppedReplicas.remove(partitionId);
+        return setStoppedReplicas(stoppedReplicas);
+      }
+      if (isStopped && !stoppedReplicas.contains(partitionId)) {
+        logger.info("Adding replica {} to stopped list", partitionId);
+        stoppedReplicas.add(partitionId);
+        return setStoppedReplicas(stoppedReplicas);
+      }
+    }
+    return true;
+  }
+
   /**
    * Disconnect from the {@link HelixManager}.
    */
@@ -190,6 +217,20 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
+   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
+   * @return list of sealed replicas from HelixAdmin
+   */
+  private List<String> getStoppedReplicas() {
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
+    return ClusterMapUtils.getStoppedReplicas(instanceConfig);
+  }
+
+  /**
    * Set the list of sealed replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
    * is taken.
    * @param sealedReplicas list of sealed replicas to be set in the HelixAdmin
@@ -203,6 +244,24 @@ class HelixParticipant implements ClusterParticipant {
     }
     logger.trace("Setting InstanceConfig with list of sealed replicas: {}", Arrays.toString(sealedReplicas.toArray()));
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
+    return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+  }
+
+  /**
+   * Set the list of sealed replicas in the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
+   * @param stoppedReplicas list of stopped replicas to be set in the HelixAdmin
+   * @return whether the operation succeeded or not
+   */
+  private boolean setStoppedReplicas(List<String> stoppedReplicas) {
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
+    logger.trace("Setting InstanceConfig with list of stopped replicas: {}",
+        Arrays.toString(stoppedReplicas.toArray()));
+    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
 }

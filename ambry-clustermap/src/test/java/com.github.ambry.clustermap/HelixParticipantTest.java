@@ -66,6 +66,7 @@ import static org.mockito.Mockito.*;
 public class HelixParticipantTest {
   private final MockHelixManagerFactory helixManagerFactory;
   private final Properties props;
+  private final Properties propsDummy;
   private final String clusterName = "HelixParticipantTestCluster";
 
   public HelixParticipantTest() throws Exception {
@@ -78,6 +79,12 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.cluster.name", clusterName);
     props.setProperty("clustermap.datacenter.name", "DC0");
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    propsDummy = new Properties(props);
+    propsDummy.setProperty("clustermap.host.name", "dummyHost");
+    propsDummy.setProperty("clustermap.port", "2200");
+    propsDummy.setProperty("clustermap.cluster.name", clusterName);
+    propsDummy.setProperty("clustermap.datacenter.name", "DC0");
+    propsDummy.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     helixManagerFactory = new MockHelixManagerFactory();
   }
 
@@ -158,6 +165,95 @@ public class HelixParticipantTest {
     helixParticipant.setReplicaSealedState(dup, false);
     sealedReplicas = ClusterMapUtils.getSealedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
     listIsExpectedSize(sealedReplicas, 0, listName);
+  }
+
+  /**
+   * Tests setReplicaStoppedState method for {@link HelixParticipant}
+   * @throws IOException
+   */
+  @Test
+  public void testSetReplicaStoppedState() throws IOException {
+    //setup HelixParticipant and dependencies
+    String partitionId1 = "partitionId1";
+    String partitionId2 = "partitionId2";
+    ReplicaId replicaId1 = createMockAmbryReplica(partitionId1);
+    ReplicaId replicaId2 = createMockAmbryReplica(partitionId2);
+    String hostname = "localhost";
+    int port = 2200;
+    String instanceName = ClusterMapUtils.getInstanceName(hostname, port);
+    String instanceNameDummy = ClusterMapUtils.getInstanceName("dummyHost", 2200);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
+    HelixParticipant helixParticipantDummy =
+        new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory);
+    helixParticipant.participate(Collections.EMPTY_LIST);
+    helixParticipantDummy.participate(Collections.EMPTY_LIST);
+    HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
+    HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
+    InstanceConfig instanceConfig = new InstanceConfig("testInstanceId");
+    helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+    helixAdmin.setInstanceConfig(clusterName, instanceNameDummy, null);
+
+    //Make sure the current stoppedReplicas list is null
+    List<String> stoppedReplicas = ClusterMapUtils.getSealedReplicas(instanceConfig);
+    assertNull("stoppedReplicas is not null", stoppedReplicas);
+
+    String listName = "stoppedReplicas list";
+
+    //Check that invoking setReplicaStoppedState with a non-AmbryReplica ReplicaId throws an IllegalArgumentException
+    ReplicaId nonAmbryReplica = createMockNotAmbryReplica(partitionId1);
+    try {
+      helixParticipant.setReplicaStoppedState(nonAmbryReplica, true);
+      fail("Expected an IllegalArgumentException here");
+    } catch (Exception e) {
+      assertTrue("Unexpected exception", e instanceof IllegalArgumentException);
+    }
+
+    //Check that invoking setReplicaStoppedState with null instanceConfig
+    try {
+      helixParticipantDummy.setReplicaStoppedState(replicaId1, true);
+      fail("Expected an IllegalStateException here");
+    } catch (Exception e) {
+      assertTrue("Unexpected exception", e instanceof IllegalStateException);
+    }
+
+    //Check that invoking setReplicaStoppedState adds the partition to the list of stopped replicas
+    helixParticipant.setReplicaStoppedState(replicaId1, true);
+    stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(stoppedReplicas, 1, listName);
+    assertTrue(stoppedReplicas.contains(partitionId1));
+
+    //Add another replicaId to stopped replica list
+    helixParticipant.setReplicaStoppedState(replicaId2, true);
+    stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(stoppedReplicas, 2, listName);
+    assertTrue(stoppedReplicas.contains(partitionId1));
+    assertTrue(stoppedReplicas.contains(partitionId2));
+
+    //Add same replicaId again to ensure no duplicates in the stopped replica list
+    helixParticipant.setReplicaStoppedState(replicaId1, true);
+    stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(stoppedReplicas, 2, listName);
+    assertTrue(stoppedReplicas.contains(partitionId1));
+    assertTrue(stoppedReplicas.contains(partitionId2));
+
+    //Check that invoking setReplicaStoppedState with isStopped == false removes replica from list of stopped replicas
+    helixParticipant.setReplicaStoppedState(replicaId1, false);
+    stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(stoppedReplicas, 1, listName);
+    assertTrue(stoppedReplicas.contains(partitionId2));
+    assertFalse(stoppedReplicas.contains(partitionId1));
+
+    //Removing a replicaId that's already been removed doesn't hurt anything
+    helixParticipant.setReplicaStoppedState(replicaId1, false);
+    stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(stoppedReplicas, 1, listName);
+    assertTrue(stoppedReplicas.contains(partitionId2));
+
+    //Removing all replicas yields expected behavior (and removal works by partitionId, not replicaId itself)
+    helixParticipant.setReplicaStoppedState(replicaId2, false);
+    stoppedReplicas = ClusterMapUtils.getStoppedReplicas(helixAdmin.getInstanceConfig(clusterName, instanceName));
+    listIsExpectedSize(stoppedReplicas, 0, listName);
   }
 
   /**
@@ -271,7 +367,7 @@ public class HelixParticipantTest {
 
   private void listIsExpectedSize(List list, int expectedSize, String listName) {
     assertNotNull(listName + " is null", list);
-    assertEquals(listName + " is not size " + expectedSize, expectedSize, list.size());
+    assertEquals(listName + " doesn't have the expected size " + expectedSize, expectedSize, list.size());
   }
 
   /**

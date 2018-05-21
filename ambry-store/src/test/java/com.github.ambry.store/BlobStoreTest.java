@@ -353,6 +353,28 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests blob store use of {@link WriteStatusDelegate}
+   * @throws StoreException
+   */
+  @Test
+  public void updateStoppedReplicasListTest() {
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    store = createBlobStore(replicaId);
+    // test update stopped replicas list when writeStatusDelegate == null, which should fail
+    assertFalse("Update stopped replica list should fail when delegate is not instantiated",
+        store.updateStoppedReplicasList(true));
+    StoreConfig defaultConfig = changeThreshold(65, 5, true);
+    WriteStatusDelegate writeStatusDelegate = mock(WriteStatusDelegate.class);
+    store = createBlobStore(replicaId, defaultConfig, writeStatusDelegate);
+    // test add a new replica into stopped list, which should trigger writeStatusDelegate to mark replica as stopped
+    store.updateStoppedReplicasList(true);
+    verify(writeStatusDelegate, times(1)).setReplicaStoppedState(replicaId, true);
+    // test remove a replica from stopped list, which should trigger writeStatusDelegate to mark replica as started
+    store.updateStoppedReplicasList(false);
+    verify(writeStatusDelegate, times(1)).setReplicaStoppedState(replicaId, false);
+  }
+
+  /**
    * Tests {@link BlobStore#start()} for corner cases and error cases.
    * Corner cases
    * 1. Creating a directory on first startup

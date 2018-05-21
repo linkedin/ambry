@@ -282,6 +282,16 @@ class DiskManager {
     }
   }
 
+  boolean setBlobStoreStoppedState(PartitionId id, boolean isStopped) {
+    BlobStore store = stores.get(id);
+    if (store == null) {
+      // no need to check if the store is started because this method could be called after store is successfully shutdown.
+      logger.error("store is not found on this disk when trying to update stoppedReplicas list");
+      return false;
+    }
+    return store.updateStoppedReplicasList(isStopped);
+  }
+
   /**
    * Gets all the throttlers that the {@link DiskIOScheduler} will be constructed with.
    * @param config the {@link StoreConfig} with configuration values.
