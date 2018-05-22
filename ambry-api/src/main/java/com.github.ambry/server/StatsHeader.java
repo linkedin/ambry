@@ -16,6 +16,7 @@ package com.github.ambry.server;
 
 import java.util.List;
 import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
 
 
 /**
@@ -23,6 +24,7 @@ import org.codehaus.jackson.annotate.JsonAutoDetect;
  * being reported, timestamp and etc.
  */
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
+@JsonPropertyOrder({"description", "timestamp", "storesContactedCount", "storesRespondedCount", "unreachableStores"})
 public class StatsHeader {
   public enum StatsDescription {
     QUOTA

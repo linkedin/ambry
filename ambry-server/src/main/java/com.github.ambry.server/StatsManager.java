@@ -33,7 +33,8 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import org.codehaus.jackson.annotate.JsonAutoDetect;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +53,6 @@ class StatsManager {
   private final File statsOutputFile;
   private final long publishPeriodInSecs;
   private final int initialDelayInSecs;
-  private final List<PartitionId> totalPartitionIds;
   private final Map<PartitionId, ReplicaId> partitionToReplicaMap;
   private final StatsManagerMetrics metrics;
   private final Time time;
@@ -76,15 +76,8 @@ class StatsManager {
     publishPeriodInSecs = config.publishPeriodInSecs;
     initialDelayInSecs = config.initialDelayUpperBoundInSecs;
     metrics = new StatsManagerMetrics(registry);
-    mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(JsonAutoDetect.Visibility.ANY));
-    totalPartitionIds = new ArrayList<>();
-    partitionToReplicaMap = new HashMap<>();
-    PartitionId partitionId;
-    for (ReplicaId replicaId : replicaIds) {
-      partitionId = replicaId.getPartitionId();
-      totalPartitionIds.add(partitionId);
-      partitionToReplicaMap.put(partitionId, replicaId);
-    }
+    partitionToReplicaMap =
+        replicaIds.stream().collect(Collectors.toMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
   }
 
@@ -185,7 +178,7 @@ class StatsManager {
       StatsSnapshot combinedSnapshot = new StatsSnapshot(0L, new HashMap<String, StatsSnapshot>());
       long totalValue = 0;
       List<String> unreachableStores = new ArrayList<>();
-      Iterator<PartitionId> iterator = totalPartitionIds.iterator();
+      Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
       while (iterator.hasNext()) {
         PartitionId partitionId = iterator.next();
         long fetchSnapshotStartTimeMs = time.milliseconds();
@@ -198,9 +191,9 @@ class StatsManager {
       }
       combinedSnapshot.setValue(totalValue);
       metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-      StatsHeader statsHeader =
-          new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), totalPartitionIds.size(),
-              totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
+      StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
+          partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
+          unreachableStores);
       statsWrapperJSON = mapper.writeValueAsString(new StatsWrapper(statsHeader, combinedSnapshot));
     } catch (Exception | Error e) {
       metrics.statsAggregationFailureCount.inc();
@@ -222,7 +215,7 @@ class StatsManager {
         long totalFetchAndAggregateStartTimeMs = time.milliseconds();
         StatsSnapshot aggregatedSnapshot = new StatsSnapshot(0L, null);
         List<String> unreachableStores = new ArrayList<>();
-        Iterator<PartitionId> iterator = totalPartitionIds.iterator();
+        Iterator<PartitionId> iterator = partitionToReplicaMap.keySet().iterator();
         while (!cancelled && iterator.hasNext()) {
           PartitionId partitionId = iterator.next();
           logger.info("Aggregating stats started for store {}", partitionId);
@@ -230,9 +223,9 @@ class StatsManager {
         }
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);
-          StatsHeader statsHeader =
-              new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(), totalPartitionIds.size(),
-                  totalPartitionIds.size() - unreachableStores.size(), unreachableStores);
+          StatsHeader statsHeader = new StatsHeader(StatsHeader.StatsDescription.QUOTA, time.milliseconds(),
+              partitionToReplicaMap.keySet().size(), partitionToReplicaMap.keySet().size() - unreachableStores.size(),
+              unreachableStores);
           publish(new StatsWrapper(statsHeader, aggregatedSnapshot));
           logger.info("Stats snapshot published to {}", statsOutputFile.getAbsolutePath());
         }
