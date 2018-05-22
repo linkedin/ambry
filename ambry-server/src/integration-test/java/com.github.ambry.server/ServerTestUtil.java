@@ -1137,7 +1137,7 @@ public final class ServerTestUtil {
       putFutures.add(future);
     }
     for (Future<String> future : putFutures) {
-      future.get(1, TimeUnit.SECONDS);
+      future.get(5, TimeUnit.SECONDS);
     }
     assertTrue("Did not receive all callbacks in time", callbackLatch.await(1, TimeUnit.SECONDS));
     if (exceptionRef.get() != null) {
