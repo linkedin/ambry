@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -91,7 +90,7 @@ class BlobStoreCompactor {
   private StoreFindToken recoveryStartToken = null;
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
-  private ByteBuffer bundleReadBuffer;
+  private final ByteBuffer bundleReadBuffer;
 
   /**
    * Constructs the compactor component.
@@ -126,8 +125,7 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     fixStateIfRequired();
-    this.bundleReadBuffer =
-        ByteBuffer.allocate(Math.max(config.storeCleanupOperationsBytesPerSec * 2, 10 * 1024 * 1024));
+    bundleReadBuffer = ByteBuffer.allocate(config.storeCleanupOperationsBufferSize);
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
 
@@ -743,16 +741,16 @@ class BlobStoreCompactor {
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
       ListIterator<IndexEntry> srcIndexEntryIterator = srcIndexEntries.listIterator();
       ByteBuffer bufferToUse = bundleReadBuffer;
+      List<IndexEntry> readyEntries = new ArrayList<>();
       while (srcIndexEntryIterator.hasNext()) {
         // reset startOffset to begin a new bundle read.
         long startOffset = -1;
-        List<IndexEntry> readyEntries = new ArrayList<>();
+        readyEntries.clear();
         // get entries as many as possible and do a bunch read.
         while (srcIndexEntryIterator.hasNext()) {
           IndexEntry currentEntry = srcIndexEntryIterator.next();
           if (startOffset == -1) {
             startOffset = currentEntry.getValue().getOffset().getOffset();
-            readyEntries.clear();
           }
           readyEntries.add(currentEntry);
           long totalSize =
@@ -772,14 +770,14 @@ class BlobStoreCompactor {
           IndexValue srcValue = srcIndexEntry.getValue();
           long usedCapacity = tgtIndex.getLogUsedCapacity();
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
-            fileChannel.position(srcValue.getOffset().getOffset());
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
             // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
             diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME,
                 writtenLastTime);
-            bufferToUse.position((int) (srcValue.getOffset().getOffset() - startOffset));
-            bufferToUse.limit(bufferToUse.capacity());
-            tgtLog.appendFrom(Channels.newChannel(new ByteBufferInputStream(bufferToUse)), srcValue.getSize());
+            long bufferPosition = srcValue.getOffset().getOffset() - startOffset;
+            bufferToUse.limit((int) (bufferPosition + srcIndexEntry.getValue().getSize()));
+            bufferToUse.position((int) (bufferPosition));
+            tgtLog.appendFrom(bufferToUse);
             FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
             if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
