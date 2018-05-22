@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -70,7 +71,8 @@ class CompactionManager {
       for (String trigger : storeConfig.storeCompactionTriggers) {
         triggers.add(Trigger.valueOf(trigger.toUpperCase()));
       }
-      compactionExecutor = new CompactionExecutor(triggers);
+      compactionExecutor = new CompactionExecutor(triggers,
+          Math.max(2 * storeConfig.storeCleanupOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
       try {
         CompactionPolicyFactory compactionPolicyFactory =
             Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
@@ -175,6 +177,7 @@ class CompactionManager {
     private final Set<BlobStore> storesDisabledCompaction = ConcurrentHashMap.newKeySet();
     private final LinkedBlockingDeque<BlobStore> storesToCheck = new LinkedBlockingDeque<>();
     private final long waitTimeMs = TimeUnit.HOURS.toMillis(storeConfig.storeCompactionCheckFrequencyInHours);
+    private final ByteBuffer bundleReadBuffer;
 
     private volatile boolean enabled = false;
 
@@ -183,8 +186,9 @@ class CompactionManager {
     /**
      * @param triggers the {@link EnumSet} of active compaction triggers.
      */
-    CompactionExecutor(EnumSet<Trigger> triggers) {
+    CompactionExecutor(EnumSet<Trigger> triggers, int bundleReadBufferSize) {
       this.triggers = triggers;
+      bundleReadBuffer = ByteBuffer.allocateDirect(bundleReadBufferSize);
     }
 
     /**
@@ -232,7 +236,7 @@ class CompactionManager {
                     logger.trace("Generated {} as details for {}", details, store);
                     metrics.markCompactionStart(true);
                     compactionStarted = true;
-                    store.compact(details);
+                    store.compact(details, bundleReadBuffer);
                   } else {
                     logger.info("{} is not eligible for compaction", store);
                   }

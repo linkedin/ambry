@@ -21,6 +21,7 @@ import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -591,14 +592,15 @@ class BlobStore implements Store {
   /**
    * Compacts the store data based on {@code details}.
    * @param details the {@link CompactionDetails} describing what needs to be compacted.
+   * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
    * in the segments to compact are in the journal.
    * @throws IOException if there is any error creating the {@link CompactionLog}.
    * @throws StoreException if there are any errors during the compaction.
    */
-  void compact(CompactionDetails details) throws IOException, StoreException {
+  void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
     checkStarted();
-    compactor.compact(details);
+    compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
     logger.trace("One cycle of compaction is completed on the store {}", storeId);
   }

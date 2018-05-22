@@ -89,7 +89,7 @@ class BlobStoreCompactor {
   private StoreFindToken recoveryStartToken = null;
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
-  private final ByteBuffer bundleReadBuffer;
+  private ByteBuffer bundleReadBuffer;
 
   /**
    * Constructs the compactor component.
@@ -124,8 +124,6 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     fixStateIfRequired();
-    bundleReadBuffer = ByteBuffer.allocateDirect(
-        Math.max(config.storeCompactionMinBufferSize, 2 * config.storeCleanupOperationsBytesPerSec));
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
 
@@ -162,13 +160,15 @@ class BlobStoreCompactor {
    * Compacts the store by copying valid data from the log segments in {@code details} to swap spaces and switching
    * the compacted segments out for the swap spaces. Returns once the compaction is complete.
    * @param details the {@link CompactionDetails} for the compaction.
+   * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
    * in the segments to compact are in the journal.
    * @throws IllegalStateException if the compactor has not been initialized.
    * @throws IOException if there were I/O errors creating the {@link CompactionLog}
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  void compact(CompactionDetails details) throws IOException, StoreException {
+  void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
+    this.bundleReadBuffer = bundleReadBuffer;
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog != null) {
@@ -178,6 +178,7 @@ class BlobStoreCompactor {
     logger.info("Compaction of {} started with details {}", storeId, details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details);
     resumeCompaction();
+    this.bundleReadBuffer = null;
   }
 
   /**
@@ -745,7 +746,8 @@ class BlobStoreCompactor {
         // calculate how many records can be included for bundle read.
         long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
         int endIndex; // [startIndex, endIndex) for a bundle of read.
-        if (srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
+        if (bundleReadBuffer == null
+            || srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
           bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(startIndex).getValue().getSize());
           endIndex = startIndex + 1;
         } else {

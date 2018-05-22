@@ -126,7 +126,7 @@ public class BlobStoreCompactorTest {
         new CompactionDetails(state.time.milliseconds(), Collections.singletonList(firstSegmentName));
 
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
       fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -168,7 +168,7 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails)} fails when a compaction is already
+   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails when a compaction is already
    * in progress.
    * @throws Exception
    */
@@ -183,7 +183,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
       fail("compact() should have failed because a compaction is already in progress");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -303,7 +303,7 @@ public class BlobStoreCompactorTest {
       compactor.initialize(state.index);
       long logSegmentsBeforeCompaction = state.index.getLogSegmentCount();
       try {
-        compactor.compact(details);
+        compactor.compact(details, ByteBuffer.allocateDirect(100));
       } finally {
         compactor.close(0);
       }
@@ -536,7 +536,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
     } finally {
       compactor.close(0);
     }
@@ -810,7 +810,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
     } finally {
       compactor.close(0);
     }
@@ -947,8 +947,6 @@ public class BlobStoreCompactorTest {
    */
   private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException, StoreException {
     closeOrExceptionInduced = false;
-    state.properties.setProperty("store.cleanup.operations.bytes.per.sec", "50");
-    state.properties.setProperty("store.compaction.min.buffer.size", "100");
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
@@ -1088,7 +1086,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
 
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
     } finally {
       compactor.close(0);
     }
@@ -1147,7 +1145,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(index);
 
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
       if (throwExceptionInsteadOfClose) {
         fail("Compact should have thrown exception");
       }
@@ -1550,7 +1548,7 @@ public class BlobStoreCompactorTest {
   // badInputTest() helpers
 
   /**
-   * Ensures that {@link BlobStoreCompactor#compact(CompactionDetails)} fails because {@code details} is invalid.
+   * Ensures that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails because {@code details} is invalid.
    * @param details the invalid {@link CompactionDetails}
    * @param msg the message to print on failure if no exception is thrown.
    * @throws Exception
@@ -1559,7 +1557,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     try {
-      compactor.compact(details);
+      compactor.compact(details, ByteBuffer.allocateDirect(100));
       fail(msg);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

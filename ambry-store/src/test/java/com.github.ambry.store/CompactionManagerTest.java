@@ -20,6 +20,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -127,7 +128,7 @@ public class CompactionManagerTest {
   /**
    * Tests that compaction is triggered on all stores provided they do not misbehave. Also includes a store that is
    * not ready for compaction. Ensures that {@link BlobStore#maybeResumeCompaction()} is called before
-   * {@link BlobStore#compact(CompactionDetails)} is called.
+   * {@link BlobStore#compact(CompactionDetails, ByteBuffer)} is called.
    * @throws Exception
    */
   @Test
@@ -471,7 +472,7 @@ public class CompactionManagerTest {
     }
 
     @Override
-    void compact(CompactionDetails details) {
+    void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) {
       compactCalled = true;
       compactCallsCountdown.countDown();
       if (details == null) {
