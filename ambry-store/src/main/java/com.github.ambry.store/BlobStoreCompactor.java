@@ -753,14 +753,26 @@ class BlobStoreCompactor {
             startOffset = currentEntry.getValue().getOffset().getOffset();
           }
           readyEntries.add(currentEntry);
-          long totalSize =
+          long readySize =
               currentEntry.getValue().getOffset().getOffset() + currentEntry.getValue().getSize() - startOffset;
-          if (totalSize > config.storeCleanupOperationsBytesPerSec || !srcIndexEntryIterator.hasNext()) {
-            // ready to read this chunk into buffer.
-            bufferToUse =
-                totalSize > bundleReadBuffer.capacity() ? ByteBuffer.allocate((int) totalSize) : bundleReadBuffer;
+          if (readySize > bundleReadBuffer.capacity()) {
+            // only have one in readyEntries and it exceeds bundleReadBuffer's capacity.
+            bufferToUse = ByteBuffer.allocate((int) readySize);
+            fileChannel.transferTo(startOffset, readySize,
+                Channels.newChannel(new ByteBufferOutputStream(bufferToUse)));
+            break;
+          }
+          long nextSize = Integer.MAX_VALUE;
+          if (srcIndexEntryIterator.hasNext()) {
+            // look ahead
+            IndexEntry nextEntry = srcIndexEntryIterator.next();
+            nextSize = nextEntry.getValue().getOffset().getOffset() + nextEntry.getValue().getSize() - startOffset;
+            srcIndexEntryIterator.previous();
+          }
+          if (nextSize > bundleReadBuffer.capacity()) {
+            bufferToUse = bundleReadBuffer;
             bufferToUse.clear();
-            fileChannel.transferTo(startOffset, totalSize,
+            fileChannel.transferTo(startOffset, readySize,
                 Channels.newChannel(new ByteBufferOutputStream(bufferToUse)));
             break;
           }
