@@ -83,11 +83,11 @@ public class StoreConfig {
   public final int storeCleanupOperationsBytesPerSec;
 
   /**
-   * The rate of I/O allowed for compaction and hard deletes.
+   * The minimum buffer size for compaction copy phase.
    */
-  @Config("store.cleanup.operations.buffer.size")
-  @Default("1*1024*1024")
-  public final int storeCleanupOperationsBufferSize;
+  @Config("store.compaction.min.buffer.size")
+  @Default("10*1024*1024")
+  public final int storeCompactionMinBufferSize;
 
   /**
    * Whether hard deletes are to be enabled or not
@@ -238,8 +238,8 @@ public class StoreConfig {
     storeCleanupOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.cleanup.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
-    storeCleanupOperationsBufferSize =
-        verifiableProperties.getIntInRange("store.cleanup.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
+    storeCompactionMinBufferSize =
+        verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =

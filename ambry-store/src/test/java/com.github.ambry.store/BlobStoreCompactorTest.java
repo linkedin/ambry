@@ -947,6 +947,8 @@ public class BlobStoreCompactorTest {
    */
   private BlobStoreCompactor getCompactor(Log log, DiskIOScheduler ioScheduler) throws IOException, StoreException {
     closeOrExceptionInduced = false;
+    state.properties.setProperty("store.cleanup.operations.bytes.per.sec", "50");
+    state.properties.setProperty("store.compaction.min.buffer.size", "100");
     StoreConfig config = new StoreConfig(new VerifiableProperties(state.properties));
     metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);

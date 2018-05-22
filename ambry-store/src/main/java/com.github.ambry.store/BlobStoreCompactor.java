@@ -31,7 +31,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
@@ -125,7 +124,8 @@ class BlobStoreCompactor {
     this.sessionId = sessionId;
     this.incarnationId = incarnationId;
     fixStateIfRequired();
-    bundleReadBuffer = ByteBuffer.allocate(config.storeCleanupOperationsBufferSize);
+    bundleReadBuffer = ByteBuffer.allocateDirect(
+        Math.max(config.storeCompactionMinBufferSize, 2 * config.storeCleanupOperationsBytesPerSec));
     logger.trace("Constructed BlobStoreCompactor for {}", dataDir);
   }
 
@@ -739,46 +739,37 @@ class BlobStoreCompactor {
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
-      ListIterator<IndexEntry> srcIndexEntryIterator = srcIndexEntries.listIterator();
-      ByteBuffer bufferToUse = bundleReadBuffer;
-      List<IndexEntry> readyEntries = new ArrayList<>();
-      while (srcIndexEntryIterator.hasNext()) {
-        // reset startOffset to begin a new bundle read.
-        long startOffset = -1;
-        readyEntries.clear();
-        // get entries as many as possible and do a bunch read.
-        while (srcIndexEntryIterator.hasNext()) {
-          IndexEntry currentEntry = srcIndexEntryIterator.next();
-          if (startOffset == -1) {
-            startOffset = currentEntry.getValue().getOffset().getOffset();
+      ByteBuffer bufferToUse;
+      int startIndex = 0;
+      while (startIndex < srcIndexEntries.size()) {
+        // calculate how many records can be included for bundle read.
+        long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
+        int endIndex; // [startIndex, endIndex) for a bundle of read.
+        if (srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
+          bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(startIndex).getValue().getSize());
+          endIndex = startIndex + 1;
+        } else {
+          for (endIndex = startIndex; endIndex < srcIndexEntries.size(); endIndex++) {
+            long currentSize =
+                srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
+                    .getValue()
+                    .getSize() - startOffset;
+            if (currentSize > bundleReadBuffer.capacity()) {
+              break;
+            }
           }
-          readyEntries.add(currentEntry);
-          long readySize =
-              currentEntry.getValue().getOffset().getOffset() + currentEntry.getValue().getSize() - startOffset;
-          if (readySize > bundleReadBuffer.capacity()) {
-            // only have one in readyEntries and it exceeds bundleReadBuffer's capacity.
-            bufferToUse = ByteBuffer.allocate((int) readySize);
-            fileChannel.transferTo(startOffset, readySize,
-                Channels.newChannel(new ByteBufferOutputStream(bufferToUse)));
-            break;
-          }
-          long nextSize = Integer.MAX_VALUE;
-          if (srcIndexEntryIterator.hasNext()) {
-            // look ahead
-            IndexEntry nextEntry = srcIndexEntryIterator.next();
-            nextSize = nextEntry.getValue().getOffset().getOffset() + nextEntry.getValue().getSize() - startOffset;
-            srcIndexEntryIterator.previous();
-          }
-          if (nextSize > bundleReadBuffer.capacity()) {
-            bufferToUse = bundleReadBuffer;
-            bufferToUse.clear();
-            fileChannel.transferTo(startOffset, readySize,
-                Channels.newChannel(new ByteBufferOutputStream(bufferToUse)));
-            break;
-          }
+          bufferToUse = bundleReadBuffer;
+          bufferToUse.clear();
         }
+        // do a bundle read.
+        fileChannel.transferTo(startOffset,
+            srcIndexEntries.get(endIndex - 1).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex - 1)
+                .getValue()
+                .getSize() - startOffset, Channels.newChannel(new ByteBufferOutputStream(bufferToUse)));
+
         // copy from buffer to tgtLog
-        for (IndexEntry srcIndexEntry : readyEntries) {
+        for (int i = startIndex; i < endIndex; i++) {
+          IndexEntry srcIndexEntry = srcIndexEntries.get(i);
           IndexValue srcValue = srcIndexEntry.getValue();
           long usedCapacity = tgtIndex.getLogUsedCapacity();
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
@@ -829,6 +820,7 @@ class BlobStoreCompactor {
             break;
           }
         }
+        startIndex = endIndex;
       }
     } finally {
       logSegmentToCopy.closeView();
