@@ -190,7 +190,7 @@ public class StoreCopierTest {
       short containerId, long operationTimeMs) throws IOException, StoreException {
     int size = isDelete ? DELETE_RECORD_SIZE : PUT_RECORD_SIZE;
     MessageInfo messageInfo =
-        new MessageInfo(key, size, isDelete, expiryTimeMs, accountId, containerId, operationTimeMs);
+        new MessageInfo(key, size, isDelete, false, expiryTimeMs, accountId, containerId, operationTimeMs);
     byte[] data = TestUtils.getRandomBytes(size);
     MessageFormatWriteSet writeSet =
         new MessageFormatWriteSet(new ByteArrayInputStream(data), Collections.singletonList(messageInfo), false);

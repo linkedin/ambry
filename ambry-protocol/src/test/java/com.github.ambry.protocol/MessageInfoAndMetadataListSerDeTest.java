@@ -13,6 +13,8 @@
  */
 package com.github.ambry.protocol;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.commons.BlobId;
@@ -23,6 +25,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -46,7 +49,7 @@ public class MessageInfoAndMetadataListSerDeTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{MessageInfoAndMetadataListSerde.VERSION_1}, {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3}, {MessageInfoAndMetadataListSerde.VERSION_4}});
+        new Object[][]{{MessageInfoAndMetadataListSerde.VERSION_1}, {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3}, {MessageInfoAndMetadataListSerde.VERSION_4}, {MessageInfoAndMetadataListSerde.VERSION_5}});
   }
 
   public MessageInfoAndMetadataListSerDeTest(short serDeVersion) {
@@ -59,6 +62,9 @@ public class MessageInfoAndMetadataListSerDeTest {
     MockPartitionId partitionId = new MockPartitionId();
     short[] accountIds = {100, 101, 102, 103};
     short[] containerIds = {10, 11, 12, 13};
+    boolean[] isDeletedVals = {false, true, false, true};
+    boolean[] isTtlUpdatedVals = {true, false, false, true};
+    Long[] crcs = {null, 100L, Long.MIN_VALUE, Long.MAX_VALUE};
     StoreKey[] keys =
         {new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
             accountIds[0], containerIds[0], partitionId, false), new BlobId(
@@ -68,9 +74,8 @@ public class MessageInfoAndMetadataListSerDeTest {
             TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[3],
             containerIds[3], partitionId, false)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
-    long[] operationTimes = {SystemTime.getInstance().milliseconds(),
-        SystemTime.getInstance().milliseconds() + 10,
-        SystemTime.getInstance().milliseconds() + 20, SystemTime.getInstance().milliseconds() + 30};
+    long[] times = {SystemTime.getInstance().milliseconds(),
+        SystemTime.getInstance().milliseconds() - 1, SystemTime.getInstance().milliseconds() + 20, Utils.Infinite_Time};
     MessageMetadata[] messageMetadata = new MessageMetadata[4];
     messageMetadata[0] = new MessageMetadata(ByteBuffer.wrap(getRandomBytes(100)));
     messageMetadata[1] = new MessageMetadata(null);
@@ -80,7 +85,9 @@ public class MessageInfoAndMetadataListSerDeTest {
     List<MessageInfo> messageInfoList = new ArrayList<>(4);
     List<MessageMetadata> messageMetadataList = new ArrayList<>(4);
     for (int i = 0; i < 4; i++) {
-      messageInfoList.add(new MessageInfo(keys[i], blobSizes[i], accountIds[i], containerIds[i], operationTimes[i]));
+      messageInfoList.add(
+          new MessageInfo(keys[i], blobSizes[i], isDeletedVals[i], isTtlUpdatedVals[i], times[i], crcs[i],
+              accountIds[i], containerIds[i], times[i]));
       messageMetadataList.add(messageMetadata[i]);
     }
 
@@ -105,35 +112,48 @@ public class MessageInfoAndMetadataListSerDeTest {
     }
   }
 
-  private void assertMessageInfoEquality(MessageInfo a, MessageInfo b) {
-    Assert.assertEquals(a.getExpirationTimeInMs(), b.getExpirationTimeInMs());
-    Assert.assertEquals(a.getSize(), b.getSize());
-    Assert.assertEquals(a.getStoreKey(), b.getStoreKey());
-    Assert.assertEquals(a.isDeleted(), b.isDeleted());
-    Assert.assertEquals(a.isExpired(), b.isExpired());
+  private void assertMessageInfoEquality(MessageInfo exp, MessageInfo act) {
+    Assert.assertEquals(exp.getExpirationTimeInMs(), act.getExpirationTimeInMs());
+    Assert.assertEquals(exp.getSize(), act.getSize());
+    Assert.assertEquals(exp.getStoreKey(), act.getStoreKey());
+    Assert.assertEquals(exp.isDeleted(), act.isDeleted());
+    Assert.assertEquals(exp.isExpired(), act.isExpired());
     if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_2) {
-      Assert.assertEquals(a.getCrc(), b.getCrc());
+      Assert.assertEquals(exp.getCrc(), act.getCrc());
+    } else {
+      Assert.assertNull("Crc should be null for version < 2", act.getCrc());
     }
     if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_3) {
-      Assert.assertEquals(a.getAccountId(), b.getAccountId());
-      Assert.assertEquals(a.getContainerId(), b.getContainerId());
-      Assert.assertEquals(a.getOperationTimeMs(), b.getOperationTimeMs());
+      Assert.assertEquals(exp.getAccountId(), act.getAccountId());
+      Assert.assertEquals(exp.getContainerId(), act.getContainerId());
+      Assert.assertEquals(exp.getOperationTimeMs(), act.getOperationTimeMs());
+    } else {
+      Assert.assertEquals("Account ID should be unknown", Account.UNKNOWN_ACCOUNT_ID, act.getAccountId());
+      Assert.assertEquals("Container ID should be unknown", Container.UNKNOWN_CONTAINER_ID, act.getContainerId());
+      Assert.assertEquals("Operation time should be unknown", Utils.Infinite_Time, act.getOperationTimeMs());
+    }
+    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_5) {
+      Assert.assertEquals("TtlUpdated not as expected", exp.isTtlUpdated(), act.isTtlUpdated());
+    } else {
+      Assert.assertFalse("TtlUpdated should be false for version < 5", act.isTtlUpdated());
     }
   }
 
-  private void assertMessageMetadataEquality(MessageMetadata a, MessageMetadata b) {
+  private void assertMessageMetadataEquality(MessageMetadata expected, MessageMetadata actual) {
     if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_4) {
-      if (a == null) {
-        Assert.assertNull(b);
+      if (expected == null) {
+        Assert.assertNull(actual);
       } else {
-        if (a.getEncryptionKey() == null) {
+        if (expected.getEncryptionKey() == null) {
           // null encryption keys come in as empty.
-          Assert.assertEquals(0, b.getEncryptionKey().remaining());
+          Assert.assertEquals(0, actual.getEncryptionKey().remaining());
         } else {
-          Assert.assertEquals(a.getEncryptionKey().rewind(), b.getEncryptionKey());
+          Assert.assertEquals(expected.getEncryptionKey().rewind(), actual.getEncryptionKey());
         }
-        Assert.assertEquals(a.getVersion(), b.getVersion());
+        Assert.assertEquals(expected.getVersion(), actual.getVersion());
       }
+    } else {
+      Assert.assertNull("MessageMetadata must null for versions < 4", actual);
     }
   }
 }

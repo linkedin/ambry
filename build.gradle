@@ -187,6 +187,7 @@ project(':ambry-store') {
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-clustermap').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-api').sourceSets.test.output
     }
 }
 
@@ -227,6 +228,7 @@ project(':ambry-tools') {
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-store').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
+        testCompile project(':ambry-api').sourceSets.test.output
     }
 }
 
