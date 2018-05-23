@@ -887,7 +887,8 @@ class IndexSegment {
    * @param findEntriesCondition The condition that determines when to stop fetching entries.
    * @param entries The input entries list that needs to be filled. The entries list can have existing entries
    * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
-   * @param oneEntryPerKey
+   * @param oneEntryPerKey returns only one index entry per key even if the segment has multiple values for the key.
+   *                       Favors DELETE records over all other records. Favors PUT over a TTL update record.
    * @return true if any entries were added.
    * @throws IOException
    */
