@@ -71,6 +71,8 @@ public class BlobStoreCompactorTest {
 
   private MetricRegistry metricRegistry;
 
+  private final ByteBuffer bundleReadBuffer = ByteBuffer.allocateDirect(100);
+
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
@@ -126,7 +128,7 @@ public class BlobStoreCompactorTest {
         new CompactionDetails(state.time.milliseconds(), Collections.singletonList(firstSegmentName));
 
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
       fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -183,7 +185,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
       fail("compact() should have failed because a compaction is already in progress");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -303,7 +305,7 @@ public class BlobStoreCompactorTest {
       compactor.initialize(state.index);
       long logSegmentsBeforeCompaction = state.index.getLogSegmentCount();
       try {
-        compactor.compact(details, ByteBuffer.allocateDirect(100));
+        compactor.compact(details, bundleReadBuffer);
       } finally {
         compactor.close(0);
       }
@@ -536,7 +538,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
     } finally {
       compactor.close(0);
     }
@@ -810,7 +812,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
     } finally {
       compactor.close(0);
     }
@@ -1086,7 +1088,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
 
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
     } finally {
       compactor.close(0);
     }
@@ -1145,7 +1147,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(index);
 
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
       if (throwExceptionInsteadOfClose) {
         fail("Compact should have thrown exception");
       }
@@ -1557,7 +1559,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     try {
-      compactor.compact(details, ByteBuffer.allocateDirect(100));
+      compactor.compact(details, bundleReadBuffer);
       fail(msg);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
