@@ -1,0 +1,66 @@
+package com.github.ambry.server;
+
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
+import com.google.common.collect.Lists;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
+
+
+/**
+ * Test for {@link StoreKeyConverterImplNoOp}
+ */
+public class StoreKeyConverterImplNoOpTest {
+
+  private final StoreKeyConverter storeKeyConverter;
+
+  public StoreKeyConverterImplNoOpTest() {
+    storeKeyConverter = new StoreKeyConverterImplNoOp();
+  }
+
+  /**
+   * Tests conversion of a StoreKey collection with two unique StoreKeys and a duplicate of one of them
+   * @throws Exception
+   */
+  @Test
+  public void testBasicOperationWithDuplicate() throws Exception {
+    StoreKey storeKey0 = mock(StoreKey.class);
+    StoreKey storeKey1 = mock(StoreKey.class);
+    StoreKey storeKey2 = storeKey0;
+    assertNotSame("storeKeys should not be equal", storeKey0, storeKey1);
+    assertSame("storeKey0 and storeKey2 should be equal", storeKey0, storeKey2);
+    List<StoreKey> list = Lists.newArrayList(storeKey0, storeKey1, storeKey2);
+    Map<StoreKey, StoreKey> storeKeyMap = storeKeyConverter.convert(list);
+    assertEquals("Returned mapping does not have size 2", 2, storeKeyMap.size());
+    assertTrue("storeKey0 not in mapping", storeKeyMap.containsKey(storeKey0));
+    assertTrue("storeKey1 not in mapping", storeKeyMap.containsKey(storeKey1));
+    storeKeyMap.forEach(
+        (key, value) -> assertEquals("Returned StoreKey keys should be the same as their values", key, value));
+  }
+
+  /**
+   * Tests conversion of an empty Collection
+   * @throws Exception
+   */
+  @Test
+  public void testEmptyInput() throws Exception {
+    Map<StoreKey, StoreKey> storeKeyMap = storeKeyConverter.convert(new ArrayList<>());
+    assertEquals("storeKeyMap should not have inputs", storeKeyMap.size(), 0);
+  }
+
+  /**
+   * Tests conversion of a null input
+   * @throws Exception
+   */
+  @Test
+  public void testNullInput() throws Exception {
+    Map<StoreKey, StoreKey> storeKeyMap = storeKeyConverter.convert(null);
+    assertEquals("storeKeyMap should not have inputs", storeKeyMap.size(), 0);
+  }
+}
