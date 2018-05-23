@@ -1487,7 +1487,7 @@ public class BlobStoreCompactorTest {
       PersistentIndex.IndexEntryType entryType =
           entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) ? PersistentIndex.IndexEntryType.DELETE
               : PersistentIndex.IndexEntryType.PUT;
-      logEntriesInOrder.add(new LogEntry(id, entryType));
+      logEntriesInOrder.add(new LogEntry(id, entryType, entry.getValue().getOffset(), entry.getValue().getSize()));
     }
   }
 
@@ -2042,15 +2042,20 @@ public class BlobStoreCompactorTest {
      * The type of the entry.
      */
     PersistentIndex.IndexEntryType entryType;
+    Offset offset;
+    long size;
+
 
     /**
      * Create an instance with {@code id} and {@code entryType}
      * @param id the {@link MockId} of the entry.
      * @param entryType the type of the entry.
      */
-    LogEntry(MockId id, PersistentIndex.IndexEntryType entryType) {
+    LogEntry(MockId id, PersistentIndex.IndexEntryType entryType, Offset offset, long size) {
       this.id = id;
       this.entryType = entryType;
+      this.offset = offset;
+      this.size = size;
     }
 
     @Override
@@ -2075,7 +2080,7 @@ public class BlobStoreCompactorTest {
 
     @Override
     public String toString() {
-      return "[id: " + this.id + " entryType: " + this.entryType + "]";
+      return "[id: " + this.id + " entryType: " + this.entryType + " Offset: " + this.offset + "Size: " + this.size + "]";
     }
   }
 }
