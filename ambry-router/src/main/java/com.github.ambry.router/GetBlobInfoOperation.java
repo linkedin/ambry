@@ -80,7 +80,8 @@ class GetBlobInfoOperation extends GetOperation {
    * @param isEncrypted if encrypted bit set based on original string of a {@link BlobId}
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
+      Callback<GetBlobResultInternal> callback, RouterCallback routerCallback, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,

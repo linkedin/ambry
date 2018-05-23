@@ -14,6 +14,8 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -102,9 +104,9 @@ import static org.junit.Assert.*;
 
 public final class ServerTestUtil {
 
-  protected static void endToEndTest(Port targetPort, String routerDatacenter, String sslEnabledDatacenters,
-      MockCluster cluster, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory, Properties routerProps,
-      boolean testEncryption) throws InterruptedException, IOException, InstantiationException {
+  protected static void endToEndTest(Port targetPort, String routerDatacenter, MockCluster cluster,
+      SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory, Properties routerProps,
+      boolean testEncryption) {
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
       BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
@@ -120,7 +122,7 @@ public final class ServerTestUtil {
       if (testEncryption) {
         TestUtils.RANDOM.nextBytes(encryptionKey);
       }
-      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+      List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false);
@@ -175,7 +177,8 @@ public final class ServerTestUtil {
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      MockPartitionId partition = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      MockPartitionId partition =
+          (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -197,7 +200,7 @@ public final class ServerTestUtil {
 
       // get blob properties with expired flag set
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      partition = (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<>();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
@@ -220,7 +223,8 @@ public final class ServerTestUtil {
       // get blob properties for expired blob
       // 1. With no flag
       ArrayList<BlobId> idsExpired = new ArrayList<>();
-      MockPartitionId partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      MockPartitionId partitionExpired =
+          (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       idsExpired.add(blobId4);
       ArrayList<PartitionRequestInfo> partitionRequestInfoListExpired = new ArrayList<>();
       PartitionRequestInfo partitionRequestInfoExpired = new PartitionRequestInfo(partitionExpired, idsExpired);
@@ -235,7 +239,8 @@ public final class ServerTestUtil {
 
       // 2. With Include_Expired flag
       idsExpired = new ArrayList<>();
-      partitionExpired = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      partitionExpired =
+          (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       idsExpired.add(blobId4);
       partitionRequestInfoListExpired = new ArrayList<>();
       partitionRequestInfoExpired = new PartitionRequestInfo(partitionExpired, idsExpired);
@@ -332,8 +337,10 @@ public final class ServerTestUtil {
         Properties routerProperties = getRouterProps(routerDatacenter);
         routerProperties.putAll(routerProps);
         VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProperties);
-        Router router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, new MockNotificationSystem(9),
-            getSSLFactoryIfRequired(routerVerifiableProps)).getRouter();
+        AccountService accountService = new InMemAccountService(false, true);
+        Router router =
+            new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, new MockNotificationSystem(clusterMap),
+                getSSLFactoryIfRequired(routerVerifiableProps), accountService).getRouter();
         checkBlobId(router, blobId1, data);
         router.close();
       }
@@ -341,7 +348,7 @@ public final class ServerTestUtil {
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
-      partition = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      partition = (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), properties.getAccountId(), properties.getContainerId(), partition, false));
       partitionRequestInfoList.clear();
@@ -423,7 +430,7 @@ public final class ServerTestUtil {
 
       // get a blob on a restarted store , which should succeed
       ids = new ArrayList<BlobId>();
-      PartitionId partitionId = clusterMap.getWritablePartitionIds(null).get(0);
+      PartitionId partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobId1);
       partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
@@ -451,8 +458,10 @@ public final class ServerTestUtil {
       e.printStackTrace();
       Assert.fail();
     } finally {
-      List<? extends ReplicaId> replicaIds =
-          cluster.getClusterMap().getWritablePartitionIds(null).get(0).getReplicaIds();
+      List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
+          .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
+          .get(0)
+          .getReplicaIds();
       for (ReplicaId replicaId : replicaIds) {
         MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
         ((MockDiskId) mockReplicaId.getDiskId()).setDiskState(HardwareState.AVAILABLE, true);
@@ -507,8 +516,7 @@ public final class ServerTestUtil {
       Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
       SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
       SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
-      MockNotificationSystem notificationSystem, boolean testEncryption)
-      throws InterruptedException, IOException, InstantiationException {
+      MockNotificationSystem notificationSystem, boolean testEncryption) {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainTextPort
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -1102,8 +1110,9 @@ public final class ServerTestUtil {
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.putAll(routerProps);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    AccountService accountService = new InMemAccountService(false, true);
     Router router = new NonBlockingRouterFactory(verifiableProperties, cluster.getClusterMap(), notificationSystem,
-        getSSLFactoryIfRequired(verifiableProperties)).getRouter();
+        getSSLFactoryIfRequired(verifiableProperties), accountService).getRouter();
     int numberOfRequestsToSend = 15;
     int numberOfVerifierThreads = 3;
     final LinkedBlockingQueue<Payload> payloadQueue = new LinkedBlockingQueue<Payload>();
@@ -1280,10 +1289,9 @@ public final class ServerTestUtil {
   }
 
   protected static void endToEndReplicationWithMultiNodeSinglePartitionTest(String routerDatacenter,
-      String sslEnabledDatacenters, int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port,
-      Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1, SSLSocketFactory clientSSLSocketFactory1,
-      MockNotificationSystem notificationSystem, Properties routerProps, boolean testEncryption)
-      throws InterruptedException, IOException, InstantiationException {
+      int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster,
+      SSLConfig clientSSLConfig1, SSLSocketFactory clientSSLSocketFactory1, MockNotificationSystem notificationSystem,
+      Properties routerProps, boolean testEncryption) {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
       int expectedTokenSize = 0;
@@ -1295,7 +1303,7 @@ public final class ServerTestUtil {
       ArrayList<byte[]> encryptionKeyList = new ArrayList<>();
       byte[] usermetadata = new byte[1000];
       TestUtils.RANDOM.nextBytes(usermetadata);
-      PartitionId partition = clusterMap.getWritablePartitionIds(null).get(0);
+      PartitionId partition = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
 
       for (int i = 0; i < 11; i++) {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -1404,7 +1412,8 @@ public final class ServerTestUtil {
 
       // get blob properties
       ArrayList<BlobId> ids = new ArrayList<BlobId>();
-      MockPartitionId mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      MockPartitionId mockPartitionId =
+          (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(blobIdList.get(2));
       ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
@@ -1515,8 +1524,9 @@ public final class ServerTestUtil {
         Properties routerProperties = getRouterProps(routerDatacenter);
         routerProperties.putAll(routerProps);
         VerifiableProperties routerVerifiableProperties = new VerifiableProperties(routerProperties);
+        AccountService accountService = new InMemAccountService(false, true);
         Router router = new NonBlockingRouterFactory(routerVerifiableProperties, clusterMap, notificationSystem,
-            getSSLFactoryIfRequired(routerVerifiableProperties)).getRouter();
+            getSSLFactoryIfRequired(routerVerifiableProperties), accountService).getRouter();
         checkBlobId(router, blobIdList.get(0), dataList.get(0));
         checkBlobId(router, blobIdList.get(1), dataList.get(1));
         checkBlobId(router, blobIdList.get(2), dataList.get(2));
@@ -1529,7 +1539,8 @@ public final class ServerTestUtil {
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<BlobId>();
-      mockPartitionId = (MockPartitionId) clusterMap.getWritablePartitionIds(null).get(0);
+      mockPartitionId =
+          (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), propertyList.get(0).getAccountId(), propertyList.get(0).getContainerId(),
           mockPartitionId, false));

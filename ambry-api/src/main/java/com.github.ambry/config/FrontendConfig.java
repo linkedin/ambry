@@ -58,13 +58,6 @@ public class FrontendConfig {
   public final String frontendSecurityServiceFactory;
 
   /**
-   * The AccountServiceFactory that needs to be used by AmbryBlobStorageService to get account-related information.
-   */
-  @Config("frontend.account.service.factory")
-  @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
-  public final String frontendAccountServiceFactory;
-
-  /**
    * The UrlSigningServiceFactory that needs to be used by AmbryBlobStorageService to sign and verify URLs.
    */
   @Config("frontend.url.signing.service.factory")
@@ -139,8 +132,6 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbryIdConverterFactory");
     frontendSecurityServiceFactory = verifiableProperties.getString("frontend.security.service.factory",
         "com.github.ambry.frontend.AmbrySecurityServiceFactory");
-    frontendAccountServiceFactory = verifiableProperties.getString("frontend.account.service.factory",
-        "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     frontendUrlSigningServiceFactory = verifiableProperties.getString("frontend.url.signing.service.factory",
         "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
     frontendPathPrefixesToRemove =

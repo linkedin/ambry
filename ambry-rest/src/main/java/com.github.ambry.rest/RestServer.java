@@ -18,6 +18,8 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.HelixNotifier;
 import com.github.ambry.commons.Notifier;
@@ -67,6 +69,7 @@ public class RestServer {
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final RestServerMetrics restServerMetrics;
   private final JmxReporter reporter;
+  private final AccountService accountService;
   private final Router router;
   private final BlobStorageService blobStorageService;
   private final RestRequestHandler restRequestHandler;
@@ -95,7 +98,8 @@ public class RestServer {
     public final Histogram restResponseHandlerStartTimeInMs;
     public final Histogram restServerShutdownTimeInMs;
     public final Histogram restServerStartTimeInMs;
-    public final Histogram routerCloseTime;
+    public final Histogram routerCloseTimeInMs;
+    public final Histogram accountServiceCloseTimeInMs;
 
     /**
      * Creates an instance of RestServerMetrics using the given {@code metricRegistry}.
@@ -131,7 +135,9 @@ public class RestServer {
           metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerShutdownTimeInMs"));
       restServerStartTimeInMs =
           metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RestServerStartTimeInMs"));
-      routerCloseTime = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
+      routerCloseTimeInMs = metricRegistry.histogram(MetricRegistry.name(RestServer.class, "RouterCloseTimeInMs"));
+      accountServiceCloseTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RestServer.class, "AccountServiceCloseTimeInMs"));
 
       Gauge<Integer> restServerStatus = new Gauge<Integer>() {
         @Override
@@ -163,9 +169,19 @@ public class RestServer {
     restServerState = new RestServerState(restServerConfig.restServerHealthCheckUri);
     restServerMetrics = new RestServerMetrics(metricRegistry, restServerState);
 
+    HelixPropertyStoreConfig helixStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
+    Notifier notifier = null;
+    if (!helixStoreConfig.zkClientConnectString.equals(HelixPropertyStoreConfig.INVALID_ZK_CLIENT_CONNECT_STRING)) {
+      notifier = new HelixNotifier(helixStoreConfig);
+    }
+    AccountServiceFactory accountServiceFactory =
+        Utils.getObj(restServerConfig.restServerAccountServiceFactory, verifiableProperties,
+            clusterMap.getMetricRegistry(), notifier);
+    accountService = accountServiceFactory.getAccountService();
+
     RouterFactory routerFactory =
         Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem,
-            sslFactory);
+            sslFactory, accountService);
     router = routerFactory.getRouter();
 
     RestResponseHandlerFactory restResponseHandlerFactory =
@@ -173,14 +189,9 @@ public class RestServer {
             restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
     restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
 
-    HelixPropertyStoreConfig helixStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
-    Notifier notifier = null;
-    if (helixStoreConfig.zkClientConnectString != HelixPropertyStoreConfig.INVALID_ZK_CLIENT_CONNECT_STRING) {
-      notifier = new HelixNotifier(helixStoreConfig);
-    }
     BlobStorageServiceFactory blobStorageServiceFactory =
         Utils.getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
-            restResponseHandler, router, notifier);
+            restResponseHandler, router, accountService);
     blobStorageService = blobStorageServiceFactory.getBlobStorageService();
 
     RestRequestHandlerFactory restRequestHandlerFactory = Utils.getObj(restServerConfig.restServerRequestHandlerFactory,
@@ -194,8 +205,8 @@ public class RestServer {
             restRequestHandler, publicAccessLogger, restServerState, sslFactory);
     nioServer = nioServerFactory.getNioServer();
 
-    if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
-        || nioServer == null) {
+    if (accountService == null || router == null || restResponseHandler == null || blobStorageService == null
+        || restRequestHandler == null || nioServer == null) {
       throw new InstantiationException("Some of the server components were null");
     }
     logger.trace("Instantiated RestServer");
@@ -288,10 +299,16 @@ public class RestServer {
       long routerCloseTime = System.currentTimeMillis();
       elapsedTime = routerCloseTime - responseHandlerShutdownTime;
       logger.info("Router close took {} ms", elapsedTime);
-      restServerMetrics.routerCloseTime.update(elapsedTime);
+      restServerMetrics.routerCloseTimeInMs.update(elapsedTime);
+
+      accountService.close();
+      long accountServiceCloseTime = System.currentTimeMillis();
+      elapsedTime = accountServiceCloseTime - responseHandlerShutdownTime;
+      logger.info("Account service close took {} ms", elapsedTime);
+      restServerMetrics.accountServiceCloseTimeInMs.update(elapsedTime);
 
       reporter.stop();
-      elapsedTime = System.currentTimeMillis() - routerCloseTime;
+      elapsedTime = System.currentTimeMillis() - accountServiceCloseTime;
       logger.info("JMX reporter shutdown took {} ms", elapsedTime);
       restServerMetrics.jmxReporterShutdownTimeInMs.update(elapsedTime);
     } catch (IOException e) {

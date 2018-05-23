@@ -892,9 +892,8 @@ class PutOperation {
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted());
-        operationTracker =
-            new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false, null, true,
-                Integer.MAX_VALUE, routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
+        operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false, null, true,
+            Integer.MAX_VALUE, routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
@@ -1124,7 +1123,8 @@ class PutOperation {
       List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(partitionClass);
       partitions.removeAll(partitionIdsToExclude);
       if (partitions.isEmpty()) {
-        throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
+        throw new RouterException("No writable partitions of class " + partitionClass + " available.",
+            RouterErrorCode.AmbryUnavailable);
       }
       PartitionId selected = partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
       if (partitionClass != null && !partitionClass.equals(selected.getPartitionClass())) {

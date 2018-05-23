@@ -24,8 +24,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import java.io.File;
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -70,8 +68,9 @@ public class ServerSSLTest {
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
     TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
-    notificationSystem = new MockNotificationSystem(9);
-    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(serverSSLProps, false, SystemTime.getInstance());
+    notificationSystem = new MockNotificationSystem(sslCluster.getClusterMap());
+    sslCluster.initializeServers(notificationSystem);
     sslCluster.startServers();
     //client
     sslFactory = SSLFactory.getNewInstance(clientSSLConfig1);
@@ -111,31 +110,24 @@ public class ServerSSLTest {
   }
 
   @Test
-  public void startStopTest() throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-  }
-
-  @Test
-  public void endToEndSSLTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndSSLTest() {
     DataNodeId dataNodeId = sslCluster.getGeneralDataNode();
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
-        clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", sslCluster, clientSSLConfig1,
+        clientSSLSocketFactory1, routerProps, testEncryption);
   }
 
   /**
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
   @Test
-  public void endToEndSSLTestWithPrefetch()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndSSLTestWithPrefetch() {
     DataNodeId dataNodeId = sslCluster.getPrefetchDataNode();
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", "DC2,DC3", sslCluster,
-        clientSSLConfig1, clientSSLSocketFactory1, routerProps, testEncryption);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getSSLPort(), PortType.SSL), "DC1", sslCluster, clientSSLConfig1,
+        clientSSLSocketFactory1, routerProps, testEncryption);
   }
 
   @Test
-  public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest() {
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);

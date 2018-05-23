@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
@@ -63,6 +64,7 @@ public class RouterFactoryTest {
   @Test
   public void testRouterFactory() throws Exception {
     VerifiableProperties verifiableProperties = getVerifiableProperties();
+    InMemAccountService accountService = new InMemAccountService(false, true);
     List<FactoryAndRouter> factoryAndRouters = new ArrayList<FactoryAndRouter>();
     factoryAndRouters.add(new FactoryAndRouter("com.github.ambry.router.NonBlockingRouterFactory",
         "com.github.ambry.router.NonBlockingRouter"));
@@ -70,7 +72,7 @@ public class RouterFactoryTest {
     for (FactoryAndRouter factoryAndRouter : factoryAndRouters) {
       RouterFactory routerFactory =
           Utils.getObj(factoryAndRouter.factoryStr, verifiableProperties, new MockClusterMap(),
-              new LoggingNotificationSystem(), null);
+              new LoggingNotificationSystem(), null, accountService);
       Router router = routerFactory.getRouter();
       Assert.assertEquals("Did not receive expected Router instance", factoryAndRouter.routerStr,
           router.getClass().getCanonicalName());

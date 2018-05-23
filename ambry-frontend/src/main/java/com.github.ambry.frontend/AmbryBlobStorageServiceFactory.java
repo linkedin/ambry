@@ -14,9 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.BlobStorageService;
@@ -41,7 +39,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   private final ClusterMap clusterMap;
   private final RestResponseHandler responseHandler;
   private final Router router;
-  private final Notifier notifier;
+  private final AccountService accountService;
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
   /**
@@ -51,11 +49,11 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
    * @param responseHandler the {@link RestResponseHandler} that can be used to submit responses that need to be sent
    *                        out.
    * @param router the {@link Router} to use.
-   * @param notifier the {@link Notifier} to use.
+   * @param accountService the {@link AccountService} to use.
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AmbryBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router, Notifier notifier) {
+      RestResponseHandler responseHandler, Router router, AccountService accountService) {
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {
@@ -65,7 +63,7 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
       this.clusterMap = clusterMap;
       this.responseHandler = responseHandler;
       this.router = router;
-      this.notifier = notifier;
+      this.accountService = accountService;
     }
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
   }
@@ -77,10 +75,6 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
   @Override
   public BlobStorageService getBlobStorageService() {
     try {
-      AccountServiceFactory accountServiceFactory =
-          Utils.getObj(frontendConfig.frontendAccountServiceFactory, verifiableProperties,
-              clusterMap.getMetricRegistry(), notifier);
-      AccountService accountService = accountServiceFactory.getAccountService();
       IdConverterFactory idConverterFactory =
           Utils.getObj(frontendConfig.frontendIdConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
       UrlSigningServiceFactory urlSigningServiceFactory =

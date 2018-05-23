@@ -307,8 +307,11 @@ public class ReplicationTest {
   @Test
   public void replicaThreadTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
-    Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
-    Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
+    // to make sure we select hosts with the SPECIAL_PARTITION_CLASS, pick hosts from the replicas of that partition
+    PartitionId specialPartitionId = clusterMap.getWritablePartitionIds(MockClusterMap.SPECIAL_PARTITION_CLASS).get(0);
+    // these hosts have replicas of the "special" partition and all the other partitions.
+    Host localHost = new Host(specialPartitionId.getReplicaIds().get(0).getDataNodeId(), clusterMap);
+    Host remoteHost = new Host(specialPartitionId.getReplicaIds().get(1).getDataNodeId(), clusterMap);
 
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);

@@ -13,10 +13,13 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
@@ -26,8 +29,6 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -51,43 +52,43 @@ public class MockCluster {
   private final MockClusterAgentsFactory mockClusterAgentsFactory;
   private final MockClusterMap clusterMap;
   private List<AmbryServer> serverList = null;
-  private NotificationSystem notificationSystem;
   private boolean serverInitialized = false;
   private int generalDataNodeIndex;
   private int prefetchDataNodeIndex;
+  private final List<String> sslEnabledDataCenterList;
+  private final Properties sslProps;
+  private final boolean enableHardDeletes;
+  private final Time time;
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableHardDeletes, Time time)
-      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, new Properties(), enableHardDeletes, time);
+  public MockCluster(boolean enableHardDeletes, Time time) throws IOException {
+    this(new Properties(), enableHardDeletes, time);
   }
 
-  public MockCluster(NotificationSystem notificationSystem, Properties sslProps, boolean enableHardDeletes, Time time)
-      throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public MockCluster(Properties sslProps, boolean enableHardDeletes, Time time) throws IOException {
+    this.sslProps = sslProps;
+    this.enableHardDeletes = enableHardDeletes;
+    this.time = time;
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
     String sslEnabledDataCentersStr = sslProps.getProperty("clustermap.ssl.enabled.datacenters");
-    ArrayList<String> sslEnabledDataCenterList =
+    sslEnabledDataCenterList =
         sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<String>();
 
-    this.notificationSystem = notificationSystem;
     mockClusterAgentsFactory = new MockClusterAgentsFactory(sslEnabledDataCentersStr != null, 9, 3, 3);
     clusterMap = mockClusterAgentsFactory.getClusterMap();
 
     serverList = new ArrayList<AmbryServer>();
-    List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     generalDataNodeIndex = 0;
-    prefetchDataNodeIndex = dataNodes.size() - 1;
-    try {
-      for (int i = 0; i < dataNodes.size(); i++) {
-        if (sslEnabledDataCentersStr != null) {
-          dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
-        }
-        initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i ? true : false,
-            time);
+    prefetchDataNodeIndex = clusterMap.getDataNodes().size() - 1;
+  }
+
+  public void initializeServers(NotificationSystem notificationSystem) {
+    List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
+    for (int i = 0; i < dataNodes.size(); i++) {
+      if (sslEnabledDataCenterList != null) {
+        dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
-    } catch (InstantiationException e) {
-      // clean up other servers which was started already
-      cleanup();
-      throw e;
+      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i ? true : false,
+          notificationSystem, time);
     }
   }
 
@@ -114,7 +115,7 @@ public class MockCluster {
   }
 
   private void initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
-      boolean enableDataPrefetch, Time time) throws IOException, InstantiationException, URISyntaxException {
+      boolean enableDataPrefetch, NotificationSystem notificationSystem, Time time) {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -135,10 +136,16 @@ public class MockCluster {
     serverList.add(server);
   }
 
-  public void startServers() throws InstantiationException {
+  public void startServers() throws InstantiationException, IOException {
     serverInitialized = true;
-    for (AmbryServer server : serverList) {
-      server.startup();
+    try {
+      for (AmbryServer server : serverList) {
+        server.startup();
+      }
+    } catch (Exception e) {
+      // clean up other servers which was started already
+      cleanup();
+      throw e;
     }
   }
 
@@ -261,10 +268,10 @@ class Tracker {
 class MockNotificationSystem implements NotificationSystem {
 
   private ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
-  private int numberOfReplicas;
+  private final ClusterMap clusterMap;
 
-  public MockNotificationSystem(int numberOfReplicas) {
-    this.numberOfReplicas = numberOfReplicas;
+  public MockNotificationSystem(ClusterMap clusterMap) {
+    this.clusterMap = clusterMap;
   }
 
   @Override
@@ -280,6 +287,14 @@ class MockNotificationSystem implements NotificationSystem {
   @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
+    int numberOfReplicas;
+    try {
+      BlobId blobIdObj = new BlobId(blobId, clusterMap);
+      PartitionId partitionId = blobIdObj.getPartition();
+      numberOfReplicas = partitionId.getReplicaIds().size();
+    } catch (Exception e) {
+      throw new IllegalArgumentException("Invalid blob ID: " + blobId);
+    }
     objectTracker.computeIfAbsent(blobId, k -> new Tracker(numberOfReplicas)).trackCreation(sourceHost, port);
   }
 

@@ -13,6 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -36,6 +39,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.UtilsTest;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -46,6 +50,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -76,6 +81,7 @@ public class PutManagerTest {
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
   private final MockClusterMap mockClusterMap;
+  private final InMemAccountService accountService;
   // this is a reference to the state used by the mockSelector. just allows tests to manipulate the state.
   private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
   private TestNotificationSystem notificationSystem;
@@ -123,6 +129,7 @@ public class PutManagerTest {
     mockServerLayout = new MockServerLayout(mockClusterMap);
     notificationSystem = new TestNotificationSystem();
     instantiateNewRouterForPuts = true;
+    accountService = new InMemAccountService(false, true);
   }
 
   /**
@@ -520,7 +527,7 @@ public class PutManagerTest {
             putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
-    future.await();
+    future.await(5, TimeUnit.SECONDS);
     requestAndResult.result = future;
   }
 
@@ -544,7 +551,7 @@ public class PutManagerTest {
     putChannel.beBad();
 
     pushWithDelay(src, putChannel, blobSize, future);
-    future.await();
+    future.await(5, TimeUnit.SECONDS);
     requestAndResult.result = future;
     Exception expectedException = new Exception("Channel encountered an error");
     assertFailure(expectedException, true);
@@ -622,6 +629,58 @@ public class PutManagerTest {
   }
 
   /**
+   * Tests that the replication policy in the container is respected
+   * @throws Exception
+   */
+  @Test
+  public void testReplPolicyToPartitionClassMapping() throws Exception {
+    Account refAccount = accountService.createAndAddRandomAccount();
+    Map<Container, String> containerToPartClass = new HashMap<>();
+    Iterator<Container> allContainers = refAccount.getAllContainers().iterator();
+    Container container = allContainers.next();
+    // container with null replication policy
+    container = accountService.addReplicationPolicyToContainer(container, null);
+    containerToPartClass.put(container, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    container = allContainers.next();
+    // container with configured default replication policy
+    container = accountService.addReplicationPolicyToContainer(container, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    containerToPartClass.put(container, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    container = allContainers.next();
+    // container with a special replication policy
+    container = accountService.addReplicationPolicyToContainer(container, MockClusterMap.SPECIAL_PARTITION_CLASS);
+    containerToPartClass.put(container, MockClusterMap.SPECIAL_PARTITION_CLASS);
+    // adding this to test the random account and container case (does not actually happen if coming from the frontend)
+    containerToPartClass.put(null, MockClusterMap.DEFAULT_PARTITION_CLASS);
+
+    Map<Integer, Integer> sizeToChunkCount = new HashMap<>();
+    // simple
+    sizeToChunkCount.put(random.nextInt(chunkSize) + 1, 1);
+    int count = random.nextInt(8) + 3;
+    // composite
+    sizeToChunkCount.put(chunkSize * count, count + 1);
+    for (Map.Entry<Integer, Integer> sizeAndChunkCount : sizeToChunkCount.entrySet()) {
+      for (Map.Entry<Container, String> containerAndPartClass : containerToPartClass.entrySet()) {
+        requestAndResultsList.clear();
+        requestAndResultsList.add(new RequestAndResult(sizeAndChunkCount.getKey(), containerAndPartClass.getKey()));
+        // since the puts are processed one at a time, it is fair to check the last partition class set
+        mockClusterMap.clearLastNRequestedPartitionClasses();
+        submitPutsAndAssertSuccess(true);
+        checkLastRequestPartitionClasses(sizeAndChunkCount.getValue(), containerAndPartClass.getValue());
+      }
+    }
+
+    // exception if there is no partition class that conforms to the replication policy
+    String nonExistentClass = UtilsTest.getRandomString(3);
+    accountService.addReplicationPolicyToContainer(container, nonExistentClass);
+    requestAndResultsList.clear();
+    requestAndResultsList.add(new RequestAndResult(chunkSize, container));
+    mockClusterMap.clearLastNRequestedPartitionClasses();
+    submitPutsAndAssertFailure(new RouterException("", RouterErrorCode.UnexpectedInternalError), true, false, false);
+    // because of how the non-encrypted flow is, prepareForSending() will be called twice
+    checkLastRequestPartitionClasses(testEncryption ? 1 : 2, nonExistentClass);
+  }
+
+  /**
    * Push from the src to the putChannel in random sized writes, with possible delays.
    * @param src the input {@link ByteBuffer}
    * @param putChannel the destination {@link MockReadableStreamChannel}
@@ -680,7 +739,7 @@ public class PutManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     return router;
   }
 
@@ -701,7 +760,7 @@ public class PutManagerTest {
    * @param shouldCloseRouterAfter whether the router should be closed after the operation.
    */
   private void submitPutsAndAssertSuccess(boolean shouldCloseRouterAfter) throws Exception {
-    submitPut().await();
+    submitPut().await(5, TimeUnit.SECONDS);
     assertSuccess();
     if (shouldCloseRouterAfter) {
       assertCloseCleanup();
@@ -728,7 +787,7 @@ public class PutManagerTest {
         mockTime.sleep(CHECKOUT_TIMEOUT_MS + 1);
       } while (!doneLatch.await(1, TimeUnit.MILLISECONDS));
     } else {
-      doneLatch.await();
+      doneLatch.await(5, TimeUnit.SECONDS);
     }
     assertFailure(expectedException, testNotifications);
     if (shouldCloseRouterAfter) {
@@ -757,7 +816,7 @@ public class PutManagerTest {
                 new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
                 requestAndResult.putUserMetadata, putChannel, null);
-            requestAndResult.result.await();
+            requestAndResult.result.await(5, TimeUnit.SECONDS);
           } catch (Exception e) {
             requestAndResult.result = new FutureResult<>();
             requestAndResult.result.done(null, e);
@@ -986,7 +1045,7 @@ public class PutManagerTest {
    */
   private boolean exceptionsAreEqual(Exception a, Exception b) {
     if (a instanceof RouterException) {
-      return a.equals(b);
+      return ((RouterException) a).getErrorCode().equals(((RouterException) b).getErrorCode());
     } else {
       return a.getClass() == b.getClass() && a.getMessage().equals(b.getMessage());
     }
@@ -1019,7 +1078,7 @@ public class PutManagerTest {
     List<String> lastNRequestedPartitionClasses = mockClusterMap.getLastNRequestedPartitionClasses();
     assertEquals("Last requested partition class count is not as expected", expectedCount,
         lastNRequestedPartitionClasses.size());
-    List<String> partitionClassesExpected = Collections.nCopies(expectedCount, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<String> partitionClassesExpected = Collections.nCopies(expectedCount, expectedClass);
     assertEquals("Last requested partition classes not as expected", partitionClassesExpected,
         lastNRequestedPartitionClasses);
   }
@@ -1031,8 +1090,13 @@ public class PutManagerTest {
     FutureResult<String> result;
 
     RequestAndResult(int blobSize) {
+      this(blobSize, null);
+    }
+
+    RequestAndResult(int blobSize, Container container) {
       putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
-          Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
+          container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getParentAccountId(),
+          container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId(), testEncryption);
       putUserMetadata = new byte[10];
       random.nextBytes(putUserMetadata);
       putContent = new byte[blobSize];
@@ -1085,7 +1149,6 @@ public class PutManagerTest {
         for (Map.Entry<String, StoredBlob> blobEntry : mockServer.getBlobs().entrySet()) {
           if (blobIdsVisited.add(blobEntry.getKey())) {
             StoredBlob blob = blobEntry.getValue();
-            System.out.println(blobEntry.getKey());
             verifyNotification(blobEntry.getKey(), NotificationBlobType.DataChunk, blob.properties);
           }
         }

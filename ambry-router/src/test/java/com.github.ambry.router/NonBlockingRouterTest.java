@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
@@ -92,6 +93,7 @@ public class NonBlockingRouterTest {
   private final CryptoService cryptoService;
   private final MockClusterMap mockClusterMap;
   private final boolean testEncryption;
+  private final InMemAccountService accountService;
   private CryptoJobHandler cryptoJobHandler;
 
   // Request params;
@@ -124,6 +126,7 @@ public class NonBlockingRouterTest {
     kms = new SingleKeyManagementService(new KMSConfig(vProps), singleKeyForKMS);
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
+    accountService = new InMemAccountService(false, true);
   }
 
   @After
@@ -175,7 +178,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime, null);
+        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
   }
 
   private void setOperationParams() {
@@ -197,7 +200,7 @@ public class NonBlockingRouterTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     try {
       router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
-          new LoggingNotificationSystem(), null).getRouter();
+          new LoggingNotificationSystem(), null, accountService).getRouter();
       Assert.fail("NonBlockingRouterFactory instantiation should have failed because the router datacenter is not in "
           + "the cluster map");
     } catch (IllegalStateException e) {
@@ -205,7 +208,7 @@ public class NonBlockingRouterTest {
     props = getNonBlockingRouterProperties("DC1");
     verifiableProperties = new VerifiableProperties((props));
     router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
-        new LoggingNotificationSystem(), null).getRouter();
+        new LoggingNotificationSystem(), null, accountService).getRouter();
     assertExpectedThreadCounts(2, 1);
     router.close();
     assertExpectedThreadCounts(0, 0);
@@ -343,7 +346,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, kms, cryptoService, cryptoJobHandler, mockTime, null);
+        mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     assertExpectedThreadCounts(2, 1);
 
@@ -418,7 +421,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime, null);
+        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     setOperationParams();
 
@@ -488,7 +491,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime, null);
+        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     String deleteServiceId = "delete-service";
@@ -576,7 +579,7 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, mockTime, null);
+        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
     router.deleteBlob(blobId, deleteServiceId, null).get();
@@ -665,8 +668,8 @@ public class NonBlockingRouterTest {
     KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
     putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
         new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
-        new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), "0", localKMS, cryptoService,
-        cryptoJobHandler, mockTime, null);
+        new RouterCallback(networkClient, new ArrayList<>()), "0", localKMS, cryptoService, cryptoJobHandler,
+        accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     OperationHelper opHelper = new OperationHelper(OperationType.PUT);
     testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, null, successfulResponseCount,
         invalidResponse, -1);
@@ -937,7 +940,7 @@ public class NonBlockingRouterTest {
      * @return the {@link FutureResult} associated with the submitted operation.
      * @throws RouterException if the blobIdStr is invalid.
      */
-    FutureResult submitOperation(BlobId blobId) throws RouterException{
+    FutureResult submitOperation(BlobId blobId) throws RouterException {
       FutureResult futureResult = null;
       switch (opType) {
         case PUT:

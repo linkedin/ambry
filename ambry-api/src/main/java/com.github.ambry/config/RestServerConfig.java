@@ -63,6 +63,13 @@ public class RestServerConfig {
   public final String restServerResponseHandlerFactory;
 
   /**
+   * The AccountServiceFactory that needs to be used by AmbryBlobStorageService to get account-related information.
+   */
+  @Config("rest.server.account.service.factory")
+  @Default("com.github.ambry.account.InMemoryUnknownAccountServiceFactory")
+  public final String restServerAccountServiceFactory;
+
+  /**
    * The RouterFactory that needs to be used by the RestServer
    * for bootstrapping the Router.
    */
@@ -103,6 +110,8 @@ public class RestServerConfig {
         verifiableProperties.getIntInRange("rest.server.response.handler.scaling.unit.count", 5, 0, Integer.MAX_VALUE);
     restServerResponseHandlerFactory = verifiableProperties.getString("rest.server.response.handler.factory",
         "com.github.ambry.rest.AsyncRequestResponseHandlerFactory");
+    restServerAccountServiceFactory = verifiableProperties.getString("rest.server.account.service.factory",
+        "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     restServerRouterFactory = verifiableProperties.getString("rest.server.router.factory",
         "com.github.ambry.router.NonBlockingRouterFactory");
     restServerPublicAccessLogRequestHeaders =

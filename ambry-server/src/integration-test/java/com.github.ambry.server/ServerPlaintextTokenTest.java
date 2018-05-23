@@ -21,8 +21,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -67,8 +65,9 @@ public class ServerPlaintextTokenTest {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    notificationSystem = new MockNotificationSystem(9);
-    plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(false, SystemTime.getInstance());
+    notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
+    plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();
   }
 
@@ -83,12 +82,11 @@ public class ServerPlaintextTokenTest {
   }
 
   @Test
-  public void endToEndReplicationWithMultiNodeSinglePartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndReplicationWithMultiNodeSinglePartitionTest() {
     DataNodeId dataNodeId = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
-    ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", "", dataNodeId.getPort(),
+    ServerTestUtil.endToEndReplicationWithMultiNodeSinglePartitionTest("DC1", dataNodeId.getPort(),
         new Port(dataNodes.get(0).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(1).getPort(), PortType.PLAINTEXT),
         new Port(dataNodes.get(2).getPort(), PortType.PLAINTEXT), plaintextCluster, null, null, notificationSystem,

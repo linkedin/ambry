@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -61,6 +62,7 @@ class NonBlockingRouter implements Router {
   private final KeyManagementService kms;
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
+  private final AccountService accountService;
   private final Time time;
 
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -81,6 +83,7 @@ class NonBlockingRouter implements Router {
    * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
    * @param cryptoService {@link CryptoService} to assist in encryption or decryption
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param accountService the {@link AccountService} to use.
    * @param time the time instance.
    * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
    *                              container config). Can be {@code null} if no affinity is required for the puts for
@@ -89,8 +92,8 @@ class NonBlockingRouter implements Router {
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      String defaultPartitionClass) throws IOException {
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
+      AccountService accountService, Time time, String defaultPartitionClass) throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
@@ -100,11 +103,12 @@ class NonBlockingRouter implements Router {
     this.kms = kms;
     this.cryptoService = cryptoService;
     this.cryptoJobHandler = cryptoJobHandler;
+    this.accountService = accountService;
     this.time = time;
     ocCount = routerConfig.routerScalingUnitCount;
     ocList = new ArrayList<>();
     for (int i = 0; i < ocCount; i++) {
-      ocList.add(new OperationController(Integer.toString(i), defaultPartitionClass));
+      ocList.add(new OperationController(Integer.toString(i), defaultPartitionClass, accountService));
     }
     backgroundDeleter = new BackgroundDeleter();
     ocList.add(backgroundDeleter);
@@ -467,14 +471,15 @@ class NonBlockingRouter implements Router {
      * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
      *                              container config). Can be {@code null} if no affinity is required for the puts for
      *                              which the container contains no partition class hints.
+     * @param accountService the {@link AccountService} to use.
      * @throws IOException if the network components could not be created.
      */
-    OperationController(String suffix, String defaultPartitionClass) throws IOException {
+    OperationController(String suffix, String defaultPartitionClass, AccountService accountService) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       routerCallback = new RouterCallback(networkClient, backgroundDeleteRequests);
       putManager =
           new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, routerCallback,
-              suffix, kms, cryptoService, cryptoJobHandler, time, defaultPartitionClass);
+              suffix, kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
       getManager =
           new GetManager(clusterMap, responseHandler, routerConfig, routerMetrics, routerCallback, kms, cryptoService,
               cryptoJobHandler, time);
@@ -675,7 +680,7 @@ class NonBlockingRouter implements Router {
      * @throws IOException if the associated {@link OperationController} throws one.
      */
     BackgroundDeleter() throws IOException {
-      super("backgroundDeleter", null);
+      super("backgroundDeleter", null, accountService);
       putManager.close();
     }
 

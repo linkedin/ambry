@@ -13,7 +13,7 @@
  */
 package com.github.ambry.frontend;
 
-import com.github.ambry.account.MockNotifier;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.VerifiableProperties;
@@ -47,7 +47,7 @@ public class AmbryBlobStorageServiceFactoryTest {
     AmbryBlobStorageServiceFactory ambryBlobStorageServiceFactory =
         new AmbryBlobStorageServiceFactory(verifiableProperties, new MockClusterMap(),
             new MockRestRequestResponseHandler(), new InMemoryRouter(verifiableProperties, new MockClusterMap()),
-            new MockNotifier());
+            new InMemAccountService(false, true));
     BlobStorageService ambryBlobStorageService = ambryBlobStorageServiceFactory.getBlobStorageService();
     assertNotNull("No BlobStorageService returned", ambryBlobStorageService);
     assertEquals("Did not receive an AmbryBlobStorageService instance",
@@ -69,7 +69,8 @@ public class AmbryBlobStorageServiceFactoryTest {
 
     // VerifiableProperties null.
     try {
-      new AmbryBlobStorageServiceFactory(null, clusterMap, restResponseHandler, router, new MockNotifier());
+      new AmbryBlobStorageServiceFactory(null, clusterMap, restResponseHandler, router,
+          new InMemAccountService(false, true));
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -77,7 +78,8 @@ public class AmbryBlobStorageServiceFactoryTest {
 
     // ClusterMap null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, null, restResponseHandler, router, new MockNotifier());
+      new AmbryBlobStorageServiceFactory(verifiableProperties, null, restResponseHandler, router,
+          new InMemAccountService(false, true));
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -85,7 +87,8 @@ public class AmbryBlobStorageServiceFactoryTest {
 
     // RestResponseHandler null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router, new MockNotifier());
+      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router,
+          new InMemAccountService(false, true));
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -94,7 +97,7 @@ public class AmbryBlobStorageServiceFactoryTest {
     // Router null.
     try {
       new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, restResponseHandler, null,
-          new MockNotifier());
+          new InMemAccountService(false, true));
       fail("Instantiation should have failed because one of the arguments was null");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.

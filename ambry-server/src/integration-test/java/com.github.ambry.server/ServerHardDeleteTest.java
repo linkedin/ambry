@@ -79,9 +79,9 @@ public class ServerHardDeleteTest {
 
   @Before
   public void initialize() throws Exception {
-    notificationSystem = new MockNotificationSystem(1);
     mockClusterAgentsFactory = new MockClusterAgentsFactory(false, 1, 1, 1);
     mockClusterMap = mockClusterAgentsFactory.getClusterMap();
+    notificationSystem = new MockNotificationSystem(mockClusterMap);
     time = new MockTime(SystemTime.getInstance().milliseconds());
     Properties props = new Properties();
     props.setProperty("host.name", mockClusterMap.getDataNodes().get(0).getHostname());
@@ -265,7 +265,7 @@ public class ServerHardDeleteTest {
     properties.add(new BlobProperties(31878, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), true));
 
-    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds(null);
+    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     PartitionId chosenPartition = partitionIds.get(0);
     blobIdList = new ArrayList<>(9);
     for (int i = 0; i < 9; i++) {

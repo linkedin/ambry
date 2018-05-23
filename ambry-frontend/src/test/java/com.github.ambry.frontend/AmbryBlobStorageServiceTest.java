@@ -161,8 +161,8 @@ public class AmbryBlobStorageServiceTest {
     router = new InMemoryRouter(verifiableProperties, clusterMap);
     responseHandler = new FrontendTestResponseHandler();
     referenceBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-        Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds(null).get(0),
-        false);
+        Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false);
     referenceBlobIdStr = referenceBlobId.getID();
     ambryBlobStorageService = getAmbryBlobStorageService();
     responseHandler.start();
@@ -493,50 +493,57 @@ public class AmbryBlobStorageServiceTest {
       // aid=refAId, cid=refCId
       String blobId =
           new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-              refContainer.getId(), clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+              refContainer.getId(), clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+              false).getID();
       verifyAccountAndContainerFromBlobId(blobId, refAccount, refContainer, RestServiceErrorCode.NotFound);
 
       // aid=refAId, cid=unknownCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-          Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+          Container.UNKNOWN_CONTAINER_ID,
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=refAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-          (short) -1234, clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+          (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+          false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=refCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, refContainer.getId(), clusterMap.getWritablePartitionIds(null).get(0),
-          false).getID();
+          Account.UNKNOWN_ACCOUNT_ID, refContainer.getId(),
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=unknownCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds(null).get(0),
-          false).getID();
+          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID,
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false).getID();
       verifyAccountAndContainerFromBlobId(blobId, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
           RestServiceErrorCode.NotFound);
 
       // aid=unknownAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, (short) -1234, clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+          Account.UNKNOWN_ACCOUNT_ID, (short) -1234,
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=nonExistAId, cid=refCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
-          refContainer.getId(), clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+          refContainer.getId(), clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+          false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
       // aid=nonExistAId, cid=unknownCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
-          Container.UNKNOWN_CONTAINER_ID, clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+          Container.UNKNOWN_CONTAINER_ID,
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
 
       // aid=nonExistAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
-          (short) -11, clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+          (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+          false).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
     }
   }
@@ -557,7 +564,8 @@ public class AmbryBlobStorageServiceTest {
     // it does not matter what AID and CID are supplied when constructing blobId in v1.
     // expect unknown account and container for v1 blob IDs that went through request processing only.
     String blobId = new BlobId(BlobId.BLOB_ID_V1, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-        refAccount.getId(), refContainer.getId(), clusterMap.getWritablePartitionIds(null).get(0), false).getID();
+        refAccount.getId(), refContainer.getId(),
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false).getID();
     verifyAccountAndContainerFromBlobId(blobId, InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER,
         RestServiceErrorCode.NotFound);
 

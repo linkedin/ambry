@@ -33,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public class MockClusterMap implements ClusterMap {
   public static final String DEFAULT_PARTITION_CLASS = "defaultPartitionClass";
+  public static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
 
   protected final boolean enableSSLPorts;
   protected final Map<Long, PartitionId> partitions;
@@ -97,17 +98,21 @@ public class MockClusterMap implements ClusterMap {
     int dcIndex = 0;
     int currentPlainTextPort = 62000;
     int currentSSLPort = 63000;
+    Map<String, List<MockDataNodeId>> dcToDataNodes = new HashMap<>();
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
       }
       String dcName = "DC" + dcIndex;
       dataCentersInClusterMap.add(dcName);
+      MockDataNodeId dataNodeId;
       if (enableSSLPorts) {
-        dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName));
+        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName);
       } else {
-        dataNodes.add(createDataNode(getListOfPorts(currentPlainTextPort++), dcName));
+        dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++), dcName);
       }
+      dataNodes.add(dataNodeId);
+      dcToDataNodes.computeIfAbsent(dcName, name -> new ArrayList<>()).add(dataNodeId);
       localDatacenterName = dcName;
     }
     partitions = new HashMap<Long, PartitionId>();
@@ -116,11 +121,19 @@ public class MockClusterMap implements ClusterMap {
     long partitionId = 0;
     for (int i = 0; i < dataNodes.get(0).getMountPaths().size(); i++) {
       for (int j = 0; j < numStoresPerMountPoint; j++) {
-        // TODO: allow partition class to be set for testing
         PartitionId id = new MockPartitionId(partitionId, DEFAULT_PARTITION_CLASS, dataNodes, i);
         partitions.put(partitionId, id);
         partitionId++;
       }
+    }
+    if (numNodes > 3 && dcToDataNodes.get(localDatacenterName).size() > 2) {
+      // create one "special partition" that has 3 replicas in the local datacenter (as configured on startup) and
+      // 2 everywhere else
+      List<MockDataNodeId> nodeIds = new ArrayList<>();
+      dcToDataNodes.forEach(
+          (s, mockDataNodeIds) -> nodeIds.addAll(mockDataNodeIds.subList(0, localDatacenterName.equals(s) ? 3 : 2)));
+      PartitionId id = new MockPartitionId(partitionId, SPECIAL_PARTITION_CLASS, nodeIds, 0);
+      partitions.put(partitionId, id);
     }
     partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
   }
@@ -203,7 +216,11 @@ public class MockClusterMap implements ClusterMap {
 
   @Override
   public String getDatacenterName(byte id) {
-    return null;
+    int idx = (int) id;
+    if (idx < 0 || idx >= dataCentersInClusterMap.size()) {
+      return null;
+    }
+    return dataCentersInClusterMap.get(id);
   }
 
   @Override

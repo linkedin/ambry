@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -100,8 +101,8 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        mockTime, null);
-    List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds(null);
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
     blobId =
         new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
@@ -299,7 +300,7 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(clusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        mockTime, null);
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;

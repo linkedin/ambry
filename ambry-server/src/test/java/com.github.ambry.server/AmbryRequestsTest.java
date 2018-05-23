@@ -136,7 +136,8 @@ public class AmbryRequestsTest {
    */
   @Test
   public void scheduleCompactionSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    List<? extends PartitionId> partitionIds =
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     for (PartitionId id : partitionIds) {
       doScheduleCompactionTest(id, ServerErrorCode.No_Error);
       assertEquals("Partition scheduled for compaction not as expected", id,
@@ -154,7 +155,7 @@ public class AmbryRequestsTest {
     // partitionId not specified
     doScheduleCompactionTest(null, ServerErrorCode.Bad_Request);
 
-    PartitionId id = clusterMap.getWritablePartitionIds(null).get(0);
+    PartitionId id = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
 
     // store is not started - Disk_Unavailable
     storageManager.returnNullStore = true;
@@ -196,7 +197,8 @@ public class AmbryRequestsTest {
     RequestOrResponseType[] requestOrResponseTypes =
         {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest};
     for (RequestOrResponseType requestType : requestOrResponseTypes) {
-      List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+      List<? extends PartitionId> partitionIds =
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
       for (PartitionId id : partitionIds) {
         doRequestControlRequestTest(requestType, id);
       }
@@ -222,7 +224,8 @@ public class AmbryRequestsTest {
    */
   @Test
   public void controlReplicationSuccessTest() throws InterruptedException, IOException {
-    List<? extends PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
+    List<? extends PartitionId> partitionIds =
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     for (PartitionId id : partitionIds) {
       doControlReplicationTest(id, ServerErrorCode.No_Error);
     }
@@ -238,11 +241,12 @@ public class AmbryRequestsTest {
     replicationManager.reset();
     replicationManager.controlReplicationReturnVal = false;
     sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
-        clusterMap.getWritablePartitionIds(null).get(0), ServerErrorCode.Bad_Request);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), ServerErrorCode.Bad_Request);
     replicationManager.reset();
     replicationManager.exceptionToThrow = new IllegalStateException();
     sendAndVerifyReplicationControlRequest(Collections.EMPTY_LIST, false,
-        clusterMap.getWritablePartitionIds(null).get(0), ServerErrorCode.Unknown_Error);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
+        ServerErrorCode.Unknown_Error);
     // PartitionUnknown is hard to simulate without betraying knowledge of the internals of MockClusterMap.
   }
 

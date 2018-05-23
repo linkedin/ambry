@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -138,7 +139,8 @@ public class GetBlobInfoOperationTest {
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
         routerMetrics.ageAtGet);
     mockServerLayout = new MockServerLayout(mockClusterMap);
-    replicasCount = mockClusterMap.getWritablePartitionIds(null).get(0).getReplicaIds().size();
+    replicasCount =
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
     networkClientFactory = new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
         CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
@@ -148,7 +150,7 @@ public class GetBlobInfoOperationTest {
     }
     router = new NonBlockingRouter(new RouterConfig(vprops), new NonBlockingRouterMetrics(mockClusterMap),
         networkClientFactory, new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
-        time, null);
+        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
     short accountId = Utils.getRandomShort(random);
     short containerId = Utils.getRandomShort(random);
     blobProperties =
@@ -193,13 +195,12 @@ public class GetBlobInfoOperationTest {
 
   /**
    * Test {@link GetBlobInfoOperation} instantiation and validate the get methods.
-   * @throws Exception
    */
   @Test
-  public void testInstantiation() throws Exception {
+  public void testInstantiation() {
     BlobId blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(random), Utils.getRandomShort(random),
-        mockClusterMap.getWritablePartitionIds(null).get(0), false);
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false);
     Callback<GetBlobResultInternal> getOperationCallback = (result, exception) -> {
       // no op.
     };

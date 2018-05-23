@@ -21,8 +21,6 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -46,8 +44,9 @@ public class ServerPlaintextTest {
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
-    notificationSystem = new MockNotificationSystem(9);
-    plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(false, SystemTime.getInstance());
+    notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
+    plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();
   }
 
@@ -60,7 +59,7 @@ public class ServerPlaintextTest {
     return Arrays.asList(new Object[][]{{true}});
   }
 
-  public ServerPlaintextTest(boolean testEncryption) throws Exception {
+  public ServerPlaintextTest(boolean testEncryption) {
     this.testEncryption = testEncryption;
   }
 
@@ -77,31 +76,24 @@ public class ServerPlaintextTest {
   }
 
   @Test
-  public void startStopTest() throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-  }
-
-  @Test
-  public void endToEndTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndTest() {
     DataNodeId dataNodeId = plaintextCluster.getGeneralDataNode();
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
-        null, routerProps, testEncryption);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
+        routerProps, testEncryption);
   }
 
   /**
    * Do endToEndTest with the last dataNode whose storeEnablePrefetch is true.
    */
   @Test
-  public void endToEndTestWithPrefetch()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndTestWithPrefetch() {
     DataNodeId dataNodeId = plaintextCluster.getPrefetchDataNode();
-    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", "", plaintextCluster, null,
-        null, routerProps, testEncryption);
+    ServerTestUtil.endToEndTest(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "DC1", plaintextCluster, null, null,
+        routerProps, testEncryption);
   }
 
   @Test
-  public void endToEndReplicationWithMultiNodeMultiPartitionTest()
-      throws InterruptedException, IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
+  public void endToEndReplicationWithMultiNodeMultiPartitionTest() {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);
