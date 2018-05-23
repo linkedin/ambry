@@ -114,32 +114,44 @@ public class MessageFormatSend implements Send {
           long startTime = SystemTime.getInstance().milliseconds();
           BufferedInputStream bufferedInputStream =
               new BufferedInputStream(new MessageReadSetIndexInputStream(readSet, i, 0), 1024);
+          logger.trace("Calculate offsets, BufferedInputStream initialization time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
+
+          startTime = SystemTime.getInstance().milliseconds();
           byte[] headerVersionBytes = new byte[Version_Field_Size_In_Bytes];
           bufferedInputStream.read(headerVersionBytes, 0, Version_Field_Size_In_Bytes);
-          ByteBuffer headerVersion = ByteBuffer.wrap(headerVersionBytes);
-          short version = headerVersion.getShort();
+          short version = ByteBuffer.wrap(headerVersionBytes).getShort();
           if (!isValidHeaderVersion(version)) {
             throw new MessageFormatException(
                 "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(i),
                 MessageFormatErrorCodes.Unknown_Format_Version);
           }
+          logger.trace("Calculate offsets, read and verify header version time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
+
+          startTime = SystemTime.getInstance().milliseconds();
           byte[] headerBytes = new byte[getHeaderSizeForVersion(version)];
           bufferedInputStream.read(headerBytes, Version_Field_Size_In_Bytes,
               headerBytes.length - Version_Field_Size_In_Bytes);
+          logger.trace("Calculate offsets, read header time: {}", SystemTime.getInstance().milliseconds() - startTime);
+
+          startTime = SystemTime.getInstance().milliseconds();
           ByteBuffer header = ByteBuffer.wrap(headerBytes);
           header.putShort(version);
           header.clear();
           MessageHeader_Format headerFormat = getMessageHeader(version, header);
           headerFormat.verifyHeader();
-          int storeKeyRelativeOffset = header.capacity();
+          logger.trace("Calculate offsets, verify header time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
 
+          startTime = SystemTime.getInstance().milliseconds();
           StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(bufferedInputStream));
           if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
             throw new MessageFormatException(
                 "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
                 MessageFormatErrorCodes.Store_Key_Id_MisMatch);
           }
-          logger.trace("Calculate offsets, verify header time: {}",
+          logger.trace("Calculate offsets, read and verify storeKey time: {}",
               SystemTime.getInstance().milliseconds() - startTime);
 
           startTime = SystemTime.getInstance().milliseconds();
