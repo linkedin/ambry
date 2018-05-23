@@ -822,6 +822,9 @@ class BlobStoreCompactor {
             break;
           }
         }
+        if (!copiedAll) {
+          break;
+        }
         startIndex = endIndex;
       }
     } finally {
