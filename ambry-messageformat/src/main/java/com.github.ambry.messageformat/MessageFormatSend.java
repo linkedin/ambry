@@ -52,7 +52,7 @@ public class MessageFormatSend implements Send {
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private final int BufferedInputStreamBufferSize = 1024;
+  private final int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
 
   private class SendInfo {
     private long relativeOffset;
@@ -114,7 +114,8 @@ public class MessageFormatSend implements Send {
         } else {
           long startTime = SystemTime.getInstance().milliseconds();
           BufferedInputStream bufferedInputStream =
-              new BufferedInputStream(new MessageReadSetIndexInputStream(readSet, i, 0), BufferedInputStreamBufferSize);
+              new BufferedInputStream(new MessageReadSetIndexInputStream(readSet, i, 0),
+                  BUFFERED_INPUT_STREAM_BUFFER_SIZE);
           // read and verify header version
           byte[] headerVersionBytes = new byte[Version_Field_Size_In_Bytes];
           bufferedInputStream.read(headerVersionBytes, 0, Version_Field_Size_In_Bytes);
