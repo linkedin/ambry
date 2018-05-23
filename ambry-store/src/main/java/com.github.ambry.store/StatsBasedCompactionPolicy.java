@@ -89,7 +89,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     CostBenefitInfo bestCandidateToCompact = null;
     while (firstEntry != null) {
       Map.Entry<String, Long> endEntry = lastEntry;
-      while (endEntry != null && firstEntry.getKey().compareTo(endEntry.getKey()) <= 0) {
+      while (endEntry != null && LogSegmentNameHelper.COMPARATOR.compare(firstEntry.getKey(), endEntry.getKey()) <= 0) {
         CostBenefitInfo costBenefitInfo =
             getCostBenefitInfo(firstEntry.getKey(), endEntry.getKey(), validDataPerLogSegments, segmentCapacity,
                 segmentHeaderSize, maxBlobSize);

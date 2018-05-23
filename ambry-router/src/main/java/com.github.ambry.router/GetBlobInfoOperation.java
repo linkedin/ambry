@@ -86,7 +86,7 @@ class GetBlobInfoOperation extends GetOperation {
         routerMetrics.getBlobInfoLocalColoLatencyMs, routerMetrics.getBlobInfoCrossColoLatencyMs,
         routerMetrics.getBlobInfoPastDueCount, kms, cryptoService, cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
-    operationTracker = getOperationTracker(blobId.getPartition());
+    operationTracker = getOperationTracker(blobId.getPartition(), blobId.getDatacenterId());
     progressTracker = new ProgressTracker(operationTracker);
   }
 

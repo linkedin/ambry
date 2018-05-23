@@ -125,6 +125,7 @@ class DumpDataHelper {
                 + updateRecord.getContainerId() + ", DeletionTimeInSecs:" + updateRecord.getUpdateTimeInMs();
             break;
           default:
+            // TODO (TTL update): handle TTL update
             throw new IllegalStateException("Unrecognized update record type: " + updateRecord.getType());
         }
       }

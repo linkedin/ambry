@@ -81,7 +81,7 @@ public class ServerSSLTokenTest {
     sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
-    sslFactory = new SSLFactory(clientSSLConfig);
+    sslFactory = SSLFactory.getNewInstance(clientSSLConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     clientSSLSocketFactory = sslContext.getSocketFactory();
   }

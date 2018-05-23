@@ -39,7 +39,7 @@ public class RouterUtilsTest {
     } catch (Exception e) {
       fail("Should not get any exception.");
     }
-    partition = clusterMap.getWritablePartitionIds().get(0);
+    partition = clusterMap.getWritablePartitionIds(null).get(0);
     originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), Utils.getRandomShort(random), Utils.getRandomShort(random), partition,
         false);

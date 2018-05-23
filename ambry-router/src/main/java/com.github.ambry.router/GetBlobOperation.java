@@ -529,7 +529,7 @@ class GetBlobOperation extends GetOperation {
     void initialize(int index, BlobId id) {
       chunkIndex = index;
       chunkBlobId = id;
-      chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition());
+      chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition(), chunkBlobId.getDatacenterId());
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
     }
@@ -962,8 +962,7 @@ class GetBlobOperation extends GetOperation {
               decryptCallbackResultInfo.exception);
           setOperationException(
               new RouterException("Exception thrown on decrypting content for " + blobType + " blob " + blobId,
-                  decryptCallbackResultInfo.exception,
-                  RouterErrorCode.UnexpectedInternalError));
+                  decryptCallbackResultInfo.exception, RouterErrorCode.UnexpectedInternalError));
           progressTracker.setDecryptionFailed();
         } else {
           // in case of Metadata blob, only user-metadata needs decryption if the blob is encrypted

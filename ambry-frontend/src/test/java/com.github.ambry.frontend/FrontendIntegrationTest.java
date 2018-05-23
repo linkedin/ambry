@@ -151,11 +151,11 @@ public class FrontendIntegrationTest {
   @BeforeClass
   public static void setup() throws Exception {
     ambryRestServer = new RestServer(FRONTEND_VERIFIABLE_PROPS, CLUSTER_MAP, new LoggingNotificationSystem(),
-        new SSLFactory(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
+        SSLFactory.getNewInstance(new SSLConfig(FRONTEND_VERIFIABLE_PROPS)));
     ambryRestServer.start();
     plaintextNettyClient = new NettyClient("localhost", PLAINTEXT_SERVER_PORT, null);
-    sslNettyClient =
-        new NettyClient("localhost", SSL_SERVER_PORT, new SSLFactory(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
+    sslNettyClient = new NettyClient("localhost", SSL_SERVER_PORT,
+        SSLFactory.getNewInstance(new SSLConfig(SSL_CLIENT_VERIFIABLE_PROPS)));
   }
 
   /**
@@ -277,7 +277,7 @@ public class FrontendIntegrationTest {
    */
   @Test
   public void getReplicasTest() throws Exception {
-    List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
+    List<? extends PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,

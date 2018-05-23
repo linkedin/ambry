@@ -28,10 +28,12 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 class AmbryPartition extends PartitionId {
   private final Long id;
+  private final String partitionClass;
   private final ClusterManagerCallback clusterManagerCallback;
+  private final Lock stateChangeLock = new ReentrantLock();
+
   private volatile PartitionState state;
   private long lastUpdatedSealedStateChangeCounter = 0;
-  private final Lock stateChangeLock = new ReentrantLock();
 
   private static final short VERSION_FIELD_SIZE_IN_BYTES = 2;
   private static final short CURRENT_VERSION = 1;
@@ -40,12 +42,14 @@ class AmbryPartition extends PartitionId {
   /**
    * Instantiate an AmbryPartition instance.
    * @param id the id associated with this partition.
+   * @param partitionClass the partition class that this partition belongs to
    * @param clusterManagerCallback the {@link ClusterManagerCallback} to use to make callbacks
    *                               to the {@link HelixClusterManager}
    * The initial state defaults to {@link PartitionState#READ_WRITE}.
    */
-  AmbryPartition(long id, ClusterManagerCallback clusterManagerCallback) {
+  AmbryPartition(long id, String partitionClass, ClusterManagerCallback clusterManagerCallback) {
     this.id = id;
+    this.partitionClass = partitionClass;
     this.clusterManagerCallback = clusterManagerCallback;
     this.state = PartitionState.READ_WRITE;
   }
@@ -62,27 +66,7 @@ class AmbryPartition extends PartitionId {
 
   @Override
   public PartitionState getPartitionState() {
-    // If there was a change to the sealed state of replicas in the cluster manager since the last check, refresh the
-    // state of this partition. We do this to avoid querying every time this method is called, considering how
-    // update to sealed states of replicas are relatively rare.
-    long currentCounterValue = clusterManagerCallback.getSealedStateChangeCounter();
-    // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
-    // state in that case.
-    if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
-      try {
-        lastUpdatedSealedStateChangeCounter = currentCounterValue;
-        boolean isSealed = false;
-        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
-          if (replica.isSealed()) {
-            isSealed = true;
-            break;
-          }
-        }
-        state = isSealed ? PartitionState.READ_ONLY : PartitionState.READ_WRITE;
-      } finally {
-        stateChangeLock.unlock();
-      }
-    }
+    resolvePartitionState();
     return state;
   }
 
@@ -121,12 +105,44 @@ class AmbryPartition extends PartitionId {
     return id.toString();
   }
 
+  @Override
+  public String getPartitionClass() {
+    return partitionClass;
+  }
+
   /**
    * Take actions, if any, on being notified that this partition has become {@link PartitionState#READ_ONLY}
    */
   void onPartitionReadOnly() {
     // no-op. The static manager does not deal with this. In the dynamic world, the cluster manager will rely
     // entirely on Helix for this.
+  }
+
+  /**
+   * Resolves the {@link PartitionState} based on the state of the replicas.
+   */
+  void resolvePartitionState() {
+    // If there was a change to the sealed state of replicas in the cluster manager since the last check, refresh the
+    // state of this partition. We do this to avoid querying every time this method is called, considering how
+    // update to sealed states of replicas are relatively rare.
+    long currentCounterValue = clusterManagerCallback.getSealedStateChangeCounter();
+    // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
+    // state in that case.
+    if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
+      try {
+        lastUpdatedSealedStateChangeCounter = currentCounterValue;
+        boolean isSealed = false;
+        for (AmbryReplica replica : clusterManagerCallback.getReplicaIdsForPartition(this)) {
+          if (replica.isSealed()) {
+            isSealed = true;
+            break;
+          }
+        }
+        state = isSealed ? PartitionState.READ_ONLY : PartitionState.READ_WRITE;
+      } finally {
+        stateChangeLock.unlock();
+      }
+    }
   }
 }
 

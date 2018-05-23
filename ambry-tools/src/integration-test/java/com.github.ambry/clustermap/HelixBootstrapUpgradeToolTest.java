@@ -77,7 +77,8 @@ public class HelixBootstrapUpgradeToolTest {
     zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
     zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
     testHardwareLayout = constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP);
-    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE);
+    testPartitionLayout =
+        constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, null);
   }
 
   /**
@@ -93,7 +94,7 @@ public class HelixBootstrapUpgradeToolTest {
       Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-            CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, new HelixAdminFactory());
+            CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory());
         Assert.fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -109,19 +110,19 @@ public class HelixBootstrapUpgradeToolTest {
     /* Test bootstrap */
     long expectedResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
-    writeBootstrapOrUpgrade(expectedResourceCount);
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
 
     /* Test Simple Upgrade */
     int numNewNodes = 4;
     int numNewPartitions = 220;
     testHardwareLayout.addNewDataNodes(numNewNodes);
-    testPartitionLayout.addNewPartitions(numNewPartitions);
+    testPartitionLayout.addNewPartitions(numNewPartitions, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, null);
     expectedResourceCount += (numNewPartitions - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
-    writeBootstrapOrUpgrade(expectedResourceCount);
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
 
     /* Test sealed state update. */
     Set<Long> partitionIdsBeforeAddition = new HashSet<>();
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       partitionIdsBeforeAddition.add(((Partition) partitionId).getId());
     }
 
@@ -129,22 +130,23 @@ public class HelixBootstrapUpgradeToolTest {
     numNewNodes = 2;
     numNewPartitions = 50;
     testHardwareLayout.addNewDataNodes(numNewNodes);
-    testPartitionLayout.addNewPartitions(numNewPartitions);
+    testPartitionLayout.addNewPartitions(numNewPartitions, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, null);
 
-    // Next, mark all previous partitions as READ_ONLY, and change their replica capacities.
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    // Next, mark all previous partitions as READ_ONLY, and change their replica capacities and partition classes.
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionIdsBeforeAddition.contains(((Partition) partitionId).getId())) {
         Partition partition = (Partition) partitionId;
         partition.partitionState = PartitionState.READ_ONLY;
         partition.replicaCapacityInBytes += 1;
+        partition.partitionClass = "specialPartitionClass";
       }
     }
 
     expectedResourceCount += (numNewPartitions - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
-    writeBootstrapOrUpgrade(expectedResourceCount);
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
 
     // Now, mark the ones that were READ_ONLY as READ_WRITE and vice versa
-    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions()) {
+    for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       Partition partition = (Partition) partitionId;
       if (partitionIdsBeforeAddition.contains(((Partition) partitionId).getId())) {
         partition.partitionState = PartitionState.READ_WRITE;
@@ -152,23 +154,58 @@ public class HelixBootstrapUpgradeToolTest {
         partition.partitionState = PartitionState.READ_ONLY;
       }
     }
-    writeBootstrapOrUpgrade(expectedResourceCount);
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+
+    // Now, change the replica count for a partition.
+    Partition partition1 = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(testPartitionLayout.getPartitionCount()));
+    Partition partition2 = (Partition) testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .get(RANDOM.nextInt(testPartitionLayout.getPartitionCount()));
+
+    // Add a new replica for partition1. Find a disk on a data node that does not already have a replica for partition1.
+    HashSet<DataNodeId> partition1Nodes = new HashSet<>();
+    for (Replica replica : partition1.getReplicas()) {
+      partition1Nodes.add(replica.getDataNodeId());
+    }
+    Disk diskForNewReplica;
+    do {
+      diskForNewReplica = testHardwareLayout.getRandomDisk();
+    } while (partition1Nodes.contains(diskForNewReplica.getDataNode()));
+
+    partition1.addReplica(new Replica(partition1, diskForNewReplica));
+    // Remove a replica from partition2.
+    partition2.getReplicas().remove(0);
+    writeBootstrapOrUpgrade(expectedResourceCount, false);
+
+    long expectedResourceCountWithoutRemovals = expectedResourceCount;
+    /* Test instance, partition and resource removal */
+    // Use the initial static clustermap that does not have the upgrades.
+    testHardwareLayout = constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP);
+    testPartitionLayout =
+        constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, null);
+    long expectedResourceCountWithRemovals =
+        (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    writeBootstrapOrUpgrade(expectedResourceCountWithoutRemovals, false);
+    writeBootstrapOrUpgrade(expectedResourceCountWithRemovals, true);
   }
 
   /**
    * Write the layout files out from the constructed in-memory hardware and partition layouts; use the bootstrap tool
    * to update the contents in Helix; verify that the information is consistent between the two.
    * @param expectedResourceCount number of resources expected in Helix for this cluster in each datacenter.
+   * @param forceRemove whether the forceRemove option should be passed when doing the bootstrap/upgrade.
    * @throws IOException if a file read error is encountered.
    * @throws JSONException if a JSON parse error is encountered.
    */
-  private void writeBootstrapOrUpgrade(long expectedResourceCount) throws Exception {
+  private void writeBootstrapOrUpgrade(long expectedResourceCount, boolean forceRemove) throws Exception {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-        CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, new HelixAdminFactory());
+        CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory());
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 

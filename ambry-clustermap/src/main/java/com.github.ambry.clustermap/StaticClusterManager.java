@@ -73,13 +73,13 @@ class StaticClusterManager implements ClusterMap {
   // --------------------------------------
 
   @Override
-  public List<PartitionId> getWritablePartitionIds() {
-    return partitionLayout.getWritablePartitions();
+  public List<PartitionId> getWritablePartitionIds(String partitionClass) {
+    return partitionLayout.getWritablePartitions(partitionClass);
   }
 
   @Override
-  public List<PartitionId> getAllPartitionIds() {
-    return partitionLayout.getPartitions();
+  public List<PartitionId> getAllPartitionIds(String partitionClass) {
+    return partitionLayout.getPartitions(partitionClass);
   }
 
   @Override
@@ -102,6 +102,12 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
+  public String getDatacenterName(byte id) {
+    Datacenter datacenter = hardwareLayout.findDatacenter(id);
+    return datacenter == null ? null : datacenter.getName();
+  }
+
+  @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
     return hardwareLayout.findDataNode(hostname, port);
   }
@@ -114,7 +120,7 @@ class StaticClusterManager implements ClusterMap {
 
   List<Replica> getReplicas(DataNodeId dataNodeId) {
     List<Replica> replicas = new ArrayList<Replica>();
-    for (PartitionId partition : partitionLayout.getPartitions()) {
+    for (PartitionId partition : partitionLayout.getPartitions(null)) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
         if (replica.getDataNodeId().equals(dataNodeId)) {
           replicas.add(replica);
@@ -155,7 +161,7 @@ class StaticClusterManager implements ClusterMap {
 
   long getAllocatedRawCapacityInBytes(Datacenter datacenter) {
     long allocatedRawCapacityInBytes = 0;
-    for (PartitionId partition : partitionLayout.getPartitions()) {
+    for (PartitionId partition : partitionLayout.getPartitions(null)) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().getDatacenter().equals(datacenter)) {
@@ -168,7 +174,7 @@ class StaticClusterManager implements ClusterMap {
 
   long getAllocatedRawCapacityInBytes(DataNodeId dataNode) {
     long allocatedRawCapacityInBytes = 0;
-    for (PartitionId partition : partitionLayout.getPartitions()) {
+    for (PartitionId partition : partitionLayout.getPartitions(null)) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk disk = (Disk) replica.getDiskId();
         if (disk.getDataNode().equals(dataNode)) {
@@ -181,7 +187,7 @@ class StaticClusterManager implements ClusterMap {
 
   long getAllocatedRawCapacityInBytes(Disk disk) {
     long allocatedRawCapacityInBytes = 0;
-    for (PartitionId partition : partitionLayout.getPartitions()) {
+    for (PartitionId partition : partitionLayout.getPartitions(null)) {
       for (Replica replica : ((Partition) partition).getReplicas()) {
         Disk currentDisk = (Disk) replica.getDiskId();
         if (currentDisk.equals(disk)) {
@@ -232,8 +238,8 @@ class StaticClusterManager implements ClusterMap {
     return maxCapacityDisk;
   }
 
-  PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
-    return partitionLayout.addNewPartition(disks, replicaCapacityInBytes);
+  PartitionId addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass) {
+    return partitionLayout.addNewPartition(disks, replicaCapacityInBytes, partitionClass);
   }
 
   // Determine if there is enough capacity to allocate a PartitionId.
@@ -379,14 +385,15 @@ class StaticClusterManager implements ClusterMap {
    * Allocate partitions for {@code numPartitions} new partitions on all datacenters.
    *
    * @param numPartitions How many partitions to allocate.
+   * @param partitionClass the partition class that the created partitions must be tagged with
    * @param replicaCountPerDatacenter The number of replicas per partition on each datacenter
    * @param replicaCapacityInBytes How large each replica (of a partition) should be
    * @param attemptNonRackAwareOnFailure {@code true} if we should attempt a non rack-aware allocation if a rack-aware
    *                                     one is not possible.
    * @return A list of the new {@link PartitionId}s.
    */
-  List<PartitionId> allocatePartitions(int numPartitions, int replicaCountPerDatacenter, long replicaCapacityInBytes,
-      boolean attemptNonRackAwareOnFailure) {
+  List<PartitionId> allocatePartitions(int numPartitions, String partitionClass, int replicaCountPerDatacenter,
+      long replicaCapacityInBytes, boolean attemptNonRackAwareOnFailure) {
     ArrayList<PartitionId> partitions = new ArrayList<PartitionId>(numPartitions);
     int partitionsAllocated = 0;
     while (checkEnoughUnallocatedRawCapacity(replicaCountPerDatacenter, replicaCapacityInBytes)
@@ -397,11 +404,10 @@ class StaticClusterManager implements ClusterMap {
             attemptNonRackAwareOnFailure);
         disksToAllocate.addAll(disks);
       }
-      partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes));
+      partitions.add(partitionLayout.addNewPartition(disksToAllocate, replicaCapacityInBytes, partitionClass));
       partitionsAllocated++;
       System.out.println("Allocated " + partitionsAllocated + " new partitions so far.");
     }
-
     return partitions;
   }
 

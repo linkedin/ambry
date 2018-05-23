@@ -876,7 +876,7 @@ public class BlobStoreTest {
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId(accountId, containerId);
       long crc = random.nextLong();
-      MessageInfo info = new MessageInfo(id, size, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+      MessageInfo info = new MessageInfo(id, size, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
           Utils.Infinite_Time);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
@@ -1347,7 +1347,7 @@ public class BlobStoreTest {
     for (int i = 0; i < mockIdList.size(); i++) {
       bufferList.add(ByteBuffer.allocate(PUT_RECORD_SIZE));
       MockId mockId = (MockId) mockIdList.get(i);
-      messageInfoList.add(new MessageInfo(mockId, PUT_RECORD_SIZE, false, Utils.Infinite_Time, crcList.get(i),
+      messageInfoList.add(new MessageInfo(mockId, PUT_RECORD_SIZE, false, false, Utils.Infinite_Time, crcList.get(i),
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
     }
     MessageWriteSet writeSet = new MockMessageWriteSet(messageInfoList, bufferList);

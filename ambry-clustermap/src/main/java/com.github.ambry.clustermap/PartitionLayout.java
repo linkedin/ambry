@@ -16,7 +16,6 @@ package com.github.ambry.clustermap;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -43,15 +42,25 @@ class PartitionLayout {
   private long maxPartitionId;
   private long allocatedRawCapacityInBytes;
   private long allocatedUsableCapacityInBytes;
+  private final String localDatacenterName;
+  private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
 
-  public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject) throws JSONException {
+  /**
+   * Create a PartitionLayout
+   * @param hardwareLayout the {@link HardwareLayout} to use.
+   * @param jsonObject the {@link JSONObject} that represents the partition layout
+   * @param localDatacenterName the name of the local datacenter. Can be {@code null}.
+   * @throws JSONException
+   */
+  public PartitionLayout(HardwareLayout hardwareLayout, JSONObject jsonObject, String localDatacenterName)
+      throws JSONException {
     if (logger.isTraceEnabled()) {
       logger.trace("PartitionLayout " + hardwareLayout + ", " + jsonObject.toString());
     }
     this.hardwareLayout = hardwareLayout;
-
+    this.localDatacenterName = localDatacenterName;
     this.clusterName = jsonObject.getString("clusterName");
     this.version = jsonObject.getLong("version");
     this.partitionMap = new HashMap<ByteBuffer, Partition>();
@@ -61,21 +70,27 @@ class PartitionLayout {
     }
 
     validate();
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName);
   }
 
-  // Constructor for initial PartitionLayout.
-  public PartitionLayout(HardwareLayout hardwareLayout) {
+  /**
+   * Constructor for initial PartitionLayout
+   * @param hardwareLayout the {@link JSONObject} that represents the partition layout
+   * @param localDatacenterName the name of the local datacenter. Can be {@code null}.
+   */
+  public PartitionLayout(HardwareLayout hardwareLayout, String localDatacenterName) {
     if (logger.isTraceEnabled()) {
       logger.trace("PartitionLayout " + hardwareLayout);
     }
     this.hardwareLayout = hardwareLayout;
-
+    this.localDatacenterName = localDatacenterName;
     this.clusterName = hardwareLayout.getClusterName();
     this.version = 1;
     this.maxPartitionId = MinPartitionId;
     this.partitionMap = new HashMap<ByteBuffer, Partition>();
 
     validate();
+    partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitionMap.values(), localDatacenterName);
   }
 
   public HardwareLayout getHardwareLayout() {
@@ -104,29 +119,12 @@ class PartitionLayout {
     return count;
   }
 
-  public List<PartitionId> getPartitions() {
-    return new ArrayList<PartitionId>(partitionMap.values());
+  public List<PartitionId> getPartitions(String partitionClass) {
+    return partitionSelectionHelper.getPartitions(partitionClass);
   }
 
-  public List<PartitionId> getWritablePartitions() {
-    List<PartitionId> writablePartitions = new ArrayList();
-    List<PartitionId> healthyWritablePartitions = new ArrayList();
-    for (Partition partition : partitionMap.values()) {
-      if (partition.getPartitionState() == PartitionState.READ_WRITE) {
-        writablePartitions.add(partition);
-        boolean up = true;
-        for (Replica replica : partition.getReplicas()) {
-          if (replica.isDown()) {
-            up = false;
-            break;
-          }
-        }
-        if (up) {
-          healthyWritablePartitions.add(partition);
-        }
-      }
-    }
-    return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+  public List<PartitionId> getWritablePartitions(String partitionClass) {
+    return partitionSelectionHelper.getWritablePartitions(partitionClass);
   }
 
   public long getAllocatedRawCapacityInBytes() {
@@ -165,7 +163,7 @@ class PartitionLayout {
     }
   }
 
-  protected void validateClusterName() {
+  private void validateClusterName() {
     if (clusterName == null) {
       throw new IllegalStateException("ClusterName cannot be null.");
     }
@@ -176,7 +174,7 @@ class PartitionLayout {
     }
   }
 
-  protected void validatePartitionIds() {
+  private void validatePartitionIds() {
     for (Partition partition : partitionMap.values()) {
       long partitionId = partition.getId();
       if (partitionId < MinPartitionId) {
@@ -188,7 +186,7 @@ class PartitionLayout {
     }
   }
 
-  protected void validateUniqueness() {
+  private void validateUniqueness() {
     // Validate uniqueness of each logical component. Partition uniqueness is validated by method addPartition.
     Set<Replica> replicaSet = new HashSet<Replica>();
 
@@ -201,34 +199,40 @@ class PartitionLayout {
     }
   }
 
-  protected void validate() {
+  private void validate() {
     logger.trace("begin validate.");
     validateClusterName();
     validatePartitionIds();
     validateUniqueness();
     this.allocatedRawCapacityInBytes = calculateAllocatedRawCapacityInBytes();
     this.allocatedUsableCapacityInBytes = calculateAllocatedUsableCapacityInBytes();
+    if (localDatacenterName != null && !localDatacenterName.isEmpty()
+        && hardwareLayout.findDatacenter(localDatacenterName) == null) {
+      throw new IllegalArgumentException("Clustermap has no datacenter named " + localDatacenterName);
+    }
     logger.trace("complete validate.");
   }
 
-  protected long getNewPartitionId() {
+  private long getNewPartitionId() {
     long currentPartitionId = maxPartitionId;
     maxPartitionId++;
     return currentPartitionId;
   }
 
   // Creates a Partition and corresponding Replicas for each specified disk
-  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes) {
+  public Partition addNewPartition(List<Disk> disks, long replicaCapacityInBytes, String partitionClass) {
     if (disks == null || disks.size() == 0) {
       throw new IllegalArgumentException("Disks either null or of zero length.");
     }
 
-    Partition partition = new Partition(getNewPartitionId(), PartitionState.READ_WRITE, replicaCapacityInBytes);
+    Partition partition =
+        new Partition(getNewPartitionId(), partitionClass, PartitionState.READ_WRITE, replicaCapacityInBytes);
     for (Disk disk : disks) {
       partition.addReplica(new Replica(partition, disk));
     }
     addPartition(partition);
     validate();
+    partitionSelectionHelper.updatePartitions(partitionMap.values(), localDatacenterName);
 
     return partition;
   }
@@ -242,6 +246,7 @@ class PartitionLayout {
       partition.addReplica(new Replica(partition, disk));
     }
     validate();
+    partitionSelectionHelper.updatePartitions(partitionMap.values(), localDatacenterName);
   }
 
   /**

@@ -30,7 +30,7 @@ import java.net.InetSocketAddress;
  * A {@link ChannelInitializer} to be used with {@link NettyServer}. Calling {@link #initChannel(SocketChannel)} adds
  * the necessary handlers to a channel's pipeline so that it may handle requests.
  */
-class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
+public class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   private final NettyConfig nettyConfig;
   private final NettyMetrics nettyMetrics;
   private final ConnectionStatsHandler connectionStatsHandler;
@@ -73,8 +73,10 @@ class NettyServerChannelInitializer extends ChannelInitializer<SocketChannel> {
     // if SSL is enabled, add an SslHandler before the HTTP codec
     if (sslFactory != null) {
       InetSocketAddress peerAddress = ch.remoteAddress();
-      pipeline.addLast("sslHandler", new SslHandler(
-          sslFactory.createSSLEngine(peerAddress.getHostName(), peerAddress.getPort(), SSLFactory.Mode.SERVER)));
+      String peerHost = peerAddress.getHostName();
+      int peerPort = peerAddress.getPort();
+      SslHandler sslHandler = new SslHandler(sslFactory.createSSLEngine(peerHost, peerPort, SSLFactory.Mode.SERVER));
+      pipeline.addLast("sslHandler", sslHandler);
     }
     pipeline
         // for http encoding/decoding.

@@ -533,7 +533,7 @@ class ReplicaThread implements Runnable {
               new DeleteMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
                   messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
           MessageInfo info =
-              new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, messageInfo.getAccountId(),
+              new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, false, messageInfo.getAccountId(),
                   messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);

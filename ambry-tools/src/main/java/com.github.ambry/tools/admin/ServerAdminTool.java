@@ -42,6 +42,7 @@ import com.github.ambry.network.Send;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
 import com.github.ambry.protocol.GetOption;
@@ -80,6 +81,8 @@ import org.slf4j.LoggerFactory;
  * Currently supports:
  * 1. Get of either BlobProperties, UserMetadata or blob data for a particular blob from a particular storage node.
  * 2. Triggering of compaction of a particular partition on a particular node.
+ * 3. Get catchup status of peers for a particular blob.
+ * 4. Stop/Start a particular blob store via BlobStoreControl operation.
  */
 public class ServerAdminTool implements Closeable {
   private static final int MAX_CONNECTIONS_PER_SERVER = 1;
@@ -97,7 +100,14 @@ public class ServerAdminTool implements Closeable {
    * The different operations supported by the tool.
    */
   private enum Operation {
-    GetBlobProperties, GetUserMetadata, GetBlob, TriggerCompaction, RequestControl, ReplicationControl, CatchupStatus
+    GetBlobProperties,
+    GetUserMetadata,
+    GetBlob,
+    TriggerCompaction,
+    RequestControl,
+    ReplicationControl,
+    CatchupStatus,
+    BlobStoreControl
   }
 
   /**
@@ -108,7 +118,7 @@ public class ServerAdminTool implements Closeable {
     /**
      * The type of operation.
      * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl,ReplicationControl,
-     * CatchupStatus
+     * CatchupStatus,BlobStoreControl
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
@@ -162,8 +172,8 @@ public class ServerAdminTool implements Closeable {
     /**
      * Comma separated list of the string representations of the partitions to operate on (if applicable).
      * Some requests (TriggerCompaction) will not work with an empty list but some requests treat empty lists as "all
-     * partitions" (RequestControl,ReplicationControl,CatchupStatus).
-     * Applicable for: TriggerCompaction,RequestControl,ReplicationControl,CatchupStatus
+     * partitions" (RequestControl,ReplicationControl,CatchupStatus,BlobStoreControl).
+     * Applicable for: TriggerCompaction,RequestControl,ReplicationControl,CatchupStatus,BlobStoreControl
      */
     @Config("partition.ids")
     @Default("")
@@ -204,7 +214,7 @@ public class ServerAdminTool implements Closeable {
     /**
      * The number of replicas of each partition that have to be within "acceptable.lag.in.bytes" in case of catchup
      * status requests. The min of this value or the total count of replicas -1 is considered.
-     * Applicable for: CatchupStatus
+     * Applicable for: CatchupStatus,BlobStoreControl
      */
     @Config("num.replicas.caught.up.per.partition")
     @Default("Short.MAX_VALUE")
@@ -255,7 +265,7 @@ public class ServerAdminTool implements Closeable {
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? new SSLFactory(
+    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
         new SSLConfig(verifiableProperties)) : null;
     ServerAdminTool serverAdminTool =
         new ServerAdminTool(clusterMap.getMetricRegistry(), sslFactory, verifiableProperties);
@@ -379,6 +389,17 @@ public class ServerAdminTool implements Closeable {
           }
         }
         break;
+      case BlobStoreControl:
+        if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
+          for (String partitionIdStr : config.partitionIds) {
+            PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
+            sendBlobStoreControlRequest(serverAdminTool, dataNodeId, partitionId,
+                config.numReplicasCaughtUpPerPartition, config.enableState);
+          }
+        } else {
+          LOGGER.error("There were no partitions provided to be controlled (Start/Stop)");
+        }
+        break;
       default:
         throw new IllegalStateException("Recognized but unsupported operation: " + config.typeOfOperation);
     }
@@ -401,7 +422,7 @@ public class ServerAdminTool implements Closeable {
       return null;
     }
     PartitionId targetPartitionId = null;
-    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds();
+    List<? extends PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
       if (partitionId.isEqual(partitionIdStr)) {
         targetPartitionId = partitionId;
@@ -455,7 +476,7 @@ public class ServerAdminTool implements Closeable {
    * @param dataNodeId the {@link DataNodeId} to send the request to.
    * @param partitionId the partition id  on which the operation will take place. Can be {@code null}.
    * @param origins the names of the datacenters from which replication should be controlled.
-   * @param enable the enable (or disable) status required for {@code toControl}.
+   * @param enable the enable (or disable) status required for replication control.
    * @throws IOException
    * @throws TimeoutException
    */
@@ -470,6 +491,32 @@ public class ServerAdminTool implements Closeable {
       LOGGER.error(
           "From {}, received server error code {} for request to set enable state {} for replication from {} for {}",
           dataNodeId, errorCode, enable, origins, partitionId);
+    }
+  }
+
+  /**
+   * Sends a {@link BlobStoreControlAdminRequest} to {@code dataNodeId} to set enable status of controlling BlobStore
+   * to {@code enable} for {@code partitionId}.
+   * @param serverAdminTool the {@link ServerAdminTool} instance to use.
+   * @param dataNodeId the {@link DataNodeId} to send the request to.
+   * @param partitionId the partition id  on which the operation will take place. Can be {@code null}.
+   * @param numReplicasCaughtUpPerPartition the minimum number of peers should catch up with the partition.
+   * @param enable the enable (or disable) status required for BlobStore control.
+   * @throws IOException
+   * @throws TimeoutException
+   */
+  private static void sendBlobStoreControlRequest(ServerAdminTool serverAdminTool, DataNodeId dataNodeId,
+      PartitionId partitionId, short numReplicasCaughtUpPerPartition, boolean enable)
+      throws IOException, TimeoutException {
+    ServerErrorCode errorCode =
+        serverAdminTool.controlBlobStore(dataNodeId, partitionId, numReplicasCaughtUpPerPartition, enable);
+    if (errorCode == ServerErrorCode.No_Error) {
+      LOGGER.info("Enable state of controlling BlobStore from has been set to {} for {} on {}", enable, partitionId,
+          dataNodeId);
+    } else {
+      LOGGER.error(
+          "From {}, received server error code {} for request to set enable state {} for controlling BlobStore for {}",
+          dataNodeId, errorCode, enable, partitionId);
     }
   }
 
@@ -628,6 +675,30 @@ public class ServerAdminTool implements Closeable {
         new AdminRequest(AdminRequestOrResponseType.ReplicationControl, partitionId, correlationId.incrementAndGet(),
             CLIENT_ID);
     ReplicationControlAdminRequest controlRequest = new ReplicationControlAdminRequest(origins, enable, adminRequest);
+    ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
+    return adminResponse.getError();
+  }
+
+  /**
+   * Sends a {@link BlobStoreControlAdminRequest} to start or stop a store associated with {@code partitionId}
+   * on {@code dataNodeId}.
+   * @param dataNodeId the {@link DataNodeId} to contact.
+   * @param partitionId the {@link PartitionId} to start or stop.
+   * @param numReplicasCaughtUpPerPartition the minimum number of peers should catch up with partition if the store is
+   *                                        being stopped
+   * @param enable the enable (or disable) status required for BlobStore control.
+   * @return the {@link ServerErrorCode} that is returned.
+   * @throws IOException
+   * @throws TimeoutException
+   */
+  private ServerErrorCode controlBlobStore(DataNodeId dataNodeId, PartitionId partitionId,
+      short numReplicasCaughtUpPerPartition, boolean enable) throws IOException, TimeoutException {
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, correlationId.incrementAndGet(),
+            CLIENT_ID);
+    BlobStoreControlAdminRequest controlRequest =
+        new BlobStoreControlAdminRequest(numReplicasCaughtUpPerPartition, enable, adminRequest);
     ByteBuffer responseBytes = sendRequestGetResponse(dataNodeId, controlRequest);
     AdminResponse adminResponse = AdminResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseBytes)));
     return adminResponse.getError();

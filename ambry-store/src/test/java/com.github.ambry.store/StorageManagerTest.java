@@ -123,7 +123,8 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
-    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
+    MockPartitionId invalidPartition =
+        new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
@@ -164,7 +165,7 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
-    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
+    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     PartitionId id = null;
@@ -201,7 +202,7 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
-    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
+    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     PartitionId id = null;
@@ -226,7 +227,7 @@ public class StorageManagerTest {
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
-    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, dataNodes, 0);
+    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, dataNodes, 0);
     List<? extends ReplicaId> invalidPartitionReplicas = invalidPartition.getReplicaIds();
     StorageManager storageManager = createStorageManager(replicas, metricRegistry);
     storageManager.start();
@@ -404,7 +405,7 @@ public class StorageManagerTest {
         getCounterValue(counters, DiskSpaceAllocator.class.getName(), "DiskSpaceAllocatorInitFailureCount"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "TotalStoreStartFailures"));
     assertEquals(0, getCounterValue(counters, DiskManager.class.getName(), "DiskMountPathFailures"));
-    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, Collections.<MockDataNodeId>emptyList(), 0);
+    MockPartitionId invalidPartition = new MockPartitionId(Long.MAX_VALUE, MockClusterMap.DEFAULT_PARTITION_CLASS, Collections.<MockDataNodeId>emptyList(), 0);
     assertNull("Should not have found a store for an invalid partition.", storageManager.getStore(invalidPartition));
     assertEquals("Compaction thread count is incorrect", dataNode.getMountPaths().size(),
         TestUtils.numThreadsByThisName(CompactionManager.THREAD_NAME_PREFIX));
@@ -508,7 +509,7 @@ public class StorageManagerTest {
     properties.put("disk.manager.enable.segment.pooling", "true");
     properties.put("store.compaction.triggers", "Periodic,Admin");
     if (segmentedLog) {
-      long replicaCapacity = clusterMap.getAllPartitionIds().get(0).getReplicaIds().get(0).getCapacityInBytes();
+      long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
     }
     VerifiableProperties vProps = new VerifiableProperties(properties);

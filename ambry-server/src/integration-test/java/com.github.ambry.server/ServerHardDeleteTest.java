@@ -92,6 +92,7 @@ public class ServerHardDeleteTest {
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
     props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
     VerifiableProperties propverify = new VerifiableProperties(props);
     server = new AmbryServer(propverify, mockClusterAgentsFactory, notificationSystem, time);
     server.startup();
@@ -99,8 +100,12 @@ public class ServerHardDeleteTest {
 
   @After
   public void cleanup() throws IOException {
-    server.shutdown();
-    mockClusterMap.cleanup();
+    if (server != null) {
+      server.shutdown();
+    }
+    if (mockClusterMap != null) {
+      mockClusterMap.cleanup();
+    }
   }
 
   /**
@@ -260,7 +265,7 @@ public class ServerHardDeleteTest {
     properties.add(new BlobProperties(31878, "serviceid1", Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), true));
 
-    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds();
+    List<PartitionId> partitionIds = mockClusterMap.getWritablePartitionIds(null);
     PartitionId chosenPartition = partitionIds.get(0);
     blobIdList = new ArrayList<>(9);
     for (int i = 0; i < 9; i++) {

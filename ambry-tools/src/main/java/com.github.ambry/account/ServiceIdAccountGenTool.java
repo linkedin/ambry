@@ -23,6 +23,7 @@ import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.NonOptionArgumentSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -64,7 +65,9 @@ public class ServiceIdAccountGenTool {
       parser.printHelpOn(System.out);
       System.exit(0);
     }
-    ToolUtils.ensureOrExit(Arrays.asList(accountJsonFilePathOpt, firstAccountIdOpt, serviceIdsArg), options, parser);
+    ToolUtils.ensureOrExit(
+        Arrays.asList((OptionSpec) accountJsonFilePathOpt, (OptionSpec) firstAccountIdOpt, (OptionSpec) serviceIdsArg),
+        options, parser);
     generateAccounts((List<String>) options.nonOptionArguments(), options.valueOf(accountJsonFilePathOpt),
         options.valueOf(firstAccountIdOpt));
   }

@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Queue;
 import java.util.Random;
 import org.junit.After;
@@ -67,6 +68,7 @@ public class RouterServerPlaintextTest {
   @BeforeClass
   public static void initializeTests() throws Exception {
     MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
+    Properties properties = getRouterProperties("DC1");
     plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
     plaintextCluster.startServers();
     MockClusterMap routerClusterMap = plaintextCluster.getClusterMap();
@@ -74,7 +76,7 @@ public class RouterServerPlaintextTest {
     // get a different registry. But at this point all server nodes have been initialized, and we want the router and
     // its components, which are going to be created, to use the same registry.
     routerClusterMap.createAndSetPermanentMetricRegistry();
-    testFramework = new RouterServerTestFramework(getRouterProperties("DC1"), routerClusterMap, notificationSystem);
+    testFramework = new RouterServerTestFramework(properties, routerClusterMap, notificationSystem);
     routerMetricRegistry = routerClusterMap.getMetricRegistry();
   }
 

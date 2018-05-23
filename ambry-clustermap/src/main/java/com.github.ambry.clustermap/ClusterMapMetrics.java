@@ -244,7 +244,7 @@ class ClusterMapMetrics {
 
   private boolean isMajorityOfReplicasDown() {
     boolean isMajorityReplicasDown = false;
-    for (PartitionId partition : partitionLayout.getPartitions()) {
+    for (PartitionId partition : partitionLayout.getPartitions(null)) {
       List<? extends ReplicaId> replicas = partition.getReplicaIds();
       int replicaCount = replicas.size();
       int downReplicas = 0;

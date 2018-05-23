@@ -308,4 +308,55 @@ public class MessageFormatInputStreamTest {
       Assert.assertEquals("DeletionTime mismatch", deletionTimeMs, updateRecord.getUpdateTimeInMs());
     }
   }
+
+  /**
+   * Tests for {@link TtlUpdateMessageFormatInputStream} in different versions.
+   */
+  @Test
+  public void messageFormatTtlUpdateRecordTest() throws IOException, MessageFormatException {
+    StoreKey key = new MockId("id1");
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long ttlUpdateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    MessageFormatInputStream messageFormatStream =
+        new TtlUpdateMessageFormatInputStream(key, accountId, containerId, ttlUpdateTimeMs);
+    int ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+    Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
+
+    // check header
+    byte[] headerOutput = new byte[headerSize];
+    Assert.assertEquals("Did not read all bytes", headerSize, messageFormatStream.read(headerOutput));
+    ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
+    Assert.assertEquals(MessageFormatRecord.headerVersionToUse, headerBuf.getShort());
+    Assert.assertEquals(ttlUpdateRecordSize, headerBuf.getLong());
+    // read encryption key relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    // blob properties relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    // update record relative offset. This is the only relative offset with a valid value.
+    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
+    // user metadata relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    // blob relative offset
+    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+    Crc32 crc = new Crc32();
+    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
+    Assert.assertEquals(crc.getValue(), headerBuf.getLong());
+
+    // verify handle
+    byte[] handleOutput = new byte[key.sizeInBytes()];
+    Assert.assertEquals("Did not read all bytes", handleOutput.length, messageFormatStream.read(handleOutput));
+    Assert.assertArrayEquals(handleOutput, key.toBytes());
+
+    // check ttl update record
+    UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
+    Assert.assertEquals("Type of update record not TTL_UPDATE", UpdateRecord.Type.TTL_UPDATE, updateRecord.getType());
+    Assert.assertNotNull("TtlUpdateSubRecord should not be null", updateRecord.getTtlUpdateSubRecord());
+    Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
+    Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
+    Assert.assertEquals("UpdateTime mismatch", ttlUpdateTimeMs, updateRecord.getUpdateTimeInMs());
+    Assert.assertEquals("Updated expiry time mismatch", Utils.Infinite_Time,
+        updateRecord.getTtlUpdateSubRecord().getUpdatedExpiryTimeMs());
+  }
 }

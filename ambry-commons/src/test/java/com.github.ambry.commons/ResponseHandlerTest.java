@@ -59,12 +59,12 @@ public class ResponseHandlerTest {
     }
 
     @Override
-    public List<PartitionId> getWritablePartitionIds() {
+    public List<PartitionId> getWritablePartitionIds(String partitionClass) {
       return null;
     }
 
     @Override
-    public List<PartitionId> getAllPartitionIds() {
+    public List<PartitionId> getAllPartitionIds(String partitionClass) {
       return null;
     }
 
@@ -76,6 +76,11 @@ public class ResponseHandlerTest {
     @Override
     public byte getLocalDatacenterId() {
       return UNKNOWN_DATACENTER_ID;
+    }
+
+    @Override
+    public String getDatacenterName(byte id) {
+      return null;
     }
 
     @Override

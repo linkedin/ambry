@@ -359,7 +359,7 @@ public class MockHelixAdmin implements HelixAdmin {
 
   @Override
   public void setResourceIdealState(String clusterName, String resourceName, IdealState idealState) {
-    throw new IllegalStateException("Not implemented");
+    addResource(clusterName, resourceName, idealState);
   }
 
   @Override

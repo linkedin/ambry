@@ -32,15 +32,21 @@ public interface ClusterMap extends AutoCloseable {
   PartitionId getPartitionIdFromStream(InputStream stream) throws IOException;
 
   /**
-   * Gets a list of partitions that are available for writes.
+   * Gets a list of partitions that are available for writes. Gets a mutable shallow copy of the list of the partitions
+   * that are available for writes
+   * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
+   * @return a list of all writable partitions belonging to the partition class (or all writable partitions if
+   * {@code partitionClass} is {@code null})
    */
-  List<? extends PartitionId> getWritablePartitionIds();
+  List<? extends PartitionId> getWritablePartitionIds(String partitionClass);
 
   /**
-   * Gets a list of all partitions in the cluster
-   * @return a list of all partitions in the cluster
+   * Gets a list of all partitions in the cluster.  Gets a mutable shallow copy of the list of all partitions.
+   * @param partitionClass the partition class whose partitions are required. Can be {@code null}
+   * @return a list of all partitions belonging to the partition class (or all partitions if {@code partitionClass} is
+   * {@code null})
    */
-  List<? extends PartitionId> getAllPartitionIds();
+  List<? extends PartitionId> getAllPartitionIds(String partitionClass);
 
   /**
    * Checks if datacenter name corresponds to some datacenter in this cluster map's hardware layout.
@@ -55,6 +61,14 @@ public interface ClusterMap extends AutoCloseable {
    * @return The id of the local datacenter.
    */
   byte getLocalDatacenterId();
+
+  /**
+   * Gets the name of the datacenter from the ID.
+   *
+   * @param id the ID of the datacenter
+   * @return name of the datacenter from the ID or null if not found.
+   */
+  String getDatacenterName(byte id);
 
   /**
    * Gets a specific DataNodeId by its hostname and port.

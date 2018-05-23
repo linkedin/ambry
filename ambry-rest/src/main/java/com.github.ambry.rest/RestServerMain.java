@@ -53,12 +53,10 @@ public class RestServerMain {
       logger.info("Bootstrapping RestServer");
       restServer = new RestServer(verifiableProperties, clusterMap, new LoggingNotificationSystem(), sslFactory);
       // attach shutdown handler to catch control-c
-      Runtime.getRuntime().addShutdownHook(new Thread() {
-        public void run() {
-          logger.info("Received shutdown signal. Shutting down RestServer");
-          restServer.shutdown();
-        }
-      });
+      Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        logger.info("Received shutdown signal. Shutting down RestServer");
+        restServer.shutdown();
+      }));
       restServer.start();
       restServer.awaitShutdown();
     } catch (Exception e) {
@@ -80,11 +78,10 @@ public class RestServerMain {
    * @throws GeneralSecurityException
    * @throws IOException
    */
-  private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties)
-      throws GeneralSecurityException, IOException {
+  private static SSLFactory getSSLFactoryIfRequired(VerifiableProperties verifiableProperties) throws Exception {
     boolean sslRequired = new NettyConfig(verifiableProperties).nettyServerEnableSSL
         || new ClusterMapConfig(verifiableProperties).clusterMapSslEnabledDatacenters.length() > 0;
-    return sslRequired ? new SSLFactory(new SSLConfig(verifiableProperties)) : null;
+    return sslRequired ? SSLFactory.getNewInstance(new SSLConfig(verifiableProperties)) : null;
   }
 }
 

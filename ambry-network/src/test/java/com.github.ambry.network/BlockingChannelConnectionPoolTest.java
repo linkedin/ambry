@@ -77,7 +77,7 @@ public class BlockingChannelConnectionPoolTest {
     props.setProperty("clustermap.datacenter.name", "dc1");
     props.setProperty("clustermap.host.name", "localhost");
     plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    sslFactory = new SSLFactory(sslConfig);
+    sslFactory = SSLFactory.getNewInstance(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }

@@ -18,6 +18,8 @@ package com.github.ambry.config;
  */
 public class ClusterMapConfig {
 
+  private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
+
   /**
    * The factory class used to get the resource state policies.
    */
@@ -129,6 +131,13 @@ public class ClusterMapConfig {
   @Default("true")
   public final boolean clusterMapResolveHostnames;
 
+  /**
+   * The partition class to assign to a partition if one is not supplied
+   */
+  @Config("clustermap.default.partition.class")
+  @Default(MAX_REPLICAS_ALL_DATACENTERS)
+  public final String clusterMapDefaultPartitionClass;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -151,5 +160,7 @@ public class ClusterMapConfig {
     clusterMapHostName = verifiableProperties.getString("clustermap.host.name");
     clusterMapPort = verifiableProperties.getInteger("clustermap.port", null);
     clusterMapResolveHostnames = verifiableProperties.getBoolean("clustermap.resolve.hostnames", true);
+    clusterMapDefaultPartitionClass =
+        verifiableProperties.getString("clustermap.default.partition.class", MAX_REPLICAS_ALL_DATACENTERS);
   }
 }

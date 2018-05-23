@@ -111,7 +111,7 @@ class DeleteManager {
       routerMetrics.deleteBlobNotOriginateLocalOperationRate.mark();
     }
     DeleteOperation deleteOperation =
-        new DeleteOperation(routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
+        new DeleteOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
             futureResult);
     deleteOperations.add(deleteOperation);
   }

@@ -13,7 +13,9 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
@@ -37,6 +39,8 @@ import java.util.Map;
 import java.util.Properties;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.SSLSocketFactory;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
@@ -56,7 +60,8 @@ import org.junit.Assert;
 public class TestSSLUtils {
   private final static String SSL_CONTEXT_PROTOCOL = "TLS";
   private final static String SSL_CONTEXT_PROVIDER = "SunJSSE";
-  private final static String SSL_ENABLED_PROTOCOLS = "TLSv1.2";
+  private final static String TLS_V1_2_PROTOCOL = "TLSv1.2";
+  private static final String SSL_V2_HELLO_PROTOCOL = "SSLv2Hello";
   private final static String ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
   private final static String SSL_CIPHER_SUITES = "TLS_RSA_WITH_AES_128_CBC_SHA";
   private final static String TRUSTSTORE_PASSWORD = "UnitTestTrustStorePassword";
@@ -160,7 +165,7 @@ public class TestSSLUtils {
 
   public static void addSSLProperties(Properties props, String sslEnabledDatacenters, SSLFactory.Mode mode,
       File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
-    Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
+    Map<String, X509Certificate> certs = new HashMap<>();
     File keyStoreFile;
     String password;
 
@@ -184,7 +189,7 @@ public class TestSSLUtils {
 
     props.put("ssl.context.protocol", SSL_CONTEXT_PROTOCOL);
     props.put("ssl.context.provider", SSL_CONTEXT_PROVIDER);
-    props.put("ssl.enabled.protocols", SSL_ENABLED_PROTOCOLS);
+    props.put("ssl.enabled.protocols", TLS_V1_2_PROTOCOL);
     props.put("ssl.endpoint.identification.algorithm", ENDPOINT_IDENTIFICATION_ALGORITHM);
     props.put("ssl.client.authentication", CLIENT_AUTHENTICATION);
     props.put("ssl.keymanager.algorithm", KEYMANAGER_ALGORITHM);
@@ -229,8 +234,19 @@ public class TestSSLUtils {
 
     // SSLEngine verify
     String[] enabledProtocols = sslEngine.getEnabledProtocols();
-    Assert.assertEquals(enabledProtocols.length, 1);
-    Assert.assertEquals(enabledProtocols[0], SSL_ENABLED_PROTOCOLS);
+    if (enabledProtocols.length == 2) {
+      // Apparently the Netty OpenSslEngine has no way of disabling the SSLv2Hello protocol.
+      // This is the relevant code from ReferenceCountedOpenSslEngine.getEnabledProtocols():
+      // """
+      // // Seems like there is no way to explicit disable SSLv2Hello in openssl so it is always enabled
+      // enabled.add(PROTOCOL_SSL_V2_HELLO);
+      // """
+      Assert.assertArrayEquals("enabledProtocols does not match expected",
+          new String[]{SSL_V2_HELLO_PROTOCOL, TLS_V1_2_PROTOCOL}, enabledProtocols);
+    } else {
+      Assert.assertArrayEquals("enabledProtocols does not match expected", new String[]{TLS_V1_2_PROTOCOL},
+          enabledProtocols);
+    }
     String[] enabledCipherSuite = sslEngine.getEnabledCipherSuites();
     Assert.assertEquals(enabledCipherSuite.length, 1);
     Assert.assertEquals(enabledCipherSuite[0], SSL_CIPHER_SUITES);
@@ -245,5 +261,38 @@ public class TestSSLUtils {
       Assert.assertEquals(sslEngine.getNeedClientAuth(), true);
       Assert.assertEquals(sslEngine.getUseClientMode(), false);
     }
+  }
+
+  /**
+   * Test instantiating an implementation of {@link SSLFactory} using reflection and verify the {@link SSLEngine}
+   * configuration.
+   * @param factoryClassName the full class name for the {@link SSLFactory} to instantiate.
+   * @throws Exception
+   */
+  public static void testSSLFactoryImpl(String factoryClassName) throws Exception {
+    //server
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+    SSLConfig serverSslConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server"));
+    SSLFactory sslFactory = Utils.getObj(factoryClassName, serverSslConfig);
+    SSLContext sslContext = sslFactory.getSSLContext();
+    SSLSocketFactory socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
+    SSLServerSocketFactory serverSocketFactory = sslContext.getServerSocketFactory();
+    Assert.assertNotNull(serverSocketFactory);
+    SSLEngine serverSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.SERVER);
+    TestSSLUtils.verifySSLConfig(sslContext, serverSideSSLEngine, false);
+
+    //client
+    SSLConfig clientSSLConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client"));
+    sslFactory = Utils.getObj(factoryClassName, clientSSLConfig);
+    sslContext = sslFactory.getSSLContext();
+    socketFactory = sslContext.getSocketFactory();
+    Assert.assertNotNull(socketFactory);
+    serverSocketFactory = sslContext.getServerSocketFactory();
+    Assert.assertNotNull(serverSocketFactory);
+    SSLEngine clientSideSSLEngine = sslFactory.createSSLEngine("localhost", 9095, SSLFactory.Mode.CLIENT);
+    TestSSLUtils.verifySSLConfig(sslContext, clientSideSSLEngine, true);
   }
 }

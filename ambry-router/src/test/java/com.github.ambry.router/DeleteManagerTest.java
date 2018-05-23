@@ -100,8 +100,8 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        mockTime);
-    List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds();
+        mockTime, null);
+    List<PartitionId> mockPartitions = clusterMap.getWritablePartitionIds(null);
     partition = mockPartitions.get(ThreadLocalRandom.current().nextInt(mockPartitions.size()));
     blobId =
         new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
@@ -226,7 +226,7 @@ public class DeleteManagerTest {
   public void testBlobNotFoundWithLastResponseNotBlobNotFound() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[8] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.IO_Error;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
         deleteErrorCodeChecker);
   }
@@ -299,7 +299,7 @@ public class DeleteManagerTest {
     router = new NonBlockingRouter(new RouterConfig(vProps), new NonBlockingRouterMetrics(clusterMap),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
-        mockTime);
+        mockTime, null);
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;

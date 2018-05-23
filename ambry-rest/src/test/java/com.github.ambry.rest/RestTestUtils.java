@@ -29,7 +29,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
 import org.json.JSONObject;
 
 
@@ -87,9 +86,9 @@ public class RestTestUtils {
     try {
       File trustStoreFile = File.createTempFile("truststore", ".jks");
       trustStoreFile.deleteOnExit();
-      return new SSLFactory(
+      return SSLFactory.getNewInstance(
           new SSLConfig(TestSSLUtils.createSslProps("", SSLFactory.Mode.SERVER, trustStoreFile, "frontend")));
-    } catch (IOException | GeneralSecurityException e) {
+    } catch (Exception e) {
       throw new IllegalStateException(e);
     }
   }

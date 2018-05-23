@@ -80,6 +80,7 @@ class PutOperation {
   private final NotificationSystem notificationSystem;
   private final BlobProperties passedInBlobProperties;
   private final byte[] userMetadata;
+  private final String partitionClass;
   private final ReadableStreamChannel channel;
   private final ByteBufferAsyncWritableChannel chunkFillerChannel;
   private final FutureResult<String> futureResult;
@@ -148,7 +149,7 @@ class PutOperation {
    * @param clusterMap the {@link ClusterMap} of the cluster
    * @param responseHandler the {@link ResponseHandler} responsible for failure detection.
    * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
-   *@param userMetadata the userMetadata associated with the put operation.
+   * @param userMetadata the userMetadata associated with the put operation.
    * @param channel the {@link ReadableStreamChannel} containing the blob data.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
@@ -158,6 +159,7 @@ class PutOperation {
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param blobProperties the BlobProperties associated with the put operation.
+   * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
@@ -165,7 +167,7 @@ class PutOperation {
       ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      BlobProperties blobProperties) throws RouterException {
+      BlobProperties blobProperties, String partitionClass) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -174,6 +176,7 @@ class PutOperation {
     this.notificationSystem = notificationSystem;
     this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
+    this.partitionClass = partitionClass;
     this.channel = channel;
     this.futureResult = futureResult;
     this.callback = callback;
@@ -629,8 +632,8 @@ class PutOperation {
       } else {
         Integer currentOperationExceptionLevel = null;
         if (operationException.get() instanceof RouterException) {
-          currentOperationExceptionLevel = getPrecedenceLevel(
-              ((RouterException) operationException.get()).getErrorCode());
+          currentOperationExceptionLevel =
+              getPrecedenceLevel(((RouterException) operationException.get()).getErrorCode());
         } else {
           currentOperationExceptionLevel = getPrecedenceLevel(RouterErrorCode.UnexpectedInternalError);
         }
@@ -880,7 +883,7 @@ class PutOperation {
         if (partitionId != null) {
           attemptedPartitionIds.add(partitionId);
         }
-        partitionId = getPartitionForPut(attemptedPartitionIds);
+        partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
         chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted());
@@ -889,15 +892,16 @@ class PutOperation {
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted());
-        operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false,
-            routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
+        operationTracker =
+            new SimpleOperationTracker(routerConfig.routerDatacenterName, partitionId, false, null, true,
+                Integer.MAX_VALUE, routerConfig.routerPutSuccessTarget, routerConfig.routerPutRequestParallelism);
         correlationIdToChunkPutRequestInfo.clear();
         state = ChunkState.Ready;
       } catch (RouterException e) {
         setOperationExceptionAndComplete(e);
       } catch (Exception e) {
-        setOperationExceptionAndComplete(new RouterException("Operation tracker could not be initialized", e,
-            RouterErrorCode.UnexpectedInternalError));
+        setOperationExceptionAndComplete(
+            new RouterException("Prepare for sending failed", e, RouterErrorCode.UnexpectedInternalError));
       }
     }
 
@@ -1109,18 +1113,25 @@ class PutOperation {
 
     /**
      * Choose a random {@link PartitionId} for putting the current chunk and return it.
+     * @param partitionClass the partition class to choose partitions from.
      * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
      * @return the chosen {@link PartitionId}
      * @throws RouterException
      */
-    protected PartitionId getPartitionForPut(List<PartitionId> partitionIdsToExclude) throws RouterException {
+    protected PartitionId getPartitionForPut(String partitionClass, List<? extends PartitionId> partitionIdsToExclude)
+        throws RouterException {
       // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
-      List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
+      List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(partitionClass);
       partitions.removeAll(partitionIdsToExclude);
       if (partitions.isEmpty()) {
         throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
       }
-      return partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
+      PartitionId selected = partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
+      if (partitionClass != null && !partitionClass.equals(selected.getPartitionClass())) {
+        throw new IllegalStateException(
+            "Selected partition's class [" + selected.getPartitionClass() + "] is not as required: " + partitionClass);
+      }
+      return selected;
     }
 
     /**

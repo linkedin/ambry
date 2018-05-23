@@ -99,8 +99,9 @@ public class StoreCopier implements Closeable {
      * Transforms the input {@link Message} into an output {@link Message}.
      * @param message the input {@link Message} to change.
      * @return the output {@link Message}.
+     * @throws Exception if transform encounters an exception when transforming a message
      */
-    Message transform(Message message);
+    Message transform(Message message) throws Exception;
   }
 
   /**
@@ -241,10 +242,9 @@ public class StoreCopier implements Closeable {
    *                   in the return value will be {@code true}.
    * @return a {@link Pair} of the {@link FindToken} until which data has been copied and a {@link Boolean} indicating
    * whether the source had problems that were skipped over - like duplicates ({@code true} indicates that there were).
-   * @throws IOException if there is any I/O error while copying.
-   * @throws StoreException if there is any exception dealing with the stores.
+   * @throws Exception if there is any exception during processing
    */
-  public Pair<FindToken, Boolean> copy(FindToken startToken) throws IOException, StoreException {
+  public Pair<FindToken, Boolean> copy(FindToken startToken) throws Exception {
     boolean sourceHasProblems = false;
     FindToken lastToken;
     FindToken token = startToken;

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import java.util.Objects;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -61,7 +62,8 @@ public class Container {
   static final String ENCRYPTED_KEY = "encrypted";
   static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
   static final String CACHEABLE_KEY = "cacheable";
-  static final String MEDIA_SCAN_DISABLED = "mediaScanDisabled";
+  static final String MEDIA_SCAN_DISABLED_KEY = "mediaScanDisabled";
+  static final String REPLICATION_POLICY_KEY = "replicationPolicy";
   static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
@@ -237,7 +239,7 @@ public class Container {
       new Container(UNKNOWN_CONTAINER_ID, UNKNOWN_CONTAINER_NAME, UNKNOWN_CONTAINER_STATUS,
           UNKNOWN_CONTAINER_DESCRIPTION, UNKNOWN_CONTAINER_ENCRYPTED_SETTING,
           UNKNOWN_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, UNKNOWN_CONTAINER_CACHEABLE_SETTING,
-          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
+          UNKNOWN_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -250,7 +252,7 @@ public class Container {
       new Container(DEFAULT_PUBLIC_CONTAINER_ID, DEFAULT_PUBLIC_CONTAINER_NAME, DEFAULT_PUBLIC_CONTAINER_STATUS,
           DEFAULT_PUBLIC_CONTAINER_DESCRIPTION, DEFAULT_PUBLIC_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PUBLIC_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PUBLIC_CONTAINER_CACHEABLE_SETTING,
-          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PUBLIC_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -263,7 +265,7 @@ public class Container {
       new Container(DEFAULT_PRIVATE_CONTAINER_ID, DEFAULT_PRIVATE_CONTAINER_NAME, DEFAULT_PRIVATE_CONTAINER_STATUS,
           DEFAULT_PRIVATE_CONTAINER_DESCRIPTION, DEFAULT_PRIVATE_CONTAINER_ENCRYPTED_SETTING,
           DEFAULT_PRIVATE_CONTAINER_PREVIOUSLY_ENCRYPTED_SETTING, DEFAULT_PRIVATE_CONTAINER_CACHEABLE_SETTING,
-          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
+          DEFAULT_PRIVATE_CONTAINER_MEDIA_SCAN_DISABLED_SETTING, null, DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID);
 
   // container field variables
   private final short id;
@@ -274,6 +276,7 @@ public class Container {
   private final boolean previouslyEncrypted;
   private final boolean cacheable;
   private final boolean mediaScanDisabled;
+  private final String replicationPolicy;
   private final short parentAccountId;
 
   /**
@@ -297,6 +300,7 @@ public class Container {
         previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         cacheable = !metadata.getBoolean(IS_PRIVATE_KEY);
         mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+        replicationPolicy = null;
         break;
       case JSON_VERSION_2:
         id = (short) metadata.getInt(CONTAINER_ID_KEY);
@@ -306,7 +310,8 @@ public class Container {
         encrypted = metadata.optBoolean(ENCRYPTED_KEY, ENCRYPTED_DEFAULT_VALUE);
         previouslyEncrypted = metadata.optBoolean(PREVIOUSLY_ENCRYPTED_KEY, PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE);
         cacheable = metadata.optBoolean(CACHEABLE_KEY, CACHEABLE_DEFAULT_VALUE);
-        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
+        mediaScanDisabled = metadata.optBoolean(MEDIA_SCAN_DISABLED_KEY, MEDIA_SCAN_DISABLED_DEFAULT_VALUE);
+        replicationPolicy = metadata.optString(REPLICATION_POLICY_KEY, null);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + metadataVersion);
@@ -326,10 +331,12 @@ public class Container {
    * @param cacheable {@code true} if cache control headers should be set to allow CDNs and browsers to cache blobs in
    *                  this container.
    * @param mediaScanDisabled {@code true} if media scanning for content in this container should be disabled.
+   * @param replicationPolicy the replication policy to use. If {@code null}, the cluster's default will be used.
    * @param parentAccountId The id of the parent {@link Account} of this container.
    */
   Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
-      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, short parentAccountId) {
+      boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
+      short parentAccountId) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -342,11 +349,13 @@ public class Container {
         this.encrypted = ENCRYPTED_DEFAULT_VALUE;
         this.previouslyEncrypted = PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE;
         this.mediaScanDisabled = MEDIA_SCAN_DISABLED_DEFAULT_VALUE;
+        this.replicationPolicy = null;
         break;
       case JSON_VERSION_2:
         this.encrypted = encrypted;
         this.previouslyEncrypted = previouslyEncrypted;
         this.mediaScanDisabled = mediaScanDisabled;
+        this.replicationPolicy = replicationPolicy;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -407,7 +416,8 @@ public class Container {
         metadata.put(ENCRYPTED_KEY, encrypted);
         metadata.put(PREVIOUSLY_ENCRYPTED_KEY, previouslyEncrypted);
         metadata.put(CACHEABLE_KEY, cacheable);
-        metadata.put(MEDIA_SCAN_DISABLED, mediaScanDisabled);
+        metadata.put(MEDIA_SCAN_DISABLED_KEY, mediaScanDisabled);
+        metadata.putOpt(REPLICATION_POLICY_KEY, replicationPolicy);
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -478,6 +488,13 @@ public class Container {
   }
 
   /**
+   * @return the replication policy desired by the container. Can be {@code null} if the container has no preference.
+   */
+  public String getReplicationPolicy() {
+    return replicationPolicy;
+  }
+
+  /**
    * Gets the if of the {@link Account} that owns this container.
    * @return The id of the parent {@link Account} of this container.
    */
@@ -503,41 +520,17 @@ public class Container {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-
     Container container = (Container) o;
-
-    if (id != container.id) {
-      return false;
-    }
-    if (encrypted != container.encrypted) {
-      return false;
-    }
-    if (previouslyEncrypted != container.previouslyEncrypted) {
-      return false;
-    }
-    if (cacheable != container.cacheable) {
-      return false;
-    }
-    if (mediaScanDisabled != container.mediaScanDisabled) {
-      return false;
-    }
-    if (parentAccountId != container.parentAccountId) {
-      return false;
-    }
-    if (!name.equals(container.name)) {
-      return false;
-    }
-    if (status != container.status) {
-      return false;
-    }
-    return description != null ? description.equals(container.description) : container.description == null;
+    return id == container.id && encrypted == container.encrypted
+        && previouslyEncrypted == container.previouslyEncrypted && cacheable == container.cacheable
+        && mediaScanDisabled == container.mediaScanDisabled && parentAccountId == container.parentAccountId
+        && Objects.equals(name, container.name) && status == container.status && Objects.equals(description,
+        container.description) && Objects.equals(replicationPolicy, container.replicationPolicy);
   }
 
   @Override
   public int hashCode() {
-    int result = (int) id;
-    result = 31 * result + (int) parentAccountId;
-    return result;
+    return Objects.hash(id, parentAccountId);
   }
 
   /**

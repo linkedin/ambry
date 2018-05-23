@@ -655,7 +655,7 @@ class PersistentIndex {
       throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
     } else {
       readOptions = new BlobReadOptions(log, value.getOffset(),
-          new MessageInfo(id, value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), value.getExpiresAtMs(),
+          new MessageInfo(id, value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), false, value.getExpiresAtMs(),
               journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs()));
     }
     return readOptions;
@@ -797,7 +797,7 @@ class PersistentIndex {
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
                     IndexEntryType.ANY, indexSegments);
             messageEntries.add(
-                new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+                new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), false,
                     value.getExpiresAtMs(), value.getAccountId(), value.getContainerId(),
                     value.getOperationTimeInMs()));
             currentTotalSizeOfEntries += value.getSize();
@@ -1101,7 +1101,7 @@ class PersistentIndex {
               findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot), IndexEntryType.ANY,
                   indexSegments);
           messageEntries.add(
-              new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+              new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), false,
                   value.getExpiresAtMs(), value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs()));
           currentTotalSizeOfEntries.addAndGet(value.getSize());
           if (!findEntriesCondition.proceed(currentTotalSizeOfEntries.get(),
@@ -1191,7 +1191,7 @@ class PersistentIndex {
         // ok to use most recent ref to filter out deleted records.
         IndexValue indexValue = findKey(messageInfo.getStoreKey());
         messageInfo = new MessageInfo(messageInfo.getStoreKey(), messageInfo.getSize(),
-            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), messageInfo.getExpirationTimeInMs(),
+            indexValue.isFlagSet(IndexValue.Flags.Delete_Index), false, messageInfo.getExpirationTimeInMs(),
             indexValue.getAccountId(), indexValue.getContainerId(), indexValue.getOperationTimeInMs());
         messageEntriesIterator.set(messageInfo);
       }
@@ -1356,7 +1356,7 @@ class PersistentIndex {
                     IndexEntryType.ANY, indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               messageEntries.add(
-                  new MessageInfo(entry.getKey(), value.getSize(), true, value.getExpiresAtMs(), value.getAccountId(),
+                  new MessageInfo(entry.getKey(), value.getSize(), true, false, value.getExpiresAtMs(), value.getAccountId(),
                       value.getContainerId(), value.getOperationTimeInMs()));
             }
             offsetEnd = entry.getOffset();

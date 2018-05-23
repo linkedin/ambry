@@ -409,7 +409,7 @@ class InMemoryBlobPoster implements Runnable {
    * @throws RouterException
    */
   private PartitionId getPartitionForPut() throws RouterException {
-    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds();
+    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(null);
     if (partitions.isEmpty()) {
       throw new RouterException("No writable partitions available.", RouterErrorCode.AmbryUnavailable);
     }

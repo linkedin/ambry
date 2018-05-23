@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
@@ -81,8 +82,9 @@ class DeleteOperation {
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
    */
-  DeleteOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ResponseHandler responsehandler,
-      BlobId blobId, String serviceId, Callback<Void> callback, Time time, FutureResult<Void> futureResult) {
+  DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
+      FutureResult<Void> futureResult) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -94,8 +96,12 @@ class DeleteOperation {
     this.time = time;
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new HashMap<Integer, DeleteRequestInfo>();
-    this.operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true,
-        routerConfig.routerDeleteSuccessTarget, routerConfig.routerDeleteRequestParallelism, false);
+    byte blobDcId = blobId.getDatacenterId();
+    String originatingDcName = clusterMap.getDatacenterName(blobDcId);
+    this.operationTracker =
+        new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(), true, originatingDcName,
+            true, Integer.MAX_VALUE, routerConfig.routerDeleteSuccessTarget,
+            routerConfig.routerDeleteRequestParallelism, false);
   }
 
   /**
