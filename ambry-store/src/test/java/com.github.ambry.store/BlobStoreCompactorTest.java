@@ -2072,5 +2072,10 @@ public class BlobStoreCompactorTest {
       result = 31 * result + entryType.hashCode();
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "[id: " + this.id + " entryType: " + this.entryType + "]";
+    }
   }
 }
