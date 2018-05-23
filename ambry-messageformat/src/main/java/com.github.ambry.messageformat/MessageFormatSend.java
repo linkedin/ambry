@@ -20,6 +20,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
+import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -110,38 +111,29 @@ public class MessageFormatSend implements Send {
             readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
           }
         } else {
-          // read header version
           long startTime = SystemTime.getInstance().milliseconds();
-          ByteBuffer headerVersion = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
-          readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
-              Version_Field_Size_In_Bytes);
-          logger.trace("Calculate offsets, read header version time: {}",
-              SystemTime.getInstance().milliseconds() - startTime);
-
-          headerVersion.flip();
+          BufferedInputStream bufferedInputStream =
+              new BufferedInputStream(new MessageReadSetIndexInputStream(readSet, i, 0), 1024);
+          byte[] headerVersionBytes = new byte[Version_Field_Size_In_Bytes];
+          bufferedInputStream.read(headerVersionBytes, 0, Version_Field_Size_In_Bytes);
+          ByteBuffer headerVersion = ByteBuffer.wrap(headerVersionBytes);
           short version = headerVersion.getShort();
           if (!isValidHeaderVersion(version)) {
             throw new MessageFormatException(
                 "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(i),
                 MessageFormatErrorCodes.Unknown_Format_Version);
           }
-          ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
-          // read the header
-          startTime = SystemTime.getInstance().milliseconds();
-          headerVersion.clear();
-          header.putShort(headerVersion.getShort());
-          readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(header)), Version_Field_Size_In_Bytes,
-              header.capacity() - Version_Field_Size_In_Bytes);
-          logger.trace("Calculate offsets, read header time: {}", SystemTime.getInstance().milliseconds() - startTime);
-
-          startTime = SystemTime.getInstance().milliseconds();
-          header.flip();
+          byte[] headerBytes = new byte[getHeaderSizeForVersion(version)];
+          bufferedInputStream.read(headerBytes, Version_Field_Size_In_Bytes,
+              headerBytes.length - Version_Field_Size_In_Bytes);
+          ByteBuffer header = ByteBuffer.wrap(headerBytes);
+          header.putShort(version);
+          header.clear();
           MessageHeader_Format headerFormat = getMessageHeader(version, header);
           headerFormat.verifyHeader();
           int storeKeyRelativeOffset = header.capacity();
 
-          StoreKey storeKey = storeKeyFactory.getStoreKey(
-              new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, storeKeyRelativeOffset)));
+          StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(bufferedInputStream));
           if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
             throw new MessageFormatException(
                 "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
