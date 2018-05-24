@@ -725,6 +725,27 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Calculate the farthest index can be used for a bundle IO read based on startIndex and bundleReadBuffer capacity.
+   * @param srcIndexEntries all available index entries.
+   * @param startIndex the startIndex for a bundle read.
+   * @return the endIndex which can be used for a bundle read.
+   */
+  private int getBundleReadEndIndex(List<IndexEntry> srcIndexEntries, int startIndex) {
+    long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
+    int endIndex; // [startIndex, endIndex) for a bundle of read.
+    for (endIndex = startIndex; endIndex < srcIndexEntries.size(); endIndex++) {
+      long currentSize =
+          srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
+              .getValue()
+              .getSize() - startOffset;
+      if (currentSize > bundleReadBuffer.capacity()) {
+        break;
+      }
+    }
+    return endIndex - 1;
+  }
+
+  /**
    * Copies the given {@code srcIndexEntries} from the given log segment into the swap spaces.
    * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param srcIndexEntries the {@link IndexEntry}s to copy.
@@ -740,37 +761,33 @@ class BlobStoreCompactor {
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
-      ByteBuffer bufferToUse;
       int startIndex = 0;
       while (startIndex < srcIndexEntries.size()) {
-        // calculate how many records can be included for bundle read.
+        // try to do a bundle of read to reduce disk IO
+        ByteBuffer bufferToUse;
         long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
-        int endIndex; // [startIndex, endIndex) for a bundle of read.
+        int endIndex;
         if (bundleReadBuffer == null
             || srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
+          endIndex = startIndex;
           bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(startIndex).getValue().getSize());
-          endIndex = startIndex + 1;
         } else {
-          for (endIndex = startIndex; endIndex < srcIndexEntries.size(); endIndex++) {
-            long currentSize =
-                srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
-                    .getValue()
-                    .getSize() - startOffset;
-            if (currentSize > bundleReadBuffer.capacity()) {
-              break;
-            }
-          }
+          endIndex = getBundleReadEndIndex(srcIndexEntries, startIndex);
           bufferToUse = bundleReadBuffer;
-          bufferToUse.clear();
+          bufferToUse.position(0);
+          bufferToUse.limit((int) (
+              srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
+                  .getValue()
+                  .getSize() - startOffset));
         }
-        // do a bundle read.
-        fileChannel.transferTo(startOffset,
-            srcIndexEntries.get(endIndex - 1).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex - 1)
-                .getValue()
-                .getSize() - startOffset, Channels.newChannel(new ByteBufferOutputStream(bufferToUse)));
+        // do IO read
+        int bytesRead = fileChannel.read(bufferToUse, startOffset);
+        if (bytesRead != bufferToUse.limit()) {
+          logger.warn("fileChannel is reading more than expected: {}/{}", bufferToUse.limit(), bytesRead);
+        }
 
         // copy from buffer to tgtLog
-        for (int i = startIndex; i < endIndex; i++) {
+        for (int i = startIndex; i <= endIndex; i++) {
           IndexEntry srcIndexEntry = srcIndexEntries.get(i);
           IndexValue srcValue = srcIndexEntry.getValue();
           long usedCapacity = tgtIndex.getLogUsedCapacity();
@@ -823,9 +840,9 @@ class BlobStoreCompactor {
           }
         }
         if (!copiedAll) {
-          break;
+          break; // break while loop
         }
-        startIndex = endIndex;
+        startIndex = endIndex + 1;
       }
     } finally {
       logSegmentToCopy.closeView();
