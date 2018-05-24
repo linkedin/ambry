@@ -608,12 +608,13 @@ class BlobStore implements Store {
   /**
    * Resumes a compaction if one is in progress.
    * @throws StoreException if there are any errors during the compaction.
+   * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    */
-  void maybeResumeCompaction() throws StoreException {
+  void maybeResumeCompaction(ByteBuffer bundleReadBuffer) throws StoreException {
     checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
-      compactor.resumeCompaction();
+      compactor.resumeCompaction(bundleReadBuffer);
       checkCapacityAndUpdateWriteStatusDelegate(log.getCapacityInBytes(), index.getLogUsedCapacity());
     }
   }

@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -22,7 +21,6 @@ import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -168,7 +166,6 @@ class BlobStoreCompactor {
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
   void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
-    this.bundleReadBuffer = bundleReadBuffer;
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog != null) {
@@ -177,16 +174,17 @@ class BlobStoreCompactor {
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details);
-    resumeCompaction();
-    this.bundleReadBuffer = null;
+    resumeCompaction(bundleReadBuffer);
   }
 
   /**
    * Resumes compaction from where it was left off.
    * @throws IllegalStateException if the compactor has not been initialized or if there is no compaction to resume.
    * @throws StoreException if there were exceptions reading to writing to store components.
+   * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    */
-  void resumeCompaction() throws StoreException {
+  void resumeCompaction(ByteBuffer bundleReadBuffer) throws StoreException {
+    this.bundleReadBuffer = bundleReadBuffer;
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog == null) {
@@ -245,6 +243,7 @@ class BlobStoreCompactor {
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
     }
+    this.bundleReadBuffer = null;
   }
 
   /**
@@ -261,7 +260,7 @@ class BlobStoreCompactor {
 
   /**
    * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
-   * and compaction can resume smoothly on a call to {@link #resumeCompaction()}. Expected to be called before the
+   * and compaction can resume smoothly on a call to {@link #resumeCompaction(ByteBuffer)}. Expected to be called before the
    * {@link PersistentIndex} is instantiated in the {@link BlobStore}.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit or cleanup failed.
    * @throws StoreException if the commit failed.
@@ -769,6 +768,7 @@ class BlobStoreCompactor {
         int endIndex;
         if (bundleReadBuffer == null
             || srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
+          // can't use the preAllocated buffer
           endIndex = startIndex;
           bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(startIndex).getValue().getSize());
         } else {

@@ -136,7 +136,7 @@ public class BlobStoreCompactorTest {
 
     // create compaction log so that resumeCompaction() thinks there is a compaction in progress
     try (CompactionLog cLog = new CompactionLog(tempDirStr, STORE_ID, state.time, details)) {
-      compactor.resumeCompaction();
+      compactor.resumeCompaction(bundleReadBuffer);
       fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -196,7 +196,7 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where {@link BlobStoreCompactor#resumeCompaction()} is called without any compaction being in
+   * Tests the case where {@link BlobStoreCompactor#resumeCompaction(ByteBuffer)} is called without any compaction being in
    * progress.
    * @throws Exception
    */
@@ -208,7 +208,7 @@ public class BlobStoreCompactorTest {
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
     assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse());
     try {
-      compactor.resumeCompaction();
+      compactor.resumeCompaction(bundleReadBuffer);
       fail("Should have failed because there is no compaction in progress");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -1174,7 +1174,7 @@ public class BlobStoreCompactorTest {
         tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse());
     try {
       if (CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID)) {
-        compactor.resumeCompaction();
+        compactor.resumeCompaction(bundleReadBuffer);
       }
     } finally {
       compactor.close(0);

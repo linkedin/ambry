@@ -207,7 +207,7 @@ class CompactionManager {
             logger.trace("{} is started and eligible for resume check", store);
             metrics.markCompactionStart(false);
             try {
-              store.maybeResumeCompaction();
+              store.maybeResumeCompaction(bundleReadBuffer);
             } catch (Exception e) {
               metrics.compactionErrorCount.inc();
               logger.error("Compaction of store {} failed on resume. Continuing with the next store", store, e);

@@ -127,7 +127,7 @@ public class CompactionManagerTest {
 
   /**
    * Tests that compaction is triggered on all stores provided they do not misbehave. Also includes a store that is
-   * not ready for compaction. Ensures that {@link BlobStore#maybeResumeCompaction()} is called before
+   * not ready for compaction. Ensures that {@link BlobStore#maybeResumeCompaction(ByteBuffer)} is called before
    * {@link BlobStore#compact(CompactionDetails, ByteBuffer)} is called.
    * @throws Exception
    */
@@ -486,7 +486,7 @@ public class CompactionManagerTest {
     }
 
     @Override
-    void maybeResumeCompaction() {
+    void maybeResumeCompaction(ByteBuffer bundleReadBuffer) {
       if (resumeCompactionCalled) {
         callOrderException = new Exception("maybeResumeCompaction() called more than once");
       }
