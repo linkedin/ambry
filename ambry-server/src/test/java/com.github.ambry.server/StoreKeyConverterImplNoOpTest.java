@@ -1,5 +1,5 @@
 /**
- * Copyright 2017 LinkedIn Corp. All rights reserved.
+ * Copyright 2018 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ package com.github.ambry.server;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
-import com.google.common.collect.Lists;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +49,7 @@ public class StoreKeyConverterImplNoOpTest {
     StoreKey storeKey2 = storeKey0;
     assertNotSame("storeKeys should not be equal", storeKey0, storeKey1);
     assertSame("storeKey0 and storeKey2 should be equal", storeKey0, storeKey2);
-    List<StoreKey> list = Lists.newArrayList(storeKey0, storeKey1, storeKey2);
+    List<StoreKey> list = Arrays.asList(storeKey0, storeKey1, storeKey2);
     Map<StoreKey, StoreKey> storeKeyMap = storeKeyConverter.convert(list);
     assertEquals("Returned mapping does not have size 2", 2, storeKeyMap.size());
     assertTrue("storeKey0 not in mapping", storeKeyMap.containsKey(storeKey0));
