@@ -122,8 +122,8 @@ class MockIdFactory implements StoreKeyFactory {
   }
 
   @Override
-  public StoreKey getStoreKey(String base64String) throws IOException {
-    return new MockId(base64String);
+  public StoreKey getStoreKey(String input) throws IOException {
+    return new MockId(input);
   }
 }
 

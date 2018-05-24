@@ -37,7 +37,7 @@ public class BlobIdFactory implements StoreKeyFactory {
   }
 
   @Override
-  public StoreKey getStoreKey(String base64String) throws IOException {
-    return new BlobId(base64String, clusterMap);
+  public StoreKey getStoreKey(String input) throws IOException {
+    return new BlobId(input, clusterMap);
   }
 }

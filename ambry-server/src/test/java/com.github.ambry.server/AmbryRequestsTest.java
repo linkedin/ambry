@@ -1157,7 +1157,7 @@ public class AmbryRequestsTest {
         }
 
         @Override
-        public StoreKey getStoreKey(String base64String) throws IOException {
+        public StoreKey getStoreKey(String input) throws IOException {
           return null;
         }
       }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null);
