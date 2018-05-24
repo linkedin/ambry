@@ -52,7 +52,7 @@ public class MessageFormatSend implements Send {
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
   private Logger logger = LoggerFactory.getLogger(getClass());
-  private final int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
+  private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
 
   private class SendInfo {
     private long relativeOffset;
@@ -129,6 +129,7 @@ public class MessageFormatSend implements Send {
               SystemTime.getInstance().milliseconds() - startTime);
 
           // read and verify header
+          startTime = SystemTime.getInstance().milliseconds();
           byte[] headerBytes = new byte[getHeaderSizeForVersion(version)];
           bufferedInputStream.read(headerBytes, Version_Field_Size_In_Bytes,
               headerBytes.length - Version_Field_Size_In_Bytes);
@@ -138,15 +139,18 @@ public class MessageFormatSend implements Send {
           header.rewind();
           MessageHeader_Format headerFormat = getMessageHeader(version, header);
           headerFormat.verifyHeader();
+          logger.trace("Calculate offsets, read and verify header time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
 
           // read and verify storeKey
+          startTime = SystemTime.getInstance().milliseconds();
           StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(bufferedInputStream));
           if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
             throw new MessageFormatException(
                 "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
                 MessageFormatErrorCodes.Store_Key_Id_MisMatch);
           }
-          logger.trace("Calculate offsets, read and verify header time: {}",
+          logger.trace("Calculate offsets, read and verify storeKey time: {}",
               SystemTime.getInstance().milliseconds() - startTime);
 
           startTime = SystemTime.getInstance().milliseconds();
@@ -297,8 +301,8 @@ class MessageReadSetIndexInputStream extends InputStream {
 
   @Override
   public int read() throws IOException {
-    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
-      throw new IOException("Reached end of stream of message read set");
+    if (currentOffset >= messageReadSet.sizeInBytes(indexToRead)) {
+      return -1;
     }
     ByteBuffer buf = ByteBuffer.allocate(1);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
@@ -316,12 +320,13 @@ class MessageReadSetIndexInputStream extends InputStream {
     if (off < 0 || len < 0 || len > b.length - off) {
       throw new IndexOutOfBoundsException();
     }
-    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
-      throw new IOException("Reached end of stream of message read set");
+    if (currentOffset >= messageReadSet.sizeInBytes(indexToRead)) {
+      return -1;
     }
     ByteBuffer buf = ByteBuffer.wrap(b);
+    buf.position(off);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
-    long sizeToRead = Math.min(len - off, messageReadSet.sizeInBytes(indexToRead) - currentOffset);
+    long sizeToRead = Math.min(len, messageReadSet.sizeInBytes(indexToRead) - currentOffset);
     long bytesWritten =
         messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset, sizeToRead);
     currentOffset += bytesWritten;

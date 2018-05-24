@@ -643,55 +643,86 @@ public class MessageFormatSendTest {
     }
   }
 
+  /**
+   * Test {@link MessageReadSetIndexInputStream} with different offsets and lengths.
+   */
   @Test
-  public void messageReadSetIndexInputStreamTest() {
-    try {
-      ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
-      byte[] buf1 = new byte[1024];
-      byte[] buf2 = new byte[2048];
-      byte[] buf3 = new byte[4096];
-      new Random().nextBytes(buf1);
-      new Random().nextBytes(buf2);
-      new Random().nextBytes(buf3);
-      listbuf.add(ByteBuffer.wrap(buf1));
-      listbuf.add(ByteBuffer.wrap(buf2));
-      listbuf.add(ByteBuffer.wrap(buf3));
-      ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
-      storeKeys.add(new MockId("012345678910123223233456789012"));
-      storeKeys.add(new MockId("012345678910123223233456789013"));
-      storeKeys.add(new MockId("012345678910123223233456789014"));
-      MessageReadSet readSet = new MockMessageReadSet(listbuf, storeKeys);
-      MessageReadSetIndexInputStream stream1 = new MessageReadSetIndexInputStream(readSet, 0, 0);
-      byte[] buf1Output = new byte[1024];
-      stream1.read(buf1Output, 0, 1024);
-      Assert.assertArrayEquals(buf1Output, buf1);
-      MessageReadSetIndexInputStream stream2 = new MessageReadSetIndexInputStream(readSet, 1, 1024);
-      byte[] buf2Output = new byte[1024];
-      stream2.read(buf2Output, 0, 1024);
-      for (int i = 0; i < 1024; i++) {
-        Assert.assertEquals(buf2Output[i], buf2[i + 1024]);
-      }
-      MessageReadSetIndexInputStream stream3 = new MessageReadSetIndexInputStream(readSet, 2, 2048);
-      byte[] buf3Output = new byte[2048];
-      stream3.read(buf3Output, 0, 2048);
-      for (int i = 0; i < 2048; i++) {
-        Assert.assertEquals(buf3Output[i], buf3[i + 2048]);
-      }
-      try {
-        stream3.read(buf3Output, 0, 1024);
-        Assert.assertTrue(false);
-      } catch (IOException e) {
-        Assert.assertTrue(true);
-      }
-    } catch (Exception e) {
-      e.printStackTrace();
-      Assert.assertEquals(true, false);
+  public void messageReadSetIndexInputStreamTest() throws Exception {
+    ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
+    byte[] buf1 = new byte[1024];
+    byte[] buf2 = new byte[2048];
+    byte[] buf3 = new byte[4096];
+    new Random().nextBytes(buf1);
+    new Random().nextBytes(buf2);
+    new Random().nextBytes(buf3);
+    listbuf.add(ByteBuffer.wrap(buf1));
+    listbuf.add(ByteBuffer.wrap(buf2));
+    listbuf.add(ByteBuffer.wrap(buf3));
+    ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
+    storeKeys.add(new MockId("012345678910123223233456789012"));
+    storeKeys.add(new MockId("012345678910123223233456789013"));
+    storeKeys.add(new MockId("012345678910123223233456789014"));
+    MessageReadSet readSet = new MockMessageReadSet(listbuf, storeKeys);
+    MessageReadSetIndexInputStream stream1 = new MessageReadSetIndexInputStream(readSet, 0, 0);
+    byte[] buf1Output = new byte[1024];
+    Assert.assertEquals("Number of bytes read doesn't match", 1024, stream1.read(buf1Output, 0, 1024));
+    Assert.assertArrayEquals(buf1Output, buf1);
+    MessageReadSetIndexInputStream stream2 = new MessageReadSetIndexInputStream(readSet, 1, 1024);
+    byte[] buf2Output = new byte[1025];
+    Assert.assertEquals("Number of bytes read doesn't match", 512, stream2.read(buf2Output, 0, 512));
+    Assert.assertEquals("Number of bytes read doesn't match", 512, stream2.read(buf2Output, 512, 513));
+    for (int i = 0; i < 1024; i++) {
+      Assert.assertEquals(buf2Output[i], buf2[i + 1024]);
     }
+    MessageReadSetIndexInputStream stream3 = new MessageReadSetIndexInputStream(readSet, 2, 2048);
+    byte[] buf3Output = new byte[2048];
+    for (int i = 0; i < 2048; i++) {
+      Assert.assertEquals((byte) stream3.read(), buf3[i + 2048]);
+    }
+    Assert.assertEquals("Should return -1 if no more data available", -1, stream3.read(buf3Output, 0, 1));
+    Assert.assertEquals("Should return -1 if no more data available", -1, stream3.read());
   }
 
-  private void verifyBlobUserMetadata(byte[] usermetadata, ByteBuffer result) {
-    for (int i = 0; i < usermetadata.length; i++) {
-      Assert.assertEquals(usermetadata[i], result.get());
+  /**
+   * Test Exceptions cases for {@link MessageReadSetIndexInputStream}
+   * IndexOutOfBoundsException should be thrown if offset or length is invalid.
+   * -1 is expected if no more data available.
+   */
+  @Test
+  public void messageReadSetIndexInputStreamTestException() throws Exception {
+    ArrayList<ByteBuffer> listBuf = new ArrayList<ByteBuffer>();
+    byte[] buf = new byte[1024];
+    new Random().nextBytes(buf);
+    listBuf.add(ByteBuffer.wrap(buf));
+    ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
+    storeKeys.add(new MockId("012345678910123223233456789012"));
+    MessageReadSet readSet = new MockMessageReadSet(listBuf, storeKeys);
+    MessageReadSetIndexInputStream stream = new MessageReadSetIndexInputStream(readSet, 0, 0);
+    byte[] bufOutput = new byte[1024];
+    try {
+      stream.read(bufOutput, -1, 10);
+      Assert.fail("IndexOutOfBoundsException is expected.");
+    } catch (IndexOutOfBoundsException e) {
+    }
+    try {
+      stream.read(bufOutput, 0, -1);
+      Assert.fail("IndexOutOfBoundsException is expected.");
+    } catch (IndexOutOfBoundsException e) {
+    }
+    try {
+      stream.read(bufOutput, 1, 1024);
+      Assert.fail("IndexOutOfBoundsException is expected.");
+    } catch (IndexOutOfBoundsException e) {
+    }
+    stream.read(bufOutput, 0, 1024);
+    Assert.assertArrayEquals("Output doesn't match", bufOutput, buf);
+    Assert.assertEquals("Should return -1 if no more data", -1, stream.read());
+    Assert.assertEquals("Should return -1 if no more data", -1, stream.read(bufOutput, 0, 1));
+  }
+
+  private void verifyBlobUserMetadata(byte[] userMetadata, ByteBuffer result) {
+    for (int i = 0; i < userMetadata.length; i++) {
+      Assert.assertEquals(userMetadata[i], result.get());
     }
   }
 
