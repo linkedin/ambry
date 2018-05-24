@@ -34,6 +34,6 @@ public class StoreKeyConverterFactoryImplTest {
   public void basicTest() throws InstantiationException {
     StoreKeyConverterFactory storeKeyConverterFactory = new StoreKeyConverterFactoryImpl();
     StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
-    assertTrue(storeKeyConverter instanceof StoreKeyConverterImplNoOp);
+    assertTrue("StoreKeyConverter should have been StoreKeyConverterImplNoOp impl", storeKeyConverter instanceof StoreKeyConverterImplNoOp);
   }
 }
