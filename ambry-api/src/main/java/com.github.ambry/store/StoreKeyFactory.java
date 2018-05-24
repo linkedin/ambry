@@ -28,5 +28,13 @@ public interface StoreKeyFactory {
    * @return The store key created from the stream
    */
   StoreKey getStoreKey(DataInputStream stream) throws IOException;
+
+  /**
+   * The store key created using the input provided, string should be base64 version of
+   * data that would have been read from an input stream
+   * @param base64String The string used to create the store key
+   * @return The store key created from the string
+   */
+  StoreKey getStoreKey(String base64String) throws IOException;
 }
 

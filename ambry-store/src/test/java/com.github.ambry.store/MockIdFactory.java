@@ -23,4 +23,9 @@ public class MockIdFactory implements StoreKeyFactory {
   public StoreKey getStoreKey(DataInputStream value) throws IOException {
     return new MockId(value);
   }
+
+  @Override
+  public StoreKey getStoreKey(String base64String) throws IOException {
+    return new MockId(base64String);
+  }
 }
