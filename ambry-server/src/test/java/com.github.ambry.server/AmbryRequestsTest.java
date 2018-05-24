@@ -1152,12 +1152,12 @@ public class AmbryRequestsTest {
       super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
 
         @Override
-        public StoreKey getStoreKey(DataInputStream stream) throws IOException {
+        public StoreKey getStoreKey(DataInputStream stream) {
           return null;
         }
 
         @Override
-        public StoreKey getStoreKey(String input) throws IOException {
+        public StoreKey getStoreKey(String input) {
           return null;
         }
       }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null);
