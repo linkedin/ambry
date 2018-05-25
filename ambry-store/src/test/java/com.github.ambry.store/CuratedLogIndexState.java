@@ -233,9 +233,7 @@ class CuratedLogIndexState {
       logOrder.put(fileSpan.getStartOffset(), new Pair<>(id, new LogEntry(dataWritten, value)));
       indexSegmentStartOffsets.put(id, new Pair<Offset, Offset>(indexSegmentStartOffset, null));
       allKeys.put(id, new Pair<IndexValue, IndexValue>(value, null));
-      referenceIndex.get(indexSegmentStartOffset)
-          .computeIfAbsent(id, k -> new TreeSet<>(IndexSegment.INDEX_VALUE_COMPARATOR))
-          .add(value);
+      referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(id, k -> new TreeSet<>()).add(value);
       if (expiresAtMs != Utils.Infinite_Time && expiresAtMs < time.milliseconds()) {
         expiredKeys.add(id);
       } else {
@@ -307,9 +305,7 @@ class CuratedLogIndexState {
     indexSegmentStartOffsets.put(idToDelete, new Pair<>(keyLocations.getFirst(), indexSegmentStartOffset));
     Pair<IndexValue, IndexValue> keyValues = allKeys.get(idToDelete);
     allKeys.put(idToDelete, new Pair<>(keyValues.getFirst(), newValue));
-    referenceIndex.get(indexSegmentStartOffset)
-        .computeIfAbsent(idToDelete, k -> new TreeSet<>(IndexSegment.INDEX_VALUE_COMPARATOR))
-        .add(newValue);
+    referenceIndex.get(indexSegmentStartOffset).computeIfAbsent(idToDelete, k -> new TreeSet<>()).add(newValue);
     endOffsetOfPrevMsg = fileSpan.getEndOffset();
     if (forcePut) {
       index.addToIndex(new IndexEntry(idToDelete, newValue), fileSpan);

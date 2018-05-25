@@ -40,7 +40,8 @@ import static com.github.ambry.account.Container.*;
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  */
-class IndexValue {
+class IndexValue implements Comparable<IndexValue> {
+
   enum Flags {
     Delete_Index
   }
@@ -316,5 +317,18 @@ class IndexValue {
         + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
         version != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId "
             + getAccountId() + ", ContainerId " + getContainerId()) : "");
+  }
+
+  /**
+   * {@inheritDoc}
+   * <p/>
+   * Compares by {@link Offset}.
+   * @param o the {@link IndexValue} to compare to.
+   * @return a negative integer, zero, or a positive integer as the offset of this {@link IndexValue} is less than,
+   * equal to, or greater than the offset of {@code o}.
+   */
+  @Override
+  public int compareTo(IndexValue o) {
+    return offset.compareTo(o.offset);
   }
 }

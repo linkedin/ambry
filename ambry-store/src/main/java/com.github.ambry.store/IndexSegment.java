@@ -34,7 +34,6 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
@@ -108,8 +107,6 @@ class IndexSegment {
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
   private ConcurrentSkipListMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
-
-  static final Comparator<IndexValue> INDEX_VALUE_COMPARATOR = Comparator.comparing(IndexValue::getOffset);
 
   /**
    * Creates a new segment
@@ -358,7 +355,7 @@ class IndexSegment {
                 found);
             int result = found.compareTo(keyToFind);
             if (result == 0) {
-              toReturn = new TreeSet<>(INDEX_VALUE_COMPARATOR);
+              toReturn = new TreeSet<>();
               getAllValuesFromMmap(duplicate, keyToFind, mid, totalEntries, toReturn);
               break;
             } else if (result < 0) {
@@ -461,8 +458,7 @@ class IndexSegment {
           entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getExpiresAtMs(),
           entry.getValue().getOriginalMessageOffset(), fileEndOffset);
       boolean isPresent = index.containsKey(entry.getKey());
-      index.computeIfAbsent(entry.getKey(), key -> new ConcurrentSkipListSet<>(INDEX_VALUE_COMPARATOR))
-          .add(entry.getValue());
+      index.computeIfAbsent(entry.getKey(), key -> new ConcurrentSkipListSet<>()).add(entry.getValue());
       if (!isPresent) {
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
@@ -802,7 +798,7 @@ class IndexSegment {
         // ignore entries that have offsets outside the log end offset that this index represents
         if (offsetInLogSegment + blobValue.getSize() <= logEndOffset) {
           boolean isPresent = index.containsKey(key);
-          index.computeIfAbsent(key, k -> new ConcurrentSkipListSet<>(INDEX_VALUE_COMPARATOR)).add(blobValue);
+          index.computeIfAbsent(key, k -> new ConcurrentSkipListSet<>()).add(blobValue);
           logger.trace("IndexSegment : {} putting key {} in index offset {} size {}", indexFile.getAbsolutePath(), key,
               blobValue.getOffset(), blobValue.getSize());
           // regenerate the bloom filter for in memory indexes
@@ -898,7 +894,7 @@ class IndexSegment {
     if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;
     }
-    NavigableSet<IndexValue> values = new TreeSet<>(INDEX_VALUE_COMPARATOR);
+    NavigableSet<IndexValue> values = new TreeSet<>();
     List<IndexEntry> entriesLocal = new ArrayList<>();
     if (mapped.get()) {
       int index = 0;

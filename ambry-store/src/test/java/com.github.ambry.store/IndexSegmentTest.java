@@ -458,7 +458,7 @@ public class IndexSegmentTest {
       IndexEntry entry = new IndexEntry(id, value);
       segment.addEntry(entry, new Offset(segment.getLogSegmentName(), offset + size));
       addedEntries.add(entry);
-      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>(IndexSegment.INDEX_VALUE_COMPARATOR)).add(value);
+      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>()).add(value);
     }
     return addedEntries;
   }
@@ -733,7 +733,7 @@ public class IndexSegmentTest {
       newValue.setNewSize(DELETE_FILE_SPAN_SIZE);
       segment.addEntry(new IndexEntry(id, newValue),
           new Offset(offset.getName(), offset.getOffset() + DELETE_FILE_SPAN_SIZE));
-      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>(IndexSegment.INDEX_VALUE_COMPARATOR)).add(newValue);
+      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>()).add(newValue);
     }
   }
 
