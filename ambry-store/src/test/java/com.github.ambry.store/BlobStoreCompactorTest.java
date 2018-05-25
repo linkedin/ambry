@@ -71,7 +71,7 @@ public class BlobStoreCompactorTest {
 
   private MetricRegistry metricRegistry;
 
-  private final ByteBuffer bundleReadBuffer =
+  private ByteBuffer bundleReadBuffer =
       ByteBuffer.allocateDirect((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1);
 
   /**
@@ -224,6 +224,20 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void basicTest() throws Exception {
+    refreshState(false, true);
+    List<String> segmentsUnderCompaction = getLogSegments(0, 2);
+    long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
+        state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+  }
+
+  /**
+   * A test similar to basicTest but doesn't use bundleReadBuffer.
+   * @throws Exception
+   */
+  @Test
+  public void basicTestNoBundleReadBuffer() throws Exception {
+    bundleReadBuffer = null;
     refreshState(false, true);
     List<String> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
