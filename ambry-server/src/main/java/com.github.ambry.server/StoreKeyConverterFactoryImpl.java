@@ -14,6 +14,8 @@
 
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 
@@ -22,6 +24,10 @@ import com.github.ambry.store.StoreKeyConverterFactory;
  * Default StoreKeyConverterFactoryImpl.  Creates StoreKeyConverterImplNoOp
  */
 public class StoreKeyConverterFactoryImpl implements StoreKeyConverterFactory {
+
+  public StoreKeyConverterFactoryImpl(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+
+  }
 
   @Override
   public StoreKeyConverter getStoreKeyConverter() throws InstantiationException {
