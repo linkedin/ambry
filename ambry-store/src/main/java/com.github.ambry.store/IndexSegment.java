@@ -33,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -106,7 +107,7 @@ class IndexSegment {
   private Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
-  private ConcurrentSkipListMap<StoreKey, NavigableSet<IndexValue>> index = null;
+  private ConcurrentSkipListMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
 
   static final Comparator<IndexValue> INDEX_VALUE_COMPARATOR = Comparator.comparing(IndexValue::getOffset);
 
@@ -326,11 +327,11 @@ class IndexSegment {
     try {
       rwLock.readLock().lock();
       if (!mapped.get()) {
-        NavigableSet<IndexValue> values = index.get(keyToFind);
+        ConcurrentSkipListSet<IndexValue> values = index.get(keyToFind);
         if (values != null) {
           metrics.blobFoundInActiveSegmentCount.inc();
+          toReturn = values.clone();
         }
-        toReturn = values;
       } else {
         if (bloomFilter != null) {
           metrics.bloomAccessedCount.inc();
@@ -377,7 +378,7 @@ class IndexSegment {
     } finally {
       rwLock.readLock().unlock();
     }
-    return toReturn;
+    return toReturn != null ? Collections.unmodifiableNavigableSet(toReturn) : null;
   }
 
   /**
@@ -632,7 +633,7 @@ class IndexSegment {
         if (getVersion() == PersistentIndex.VERSION_2) {
           maxPaddingBytes = new byte[persistedEntrySize - valueSize];
         }
-        for (Map.Entry<StoreKey, NavigableSet<IndexValue>> entry : index.entrySet()) {
+        for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
           for (IndexValue value : entry.getValue()) {
             if (value.getOffset().getOffset() + value.getSize() <= safeEndPoint.getOffset()) {
               writer.write(entry.getKey().toBytes());
@@ -926,11 +927,11 @@ class IndexSegment {
         metrics.keyInFindEntriesAbsent.inc();
       }
     } else if (key == null || index.containsKey(key)) {
-      ConcurrentNavigableMap<StoreKey, NavigableSet<IndexValue>> tempMap = index;
+      ConcurrentNavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = index;
       if (key != null) {
         tempMap = index.tailMap(key, true);
       }
-      for (Map.Entry<StoreKey, NavigableSet<IndexValue>> entry : tempMap.entrySet()) {
+      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
         if (key == null || entry.getKey().compareTo(key) != 0) {
           for (IndexValue value : entry.getValue()) {
             IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
