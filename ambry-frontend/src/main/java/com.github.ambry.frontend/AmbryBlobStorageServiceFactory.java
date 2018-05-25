@@ -22,6 +22,7 @@ import com.github.ambry.rest.BlobStorageServiceFactory;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,17 +55,13 @@ public class AmbryBlobStorageServiceFactory implements BlobStorageServiceFactory
    */
   public AmbryBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
       RestResponseHandler responseHandler, Router router, AccountService accountService) {
-    if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
-      throw new IllegalArgumentException("Null arguments were provided during instantiation!");
-    } else {
-      frontendConfig = new FrontendConfig(verifiableProperties);
-      frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
-      this.verifiableProperties = verifiableProperties;
-      this.clusterMap = clusterMap;
-      this.responseHandler = responseHandler;
-      this.router = router;
-      this.accountService = accountService;
-    }
+    this.verifiableProperties = Objects.requireNonNull(verifiableProperties, "Provided VerifiableProperties is null");
+    this.clusterMap = Objects.requireNonNull(clusterMap, "Provided ClusterMap is null");
+    this.responseHandler = Objects.requireNonNull(responseHandler, "Provided RestResponseHandler is null");
+    this.router = Objects.requireNonNull(router, "Provided Router is null");
+    this.accountService = Objects.requireNonNull(accountService, "Provided AccountService is null");
+    frontendConfig = new FrontendConfig(verifiableProperties);
+    frontendMetrics = new FrontendMetrics(clusterMap.getMetricRegistry());
     logger.trace("Instantiated AmbryBlobStorageServiceFactory");
   }
 

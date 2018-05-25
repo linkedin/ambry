@@ -195,6 +195,8 @@ class RouterServerTestFramework {
   /**
    * Check for blob ID validity.
    * @param blobId the blobId
+   * @param properties the blob properties associated with the blob (to check that the blob was put in the right
+   *                   partition)
    * @param operationName a name for the operation being checked
    */
   private void checkBlobId(String blobId, BlobProperties properties, String operationName) throws IOException {

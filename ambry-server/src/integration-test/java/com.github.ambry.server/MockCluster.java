@@ -87,7 +87,7 @@ public class MockCluster {
       if (sslEnabledDataCenterList != null) {
         dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
-      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i ? true : false,
+      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i,
           notificationSystem, time);
     }
   }

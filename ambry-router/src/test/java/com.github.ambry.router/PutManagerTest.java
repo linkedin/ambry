@@ -157,9 +157,9 @@ public class PutManagerTest {
       // size in [1, chunkSize]
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(random.nextInt(chunkSize) + 1));
-      // since the puts are processed one at a time, it is fair to check the last partition class set
       mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
+      // since the puts are processed one at a time, it is fair to check the last partition class set
       checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
   }
@@ -173,9 +173,9 @@ public class PutManagerTest {
     for (int i = 1; i < 10; i++) {
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * i));
-      // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
       mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
+      // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
       // one extra call if there is a metadata blob
       checkLastRequestPartitionClasses(i == 1 ? 1 : i + 1, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
@@ -189,9 +189,9 @@ public class PutManagerTest {
     for (int i = 1; i < 10; i++) {
       requestAndResultsList.clear();
       requestAndResultsList.add(new RequestAndResult(chunkSize * i + random.nextInt(chunkSize - 1) + 1));
-      // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
       mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
+      // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
       checkLastRequestPartitionClasses(i + 2, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
   }
@@ -662,9 +662,9 @@ public class PutManagerTest {
       for (Map.Entry<Container, String> containerAndPartClass : containerToPartClass.entrySet()) {
         requestAndResultsList.clear();
         requestAndResultsList.add(new RequestAndResult(sizeAndChunkCount.getKey(), containerAndPartClass.getKey()));
-        // since the puts are processed one at a time, it is fair to check the last partition class set
         mockClusterMap.clearLastNRequestedPartitionClasses();
         submitPutsAndAssertSuccess(true);
+        // since the puts are processed one at a time, it is fair to check the last partition class set
         checkLastRequestPartitionClasses(sizeAndChunkCount.getValue(), containerAndPartClass.getValue());
       }
     }

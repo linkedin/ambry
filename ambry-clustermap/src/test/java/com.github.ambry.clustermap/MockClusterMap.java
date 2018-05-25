@@ -39,7 +39,6 @@ public class MockClusterMap implements ClusterMap {
   protected final Map<Long, PartitionId> partitions;
   protected final List<MockDataNodeId> dataNodes;
   protected final int numMountPointsPerNode;
-  protected final int numStoresPerMountPoint;
   protected final List<String> dataCentersInClusterMap = new ArrayList<>();
   private final ClusterMapUtils.PartitionSelectionHelper partitionSelectionHelper;
   protected boolean partitionsUnavailable = false;
@@ -51,48 +50,53 @@ public class MockClusterMap implements ClusterMap {
   // allow this to be changed to support some tests
   private String localDatacenterName;
 
+  private final MockPartitionId specialPartition;
+
   /**
-   * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 partitions/replicas per
-   * mount point which amount to a total of 9 replicas per node and 81 replicas across the cluster. If this cluster map
-   * is going to be used to start a cluster, use it judiciously to avoid resource consumption issues on the test
-   * machine.
+   * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 default partitions/replicas
+   * per mount point. It will also add replicas for a "special" partition. The distribution of these replicas will be
+   * 3 in the chosen "local" datacenter and 2 everywhere else. This will amount to a total of 9/10 replicas per node and
+   * 88 replicas across the cluster.
+   *
+   * If this cluster map is going to be used to start a cluster, use it judiciously to avoid resource consumption issues
+   * on the test machine.
    */
   public MockClusterMap() throws IOException {
-    this(false, 9, 3, 3);
+    this(false, 9, 3, 3, false);
   }
 
   /**
    * Creates and returns a mock cluster map.
    * <p>
-   *
-   * In doing so, this actually creates the mock cluster itself, by setting up nodes,
-   * mount points and replicas for partitions on these nodes. (The mock nodes will not be started automatically,
-   * however).
-   * <p>
-   *
-   * The parameters to this method determine the number of mock datanodes that will be created in the cluster,
-   * the number of mount points that will be created on each of these mock datanodes,
-   * and the number of stores that will be created on each mount point. Stores correspond to replicas,
-   * so the number of stores also determines the number of replicas that will be created on a node (which is
-   * going to be the number of mount points per node multiplied by the number of stores per mount point). Since every
-   * partition will be present on every datanode, this is also the number of partitions that will be created across the
-   * cluster. The total number of replicas across the cluster will therefore be this number multiplied by the
-   * number of nodes. This is therefore the number of stores that will be created by the test on the machine on which
-   * it runs - and the resource consumption on the machine is a function of this number. Tests that start a cluster or
-   * a server should therefore keep these parameters to the minimum required for testing intended functionality
-   * correctly (however, tests that only create the MockClusterMap but do not start the cluster or servers will not
-   * end up using any significant resources, and should be fine).
-   *
+   * The parameters to this method determine the number of mock datanodes that will be created in the cluster, the
+   * number of mount points that will be created on each of these mock datanodes, and the number of "default" stores
+   * that will be created on each mount point and whether there will be stores that host a "special" partition. Stores
+   * correspond to replicas, so the number of stores also determines the number of replicas that will be created on a
+   * node (which is going to be the number of mount points per node multiplied by the number of default stores per mount
+   * point and possibly an extra store if a replica of the special partition resides on the node). Every default
+   * partition is available on every node however the special partition is only available on a subset. These parameters
+   * determine resource consumption so tests that start a cluster or a server should therefore keep these parameters to
+   * the minimum required for testing intended functionality correctly (however, tests that only create the
+   * MockClusterMap but do not start the cluster or servers will not end up using any significant resources, and should
+   * be fine).
+   * <p/>
+   * The "special" partition will be created only if
+   * 1. The parameter {@code createOnlyDefaultPartitionClass} is {@code false}.
+   * 2. {@code numNodes} >= 4
+   * 3. There are at least 3 nodes in the designated "local" datacenter.
+   * To determine whether a "special" partition was created, use the function {@link #getSpecialPartition()}.
+   * The "special" partition has 3 replicas in the designated "local" datacenter and 2 replicas in all other datacenters
    * @param numNodes number of mock datanodes that will be created (every 3 of which will be put in a separate
    *                 datacenter).
    * @param numMountPointsPerNode number of mount points (mocking disks) that will be created in each datanode.
-   * @param numStoresPerMountPoint the number of stores that will be created on each mount point.
+   * @param numDefaultStoresPerMountPoint the number of stores that will be created on each mount point.
+   * @param createOnlyDefaultPartitionClass if {@code true}, does not attempt to create the "special" partition. If
+   *                                        {@code false}, attempts to do so. See javadoc of function for more details
    */
-  public MockClusterMap(boolean enableSSLPorts, int numNodes, int numMountPointsPerNode, int numStoresPerMountPoint)
-      throws IOException {
+  public MockClusterMap(boolean enableSSLPorts, int numNodes, int numMountPointsPerNode,
+      int numDefaultStoresPerMountPoint, boolean createOnlyDefaultPartitionClass) throws IOException {
     this.enableSSLPorts = enableSSLPorts;
     this.numMountPointsPerNode = numMountPointsPerNode;
-    this.numStoresPerMountPoint = numStoresPerMountPoint;
     dataNodes = new ArrayList<MockDataNodeId>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
@@ -120,20 +124,23 @@ public class MockClusterMap implements ClusterMap {
     // create partitions
     long partitionId = 0;
     for (int i = 0; i < dataNodes.get(0).getMountPaths().size(); i++) {
-      for (int j = 0; j < numStoresPerMountPoint; j++) {
+      for (int j = 0; j < numDefaultStoresPerMountPoint; j++) {
         PartitionId id = new MockPartitionId(partitionId, DEFAULT_PARTITION_CLASS, dataNodes, i);
         partitions.put(partitionId, id);
         partitionId++;
       }
     }
-    if (numNodes > 3 && dcToDataNodes.get(localDatacenterName).size() > 2) {
+    if (!createOnlyDefaultPartitionClass && numNodes >= 4 && dcToDataNodes.get(localDatacenterName).size() >= 3) {
       // create one "special partition" that has 3 replicas in the local datacenter (as configured on startup) and
       // 2 everywhere else
       List<MockDataNodeId> nodeIds = new ArrayList<>();
       dcToDataNodes.forEach(
           (s, mockDataNodeIds) -> nodeIds.addAll(mockDataNodeIds.subList(0, localDatacenterName.equals(s) ? 3 : 2)));
-      PartitionId id = new MockPartitionId(partitionId, SPECIAL_PARTITION_CLASS, nodeIds, 0);
+      MockPartitionId id = new MockPartitionId(partitionId, SPECIAL_PARTITION_CLASS, nodeIds, 0);
       partitions.put(partitionId, id);
+      specialPartition = id;
+    } else {
+      specialPartition = null;
     }
     partitionSelectionHelper = new ClusterMapUtils.PartitionSelectionHelper(partitions.values(), localDatacenterName);
   }
@@ -220,7 +227,7 @@ public class MockClusterMap implements ClusterMap {
     if (idx < 0 || idx >= dataCentersInClusterMap.size()) {
       return null;
     }
-    return dataCentersInClusterMap.get(id);
+    return dataCentersInClusterMap.get(idx);
   }
 
   @Override
@@ -264,6 +271,13 @@ public class MockClusterMap implements ClusterMap {
       metricRegistry = new MetricRegistry();
     }
     return metricRegistry;
+  }
+
+  /**
+   * @return the special {@link MockPartitionId} if it was created.
+   */
+  public MockPartitionId getSpecialPartition() {
+    return specialPartition;
   }
 
   /**

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -66,40 +67,45 @@ public class AmbryBlobStorageServiceFactoryTest {
     ClusterMap clusterMap = new MockClusterMap();
     RestResponseHandler restResponseHandler = new MockRestRequestResponseHandler();
     Router router = new InMemoryRouter(verifiableProperties, clusterMap);
+    AccountService accountService = new InMemAccountService(false, true);
 
     // VerifiableProperties null.
     try {
-      new AmbryBlobStorageServiceFactory(null, clusterMap, restResponseHandler, router,
-          new InMemAccountService(false, true));
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
+      new AmbryBlobStorageServiceFactory(null, clusterMap, restResponseHandler, router, accountService);
+      fail("Instantiation should have failed because VerifiableProperties was null");
+    } catch (NullPointerException e) {
       // expected. Nothing to do.
     }
 
     // ClusterMap null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, null, restResponseHandler, router,
-          new InMemAccountService(false, true));
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
+      new AmbryBlobStorageServiceFactory(verifiableProperties, null, restResponseHandler, router, accountService);
+      fail("Instantiation should have failed because ClusterMap was null");
+    } catch (NullPointerException e) {
       // expected. Nothing to do.
     }
 
     // RestResponseHandler null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router,
-          new InMemAccountService(false, true));
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
+      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, null, router, accountService);
+      fail("Instantiation should have failed because RestResponseHandler was null");
+    } catch (NullPointerException e) {
       // expected. Nothing to do.
     }
 
     // Router null.
     try {
-      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, restResponseHandler, null,
-          new InMemAccountService(false, true));
-      fail("Instantiation should have failed because one of the arguments was null");
-    } catch (IllegalArgumentException e) {
+      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, restResponseHandler, null, accountService);
+      fail("Instantiation should have failed because Router was null");
+    } catch (NullPointerException e) {
+      // expected. Nothing to do.
+    }
+
+    // AccountService null.
+    try {
+      new AmbryBlobStorageServiceFactory(verifiableProperties, clusterMap, restResponseHandler, router, null);
+      fail("Instantiation should have failed because AccountService was null");
+    } catch (NullPointerException e) {
       // expected. Nothing to do.
     }
   }

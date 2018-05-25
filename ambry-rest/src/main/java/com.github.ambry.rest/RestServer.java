@@ -303,7 +303,7 @@ public class RestServer {
 
       accountService.close();
       long accountServiceCloseTime = System.currentTimeMillis();
-      elapsedTime = accountServiceCloseTime - responseHandlerShutdownTime;
+      elapsedTime = accountServiceCloseTime - routerCloseTime;
       logger.info("Account service close took {} ms", elapsedTime);
       restServerMetrics.accountServiceCloseTimeInMs.update(elapsedTime);
 
