@@ -14,11 +14,14 @@
 
 package com.github.ambry.server;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -32,8 +35,10 @@ public class StoreKeyConverterFactoryImplTest {
    */
   @Test
   public void basicTest() throws InstantiationException {
-    StoreKeyConverterFactory storeKeyConverterFactory = new StoreKeyConverterFactoryImpl();
+    StoreKeyConverterFactory storeKeyConverterFactory =
+        new StoreKeyConverterFactoryImpl(mock(VerifiableProperties.class), mock(MetricRegistry.class));
     StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
-    assertTrue("StoreKeyConverter should have been StoreKeyConverterImplNoOp impl", storeKeyConverter instanceof StoreKeyConverterImplNoOp);
+    assertTrue("StoreKeyConverter should have been StoreKeyConverterImplNoOp impl",
+        storeKeyConverter instanceof StoreKeyConverterImplNoOp);
   }
 }
