@@ -724,14 +724,15 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Calculate the farthest index can be used for a bundle IO read based on startIndex and bundleReadBuffer capacity.
+   * Calculate the farthest index that can be used for a bundle IO read based on startIndex and bundleReadBuffer capacity.
    * @param srcIndexEntries all available index entries.
    * @param startIndex the startIndex for a bundle read.
    * @return the endIndex which can be used for a bundle read.
    */
   private int getBundleReadEndIndex(List<IndexEntry> srcIndexEntries, int startIndex) {
     long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
-    int endIndex; // [startIndex, endIndex) for a bundle of read.
+    int endIndex;
+    // [startIndex, endIndex) for a bundle of read.
     for (endIndex = startIndex; endIndex < srcIndexEntries.size(); endIndex++) {
       long currentSize =
           srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
@@ -768,9 +769,11 @@ class BlobStoreCompactor {
         int endIndex;
         if (bundleReadBuffer == null
             || srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
-          // can't use the preAllocated buffer
           endIndex = startIndex;
           bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(startIndex).getValue().getSize());
+          srcMetrics.compactionBundleReadBufferNotFitIn.inc();
+          logger.trace("Record size greater than bundleReadBuffer capacity, key: {} size: {}",
+              srcIndexEntries.get(startIndex).getKey(), srcIndexEntries.get(startIndex).getValue().getSize());
         } else {
           endIndex = getBundleReadEndIndex(srcIndexEntries, startIndex);
           bufferToUse = bundleReadBuffer;
@@ -783,6 +786,7 @@ class BlobStoreCompactor {
         // do IO read
         int bytesRead = fileChannel.read(bufferToUse, startOffset);
         if (bytesRead != bufferToUse.limit()) {
+          srcMetrics.compactionBundleReadBufferReadExtra.inc();
           logger.warn("fileChannel is reading more than expected: {}/{}", bufferToUse.limit(), bytesRead);
         }
 
@@ -840,7 +844,8 @@ class BlobStoreCompactor {
           }
         }
         if (!copiedAll) {
-          break; // break while loop
+          // break outer while loop
+          break;
         }
         startIndex = endIndex + 1;
       }

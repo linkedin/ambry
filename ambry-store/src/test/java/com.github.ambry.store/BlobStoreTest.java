@@ -341,7 +341,7 @@ public class BlobStoreTest {
       //that the store is now read-write
       time.sleep(TimeUnit.DAYS.toMillis(8));
       store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)),
-          ByteBuffer.allocateDirect(100));
+          ByteBuffer.allocateDirect(PUT_RECORD_SIZE * 2 + 1));
       verify(writeStatusDelegate, times(2)).unseal(replicaId);
 
       //Test if replicaId is erroneously true that it updates the status upon startup

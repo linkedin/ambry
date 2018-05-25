@@ -71,7 +71,8 @@ public class BlobStoreCompactorTest {
 
   private MetricRegistry metricRegistry;
 
-  private final ByteBuffer bundleReadBuffer = ByteBuffer.allocateDirect(100);
+  private final ByteBuffer bundleReadBuffer =
+      ByteBuffer.allocateDirect((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1);
 
   /**
    * Creates a temporary directory for the store.
@@ -1437,7 +1438,7 @@ public class BlobStoreCompactorTest {
       List<IndexEntry> validIndexEntries =
           state.getValidIndexEntriesForLogSegment(state.log.getSegment(logSegment), deleteReferenceTimeMs,
               state.time.milliseconds());
-      addToLogEntriesInOrder(validIndexEntries, validLogEntriesInOrder, null);
+      addToLogEntriesInOrder(validIndexEntries, validLogEntriesInOrder);
     }
     return validLogEntriesInOrder;
   }
@@ -1468,7 +1469,7 @@ public class BlobStoreCompactorTest {
           IndexValue value = indexSegment.find(info.getStoreKey());
           indexEntries.add(new IndexEntry(info.getStoreKey(), value));
         }
-        addToLogEntriesInOrder(indexEntries, logEntriesInOrder, indexSegmentStartOffset);
+        addToLogEntriesInOrder(indexEntries, logEntriesInOrder);
         indexSegmentStartOffset = indexSegments.higherKey(indexSegmentStartOffset);
       }
     }
@@ -1480,8 +1481,7 @@ public class BlobStoreCompactorTest {
    * @param indexEntries the index entries to process.
    * @param logEntriesInOrder the list of {@link LogEntry} instances to add to.
    */
-  private void addToLogEntriesInOrder(List<IndexEntry> indexEntries, List<LogEntry> logEntriesInOrder,
-      Offset indexSegmentStartOffset) {
+  private void addToLogEntriesInOrder(List<IndexEntry> indexEntries, List<LogEntry> logEntriesInOrder) {
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     for (IndexEntry entry : indexEntries) {
       MockId id = (MockId) entry.getKey();
@@ -2073,12 +2073,13 @@ public class BlobStoreCompactorTest {
     public int hashCode() {
       int result = id.hashCode();
       result = 31 * result + entryType.hashCode();
+      result = 31 * result + (int) size;
       return result;
     }
 
     @Override
     public String toString() {
-      return "[id: " + this.id + " entryType: " + this.entryType + " size: " + this.size + "]";
+      return "[id: " + id + " entryType: " + entryType + " size: " + size + "]";
     }
   }
 }
