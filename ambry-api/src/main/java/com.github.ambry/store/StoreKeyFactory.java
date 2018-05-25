@@ -28,5 +28,12 @@ public interface StoreKeyFactory {
    * @return The store key created from the stream
    */
   StoreKey getStoreKey(DataInputStream stream) throws IOException;
+
+  /**
+   * The store key created using the input provided
+   * @param input The string used to create the store key
+   * @return The store key created from the string
+   */
+  StoreKey getStoreKey(String input) throws IOException;
 }
 

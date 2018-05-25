@@ -72,6 +72,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -80,6 +81,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -1147,8 +1149,18 @@ public class AmbryRequestsTest {
     MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
         StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId)
         throws ReplicationException {
-      super(replicationConfig, clusterMapConfig, storeConfig, storageManager, stream -> null, clusterMap, null,
-          dataNodeId, null, clusterMap.getMetricRegistry(), null);
+      super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
+
+        @Override
+        public StoreKey getStoreKey(DataInputStream stream) {
+          return null;
+        }
+
+        @Override
+        public StoreKey getStoreKey(String input) {
+          return null;
+        }
+      }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null);
       this.dataNodeId = dataNodeId;
       reset();
     }
