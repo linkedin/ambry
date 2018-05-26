@@ -552,7 +552,7 @@ class BlobStoreCompactor {
     diskIOScheduler.getSlice(INDEX_SEGMENT_READ_JOB_NAME, INDEX_SEGMENT_READ_JOB_NAME, 1);
     // get all entries
     indexSegmentToCopy.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), allIndexEntries,
-        new AtomicLong(0));
+        new AtomicLong(0), true);
 
     // save a token for restart (the key gets ignored but is required to be non null for construction)
     StoreFindToken safeToken =

@@ -26,9 +26,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
@@ -134,12 +136,10 @@ class PersistentIndex {
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Time time, UUID sessionId, UUID incarnationId)
       throws StoreException {
-    /*
-    If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
-    whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
-    elements held by the latest segment, the journal needs to be able to hold twice the max number of elements a
-    segment can hold.
-    */
+    /* it is no longer required that the journal have twice the size of the index segment size since the index
+    segment will not squash entries anymore but useful to keep this here in order to allow for a new index segment
+    to be created that doesn't squash entries.
+     */
     this(datadir, storeId, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
         new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
             config.storeMaxNumberOfEntriesToReturnFromJournal), time, sessionId, incarnationId,
@@ -543,18 +543,25 @@ class PersistentIndex {
       for (Map.Entry<Offset, IndexSegment> entry : segmentsMapToSearch.entrySet()) {
         segmentsSearched++;
         logger.trace("Index : {} searching index with start offset {}", dataDir, entry.getKey());
-        IndexValue value = entry.getValue().find(key);
-        if (value != null) {
-          logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
-              value.getExpiresAtMs());
-          if (type.equals(IndexEntryType.ANY)) {
-            retValue = value;
-            break;
-          } else if (type.equals(IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-            retValue = value;
-            break;
-          } else if (type.equals(IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-            retValue = value;
+        NavigableSet<IndexValue> values = entry.getValue().find(key);
+        if (values != null) {
+          Iterator<IndexValue> it = values.descendingIterator();
+          while (it.hasNext()) {
+            IndexValue value = it.next();
+            logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
+                value.getExpiresAtMs());
+            if (type.equals(IndexEntryType.ANY)) {
+              retValue = value;
+              break;
+            } else if (type.equals(IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              retValue = value;
+              break;
+            } else if (type.equals(IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              retValue = value;
+              break;
+            }
+          }
+          if (retValue != null) {
             break;
           }
         }

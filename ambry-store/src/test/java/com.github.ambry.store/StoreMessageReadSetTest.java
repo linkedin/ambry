@@ -54,6 +54,7 @@ public class StoreMessageReadSetTest {
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{false}, {true}});
   }
+
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
   static {

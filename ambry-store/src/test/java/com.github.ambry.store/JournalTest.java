@@ -33,16 +33,18 @@ public class JournalTest {
     Assert.assertNull("Last offset should be null", journal.getLastOffset());
     Assert.assertNull("Should not be able to get entries because there are none",
         journal.getEntriesSince(new Offset(firstLogSegmentName, 0), true));
-    journal.addEntry(new Offset(firstLogSegmentName, 0), new MockId("id1"));
-    journal.addEntry(new Offset(firstLogSegmentName, 1000), new MockId("id2"));
-    journal.addEntry(new Offset(firstLogSegmentName, 2000), new MockId("id3"));
-    journal.addEntry(new Offset(firstLogSegmentName, 3000), new MockId("id4"));
-    journal.addEntry(new Offset(firstLogSegmentName, 4000), new MockId("id5"));
-    journal.addEntry(new Offset(secondLogSegmentName, 0), new MockId("id6"));
-    journal.addEntry(new Offset(secondLogSegmentName, 1000), new MockId("id7"));
-    journal.addEntry(new Offset(secondLogSegmentName, 2000), new MockId("id8"));
-    journal.addEntry(new Offset(secondLogSegmentName, 3000), new MockId("id9"));
-    journal.addEntry(new Offset(secondLogSegmentName, 4000), new MockId("id10"));
+    addEntryAndVerify(journal, new Offset(firstLogSegmentName, 0), new MockId("id1"));
+    Assert.assertEquals("Did not get expected key at offset", new MockId("id1"),
+        journal.getKeyAtOffset(new Offset(firstLogSegmentName, 0)));
+    addEntryAndVerify(journal, new Offset(firstLogSegmentName, 1000), new MockId("id2"));
+    addEntryAndVerify(journal, new Offset(firstLogSegmentName, 2000), new MockId("id3"));
+    addEntryAndVerify(journal, new Offset(firstLogSegmentName, 3000), new MockId("id4"));
+    addEntryAndVerify(journal, new Offset(firstLogSegmentName, 4000), new MockId("id5"));
+    addEntryAndVerify(journal, new Offset(secondLogSegmentName, 0), new MockId("id6"));
+    addEntryAndVerify(journal, new Offset(secondLogSegmentName, 1000), new MockId("id7"));
+    addEntryAndVerify(journal, new Offset(secondLogSegmentName, 2000), new MockId("id8"));
+    addEntryAndVerify(journal, new Offset(secondLogSegmentName, 3000), new MockId("id9"));
+    addEntryAndVerify(journal, new Offset(secondLogSegmentName, 4000), new MockId("id10"));
     Assert.assertEquals("First offset not as expected", new Offset(firstLogSegmentName, 0), journal.getFirstOffset());
     Assert.assertEquals("Last offset not as expected", new Offset(secondLogSegmentName, 4000), journal.getLastOffset());
     List<JournalEntry> entries = journal.getEntriesSince(new Offset(firstLogSegmentName, 0), true);
@@ -71,10 +73,16 @@ public class JournalTest {
     Assert.assertEquals(entries.size(), 5);
     Assert.assertNull("Should not be able to get entries because offset does not exist",
         journal.getEntriesSince(new Offset(firstLogSegmentName, 1), true));
-    journal.addEntry(new Offset(secondLogSegmentName, 5000), new MockId("id11"));
+    addEntryAndVerify(journal, new Offset(secondLogSegmentName, 5000), new MockId("id11"));
     Assert.assertEquals("First offset not as expected", new Offset(firstLogSegmentName, 1000),
         journal.getFirstOffset());
     Assert.assertEquals("Last offset not as expected", new Offset(secondLogSegmentName, 5000), journal.getLastOffset());
+    Assert.assertNull("Journal should have no entries for the first added offset",
+        journal.getKeyAtOffset(new Offset(firstLogSegmentName, 0)));
+    Assert.assertNull("Journal should have no entries for the offset after the last one",
+        journal.getKeyAtOffset(new Offset(firstLogSegmentName, 5001)));
+    Assert.assertNull("Journal should have no entries for offsets that weren't added",
+        journal.getKeyAtOffset(new Offset(firstLogSegmentName, 1001)));
     entries = journal.getEntriesSince(new Offset(firstLogSegmentName, 0), true);
     Assert.assertNull(entries);
     entries = journal.getEntriesSince(new Offset(firstLogSegmentName, 1000), false);
@@ -83,5 +91,18 @@ public class JournalTest {
     Assert.assertEquals(entries.size(), 5);
     Assert.assertEquals(entries.get(4).getOffset(), new Offset(secondLogSegmentName, 1000));
     Assert.assertEquals(entries.get(4).getKey(), new MockId("id7"));
+  }
+
+  /**
+   * Adds an entry to the journal and verifies some getters
+   * @param journal the {@link Journal} to add to
+   * @param offset the {@link Offset} to add an entry for
+   * @param id the {@link StoreKey}  at {@code offset}
+   */
+  private void addEntryAndVerify(Journal journal, Offset offset, MockId id) {
+    long crc = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    journal.addEntry(offset, id, crc);
+    Assert.assertEquals("Unexpected key at offset", id, journal.getKeyAtOffset(offset));
+    Assert.assertEquals("Unexpected crc for key", crc, journal.getCrcOfKey(id).longValue());
   }
 }

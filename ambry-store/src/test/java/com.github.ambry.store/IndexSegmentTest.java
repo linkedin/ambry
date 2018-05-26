@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2016 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,15 +26,17 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.NavigableSet;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Test;
@@ -55,7 +57,7 @@ public class IndexSegmentTest {
   private static final int LARGER_KEY_SIZE =
       new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE + CUSTOM_ID_SIZE / 2)).sizeInBytes();
   private static final StoreConfig STORE_CONFIG = new StoreConfig(new VerifiableProperties(new Properties()));
-  private static final Time time = new MockTime();
+  private static final MockTime time = new MockTime();
   private static final long DELETE_FILE_SPAN_SIZE = 10;
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
@@ -105,7 +107,7 @@ public class IndexSegmentTest {
    * Comprehensive tests for {@link IndexSegment}
    */
   @Test
-  public void comprehensiveTest() throws IOException, StoreException, InterruptedException {
+  public void comprehensiveTest() throws IOException, StoreException {
     if (version == PersistentIndex.VERSION_2) {
       for (boolean includeSmall : new boolean[]{false, true}) {
         for (boolean includeLarge : new boolean[]{false, true}) {
@@ -128,32 +130,40 @@ public class IndexSegmentTest {
     String prevLogSegmentName = LogSegmentNameHelper.getName(0, 0);
     String logSegmentName = LogSegmentNameHelper.getNextPositionName(prevLogSegmentName);
     Offset startOffset = new Offset(logSegmentName, 0);
-    MockId id1 = new MockId("id1");
-    MockId id2 = new MockId("id2");
-    MockId id3 = new MockId("id3");
-    short serviceId = Utils.getRandomShort(TestUtils.RANDOM);
+    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
-            serviceId, containerId, version);
+            accountId, containerId, version);
     IndexValue value2 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.milliseconds(),
-            serviceId, containerId, version);
+            accountId, containerId, version);
     IndexValue value3 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
-            serviceId, containerId, version);
+            accountId, containerId, version);
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
+    // generate a DELETE
+    IndexValue delValue2 =
+        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), value2.getExpiresAtMs(), time.milliseconds(),
+            value2.getAccountId(), value2.getContainerId(), version);
+    delValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    delValue2.setNewSize(100);
+    delValue2.setFlag(IndexValue.Flags.Delete_Index);
     IndexSegment indexSegment = generateIndexSegment(startOffset);
     // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
     indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
     indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
     indexSegment.addEntry(new IndexEntry(id1, value3), new Offset(logSegmentName, 3000));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3100));
 
-    // provide end offset such that nothing is written
-    indexSegment.writeIndexSegmentToFile(new Offset(prevLogSegmentName, 0));
-    assertFalse("Index file should not have been created", indexSegment.getFile().exists());
-    // provide end offset such that nothing is written
-    indexSegment.writeIndexSegmentToFile(new Offset(prevLogSegmentName, indexSegment.getStartOffset().getOffset()));
-    assertFalse("Index file should not have been created", indexSegment.getFile().exists());
+    // provide end offsets such that nothing is written
+    checkNonCreationOfIndexSegmentFile(indexSegment, new Offset(prevLogSegmentName, 0));
+    checkNonCreationOfIndexSegmentFile(indexSegment,
+        new Offset(prevLogSegmentName, indexSegment.getStartOffset().getOffset()));
+    checkNonCreationOfIndexSegmentFile(indexSegment, new Offset(logSegmentName, 0));
     List<MockId> shouldBeFound = new ArrayList<>();
     List<MockId> shouldNotBeFound = new ArrayList<>(Arrays.asList(id3, id2, id1));
     for (int safeEndPoint = 1000; safeEndPoint <= 3000; safeEndPoint += 1000) {
@@ -164,12 +174,124 @@ public class IndexSegmentTest {
         Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
         IndexSegment fromDisk =
             new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
+        assertEquals("Number of items incorrect", shouldBeFound.size(), fromDisk.getNumberOfItems());
         for (MockId id : shouldBeFound) {
-          assertNotNull("Value for key should have been found", fromDisk.find(id));
+          verifyValues(fromDisk, id, 1, false);
         }
         for (MockId id : shouldNotBeFound) {
-          assertNull("Value for key should not have been found", fromDisk.find(id));
+          assertNull("Values for key should not have been found", fromDisk.find(id));
         }
+      }
+    }
+    // now persist the delete too
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3100));
+    Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
+    IndexSegment fromDisk =
+        new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
+    assertEquals("Number of items incorrect", 4, fromDisk.getNumberOfItems());
+    for (MockId id : new MockId[]{id1, id2, id3}) {
+      verifyValues(fromDisk, id, id.equals(id2) ? 2 : 1, id.equals(id2));
+    }
+  }
+
+  /**
+   * Tests some corner cases with
+   * {@link IndexSegment#getIndexEntriesSince(StoreKey, FindEntriesCondition, List, AtomicLong, boolean)}
+   * - tests that all values of a key are returned even if the find entries condition max size expires when the first
+   * value is loaded
+   * @throws StoreException
+   */
+  @Test
+  public void getIndexEntriesCornerCasesTest() throws IOException, StoreException {
+    String logSegmentName = LogSegmentNameHelper.getName(0, 0);
+    MockId id1 = new MockId("0" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + UtilsTest.getRandomString(CUSTOM_ID_SIZE - 1));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    IndexValue value1 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, version);
+    IndexValue value2 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, version);
+    IndexValue value3 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, version);
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
+    // generate a DELETE
+    IndexValue delValue2 =
+        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), value2.getExpiresAtMs(), time.milliseconds(),
+            value2.getAccountId(), value2.getContainerId(), version);
+    delValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    delValue2.setNewSize(100);
+    delValue2.setFlag(IndexValue.Flags.Delete_Index);
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0));
+    // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
+    indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
+    indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
+    indexSegment.addEntry(new IndexEntry(id1, value3), new Offset(logSegmentName, 3000));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3100));
+
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3100));
+    indexSegment.map(true);
+    List<IndexEntry> entries = new ArrayList<>();
+    for (boolean map : new boolean[]{false, true}) {
+      Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
+      IndexSegment fromDisk =
+          new IndexSegment(indexSegment.getFile(), map, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
+      // getIndexEntriesSince with maxSize = 0 should not return anything
+      FindEntriesCondition condition = new FindEntriesCondition(0);
+      assertFalse("getIndexEntriesSince() should not return anything",
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+      assertEquals("There should be no entries returned", 0, entries.size());
+      // getIndexEntriesSince with maxSize <= 1000 should return only the first key (id1)
+      condition = new FindEntriesCondition(1000);
+      assertTrue("getIndexEntriesSince() should return one entry",
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+      assertEquals("There should be one entry returned", 1, entries.size());
+      assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
+      assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
+      entries.clear();
+      // getIndexEntriesSince with maxSize > 1000 and <= 2100 should return three entries
+      for (int maxSize : new int[]{1001, 2100}) {
+        condition = new FindEntriesCondition(maxSize);
+        assertTrue("getIndexEntriesSince() should return entries",
+            fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+        assertEquals("There should be three entries returned", 3, entries.size());
+        assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
+        assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
+        assertEquals("Key in entry is incorrect", id2, entries.get(1).getKey());
+        assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(1).getValue().getBytes());
+        assertEquals("Key in entry is incorrect", id2, entries.get(2).getKey());
+        assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
+        entries.clear();
+      }
+      // getIndexEntriesSince with maxSize > 2100 should return four entries
+      condition = new FindEntriesCondition(2101);
+      assertTrue("getIndexEntriesSince() should return entries",
+          fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
+      assertEquals("There should be four entries returned", 4, entries.size());
+      assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
+      assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
+      assertEquals("Key in entry is incorrect", id2, entries.get(1).getKey());
+      assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(1).getValue().getBytes());
+      assertEquals("Key in entry is incorrect", id2, entries.get(2).getKey());
+      assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
+      assertEquals("Key in entry is incorrect", id3, entries.get(3).getKey());
+      assertEquals("Value in entry is incorrect", value1.getBytes(), entries.get(3).getValue().getBytes());
+      entries.clear();
+      // getIndexEntriesSince with maxSize > 0 and <= 1100 should return two entries
+      for (int maxSize : new int[]{1, 1100}) {
+        condition = new FindEntriesCondition(maxSize);
+        assertTrue("getIndexEntriesSince() should return entries",
+            fromDisk.getIndexEntriesSince(id1, condition, entries, new AtomicLong(0), false));
+        assertEquals("There should be two entries returned", 2, entries.size());
+        assertEquals("Key in entry is incorrect", id2, entries.get(0).getKey());
+        assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(0).getValue().getBytes());
+        assertEquals("Key in entry is incorrect", id2, entries.get(1).getKey());
+        assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(1).getValue().getBytes());
+        entries.clear();
       }
     }
   }
@@ -190,14 +312,14 @@ public class IndexSegmentTest {
    * @throws StoreException
    */
   private void doComprehensiveTest(short version, boolean includeSmallKeys, boolean includeLargeKeys)
-      throws IOException, StoreException, InterruptedException {
+      throws IOException, StoreException {
     String[] logSegmentNames = {LogSegmentNameHelper.generateFirstSegmentName(false), generateRandomLogSegmentName()};
     int valueSize = version == PersistentIndex.VERSION_0 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0
         : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1;
     for (String logSegmentName : logSegmentNames) {
       long writeStartOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
       Offset startOffset = new Offset(logSegmentName, writeStartOffset);
-      NavigableMap<MockId, IndexValue> referenceIndex = new TreeMap<>();
+      NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex = new TreeMap<>();
       // advance time so that last modified time for VERSION_1 has different last modified times for different index
       // segments
       time.sleep(10 * Time.MsPerSec);
@@ -239,17 +361,19 @@ public class IndexSegmentTest {
 
       int extraIdsToDelete = 10;
       Set<MockId> idsToDelete = getIdsToDelete(referenceIndex, extraIdsToDelete);
-      Map<Offset, MockId> extraOffsetsToCheck = addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
+      addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
       endOffset += idsToDelete.size() * DELETE_FILE_SPAN_SIZE;
-      numItems += extraIdsToDelete;
-      expectedSizeWritten += extraIdsToDelete * (KEY_SIZE + valueSize);
+      numItems += idsToDelete.size();
+      for (MockId id : idsToDelete) {
+        expectedSizeWritten += valueSize + id.sizeInBytes();
+      }
       verifyIndexSegmentDetails(indexSegment, startOffset, numItems, expectedSizeWritten, false, endOffset,
           time.milliseconds(), resetKey);
       verifyFind(referenceIndex, indexSegment);
       verifyGetEntriesSince(referenceIndex, indexSegment);
       indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
       verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
-          time.milliseconds(), resetKey, extraOffsetsToCheck);
+          time.milliseconds(), resetKey);
     }
   }
 
@@ -311,7 +435,7 @@ public class IndexSegmentTest {
    * @throws StoreException
    */
   private List<IndexEntry> addPutEntries(List<Long> offsets, long lastEntrySize, IndexSegment segment,
-      NavigableMap<MockId, IndexValue> referenceIndex, boolean includeSmallKeys, boolean includeLargeKeys)
+      NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, boolean includeSmallKeys, boolean includeLargeKeys)
       throws StoreException {
     List<IndexEntry> addedEntries = new ArrayList<>();
     for (int i = 0; i < offsets.size(); i++) {
@@ -334,7 +458,7 @@ public class IndexSegmentTest {
       IndexEntry entry = new IndexEntry(id, value);
       segment.addEntry(entry, new Offset(segment.getLogSegmentName(), offset + size));
       addedEntries.add(entry);
-      referenceIndex.put(id, value);
+      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>()).add(value);
     }
     return addedEntries;
   }
@@ -391,13 +515,19 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to test
    * @throws StoreException
    */
-  private void verifyFind(NavigableMap<MockId, IndexValue> referenceIndex, IndexSegment segment) throws StoreException {
-    for (Map.Entry<MockId, IndexValue> entry : referenceIndex.entrySet()) {
-      IndexValue referenceValue = entry.getValue();
-      IndexValue valueFromSegment = segment.find(entry.getKey());
-      assertNotNull("Value obtained from segment is null", valueFromSegment);
-      assertEquals("Offset is not equal", referenceValue.getOffset(), valueFromSegment.getOffset());
-      assertEquals("Value is not equal", referenceValue.getBytes(), valueFromSegment.getBytes());
+  private void verifyFind(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, IndexSegment segment)
+      throws StoreException {
+    for (Map.Entry<MockId, NavigableSet<IndexValue>> entry : referenceIndex.entrySet()) {
+      NavigableSet<IndexValue> referenceValues = entry.getValue();
+      NavigableSet<IndexValue> values = segment.find(entry.getKey());
+      assertNotNull("Values obtained from segment is null", values);
+      IndexValue valueFromSegment = values.first();
+      for (IndexValue referenceValue : referenceValues) {
+        assertEquals("Offset is not equal", referenceValue.getOffset(), valueFromSegment.getOffset());
+        assertEquals("Value is not equal", referenceValue.getBytes(), valueFromSegment.getBytes());
+        valueFromSegment = values.higher(valueFromSegment);
+      }
+      assertNull("There should be no more values in the segment", valueFromSegment);
     }
     // try to find a key that does not exist.
     MockId id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
@@ -410,10 +540,9 @@ public class IndexSegmentTest {
    * @param referenceIndex the index entries to be used as reference.
    * @param segment the {@link IndexSegment} to test
    * @throws IOException
-   * @throws StoreException
    */
-  private void verifyGetEntriesSince(NavigableMap<MockId, IndexValue> referenceIndex, IndexSegment segment)
-      throws IOException, StoreException {
+  private void verifyGetEntriesSince(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
+      IndexSegment segment) throws IOException {
     // index segment is "too" recent
     FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE, segment.getLastModifiedTimeSecs() - 1);
     List<MessageInfo> entries = new ArrayList<>();
@@ -423,8 +552,10 @@ public class IndexSegmentTest {
 
     long sizeLeftInSegment = segment.getEndOffset().getOffset() - segment.getStartOffset().getOffset();
     getEntriesSinceTest(referenceIndex, segment, null, sizeLeftInSegment);
-    for (Map.Entry<MockId, IndexValue> entry : referenceIndex.entrySet()) {
-      sizeLeftInSegment -= entry.getValue().getSize();
+    for (Map.Entry<MockId, NavigableSet<IndexValue>> entry : referenceIndex.entrySet()) {
+      for (IndexValue value : entry.getValue()) {
+        sizeLeftInSegment -= value.getSize();
+      }
       getEntriesSinceTest(referenceIndex, segment, entry.getKey(), sizeLeftInSegment);
     }
   }
@@ -438,7 +569,7 @@ public class IndexSegmentTest {
    * @param sizeLeftInSegment the total size of values in the segment beyond {@code idToCheck}.
    * @throws IOException
    */
-  private void getEntriesSinceTest(NavigableMap<MockId, IndexValue> referenceIndex, IndexSegment segment,
+  private void getEntriesSinceTest(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, IndexSegment segment,
       MockId idToCheck, long sizeLeftInSegment) throws IOException {
     long maxSize = 0;
     MockId idHigherThanIdToCheck = idToCheck == null ? referenceIndex.firstKey() : referenceIndex.higherKey(idToCheck);
@@ -449,13 +580,17 @@ public class IndexSegmentTest {
       long existingSize = 0;
       while (existingSize < maxSize) {
         doGetEntriesSinceTest(referenceIndex, segment, idToCheck, maxSize, existingSize, highestIdIncluded);
-        existingSize += referenceIndex.get(highestIdIncluded).getSize();
+        for (IndexValue value : referenceIndex.get(highestIdIncluded)) {
+          existingSize += value.getSize();
+        }
         highestIdIncluded = referenceIndex.lowerKey(highestIdIncluded);
       }
       doGetEntriesSinceTest(referenceIndex, segment, idToCheck, maxSize, maxSize, null);
       if (nextHighestIdIncluded != null) {
         highestIdIncluded = nextHighestIdIncluded;
-        maxSize += referenceIndex.get(highestIdIncluded).getSize();
+        for (IndexValue value : referenceIndex.get(highestIdIncluded)) {
+          maxSize += value.getSize();
+        }
       } else {
         break;
       }
@@ -479,9 +614,12 @@ public class IndexSegmentTest {
    * @param highestExpectedId the highest expected Id in the returned entries.
    * @throws IOException
    */
-  private void doGetEntriesSinceTest(NavigableMap<MockId, IndexValue> referenceIndex, IndexSegment segment,
-      MockId idToCheck, long maxSize, long existingSize, MockId highestExpectedId) throws IOException {
+  private void doGetEntriesSinceTest(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
+      IndexSegment segment, MockId idToCheck, long maxSize, long existingSize, MockId highestExpectedId)
+      throws IOException {
+    // test getEntriesSince
     FindEntriesCondition condition = new FindEntriesCondition(maxSize);
+
     List<MessageInfo> entries = new ArrayList<>();
     assertEquals("Unexpected return value from getEntriesSince()", highestExpectedId != null,
         segment.getEntriesSince(idToCheck, condition, entries, new AtomicLong(existingSize)));
@@ -495,6 +633,45 @@ public class IndexSegmentTest {
     } else {
       assertEquals("Entries list is not empty", 0, entries.size());
     }
+
+    // test getIndexEntriesSince()
+    for (boolean oneEntryPerKey : new boolean[]{true, false}) {
+      List<IndexEntry> indexEntries = new ArrayList<>();
+      assertEquals("Unexpected return value from getIndexEntriesSince()", highestExpectedId != null,
+          segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize),
+              oneEntryPerKey));
+      if (highestExpectedId != null) {
+        assertEquals("Highest ID not as expected", highestExpectedId,
+            indexEntries.get(indexEntries.size() - 1).getKey());
+        MockId nextExpectedId = idToCheck == null ? referenceIndex.firstKey() : referenceIndex.higherKey(idToCheck);
+        // gather all index entries that should be there
+        final List<IndexEntry> expectedEntries = new ArrayList<>();
+        while (nextExpectedId != null) {
+          NavigableSet<IndexValue> values = referenceIndex.get(nextExpectedId);
+          if (oneEntryPerKey) {
+            expectedEntries.add(new IndexEntry(nextExpectedId, values.last()));
+          } else {
+            for (IndexValue value : values) {
+              expectedEntries.add(new IndexEntry(nextExpectedId, value));
+            }
+          }
+          if (nextExpectedId.equals(highestExpectedId)) {
+            break;
+          }
+          nextExpectedId = referenceIndex.higherKey(nextExpectedId);
+        }
+        assertEquals("Number of entries not as expected", expectedEntries.size(), indexEntries.size());
+        Iterator<IndexEntry> it = indexEntries.iterator();
+        for (IndexEntry expected : expectedEntries) {
+          assertTrue("There should be more entries", it.hasNext());
+          IndexEntry actual = it.next();
+          assertEquals("Key not as expected", expected.getKey(), actual.getKey());
+          assertEquals("Value not as expected", expected.getValue().getBytes(), actual.getValue().getBytes());
+        }
+      } else {
+        assertEquals("Entries list is not empty", 0, indexEntries.size());
+      }
+    }
   }
 
   /**
@@ -504,7 +681,8 @@ public class IndexSegmentTest {
    * @param outOfSegmentIdCount the number of ids to be generated that are not in {@code referenceIndex}.
    * @return a {@link Set} of IDs to create delete entries for.
    */
-  private Set<MockId> getIdsToDelete(NavigableMap<MockId, IndexValue> referenceIndex, int outOfSegmentIdCount) {
+  private Set<MockId> getIdsToDelete(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
+      int outOfSegmentIdCount) {
     Set<MockId> idsToDelete = new HashSet<>();
     // return every alternate id in the map
     boolean include = true;
@@ -519,7 +697,7 @@ public class IndexSegmentTest {
       MockId id;
       do {
         id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
-      } while (idsToDelete.contains(id));
+      } while (referenceIndex.containsKey(id) || idsToDelete.contains(id));
       idsToDelete.add(id);
     }
     return idsToDelete;
@@ -531,24 +709,23 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to add the entries to.
    * @param referenceIndex the {@link NavigableMap} to add all the entries to. This repreents the source of truth for
    *                       all checks.
-   * @return a {@link Map} that defines the put record offsets of keys whose index entries have been replaced by delete
-   * entries owing to the fact that the put and delete both occurred in the same index segment.
    * @throws StoreException
    */
-  private Map<Offset, MockId> addDeleteEntries(Set<MockId> idsToDelete, IndexSegment segment,
-      NavigableMap<MockId, IndexValue> referenceIndex) throws StoreException {
-    Map<Offset, MockId> putRecordOffsets = new HashMap<>();
+  private void addDeleteEntries(Set<MockId> idsToDelete, IndexSegment segment,
+      NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex) throws StoreException {
     for (MockId id : idsToDelete) {
       Offset offset = segment.getEndOffset();
-      IndexValue value = segment.find(id);
-      if (value == null) {
+      NavigableSet<IndexValue> values = segment.find(id);
+      IndexValue value;
+      if (values == null) {
         // create an index value with a random log segment name
         value = IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), Utils.Infinite_Time,
             time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
             version);
+      } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        throw new IllegalArgumentException(id + " is already deleted");
       } else {
-        // if in this segment, add to putRecordOffsets so that journal can verify these later
-        putRecordOffsets.put(value.getOffset(), id);
+        value = values.last();
       }
       IndexValue newValue = IndexValueTest.getIndexValue(value, version);
       newValue.setFlag(IndexValue.Flags.Delete_Index);
@@ -556,9 +733,8 @@ public class IndexSegmentTest {
       newValue.setNewSize(DELETE_FILE_SPAN_SIZE);
       segment.addEntry(new IndexEntry(id, newValue),
           new Offset(offset.getName(), offset.getOffset() + DELETE_FILE_SPAN_SIZE));
-      referenceIndex.put(id, newValue);
+      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>()).add(newValue);
     }
-    return putRecordOffsets;
   }
 
   /**
@@ -571,15 +747,12 @@ public class IndexSegmentTest {
    * @param endOffset the expected end offset of the {@code indexSegment}
    * @param lastModifiedTimeInMs the last modified time of the index segment in ms
    * @param resetKey the resetKey of the index segment
-   * @param extraOffsetsToCheck a {@link Map} that defines the put record offsets of keys whose presence needs to be
-   *                            verified in the {@link Journal}.
    * @throws IOException
    * @throws StoreException
    */
-  private void verifyReadFromFile(NavigableMap<MockId, IndexValue> referenceIndex, File file, Offset startOffset,
-      int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
-      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey, Map<Offset, MockId> extraOffsetsToCheck)
-      throws IOException, StoreException {
+  private void verifyReadFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, File file,
+      Offset startOffset, int numItems, int expectedSizeWritten, long endOffset, long lastModifiedTimeInMs,
+      Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey) throws IOException, StoreException {
     // read from file (unmapped) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
@@ -588,7 +761,7 @@ public class IndexSegmentTest {
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
     // journal should contain all the entries
-    verifyJournal(referenceIndex, startOffset, journal, extraOffsetsToCheck);
+    verifyJournal(referenceIndex, journal);
     fromDisk.map(true);
 
     // read from file (mapped) and verify that everything is ok
@@ -605,36 +778,52 @@ public class IndexSegmentTest {
   /**
    * Verfies that the journal has all and only expected entries.
    * @param referenceIndex the index entries to be used as reference.
-   * @param indexSegmentStartOffset the start offset of the {@link IndexSegment} that filled the journal.
    * @param journal the {@link Journal} to check.
-   * @param extraOffsetsToCheck a {@link Map} that defines the put record offsets of keys whose presence needs to be
-   *                            verified in the {@link Journal}.
    */
-  private void verifyJournal(NavigableMap<MockId, IndexValue> referenceIndex, Offset indexSegmentStartOffset,
-      Journal journal, Map<Offset, MockId> extraOffsetsToCheck) {
-    Set<StoreKey> seenKeys = new TreeSet<>();
-    Map<Offset, Boolean> extraEntriesCheckState = null;
-    if (extraOffsetsToCheck != null) {
-      extraEntriesCheckState = new HashMap<>();
-      for (Map.Entry<Offset, MockId> extra : extraOffsetsToCheck.entrySet()) {
-        extraEntriesCheckState.put(extra.getKey(), false);
-      }
-    }
-    List<JournalEntry> entries = journal.getEntriesSince(indexSegmentStartOffset, true);
+  private void verifyJournal(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, Journal journal) {
+    // order all available IndexValue by offset
+    final TreeMap<Offset, MockId> allIdsByOffset = new TreeMap<>();
+    referenceIndex.forEach(
+        (key, value) -> value.forEach(indexValue -> allIdsByOffset.put(indexValue.getOffset(), key)));
+    List<JournalEntry> entries = journal.getEntriesSince(allIdsByOffset.firstKey(), true);
+    assertEquals("Size of entries returned from journal not as expected", allIdsByOffset.size(), entries.size());
     for (JournalEntry entry : entries) {
       StoreKey key = entry.getKey();
       Offset offset = entry.getOffset();
-      seenKeys.add(key);
-      if (extraOffsetsToCheck != null && extraOffsetsToCheck.containsKey(offset) && extraOffsetsToCheck.get(offset)
-          .equals(key)) {
-        extraEntriesCheckState.put(offset, true);
-      }
+      assertEquals("Key not as expected", key, allIdsByOffset.get(offset));
     }
-    assertEquals("Keys seen does not match keys in reference index", seenKeys.size(), referenceIndex.size());
-    seenKeys.containsAll(referenceIndex.keySet());
-    if (extraEntriesCheckState != null) {
-      assertFalse("One of the extraOffsetsToCheck was not found", extraEntriesCheckState.values().contains(false));
-    }
+  }
+
+  // partialWriteTest() helpers
+
+  /**
+   * Checks that an index segment file is not created
+   * @param indexSegment the index segment to write to file
+   * @param safeEndPoint the safe end point to use to the call to {@link IndexSegment#writeIndexSegmentToFile(Offset)}.
+   * @throws IOException
+   * @throws StoreException
+   */
+  private void checkNonCreationOfIndexSegmentFile(IndexSegment indexSegment, Offset safeEndPoint)
+      throws IOException, StoreException {
+    indexSegment.writeIndexSegmentToFile(safeEndPoint);
+    assertFalse("Index file should not have been created", indexSegment.getFile().exists());
+  }
+
+  /**
+   * Verifies that the values obtained for {@code id} from {@code segment} satisfy the count and deleted state as
+   * provided
+   * @param segment the {@link IndexSegment} to check
+   * @param id the {@link MockId} to find values for
+   * @param valueCount the number of values expected to be returned
+   * @param isDeleted the expected state of the latest value
+   * @throws StoreException
+   */
+  private void verifyValues(IndexSegment segment, MockId id, int valueCount, boolean isDeleted) throws StoreException {
+    NavigableSet<IndexValue> values = segment.find(id);
+    assertNotNull("Values should have been found for " + id, values);
+    assertEquals("Unexpected number of values for " + id, valueCount, values.size());
+    assertEquals("Delete flag not as expected for " + id, isDeleted,
+        values.last().isFlagSet(IndexValue.Flags.Delete_Index));
   }
 }
 

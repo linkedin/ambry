@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -402,7 +403,6 @@ public class IndexTest {
    */
   @Test
   public void expirationTest() throws InterruptedException, IOException, StoreException {
-
     // add a PUT entry that will expire if time advances
     // advance time so that time moves to whole second with no residual milliseconds
     state.time.sleep(Time.MsPerSec - state.time.milliseconds());
@@ -804,8 +804,8 @@ public class IndexTest {
   @Test
   public void getLogSegmentsNotInJournalTest() throws InterruptedException, IOException, StoreException {
     if (isLogSegmented) {
-      testGetLogSegmentsNotInJournal(2, 2 * MAX_IN_MEM_ELEMENTS);
-      testGetLogSegmentsNotInJournal(3, 2 * MAX_IN_MEM_ELEMENTS);
+      testGetLogSegmentsNotInJournal(2, 2 * state.getMaxInMemElements());
+      testGetLogSegmentsNotInJournal(3, 2 * state.getMaxInMemElements());
     } else {
       assertEquals("LogSegments mismatch for non segmented log ", null, state.index.getLogSegmentsNotInJournal());
     }
@@ -1760,8 +1760,6 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceToIndexBasedTest() throws StoreException {
-    Offset logAbsoluteZero = new Offset(state.log.getFirstSegment().getName(), 0);
-
     // ------------------
     // 1. Index -> Index
     Offset firstIndexSegmentStartOffset = state.referenceIndex.firstKey();
@@ -1770,20 +1768,20 @@ public class IndexTest {
     // All elements from first index segment and two from the second to be returned (because of size restrictions)
     Set<MockId> expectedKeys = new HashSet<>();
     long maxTotalSizeOfEntries = 0;
-    for (Map.Entry<MockId, IndexValue> segmentEntry : state.referenceIndex.get(firstIndexSegmentStartOffset)
+    for (Map.Entry<MockId, TreeSet<IndexValue>> segmentEntry : state.referenceIndex.get(firstIndexSegmentStartOffset)
         .entrySet()) {
       if (!segmentEntry.getKey().equals(firstId)) {
         expectedKeys.add(segmentEntry.getKey());
-        maxTotalSizeOfEntries += segmentEntry.getValue().getSize();
+        maxTotalSizeOfEntries += getSizeOfAllValues(segmentEntry.getValue());
       }
     }
-    TreeMap<MockId, IndexValue> secondIndexSegment = state.referenceIndex.get(secondIndexSegmentStartOffset);
-    Map.Entry<MockId, IndexValue> secondIndexSegmentEntry = secondIndexSegment.firstEntry();
+    TreeMap<MockId, TreeSet<IndexValue>> secondIndexSegment = state.referenceIndex.get(secondIndexSegmentStartOffset);
+    Map.Entry<MockId, TreeSet<IndexValue>> secondIndexSegmentEntry = secondIndexSegment.firstEntry();
     expectedKeys.add(secondIndexSegmentEntry.getKey());
-    maxTotalSizeOfEntries += secondIndexSegmentEntry.getValue().getSize();
+    maxTotalSizeOfEntries += getSizeOfAllValues(secondIndexSegmentEntry.getValue());
     secondIndexSegmentEntry = secondIndexSegment.higherEntry(secondIndexSegmentEntry.getKey());
     expectedKeys.add(secondIndexSegmentEntry.getKey());
-    maxTotalSizeOfEntries += secondIndexSegmentEntry.getValue().getSize();
+    maxTotalSizeOfEntries += getSizeOfAllValues(secondIndexSegmentEntry.getValue());
 
     StoreFindToken startToken =
         new StoreFindToken(firstId, firstIndexSegmentStartOffset, state.sessionId, state.incarnationId);
@@ -1797,7 +1795,8 @@ public class IndexTest {
     // 2. Uninitialized -> Index
     // add firstStoreKey and its size
     expectedKeys.add(firstId);
-    maxTotalSizeOfEntries += state.allKeys.get(firstId).getFirst().getSize();
+    maxTotalSizeOfEntries +=
+        getSizeOfAllValues(state.referenceIndex.get(firstIndexSegmentStartOffset).firstEntry().getValue());
     doFindEntriesSinceTest(new StoreFindToken(), maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
 
     // ------------------
@@ -1871,7 +1870,7 @@ public class IndexTest {
     Offset journalStartOffset = state.index.journal.getFirstOffset();
     StoreFindToken startToken = new StoreFindToken();
     Offset stoppedAt = null;
-    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry : state.referenceIndex.entrySet()) {
+    for (Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> indexEntry : state.referenceIndex.entrySet()) {
       Offset indexSegmentStartOffset = indexEntry.getKey();
       // We get index based tokens as long as
       // 1. The original token is index based
@@ -1880,12 +1879,12 @@ public class IndexTest {
         stoppedAt = indexSegmentStartOffset;
         break;
       }
-      for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
+      for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
         StoreFindToken expectedEndToken =
             new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId);
         expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(indexSegmentStartOffset));
-        doFindEntriesSinceTest(startToken, indexSegmentEntry.getValue().getSize(), Collections.singleton(id),
+        doFindEntriesSinceTest(startToken, getSizeOfAllValues(indexSegmentEntry.getValue()), Collections.singleton(id),
             expectedEndToken);
         startToken = expectedEndToken;
       }
@@ -1913,7 +1912,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findEntriesSinceIndexBasedTokenForOffsetInJournalTest() throws StoreException {
-    Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry =
+    Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> indexEntry =
         state.referenceIndex.floorEntry(state.index.journal.getFirstOffset());
     Offset nextIndexSegmentStartOffset = state.referenceIndex.higherKey(indexEntry.getKey());
     MockId firstIdInSegment = indexEntry.getValue().firstKey();
@@ -1921,10 +1920,10 @@ public class IndexTest {
         new StoreFindToken(firstIdInSegment, indexEntry.getKey(), state.sessionId, state.incarnationId);
     long maxSize = 0;
     Set<MockId> expectedKeys = new HashSet<>();
-    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
+    for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
       if (!firstIdInSegment.equals(indexSegmentEntry.getKey())) {
         expectedKeys.add(indexSegmentEntry.getKey());
-        maxSize += indexSegmentEntry.getValue().getSize();
+        maxSize += getSizeOfAllValues(indexSegmentEntry.getValue());
       }
     }
     MockId logId = state.logOrder.get(nextIndexSegmentStartOffset).getFirst();
@@ -2036,19 +2035,19 @@ public class IndexTest {
     // ------------------
     // 1. Index -> Index
     Offset secondIndexSegmentStartOffset = state.referenceIndex.higherKey(state.referenceIndex.firstKey());
-    Map.Entry<MockId, IndexValue> firstSegmentEntry =
+    Map.Entry<MockId, TreeSet<IndexValue>> firstSegmentEntry =
         state.referenceIndex.get(secondIndexSegmentStartOffset).firstEntry();
     // Most elements from the second to be returned (because of size restrictions)
     Set<MockId> expectedKeys = new HashSet<>();
     long maxTotalSizeOfEntries = 0;
     MockId lastKey = null;
-    for (Map.Entry<MockId, IndexValue> segmentEntry : state.referenceIndex.get(secondIndexSegmentStartOffset)
+    for (Map.Entry<MockId, TreeSet<IndexValue>> segmentEntry : state.referenceIndex.get(secondIndexSegmentStartOffset)
         .entrySet()) {
       if (!segmentEntry.equals(firstSegmentEntry)) {
-        if (segmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (segmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
           expectedKeys.add(segmentEntry.getKey());
         }
-        maxTotalSizeOfEntries += segmentEntry.getValue().getSize();
+        maxTotalSizeOfEntries += getSizeOfAllValues(segmentEntry.getValue());
       }
       lastKey = segmentEntry.getKey();
     }
@@ -2062,15 +2061,17 @@ public class IndexTest {
     // ------------------
     // 2. Uninitialized -> Index
     // add size of values and any keys that are supposed to be returned from the first index segment
-    for (Map.Entry<MockId, IndexValue> segmentEntry : state.referenceIndex.firstEntry().getValue().entrySet()) {
-      if (segmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+    for (Map.Entry<MockId, TreeSet<IndexValue>> segmentEntry : state.referenceIndex.firstEntry()
+        .getValue()
+        .entrySet()) {
+      if (segmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
         expectedKeys.add(segmentEntry.getKey());
       }
-      maxTotalSizeOfEntries += segmentEntry.getValue().getSize();
+      maxTotalSizeOfEntries += getSizeOfAllValues(segmentEntry.getValue());
     }
     // add size of value of firstIdInSegment
-    maxTotalSizeOfEntries += firstSegmentEntry.getValue().getSize();
-    if (firstSegmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+    maxTotalSizeOfEntries += getSizeOfAllValues(firstSegmentEntry.getValue());
+    if (firstSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
       expectedKeys.add(firstSegmentEntry.getKey());
     }
     doFindDeletedEntriesSinceTest(new StoreFindToken(), maxTotalSizeOfEntries, expectedKeys, expectedEndToken);
@@ -2141,7 +2142,7 @@ public class IndexTest {
     Offset journalStartOffset = state.index.journal.getFirstOffset();
     StoreFindToken startToken = new StoreFindToken();
     Offset stoppedAt = null;
-    for (Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry : state.referenceIndex.entrySet()) {
+    for (Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> indexEntry : state.referenceIndex.entrySet()) {
       Offset indexSegmentStartOffset = indexEntry.getKey();
       // We get index based tokens as long as
       // 1. The original token is index based
@@ -2150,12 +2151,12 @@ public class IndexTest {
         stoppedAt = indexSegmentStartOffset;
         break;
       }
-      for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
+      for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
         MockId id = indexSegmentEntry.getKey();
-        boolean isDeleted = indexSegmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index);
+        boolean isDeleted = indexSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index);
         StoreFindToken expectedEndToken =
             new StoreFindToken(id, indexSegmentStartOffset, state.sessionId, state.incarnationId);
-        long size = indexSegmentEntry.getValue().getSize();
+        long size = getSizeOfAllValues(indexSegmentEntry.getValue());
         doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.EMPTY_SET,
             expectedEndToken);
         startToken = expectedEndToken;
@@ -2184,7 +2185,7 @@ public class IndexTest {
    * @throws StoreException
    */
   private void findDeletedEntriesSinceIndexBasedTokenForOffsetInJournalTest() throws StoreException {
-    Map.Entry<Offset, TreeMap<MockId, IndexValue>> indexEntry =
+    Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> indexEntry =
         state.referenceIndex.floorEntry(state.index.journal.getFirstOffset());
     Offset nextIndexSegmentStartOffset = state.referenceIndex.higherKey(indexEntry.getKey());
     MockId firstIdInSegment = indexEntry.getValue().firstKey();
@@ -2192,12 +2193,12 @@ public class IndexTest {
         new StoreFindToken(firstIdInSegment, indexEntry.getKey(), state.sessionId, state.incarnationId);
     long maxSize = 0;
     Set<MockId> expectedKeys = new HashSet<>();
-    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : indexEntry.getValue().entrySet()) {
+    for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : indexEntry.getValue().entrySet()) {
       if (!firstIdInSegment.equals(indexSegmentEntry.getKey())) {
-        if (indexSegmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        if (indexSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
           expectedKeys.add(indexSegmentEntry.getKey());
         }
-        maxSize += indexSegmentEntry.getValue().getSize();
+        maxSize += getSizeOfAllValues(indexSegmentEntry.getValue());
       }
     }
     MockId logId = state.logOrder.get(nextIndexSegmentStartOffset).getFirst();
@@ -2246,9 +2247,9 @@ public class IndexTest {
    */
   private MockId getDeletedKeyFromIndexSegment(Offset indexSegmentStartOffset) {
     MockId deletedId = null;
-    for (Map.Entry<MockId, IndexValue> indexSegmentEntry : state.referenceIndex.get(indexSegmentStartOffset)
+    for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : state.referenceIndex.get(indexSegmentStartOffset)
         .entrySet()) {
-      if (indexSegmentEntry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+      if (indexSegmentEntry.getValue().last().isFlagSet(IndexValue.Flags.Delete_Index)) {
         deletedId = indexSegmentEntry.getKey();
         break;
       }

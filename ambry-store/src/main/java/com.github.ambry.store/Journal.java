@@ -177,4 +177,13 @@ class Journal {
   Long getCrcOfKey(StoreKey key) {
     return recentCrcs.get(key);
   }
+
+  /**
+   * @param offset the offset of the record whose key is needed
+   * @return the {@link StoreKey} of the record at {@code offset}. {@code null} if the journal is not tracking that
+   * offset
+   */
+  StoreKey getKeyAtOffset(Offset offset) {
+    return journal.get(offset);
+  }
 }

@@ -203,7 +203,7 @@ public class HardDeleter implements Runnable {
         return;
       }
 
-        /* First create the readOptionsList */
+      /* First create the readOptionsList */
       List<BlobReadOptions> readOptionsList = hardDeleteRecoveryRange.getBlobReadOptionsList();
 
         /* Next, perform the log write. The token file does not have to be persisted again as only entries that are
@@ -334,7 +334,7 @@ public class HardDeleter implements Runnable {
    * This method will be called before the log is flushed.
    */
   void preLogFlush() {
-      /* Save the current start token before the log gets flushed */
+    /* Save the current start token before the log gets flushed */
     startTokenBeforeLogFlush = startToken;
   }
 
@@ -342,7 +342,7 @@ public class HardDeleter implements Runnable {
    * This method will be called after the log is flushed.
    */
   void postLogFlush() {
-      /* start token saved before the flush is now safe to be persisted */
+    /* start token saved before the flush is now safe to be persisted */
     startTokenSafeToPersist = startTokenBeforeLogFlush;
   }
 
@@ -556,7 +556,7 @@ public class HardDeleter implements Runnable {
       EnumSet<StoreGetOptions> getOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
       List<BlobReadOptions> readOptionsList = new ArrayList<BlobReadOptions>(messageInfoList.size());
 
-        /* First create the readOptionsList */
+      /* First create the readOptionsList */
       for (MessageInfo info : messageInfoList) {
         if (!enabled.get()) {
           throw new StoreException("Aborting, store is shutting down", StoreErrorCodes.Store_Shutting_Down);
@@ -577,8 +577,8 @@ public class HardDeleter implements Runnable {
       Iterator<HardDeleteInfo> hardDeleteIterator = hardDelete.getHardDeleteMessages(readSet, factory, null);
       Iterator<BlobReadOptions> readOptionsIterator = readOptionsList.iterator();
 
-        /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
-         * after the whole range is persisted can we start with the actual log write */
+      /* Next, get the information to persist hard delete recovery info. Get all the information and save it, as only
+       * after the whole range is persisted can we start with the actual log write */
       while (hardDeleteIterator.hasNext()) {
         if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",
@@ -604,7 +604,7 @@ public class HardDeleter implements Runnable {
 
       persistCleanupToken();
 
-        /* Finally, write the hard delete stream into the Log */
+      /* Finally, write the hard delete stream into the Log */
       for (LogWriteInfo logWriteInfo : logWriteInfoList) {
         if (!enabled.get()) {
           throw new StoreException("Aborting hard deletes as store is shutting down",

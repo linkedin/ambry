@@ -651,7 +651,7 @@ public class CompactionVerifier implements Closeable {
       List<IndexEntry> indexEntries = new ArrayList<>();
       try {
         indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries,
-            new AtomicLong(0));
+            new AtomicLong(0), true);
         // for each index entry, if it represents a squashed put entry, add an index entry to account for that.
         List<IndexEntry> entriesToAdd = new ArrayList<>();
         for (IndexEntry indexEntry : indexEntries) {
