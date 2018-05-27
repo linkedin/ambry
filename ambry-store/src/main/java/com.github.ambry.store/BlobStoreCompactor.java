@@ -847,6 +847,7 @@ class BlobStoreCompactor {
           // break outer while loop
           break;
         }
+        tgtLog.flush();
         startIndex = endIndex + 1;
       }
     } finally {

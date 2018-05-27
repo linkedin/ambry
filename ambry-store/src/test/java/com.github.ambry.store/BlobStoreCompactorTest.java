@@ -2063,6 +2063,7 @@ public class BlobStoreCompactorTest {
      * Create an instance with {@code id} and {@code entryType}
      * @param id the {@link MockId} of the entry.
      * @param entryType the type of the entry.
+     * @param size the size of the log entry.
      */
     LogEntry(MockId id, PersistentIndex.IndexEntryType entryType, long size) {
       this.id = id;
