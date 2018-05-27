@@ -686,6 +686,7 @@ public class MessageFormatSendTest {
   /**
    * Test Exceptions cases for {@link MessageReadSetIndexInputStream}
    * IndexOutOfBoundsException should be thrown if offset or length is invalid.
+   * 0 is expected if length requested is 0.
    * -1 is expected if no more data available.
    */
   @Test
@@ -699,6 +700,8 @@ public class MessageFormatSendTest {
     MessageReadSet readSet = new MockMessageReadSet(listBuf, storeKeys);
     MessageReadSetIndexInputStream stream = new MessageReadSetIndexInputStream(readSet, 0, 0);
     byte[] bufOutput = new byte[1024];
+    Assert.assertEquals("Should return 0 if length requested is 0", 0, stream.read(bufOutput, 0, 0));
+    Assert.assertEquals("Should return 0 if length requested is 0", 0, stream.read(bufOutput, 1, 0));
     try {
       stream.read(bufOutput, -1, 10);
       Assert.fail("IndexOutOfBoundsException is expected.");

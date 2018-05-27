@@ -320,6 +320,9 @@ class MessageReadSetIndexInputStream extends InputStream {
     if (off < 0 || len < 0 || len > b.length - off) {
       throw new IndexOutOfBoundsException();
     }
+    if (len == 0) {
+      return 0;
+    }
     if (currentOffset >= messageReadSet.sizeInBytes(indexToRead)) {
       return -1;
     }
