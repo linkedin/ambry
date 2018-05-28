@@ -14,7 +14,7 @@
 
 package com.github.ambry.clustermap;
 
-import com.github.ambry.store.Store;
+import java.util.List;
 
 
 /**
@@ -30,7 +30,8 @@ public class ReplicaStatusDelegate {
 
   /**
    * Sets replicaId to read-only status
-   * @param replicaId
+   * @param replicaId the {@link ReplicaId} whose status would be set to read-only.
+   * @return {@code true} if replica is successfully sealed. {@code false} if not.
    */
   public boolean seal(ReplicaId replicaId) {
     return clusterParticipant.setReplicaSealedState(replicaId, true);
@@ -38,19 +39,32 @@ public class ReplicaStatusDelegate {
 
   /**
    * Sets replicaId to read-write status
-   * @param replicaId
+   * @param replicaId the {@link ReplicaId} whose status would be set to read-write.
+   * @return {@code true} if replica is successfully unsealed. {@code false} if not.
    */
   public boolean unseal(ReplicaId replicaId) {
     return clusterParticipant.setReplicaSealedState(replicaId, false);
   }
 
   /**
-   * Sets stopped status of given store
-   * @param replicaId the {@link ReplicaId} of the {@link Store} of which the stopped state would be set.
-   * @param isStopped whether to mark the store as stopped ({@code true}).
-   * @return {@code true} if state is successful set. {@code false} if not.
+   * Sets a list of replicaIds to stopped status
+   * @param replicaIds a list of replicas whose status would be set to stopped.
+   * @return {@code true} if replica is successfully marked as stopped. {@code false} if not.
    */
-  public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
-    return clusterParticipant.setReplicaStoppedState(replicaId, isStopped);
+  public boolean markStopped(List<ReplicaId> replicaIds) {
+    return clusterParticipant.setReplicaStoppedState(replicaIds, true);
+  }
+
+  /**
+   * Sets a list of replicaIds to started status
+   * @param replicaIds a list of replicas whose status would be set to started.
+   * @return {@code true} if replica is successfully unmarked and becomes started. {@code false} if not.
+   */
+  public boolean unmarkStopped(List<ReplicaId> replicaIds) {
+    return clusterParticipant.setReplicaStoppedState(replicaIds, false);
+  }
+
+  public List<String> getStoppedReplicas() {
+    return clusterParticipant.getStoppedReplicas();
   }
 }

@@ -46,6 +46,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -295,19 +296,21 @@ public class StorageManagerTest {
    * Test successfully set stopped state of blobstore with given {@link PartitionId} {@code id}.
    */
   @Test
-  public void setBlobStoreStateSuccessTest() throws Exception {
+  public void setBlobStoreStoppedStateSuccessTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     List<MockDataNodeId> dataNodes = new ArrayList<>();
     dataNodes.add(dataNode);
     // test set the state of store with instantiated replicaStatusDelegate
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, new MockReplicaStatusDelegate());
+    ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegate);
     storageManager.start();
-    for (int i = 1; i < replicas.size(); i++) {
-      ReplicaId replica = replicas.get(i);
+    for (ReplicaId replica : replicas) {
       PartitionId id = replica.getPartitionId();
-      assertTrue("Mark store as stopped should succeed", storageManager.setBlobStoreStoppedState(id, true));
-      assertTrue("Mark store as started should succeed", storageManager.setBlobStoreStoppedState(id, false));
+      storageManager.setBlobStoreStoppedState(id, true);
+      verify(replicaStatusDelegate, times(1)).markStopped(Arrays.asList(replica));
+      storageManager.setBlobStoreStoppedState(id, false);
+      verify(replicaStatusDelegate, times(1)).unmarkStopped(Arrays.asList(replica));
     }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
@@ -474,6 +477,32 @@ public class StorageManagerTest {
   }
 
   /**
+   * Test the stopped stores are correctly skipped and not started during StorageManager's startup.
+   */
+  @Test
+  public void skipStoppedStoresTest() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    MockReplicaStatusDelegate replicaStatusDelegate = new MockReplicaStatusDelegate();
+    replicaStatusDelegate.stoppedReplicas.add(replicas.get(0).getPartitionId().toPathString());
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegate);
+    storageManager.start();
+    for (int i = 0; i < replicas.size(); ++i) {
+      PartitionId id = replicas.get(i).getPartitionId();
+      if (i == 0) {
+        assertNull("Store should be null because stopped stores will be skipped and will not be started",
+            storageManager.getStore(id));
+        assertFalse("Compaction should not be scheduled", storageManager.scheduleNextForCompaction(id));
+      } else {
+        Store store = storageManager.getStore(id);
+        assertTrue("Store should be started", ((BlobStore) store).isStarted());
+        assertTrue("Compaction should be scheduled", storageManager.scheduleNextForCompaction(id));
+      }
+    }
+    shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  /**
    * Construct a {@link StorageManager} for the passed in set of replicas.
    * @param replicas the list of replicas for the {@link StorageManager} to use.
    * @param metricRegistry the {@link MetricRegistry} instance to use to instantiate {@link StorageManager}
@@ -580,6 +609,8 @@ public class StorageManagerTest {
    * An extension of {@link ReplicaStatusDelegate} to help with tests.
    */
   private static class MockReplicaStatusDelegate extends ReplicaStatusDelegate {
+    List<String> stoppedReplicas;
+
     public MockReplicaStatusDelegate() {
       super(new ClusterParticipant() {
         @Override
@@ -593,8 +624,18 @@ public class StorageManagerTest {
         }
 
         @Override
-        public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
+        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
           return false;
+        }
+
+        @Override
+        public List<String> getSealedReplicas() {
+          return null;
+        }
+
+        @Override
+        public List<String> getStoppedReplicas() {
+          return null;
         }
 
         @Override
@@ -602,11 +643,12 @@ public class StorageManagerTest {
 
         }
       });
+      stoppedReplicas = new ArrayList<>();
     }
 
     @Override
-    public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
-      return true;
+    public List<String> getStoppedReplicas() {
+      return stoppedReplicas;
     }
   }
 }

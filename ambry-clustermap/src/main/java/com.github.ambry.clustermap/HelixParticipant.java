@@ -20,8 +20,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -137,30 +139,37 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   @Override
-  public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
-    if (!(replicaId instanceof AmbryReplica)) {
-      throw new IllegalArgumentException(
-          "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+  public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
+    Set<String> replicasToUpdate = new HashSet<>();
+    for (ReplicaId replicaId : replicaIds) {
+      if (!(replicaId instanceof AmbryReplica)) {
+        throw new IllegalArgumentException(
+            "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
+      }
+      replicasToUpdate.add(replicaId.getPartitionId().toPathString());
     }
-    String partitionId = replicaId.getPartitionId().toPathString();
+    boolean setResult;
     synchronized (helixAdministrationLock) {
-      logger.trace("Getting stopped replicas from instanceConfig for partition {}", partitionId);
-      List<String> stoppedReplicas = getStoppedReplicas();
-      if (stoppedReplicas == null) {
-        stoppedReplicas = new ArrayList<>();
+      logger.trace("Getting stopped replicas from instanceConfig");
+      List<String> stoppedList = getStoppedReplicas();
+      if (stoppedList == null) {
+        stoppedList = new ArrayList<>();
       }
-      if (!isStopped && stoppedReplicas.contains(partitionId)) {
-        logger.info("Removing replica {} from stopped list", partitionId);
-        stoppedReplicas.remove(partitionId);
-        return setStoppedReplicas(stoppedReplicas);
-      }
-      if (isStopped && !stoppedReplicas.contains(partitionId)) {
-        logger.info("Adding replica {} to stopped list", partitionId);
-        stoppedReplicas.add(partitionId);
-        return setStoppedReplicas(stoppedReplicas);
+      Set<String> stoppedReplicas = new HashSet<>(stoppedList);
+      if (!isStopped) {
+        replicasToUpdate.retainAll(stoppedReplicas);
+        logger.info("Removing replicas {} from stopped list", Arrays.toString(replicasToUpdate.toArray()));
+        stoppedList.removeAll(replicasToUpdate);
+        setResult = setStoppedReplicas(stoppedList);
+      } else {
+        stoppedReplicas.retainAll(replicasToUpdate);
+        replicasToUpdate.removeAll(stoppedReplicas);
+        logger.info("Adding replicas {} to stopped list", Arrays.toString(replicasToUpdate.toArray()));
+        stoppedList.addAll(replicasToUpdate);
+        setResult = setStoppedReplicas(stoppedList);
       }
     }
-    return true;
+    return setResult;
   }
 
   /**
@@ -172,6 +181,36 @@ class HelixParticipant implements ClusterParticipant {
       manager.disconnect();
       manager = null;
     }
+  }
+
+  /**
+   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
+   * @return list of sealed replicas from HelixAdmin
+   */
+  @Override
+  public List<String> getSealedReplicas() {
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
+    return ClusterMapUtils.getSealedReplicas(instanceConfig);
+  }
+
+  /**
+   * Get the list of stopped replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
+   * is taken.
+   * @return list of stopped replicas from HelixAdmin
+   */
+  @Override
+  public List<String> getStoppedReplicas() {
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalStateException(
+          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
+    }
+    return ClusterMapUtils.getStoppedReplicas(instanceConfig);
   }
 
   /**
@@ -200,34 +239,6 @@ class HelixParticipant implements ClusterParticipant {
       engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,
           new TaskStateModelFactory(manager, taskFactoryMap));
     }
-  }
-
-  /**
-   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
-   * @return list of sealed replicas from HelixAdmin
-   */
-  private List<String> getSealedReplicas() {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-    }
-    return ClusterMapUtils.getSealedReplicas(instanceConfig);
-  }
-
-  /**
-   * Get the list of stopped replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
-   * @return list of stopped replicas from HelixAdmin
-   */
-  private List<String> getStoppedReplicas() {
-    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalStateException(
-          "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
-    }
-    return ClusterMapUtils.getStoppedReplicas(instanceConfig);
   }
 
   /**

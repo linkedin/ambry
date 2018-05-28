@@ -15,6 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -68,13 +69,25 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
-          if (!(replicaId instanceof MockReplicaId)) {
-            throw new IllegalArgumentException("Not MockReplicaId");
+        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
+          for (ReplicaId replicaId : replicaIds) {
+            if (!(replicaId instanceof MockReplicaId)) {
+              throw new IllegalArgumentException("Not MockReplicaId");
+            }
+            MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+            mockReplicaId.markReplicaDownStatus(isStopped);
           }
-          MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
-          mockReplicaId.markReplicaDownStatus(isStopped);
           return true;
+        }
+
+        @Override
+        public List<String> getSealedReplicas() {
+          return new ArrayList<>();
+        }
+
+        @Override
+        public List<String> getStoppedReplicas() {
+          return new ArrayList<>();
         }
       };
     }

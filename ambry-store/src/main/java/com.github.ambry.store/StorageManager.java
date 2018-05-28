@@ -64,6 +64,8 @@ public class StorageManager {
     metrics = new StorageManagerMetrics(registry);
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
     StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
+    List<String> stoppedReplicas =
+        replicaStatusDelegate == null ? new ArrayList<>() : replicaStatusDelegate.getStoppedReplicas();
     this.time = time;
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -75,7 +77,8 @@ public class StorageManager {
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager =
           new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
-              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, time);
+              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, stoppedReplicas,
+              time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);

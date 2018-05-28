@@ -23,6 +23,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -99,7 +100,7 @@ class BlobStore implements Store {
    * @param factory the {@link StoreKeyFactory} for parsing store keys.
    * @param recovery the {@link MessageStoreRecovery} instance to use.
    * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
-   * @param replicaStatusDelegate delegate used to communicate BlobStore write status (sealed or unsealed)
+   * @param replicaStatusDelegate delegate used to communicate BlobStore write status (sealed/unsealed, stopped/started)
    * @param time the {@link Time} instance to use.
    */
   BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
@@ -345,13 +346,17 @@ class BlobStore implements Store {
    * @param isStopped whether the store is stopped ({@code true}) or started.
    * @return {@code true} if StoppedReplicas list has been updated successfully.
    */
-  public boolean updateStoppedReplicasList(boolean isStopped) {
+  boolean updateStoppedReplicasList(boolean isStopped) {
+    boolean updated = false;
     if (replicaStatusDelegate != null) {
       logger.info("Setting replica stopped state via ReplicaStatusDelegate on replica {}", replicaId);
-      return replicaStatusDelegate.setReplicaStoppedState(replicaId, isStopped);
+      List<ReplicaId> replicasToUpdate = Arrays.asList(replicaId);
+      updated = isStopped ? replicaStatusDelegate.markStopped(replicasToUpdate)
+          : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
+    } else {
+      logger.error("The ReplicaStatusDelegate is not instantiated");
     }
-    logger.error("The ReplicaStatusDelegate is not instantiated");
-    return false;
+    return updated;
   }
 
   @Override
@@ -589,7 +594,7 @@ class BlobStore implements Store {
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    checkStarted();
+    //checkStarted();
     DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(log.getSegmentCapacity(),
         log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
     logger.debug("Store {} has disk space requirements: {}", storeId, requirements);

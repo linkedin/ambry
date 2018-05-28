@@ -33,17 +33,31 @@ public interface ClusterParticipant extends AutoCloseable {
 
   /**
    * Set or reset the sealed state of the given replica.
-   * @param replicaId the {@link ReplicaId}
+   * @param replicaId the {@link ReplicaId} whose sealed state will be updated.
    * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
+   * @return {@code true} if set replica sealed state was successful. {@code false} if not.
    */
   boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed);
 
   /**
    * Set or reset the stopped state of the given replica.
-   * @param replicaId the {@link ReplicaId}
+   * @param replicaIds a list of replicas whose stopped state will be updated
    * @param isStopped if true, the replica will be marked as stopped; otherwise it will be marked as started.
+   * @return {@code true} if set replica stopped state was successful. {@code false} if not.
    */
-  boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped);
+  boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped);
+
+  /**
+   * Get a list of replicas that are marked as sealed (read-only).
+   * @return a list of all sealed replicas.
+   */
+  List<String> getSealedReplicas();
+
+  /**
+   * Get a list of replicas that are marked as stopped.
+   * @return a list of all stopped replicas.
+   */
+  List<String> getStoppedReplicas();
 
   /**
    * Terminate the participant.

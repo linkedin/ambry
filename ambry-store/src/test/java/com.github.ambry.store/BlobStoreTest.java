@@ -287,7 +287,7 @@ public class BlobStoreTest {
    */
   @Test
   public void testClusterManagerReplicaStatusDelegateUse() throws StoreException, IOException, InterruptedException {
-    //Setup threshold test properties, replicaId, mock write status delegate
+    //Setup threshold test properties, replicaId, mock replica status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
@@ -366,12 +366,13 @@ public class BlobStoreTest {
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
     store = createBlobStore(replicaId, defaultConfig, replicaStatusDelegate);
+    List<ReplicaId> replicaIds = Arrays.asList(replicaId);
     // test add a new replica into stopped list, which should trigger replicaStatusDelegate to mark replica as stopped
     store.updateStoppedReplicasList(true);
-    verify(replicaStatusDelegate, times(1)).setReplicaStoppedState(replicaId, true);
+    verify(replicaStatusDelegate, times(1)).markStopped(replicaIds);
     // test remove a replica from stopped list, which should trigger replicaStatusDelegate to mark replica as started
     store.updateStoppedReplicasList(false);
-    verify(replicaStatusDelegate, times(1)).setReplicaStoppedState(replicaId, false);
+    verify(replicaStatusDelegate, times(1)).unmarkStopped(replicaIds);
   }
 
   /**

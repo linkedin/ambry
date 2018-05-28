@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.json.JSONException;
@@ -90,8 +91,18 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public boolean setReplicaStoppedState(ReplicaId replicaId, boolean isStopped) {
+        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
           return false;
+        }
+
+        @Override
+        public List<String> getSealedReplicas() {
+          return new ArrayList<>();
+        }
+
+        @Override
+        public List<String> getStoppedReplicas() {
+          return new ArrayList<>();
         }
       };
     }

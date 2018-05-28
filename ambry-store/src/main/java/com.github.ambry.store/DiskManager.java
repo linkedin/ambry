@@ -49,6 +49,7 @@ class DiskManager {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
+  private final List<String> stoppedReplicas;
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -71,7 +72,8 @@ class DiskManager {
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, StorageManagerMetrics metrics, StoreMetrics storeMainMetrics,
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, Time time) {
+      MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, List<String> stoppedReplicas,
+      Time time) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
@@ -80,6 +82,7 @@ class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
+    this.stoppedReplicas = stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         BlobStore store =
@@ -104,6 +107,11 @@ class DiskManager {
 
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+        if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
+          // if the store is in stopped replica list, skip start process and leave it in stopped state.
+          logger.info("Skip the store {} because it is on the stopped list", partitionAndStore.getKey());
+          continue;
+        }
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().start();
@@ -166,6 +174,10 @@ class DiskManager {
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+        if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
+          // if the store is in stopped replica list, skip stop process and leave it in stopped state.
+          continue;
+        }
         Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().shutdown();
