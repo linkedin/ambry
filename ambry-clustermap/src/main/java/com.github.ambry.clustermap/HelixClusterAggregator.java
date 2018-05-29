@@ -155,7 +155,7 @@ public class HelixClusterAggregator {
     StatsSnapshot reducedSnapshot = new StatsSnapshot(0L, null);
     if (statsSnapshot.getSubMap() != null) {
       for (StatsSnapshot snapshot : statsSnapshot.getSubMap().values()) {
-        statsSnapshot.aggregate(reducedSnapshot, snapshot);
+        StatsSnapshot.aggregate(reducedSnapshot, snapshot);
       }
     }
     return reducedSnapshot;
