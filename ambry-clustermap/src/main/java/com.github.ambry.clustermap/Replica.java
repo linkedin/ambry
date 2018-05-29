@@ -114,6 +114,10 @@ class Replica implements ReplicaId {
     return peers;
   }
 
+  void setStoppedState(boolean isStopped) {
+    this.isStopped = isStopped;
+  }
+  
   protected void validatePartition() {
     if (partition == null) {
       throw new IllegalStateException("Partition cannot be null.");
