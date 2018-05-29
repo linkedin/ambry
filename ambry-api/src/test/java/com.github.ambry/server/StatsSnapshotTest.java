@@ -25,7 +25,15 @@ import static org.junit.Assert.*;
 import static org.junit.matchers.JUnitMatchers.*;
 
 
+/**
+ * Serialization/deserialization unit tests of {@link StatsSnapshot}.
+ */
 public class StatsSnapshotTest {
+
+  /**
+   * Serialization unit test of {@link StatsSnapshot}.
+   * Test if subMap and null fields are removed from serialized result.
+   */
   @Test
   public void serializeStatsSnapshotTest() throws IOException {
     Long val = 100L;
@@ -36,22 +44,27 @@ public class StatsSnapshotTest {
 
     String result = new ObjectMapper().writeValueAsString(snapshot);
 
-    assertThat(result, containsString("first"));
-    assertThat(result, containsString("second"));
-    assertThat(result, not(containsString("subMap")));
-    assertThat(result, not(containsString("null")));
+    assertThat("Result should contain \"first\" keyword and associated entry", result, containsString("first"));
+    assertThat("Result should contain \"second\" keyword and associated entry", result, containsString("second"));
+    assertThat("Result should not contain \"subMap\" keyword", result, not(containsString("subMap")));
+    assertThat("Result should ignore any null fields", result, not(containsString("null")));
   }
 
+  /**
+   * Deserialization unit test of {@link StatsSnapshot}.
+   * Test if {@link StatsSnapshot} can be reconstructed from json string in the form of a directory or tree (consist of
+   * value and subMap fields).
+   */
   @Test
   public void deserializeStatsSnapshotTest() throws IOException {
     String jsonAsString = "{\"value\":100,\"first\":{\"value\":40},\"second\":{\"value\":60}}";
 
     StatsSnapshot snapshot = new ObjectMapper().readValue(jsonAsString, StatsSnapshot.class);
 
-    assertEquals(100L, snapshot.getValue());
-    assertEquals(40L, snapshot.getSubMap().get("first").getValue());
-    assertEquals(60L, snapshot.getSubMap().get("second").getValue());
-    assertEquals(null, snapshot.getSubMap().get("first").getSubMap());
-    assertEquals(null, snapshot.getSubMap().get("second").getSubMap());
+    assertEquals("Mismatch in total aggregated value for StatsSnapshot", 100L, snapshot.getValue());
+    assertEquals("Mismatch in aggregated value for first account", 40L, snapshot.getSubMap().get("first").getValue());
+    assertEquals("Mismatch in aggregated value for second account", 60L, snapshot.getSubMap().get("second").getValue());
+    assertEquals("The subMap in first account should be null", null, snapshot.getSubMap().get("first").getSubMap());
+    assertEquals("The subMap in second account should be null", null, snapshot.getSubMap().get("second").getSubMap());
   }
 }

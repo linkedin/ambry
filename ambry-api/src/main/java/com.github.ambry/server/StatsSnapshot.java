@@ -81,8 +81,8 @@ public class StatsSnapshot {
 
   @JsonAnySetter
   public void add(String str, StatsSnapshot statsSnapshot) {
-    this.subMap = this.subMap == null ? new HashMap<>() : this.subMap;
-    this.subMap.put(str, statsSnapshot);
+    subMap = subMap == null ? new HashMap<>() : subMap;
+    subMap.put(str, statsSnapshot);
   }
 
   @Override
