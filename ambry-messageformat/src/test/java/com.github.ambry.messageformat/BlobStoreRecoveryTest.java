@@ -15,16 +15,16 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageStoreRecovery;
+import com.github.ambry.store.MockId;
+import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.Read;
-import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.After;
@@ -34,98 +34,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-
-class MockId extends StoreKey {
-
-  private String id;
-  private static final int Id_Size_In_Bytes = 2;
-
-  public MockId(String id) {
-    this.id = id;
-  }
-
-  public MockId(DataInputStream stream) throws IOException {
-    id = Utils.readShortString(stream);
-  }
-
-  @Override
-  public byte[] toBytes() {
-    ByteBuffer idBuf = ByteBuffer.allocate(Id_Size_In_Bytes + id.length());
-    idBuf.putShort((short) id.length());
-    idBuf.put(id.getBytes());
-    return idBuf.array();
-  }
-
-  @Override
-  public String getID() {
-    return toString();
-  }
-
-  @Override
-  public String getLongForm() {
-    return getID();
-  }
-
-  @Override
-  public boolean isAccountContainerMatch(short accountId, short containerId) {
-    return true;
-  }
-
-  @Override
-  public short sizeInBytes() {
-    return (short) (Id_Size_In_Bytes + id.length());
-  }
-
-  @Override
-  public int compareTo(StoreKey o) {
-    if (o == null) {
-      throw new NullPointerException();
-    }
-    MockId otherId = (MockId) o;
-    return id.compareTo(otherId.id);
-  }
-
-  @Override
-  public int hashCode() {
-    return Utils.hashcode(new Object[]{id});
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (this == obj) {
-      return true;
-    }
-    if (obj == null) {
-      return false;
-    }
-    if (getClass() != obj.getClass()) {
-      return false;
-    }
-    MockId other = (MockId) obj;
-
-    if (id == null) {
-      if (other.id != null) {
-        return false;
-      }
-    } else if (!id.equals(other.id)) {
-      return false;
-    }
-    return true;
-  }
-}
-
-class MockIdFactory implements StoreKeyFactory {
-
-  @Override
-  public StoreKey getStoreKey(DataInputStream value) throws IOException {
-    return new MockId(value);
-  }
-
-  @Override
-  public StoreKey getStoreKey(String input) throws IOException {
-    return new MockId(input);
-  }
-}
 
 @RunWith(Parameterized.class)
 public class BlobStoreRecoveryTest {
@@ -154,8 +62,11 @@ public class BlobStoreRecoveryTest {
   public class ReadImp implements Read {
 
     ByteBuffer buffer;
-    public StoreKey[] keys = {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4")};
+    public MockId[] keys =
+        {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4"), new MockId("id5"), new MockId(
+            "id6")};
     long expectedExpirationTimeMs = 0;
+    List<Long> sizes = new ArrayList<>();
 
     public void initialize() throws MessageFormatException, IOException {
       // write 3 new blob messages, and delete update messages. write the last
@@ -166,46 +77,77 @@ public class BlobStoreRecoveryTest {
       TestUtils.RANDOM.nextBytes(usermetadata);
       TestUtils.RANDOM.nextBytes(blob);
       TestUtils.RANDOM.nextBytes(encryptionKey);
-      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-      long deletionTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+      long updateTimeInMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
 
       // 1st message
       BlobProperties blobProperties =
-          new BlobProperties(4000, "test", "mem1", "img", false, 9999, accountId, containerId, true);
+          new BlobProperties(4000, "test", "mem1", "img", false, 9999, keys[0].getAccountId(), keys[0].getContainerId(),
+              true);
       expectedExpirationTimeMs =
           Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
       PutMessageFormatInputStream msg1 =
           new PutMessageFormatInputStream(keys[0], ByteBuffer.wrap(encryptionKey), blobProperties,
               ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      sizes.add(msg1.getSize());
 
       // 2nd message
       PutMessageFormatInputStream msg2 = new PutMessageFormatInputStream(keys[1], ByteBuffer.wrap(encryptionKey),
-          new BlobProperties(4000, "test", accountId, containerId, false), ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+          new BlobProperties(4000, "test", keys[1].getAccountId(), keys[1].getContainerId(), false),
+          ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      sizes.add(msg2.getSize());
 
       // 3rd message (null encryption key)
       PutMessageFormatInputStream msg3 = new PutMessageFormatInputStream(keys[2], null,
-          new BlobProperties(4000, "test", accountId, containerId, false), ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+          new BlobProperties(4000, "test", keys[2].getAccountId(), keys[2].getContainerId(), false),
+          ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      sizes.add(msg3.getSize());
 
       // 4th message
-      DeleteMessageFormatInputStream msg4 =
-          new DeleteMessageFormatInputStream(keys[1], accountId, containerId, deletionTimeMs);
+      MessageFormatInputStream msg4;
+      if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
+        msg4 = new TtlUpdateMessageFormatInputStream(keys[1], keys[1].getAccountId(), keys[1].getContainerId(),
+            updateTimeInMs);
+      } else {
+        msg4 = new PutMessageFormatInputStream(keys[3], ByteBuffer.wrap(encryptionKey),
+            new BlobProperties(4000, "test", keys[3].getAccountId(), keys[3].getContainerId(), false),
+            ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      }
+      sizes.add(msg4.getSize());
 
       // 5th message
-      PutMessageFormatInputStream msg5 = new PutMessageFormatInputStream(keys[3], ByteBuffer.wrap(encryptionKey),
-          new BlobProperties(4000, "test", accountId, containerId, false), ByteBuffer.wrap(usermetadata),
-          new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      DeleteMessageFormatInputStream msg5 =
+          new DeleteMessageFormatInputStream(keys[1], keys[1].getAccountId(), keys[1].getContainerId(), updateTimeInMs);
+      sizes.add(msg5.getSize());
+
+      // 6th message
+      MessageFormatInputStream msg6;
+      if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
+        msg6 = new TtlUpdateMessageFormatInputStream(keys[0], keys[0].getAccountId(), keys[0].getContainerId(),
+            updateTimeInMs);
+      } else {
+        msg6 = new PutMessageFormatInputStream(keys[4], ByteBuffer.wrap(encryptionKey),
+            new BlobProperties(4000, "test", keys[4].getAccountId(), keys[4].getContainerId(), false),
+            ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      }
+      sizes.add(msg6.getSize());
+
+      // 7th message
+      PutMessageFormatInputStream msg7 = new PutMessageFormatInputStream(keys[5], ByteBuffer.wrap(encryptionKey),
+          new BlobProperties(4000, "test", keys[5].getAccountId(), keys[5].getContainerId(), false),
+          ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+      sizes.add(msg7.getSize());
 
       buffer = ByteBuffer.allocate(
-          (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() / 2));
+          (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() + msg6.getSize()
+              + msg7.getSize() / 2));
 
       writeToBuffer(msg1, (int) msg1.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
       writeToBuffer(msg3, (int) msg3.getSize());
       writeToBuffer(msg4, (int) msg4.getSize());
-      writeToBuffer(msg5, (int) msg5.getSize() / 2);
+      writeToBuffer(msg5, (int) msg5.getSize());
+      writeToBuffer(msg6, (int) msg6.getSize());
+      writeToBuffer(msg7, (int) msg7.getSize() / 2);
       buffer.position(0);
     }
 
@@ -236,12 +178,45 @@ public class BlobStoreRecoveryTest {
     readrecovery.initialize();
     List<MessageInfo> recoveredMessages =
         recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
-    Assert.assertEquals(recoveredMessages.size(), 4);
-    Assert.assertEquals(recoveredMessages.get(0).getStoreKey(), readrecovery.keys[0]);
-    Assert.assertEquals(recoveredMessages.get(0).getExpirationTimeInMs(), readrecovery.expectedExpirationTimeMs);
-    Assert.assertEquals(recoveredMessages.get(1).getStoreKey(), readrecovery.keys[1]);
-    Assert.assertEquals(recoveredMessages.get(2).getStoreKey(), readrecovery.keys[2]);
-    Assert.assertEquals(recoveredMessages.get(3).getStoreKey(), readrecovery.keys[1]);
-    Assert.assertEquals(recoveredMessages.get(3).isDeleted(), true);
+    Assert.assertEquals(recoveredMessages.size(), 6);
+    verifyInfo(recoveredMessages.get(0), readrecovery.keys[0], readrecovery.sizes.get(0),
+        readrecovery.expectedExpirationTimeMs, false, false);
+    verifyInfo(recoveredMessages.get(1), readrecovery.keys[1], readrecovery.sizes.get(1), Utils.Infinite_Time, false,
+        false);
+    verifyInfo(recoveredMessages.get(2), readrecovery.keys[2], readrecovery.sizes.get(2), Utils.Infinite_Time, false,
+        false);
+    verifyInfo(recoveredMessages.get(4), readrecovery.keys[1], readrecovery.sizes.get(4), Utils.Infinite_Time, true,
+        false);
+    if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
+      verifyInfo(recoveredMessages.get(3), readrecovery.keys[1], readrecovery.sizes.get(3), Utils.Infinite_Time, false,
+          true);
+      verifyInfo(recoveredMessages.get(5), readrecovery.keys[0], readrecovery.sizes.get(5), Utils.Infinite_Time, false,
+          true);
+    } else {
+      verifyInfo(recoveredMessages.get(3), readrecovery.keys[3], readrecovery.sizes.get(3), Utils.Infinite_Time, false,
+          false);
+      verifyInfo(recoveredMessages.get(5), readrecovery.keys[4], readrecovery.sizes.get(5), Utils.Infinite_Time, false,
+          false);
+    }
+  }
+
+  /**
+   * Verifies that {@code info} has details as provided.
+   * @param info the {@link MessageInfo} to check
+   * @param id the expected {@link com.github.ambry.store.StoreKey}
+   * @param size the expected size
+   * @param expiresAtMs the expected expiry time in ms
+   * @param isDeleted the expected delete state
+   * @param isTtlUpdated the expected ttl update state
+   */
+  private void verifyInfo(MessageInfo info, MockId id, long size, long expiresAtMs, boolean isDeleted,
+      boolean isTtlUpdated) {
+    Assert.assertEquals("StoreKey not as expected", id, info.getStoreKey());
+    Assert.assertEquals("Size not as expected", size, info.getSize());
+    Assert.assertEquals("ExpiresAtMs not as expected", expiresAtMs, info.getExpirationTimeInMs());
+    Assert.assertEquals("isDeleted not as expected", isDeleted, info.isDeleted());
+    Assert.assertEquals("isTtlUpdated not as expected", isTtlUpdated, info.isTtlUpdated());
+    Assert.assertEquals("AccountId not as expected", id.getAccountId(), info.getAccountId());
+    Assert.assertEquals("ContainerId not as expected", id.getContainerId(), info.getContainerId());
   }
 }

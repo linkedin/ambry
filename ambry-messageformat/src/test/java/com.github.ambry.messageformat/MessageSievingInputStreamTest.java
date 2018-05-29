@@ -15,6 +15,8 @@ package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MockId;
+import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;

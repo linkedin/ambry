@@ -94,8 +94,12 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
                       updateRecord.getUpdateTimeInMs());
               messageRecovered.add(info);
               break;
+            case TTL_UPDATE:
+              info = new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), false,
+                  true, updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+              messageRecovered.add(info);
+              break;
             default:
-              // TODO (TTL update): handle TTL update
               throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
           }
         }

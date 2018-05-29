@@ -234,7 +234,7 @@ public class DumpDataTool {
           boolean success = readFromLogAndVerify(randomAccessFile, key.getID(), value, coveredRanges);
           if (success) {
             if (isDeleted) {
-              long originalOffset = value.getOriginalMessageOffset();
+              long originalOffset = value.getRelatedMessageOffset();
               if (originalOffset != -1) {
                 if (!coveredRanges.containsKey(originalOffset)) {
                   if (startOffset.getOffset() > originalOffset) {

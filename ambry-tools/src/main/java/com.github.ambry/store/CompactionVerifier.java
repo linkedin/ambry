@@ -656,9 +656,9 @@ public class CompactionVerifier implements Closeable {
         List<IndexEntry> entriesToAdd = new ArrayList<>();
         for (IndexEntry indexEntry : indexEntries) {
           IndexValue value = indexEntry.getValue();
-          long origMsgOffset = value.getOriginalMessageOffset();
+          long origMsgOffset = value.getRelatedMessageOffset();
           if (value.isFlagSet(IndexValue.Flags.Delete_Index)
-              && origMsgOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+              && origMsgOffset != IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET
               && origMsgOffset >= indexSegment.getStartOffset().getOffset()) {
             try (BlobReadOptions options = index.getBlobReadInfo(indexEntry.getKey(),
                 EnumSet.allOf(StoreGetOptions.class))) {

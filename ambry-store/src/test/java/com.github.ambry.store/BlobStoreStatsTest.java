@@ -73,7 +73,7 @@ public class BlobStoreStatsTest {
   public BlobStoreStatsTest(boolean isLogSegmented, boolean isBucketingEnabled)
       throws InterruptedException, IOException, StoreException {
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, false);
     bucketingEnabled = isBucketingEnabled;
     this.isLogSegmented = isLogSegmented;
   }
@@ -291,8 +291,8 @@ public class BlobStoreStatsTest {
     // advance time to the next seconds before adding the deletes
     advanceTimeToNextSecond();
     // 2 deletes from the last index segment
-    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
-    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
+    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
 
     long expectedDeltaBeforeDeletesRelevant = 2 * CuratedLogIndexState.DELETE_RECORD_SIZE;
     long totalLogSegmentValidSizeBeforeDeletesRelevant =
@@ -434,7 +434,7 @@ public class BlobStoreStatsTest {
       blobStoreStats.handleNewPutEntry(entry.getValue());
     }
     // delete one of the newly added put
-    newDelete(blobStoreStats, state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    newDelete(blobStoreStats, state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     queueProcessedLatch = new CountDownLatch(1);
     // a probe put with a latch to inform us about the state of the queue
     blobStoreStats.handleNewPutEntry(new MockIndexValue(queueProcessedLatch, state.index.getCurrentEndOffset()));
@@ -499,9 +499,9 @@ public class BlobStoreStatsTest {
     }
     List<MockId> newDeletes = new ArrayList<>();
     // 1 delete from the first index segment
-    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.firstKey()));
+    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.firstKey(), false));
     // 1 delete from the last index segment
-    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     for (MockId idToDelete : newDeletes) {
       if (idToDelete != null) {
         newDelete(blobStoreStats, idToDelete);
@@ -519,7 +519,7 @@ public class BlobStoreStatsTest {
     }
     newDeletes.clear();
     // 1 delete from the last index segment
-    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    newDeletes.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     for (MockId idToDelete : newDeletes) {
       if (idToDelete != null) {
         newDelete(blobStoreStats, idToDelete);
@@ -599,7 +599,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, false);
     int bucketCount = bucketingEnabled ? 1 : 0;
     BlobStoreStats blobStoreStats = setupBlobStoreStats(bucketCount, 0);
     verifyAndGetContainerValidSize(blobStoreStats, state.time.milliseconds());
@@ -618,7 +618,7 @@ public class BlobStoreStatsTest {
     state.destroy();
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     tempDir = StoreTestUtils.createTempDirectory("blobStoreStatsDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, false, false, false);
     MockThrottler mockThrottler = new MockThrottler(new CountDownLatch(0), new CountDownLatch(0));
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, mockThrottler);
     int bucketCount = 50;
@@ -838,15 +838,13 @@ public class BlobStoreStatsTest {
    * A helper function that deletes the PUT with the given {@link MockId} and inform {@link BlobStoreStats} about it.
    * @param blobStoreStats the {@link BlobStoreStats} instance to handle the new delete
    * @param idToDelete the {@link MockId} to be deleted
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
-  private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete)
-      throws InterruptedException, StoreException, IOException {
+  private void newDelete(BlobStoreStats blobStoreStats, MockId idToDelete) throws StoreException, IOException {
     state.addDeleteEntry(idToDelete);
-    Pair<IndexValue, IndexValue> putAndDeletePair = state.allKeys.get(idToDelete);
-    blobStoreStats.handleNewDeleteEntry(putAndDeletePair.getSecond(), putAndDeletePair.getFirst());
+    blobStoreStats.handleNewDeleteEntry(state.getExpectedValue(idToDelete, false),
+        state.getExpectedValue(idToDelete, true));
   }
 
   /**

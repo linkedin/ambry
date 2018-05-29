@@ -92,8 +92,10 @@ public class BlobStoreHardDelete implements MessageStoreHardDelete {
           case DELETE:
             return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
                 false, updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+          case TTL_UPDATE:
+            return new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), false,
+                true, updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
           default:
-            // TODO (TTL update): handle TTL update
             throw new IllegalStateException("Unknown update record type: " + updateRecord.getType());
         }
       }
@@ -186,7 +188,7 @@ class BlobStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
       }
 
       if (!headerFormat.isPutRecord()) {
-        throw new MessageFormatException("Cleanup operation for a delete record is unsupported",
+        throw new MessageFormatException("Cleanup operation for a non-PUT record is unsupported",
             MessageFormatErrorCodes.IO_Error);
       } else {
         if (headerFormat.hasEncryptionKeyRecord()) {

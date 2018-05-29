@@ -81,11 +81,12 @@ public class IndexTest {
   /**
    * Creates a temporary directory and sets up some test state.
    * @throws IOException
+   * @throws StoreException
    */
-  public IndexTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
+  public IndexTest(boolean isLogSegmented) throws IOException, StoreException {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("indexDir-" + UtilsTest.getRandomString(10));
-    state = new CuratedLogIndexState(isLogSegmented, tempDir);
+    state = new CuratedLogIndexState(isLogSegmented, tempDir, true);
   }
 
   /**
@@ -137,26 +138,27 @@ public class IndexTest {
       FileSpan fileSpanForMessage = state.log.getFileSpanForMessage(expectedValue.getOffset(), expectedValue.getSize());
 
       // FileSpan that is exactly that of the message
-      verifyValue(id, state.index.findKey(id, fileSpanForMessage));
+      verifyValue(id, state.index.findKey(id, fileSpanForMessage), fileSpanForMessage);
 
-      Offset indexSegmentStartOffset = state.indexSegmentStartOffsets.get(id).getFirst();
+      Offset putRecordOffset = state.getExpectedValue(id, true).getOffset();
+      Offset indexSegmentStartOffset = state.referenceIndex.floorKey(putRecordOffset);
       Offset lowerSegmentStartOffset = state.referenceIndex.lowerKey(indexSegmentStartOffset);
       Offset higherSegmentStartOffset = state.referenceIndex.higherKey(indexSegmentStartOffset);
 
       // FileSpan from start offset of message to index end offset
       FileSpan fileSpan = new FileSpan(fileSpanForMessage.getStartOffset(), state.index.getCurrentEndOffset());
-      verifyValue(id, state.index.findKey(id, fileSpan));
+      verifyValue(id, state.index.findKey(id, fileSpan), fileSpan);
 
       // FileSpan from start offset of index to end offset of message
       fileSpan = new FileSpan(state.index.getStartOffset(), fileSpanForMessage.getEndOffset());
-      verifyValue(id, state.index.findKey(id, fileSpan));
+      verifyValue(id, state.index.findKey(id, fileSpan), fileSpan);
 
       // FileSpan that includes the message
       Offset startOffset = lowerSegmentStartOffset == null ? indexSegmentStartOffset : lowerSegmentStartOffset;
       Offset endOffset =
           higherSegmentStartOffset == null ? state.index.getCurrentEndOffset() : higherSegmentStartOffset;
       fileSpan = new FileSpan(startOffset, endOffset);
-      verifyValue(id, state.index.findKey(id, fileSpan));
+      verifyValue(id, state.index.findKey(id, fileSpan), fileSpan);
 
       if (higherSegmentStartOffset != null) {
         // FileSpan higher than the entry (does not include entry)
@@ -351,12 +353,11 @@ public class IndexTest {
 
   /**
    * Tests that hard delete zeros out blobs correctly and makes progress as expected.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void hardDeleteTest() throws InterruptedException, IOException, StoreException {
+  public void hardDeleteTest() throws IOException, StoreException {
     state.properties.put("store.deleted.message.retention.days", Integer.toString(1));
     state.properties.put("store.cleanup.operations.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
     state.reloadIndex(true, false);
@@ -397,12 +398,11 @@ public class IndexTest {
 
   /**
    * Tests that expired values are correctly handled.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void expirationTest() throws InterruptedException, IOException, StoreException {
+  public void expirationTest() throws IOException, StoreException {
     // add a PUT entry that will expire if time advances
     // advance time so that time moves to whole second with no residual milliseconds
     state.time.sleep(Time.MsPerSec - state.time.milliseconds());
@@ -638,12 +638,11 @@ public class IndexTest {
    * 2. Multiple segment recovery
    * 3. Recovery after index is completely lost
    * In all cases, the tests also verify that end offsets are set correctly.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void recoverySuccessTest() throws InterruptedException, IOException, StoreException {
+  public void recoverySuccessTest() throws IOException, StoreException {
     state.advanceTime(1);
     singleSegmentRecoveryTest();
     if (isLogSegmented) {
@@ -690,16 +689,15 @@ public class IndexTest {
    * 5. Error case - trying to findEntriesSince() using an index based token that contains the last index segment
    * 6. Using findEntriesSince() in an empty index
    * 7. Token that has the log end offset
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceTest() throws InterruptedException, IOException, StoreException {
+  public void findEntriesSinceTest() throws IOException, StoreException {
     // add some more entries so that the journal gets entries across segments and doesn't start at the beginning
     // of an index segment.
     state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    state.addDeleteEntry(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
 
     // token with log end offset should not return anything
     StoreFindToken token = new StoreFindToken(state.log.getEndOffset(), state.sessionId, state.incarnationId, false);
@@ -747,9 +745,10 @@ public class IndexTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long operationTimeMs = state.time.milliseconds();
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
-    state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
+    IndexValue putValue =
         new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
-            operationTimeMs, accountId, containerId), null));
+            operationTimeMs, accountId, containerId);
+    state.allKeys.computeIfAbsent(newId, k -> new TreeSet<>()).add(putValue);
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -797,12 +796,11 @@ public class IndexTest {
 
   /**
    * Tests {@link PersistentIndex#getLogSegmentsNotInJournal()}
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
   @Test
-  public void getLogSegmentsNotInJournalTest() throws InterruptedException, IOException, StoreException {
+  public void getLogSegmentsNotInJournalTest() throws IOException, StoreException {
     if (isLogSegmented) {
       testGetLogSegmentsNotInJournal(2, 2 * state.getMaxInMemElements());
       testGetLogSegmentsNotInJournal(3, 2 * state.getMaxInMemElements());
@@ -874,12 +872,11 @@ public class IndexTest {
    * token to logEndOffsetOnStartup and returns the same.
    * On the subsequent findEntriesSince() call, the index should start returning entries
    * starting from that offset and should not consider that token as non-inclusive
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findEntriesSinceOnCrashRestartTest() throws InterruptedException, IOException, StoreException {
+  public void findEntriesSinceOnCrashRestartTest() throws IOException, StoreException {
     UUID oldSessionId = state.sessionId;
     state.addPutEntries(3, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     state.reloadIndex(true, true);
@@ -934,9 +931,10 @@ public class IndexTest {
     long operationTimeMs = state.time.milliseconds();
 
     // add to allKeys() so that doFindEntriesSinceTest() works correctly.
-    state.allKeys.put(newId, new Pair<IndexValue, IndexValue>(
+    IndexValue putValue =
         new IndexValue(CuratedLogIndexState.PUT_RECORD_SIZE, firstRecordFileSpan.getStartOffset(), Utils.Infinite_Time,
-            operationTimeMs, accountId, containerId), null));
+            operationTimeMs, accountId, containerId);
+    state.allKeys.computeIfAbsent(newId, k -> new TreeSet<>()).add(putValue);
     state.recovery = new MessageStoreRecovery() {
       @Override
       public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
@@ -978,16 +976,15 @@ public class IndexTest {
    * 4. Getting entries using an index based token for an offset in the journal
    * 5. Using findDeletedEntriesSince() in an empty index
    * 6. Token that has the log end offset
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void findDeletedEntriesSinceTest() throws InterruptedException, IOException, StoreException {
+  public void findDeletedEntriesSinceTest() throws IOException, StoreException {
     // add some more entries so that the journal gets entries across segments and doesn't start at the beginning
     // of an index segment.
     state.addPutEntries(7, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-    MockId idToDelete = state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey());
+    MockId idToDelete = state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false);
     state.addDeleteEntry(idToDelete);
 
     // token with log end offset should not return anything
@@ -1111,12 +1108,11 @@ public class IndexTest {
 
   /**
    * Tests the Index persistor for all cases
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void indexPersistorTest() throws InterruptedException, IOException, StoreException {
+  public void indexPersistorTest() throws IOException, StoreException {
     // make sure persistor is persisting all segments
     int numIndexSegments = state.index.getIndexSegments().size();
     state.index.persistIndex();
@@ -1209,12 +1205,11 @@ public class IndexTest {
 
   /**
    * Test that verifies that everything is ok even if {@link MessageStoreHardDelete} instance provided is null.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @Test
-  public void hardDeleteNullTest() throws InterruptedException, IOException, StoreException {
+  public void hardDeleteNullTest() throws IOException, StoreException {
     state.hardDelete = null;
     state.reloadIndex(true, false);
     state.addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1343,12 +1338,26 @@ public class IndexTest {
    * @param valueFromFind the {@link IndexValue} that needs to be verified.
    */
   private void verifyValue(MockId id, IndexValue valueFromFind) {
+    verifyValue(id, valueFromFind, null);
+  }
+
+  /**
+   * Verifies that {@code valueFromFind} matches the expected value from {@link CuratedLogIndexState#referenceIndex}.
+   * @param id the {@link MockId} whose value is required.
+   * @param valueFromFind the {@link IndexValue} that needs to be verified.
+   * @param fileSpan the {@link FileSpan} to use to get expected value. Can be {@code null}
+   */
+  private void verifyValue(MockId id, IndexValue valueFromFind, FileSpan fileSpan) {
     if (state.allKeys.containsKey(id)) {
-      assertNotNull("Value should be successfully fetched", valueFromFind);
-      IndexValue expectedValue = state.getExpectedValue(id, !state.deletedKeys.contains(id));
-      assertEquals("Offset in value from index not as expected", expectedValue.getOffset(), valueFromFind.getOffset());
-      assertEquals("Bytes from value from index not as expected for " + id + " ex " + expectedValue + ", actual "
-          + valueFromFind, expectedValue.getBytes(), valueFromFind.getBytes());
+      IndexValue expectedValue =
+          state.getExpectedValue(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class), fileSpan);
+      if (expectedValue != null) {
+        assertNotNull("Value should be successfully fetched", valueFromFind);
+        assertEquals("Bytes from value from index not as expected for " + id + " ex: " + expectedValue + ", actual: "
+            + valueFromFind, expectedValue.getBytes(), valueFromFind.getBytes());
+      } else {
+        assertNull("There should be no value for " + id, valueFromFind);
+      }
     } else {
       assertNull("There should have been no value returned", valueFromFind);
     }
@@ -1400,9 +1409,9 @@ public class IndexTest {
     // delete two entries
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     Set<MockId> idsToDelete = new HashSet<>();
-    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     for (MockId id : idsToDelete) {
       state.addDeleteEntry(id);
     }
@@ -1417,9 +1426,9 @@ public class IndexTest {
     // delete two entries
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     idsToDelete.clear();
-    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+    idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
     for (MockId id : idsToDelete) {
       state.addDeleteEntry(id);
     }
@@ -1432,9 +1441,9 @@ public class IndexTest {
               HardDeleter.HARD_DELETE_SLEEP_TIME_ON_CAUGHT_UP_MS + 1));
       idsToDelete.clear();
       state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-      idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+      idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
       state.addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
-      idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey()));
+      idsToDelete.add(state.getIdToDeleteFromIndexSegment(state.referenceIndex.lastKey(), false));
       for (MockId id : idsToDelete) {
         state.addDeleteEntry(id);
       }
@@ -1458,12 +1467,11 @@ public class IndexTest {
    * Tests {@link PersistentIndex#getLogSegmentsNotInJournal()}
    * @param maxLogSegmentsToBeIgnored number of log segments not to be returned via {@link PersistentIndex#getLogSegmentsNotInJournal()}
    * @param maxEntriesInJournal max number of entries in {@link Journal}
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
   private void testGetLogSegmentsNotInJournal(int maxLogSegmentsToBeIgnored, int maxEntriesInJournal)
-      throws InterruptedException, StoreException, IOException {
+      throws StoreException, IOException {
     // fill current log segment to its capacity
     fillLastLogSegmentToCapacity(1, false);
 
@@ -1512,12 +1520,11 @@ public class IndexTest {
    * Fill the current log segment to its capacity
    * @param numberOfEntries number of entries to be added to fill the log segment to its capacity
    * @param newLogSegment {@code true} if this is a new log segment. {@code false} otherwise
-   * @throws InterruptedException
    * @throws StoreException
    * @throws IOException
    */
   private void fillLastLogSegmentToCapacity(int numberOfEntries, boolean newLogSegment)
-      throws InterruptedException, StoreException, IOException {
+      throws StoreException, IOException {
     if (newLogSegment) {
       // to ensure a new log segment is created. If not, find the remaining size below will fail
       state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time);
@@ -1535,11 +1542,10 @@ public class IndexTest {
 
   /**
    * Test recovery of a single segment.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  private void singleSegmentRecoveryTest() throws InterruptedException, IOException, StoreException {
+  private void singleSegmentRecoveryTest() throws IOException, StoreException {
     Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
     MockId idToCreateAndDelete = state.getUniqueId();
     // recover a few messages in a single segment
@@ -1570,11 +1576,10 @@ public class IndexTest {
 
   /**
    * Tests recovery of more than one segment.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  private void multipleSegmentRecoveryTest() throws InterruptedException, IOException, StoreException {
+  private void multipleSegmentRecoveryTest() throws IOException, StoreException {
     Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
     LogSegment activeSegment = state.log.getSegment(indexEndOffsetBeforeRecovery.getName());
     // recover a few messages across segments
@@ -1600,8 +1605,7 @@ public class IndexTest {
     state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     nextSegmentInfos.add(
         new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
-            accountId,
-            containerId, state.time.milliseconds()));
+            accountId, containerId, state.time.milliseconds()));
     final AtomicInteger returnTracker = new AtomicInteger(0);
     state.recovery = new MessageStoreRecovery() {
       @Override
@@ -1645,8 +1649,10 @@ public class IndexTest {
     List<MessageInfo> infos = new ArrayList<>();
     state.appendToLog(3 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE);
     // 1 DELETE for a PUT not in the infos
-    MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
+    MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
     IndexValue putValue = state.getExpectedValue(idToDelete, true);
+    // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
+    // has been a ttl update
     infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, putValue.getAccountId(),
         putValue.getContainerId(), state.time.milliseconds()));
     // 3 PUT
@@ -1659,14 +1665,14 @@ public class IndexTest {
     infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
     // 1 DELETE for a PUT in the infos
-    infos.add(
-        new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId, containerId,
-            state.time.milliseconds()));
+    infos.add(new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId,
+        containerId, state.time.milliseconds()));
     // 1 expired PUT
     infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE, 0,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
     // 1 delete for PUT that does not exist in the index
-    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
+    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
     return infos;
   }
 
@@ -1894,9 +1900,8 @@ public class IndexTest {
     while (logEntry != null) {
       Offset startOffset = logEntry.getKey();
       MockId id = logEntry.getValue().getFirst();
-      Pair<IndexValue, IndexValue> putDelete = state.allKeys.get(id);
       // size returned is the size of the delete if the key has been deleted.
-      long size = putDelete.getSecond() != null ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
+      long size = state.getExpectedValue(id, false).getSize();
       StoreFindToken expectedEndToken = new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false);
       Offset endOffset = state.log.getFileSpanForMessage(startOffset, size).getEndOffset();
       expectedEndToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(endOffset));
@@ -1958,23 +1963,20 @@ public class IndexTest {
     List<MessageInfo> infos = findInfo.getMessageEntries();
     Set<StoreKey> keysExamined = new HashSet<>();
     for (MessageInfo info : infos) {
-      Pair<IndexValue, IndexValue> putDelete = state.allKeys.get(info.getStoreKey());
-      IndexValue value = putDelete.getFirst();
-      // size returned is hard to predict if the key has been deleted - it depends on the locations of the PUT and
-      // DELETE entries and whether both or one of them is present in the return list. It is not useful to recompute the
-      // situations here and check since there isn't currently a reason to depend on the size if the record has been
-      // deleted.
-      if (putDelete.getSecond() == null) {
-        assertEquals("Inconsistent size", value.getSize(), info.getSize());
-      }
-      long expiresAtMs = value != null ? value.getExpiresAtMs() : putDelete.getSecond().getExpiresAtMs();
-      short accountId = value != null ? value.getAccountId() : putDelete.getSecond().getAccountId();
-      short containerId = value != null ? value.getContainerId() : putDelete.getSecond().getContainerId();
-      long operationTimeMs =
-          putDelete.getSecond() != null ? putDelete.getSecond().getOperationTimeInMs() : value.getOperationTimeInMs();
-      // if a key is deleted, it doesn't matter if we reached the delete record or not, the delete state will be
+      IndexValue value = state.getExpectedValue((MockId) info.getStoreKey(), true);
+      IndexValue deleteValue =
+          state.deletedKeys.contains(info.getStoreKey()) ? state.getExpectedValue((MockId) info.getStoreKey(), false)
+              : null;
+      // size returned is hard to predict if the key has been updated - it depends on the locations of the PUT and
+      // update entries and whether all or some of them are present in the return list. It is not useful to recompute
+      // the situations here and check
+      long expiresAtMs = value != null ? value.getExpiresAtMs() : deleteValue.getExpiresAtMs();
+      short accountId = value != null ? value.getAccountId() : deleteValue.getAccountId();
+      short containerId = value != null ? value.getContainerId() : deleteValue.getContainerId();
+      long operationTimeMs = deleteValue != null ? deleteValue.getOperationTimeInMs() : value.getOperationTimeInMs();
+      // if a key is updated, it doesn't matter if we reached the update record or not, the updated state will be
       // the one that is returned.
-      assertEquals("Inconsistent delete state ", putDelete.getSecond() != null, info.isDeleted());
+      assertEquals("Inconsistent delete state ", deleteValue != null, info.isDeleted());
       assertEquals("Inconsistent expiresAtMs", expiresAtMs, info.getExpirationTimeInMs());
       assertEquals("Inconsistent accountId", accountId, info.getAccountId());
       assertEquals("Inconsistent containerId", containerId, info.getContainerId());
@@ -2114,8 +2116,9 @@ public class IndexTest {
     // ------------------
     // 3. Journal -> Journal
     // a. Token no longer in journal
-    startToken = new StoreFindToken(state.allKeys.get(firstDeletedKey).getSecond().getOffset(), state.sessionId,
-        state.incarnationId, false);
+    startToken =
+        new StoreFindToken(state.getExpectedValue((MockId) firstDeletedKey, false).getOffset(), state.sessionId,
+            state.incarnationId, false);
     doFindDeletedEntriesSinceTest(startToken, Long.MAX_VALUE, state.deletedKeys, absoluteEndToken);
 
     // b. Token still in journal
@@ -2167,10 +2170,10 @@ public class IndexTest {
     while (logEntry != null) {
       Offset startOffset = logEntry.getKey();
       MockId id = logEntry.getValue().getFirst();
-      Pair<IndexValue, IndexValue> putDelete = state.allKeys.get(id);
-      boolean isDeleted = putDelete.getSecond() != null;
+      IndexValue value = state.getExpectedValue(id, false);
+      boolean isDeleted = value.isFlagSet(IndexValue.Flags.Delete_Index);
       // size returned is the size of the delete if the key has been deleted.
-      long size = isDeleted ? putDelete.getSecond().getSize() : putDelete.getFirst().getSize();
+      long size = value.getSize();
       StoreFindToken expectedEndToken = new StoreFindToken(startOffset, state.sessionId, state.incarnationId, false);
       doFindDeletedEntriesSinceTest(startToken, size, isDeleted ? Collections.singleton(id) : Collections.EMPTY_SET,
           expectedEndToken);
@@ -2231,7 +2234,7 @@ public class IndexTest {
     List<MessageInfo> infos = findInfo.getMessageEntries();
     Set<StoreKey> keysExamined = new HashSet<>();
     for (MessageInfo info : infos) {
-      IndexValue value = state.allKeys.get(info.getStoreKey()).getSecond();
+      IndexValue value = state.getExpectedValue((MockId) info.getStoreKey(), false);
       assertEquals("Inconsistent size", value.getSize(), info.getSize());
       assertTrue("Not deleted", info.isDeleted());
       assertEquals("Inconsistent expiresAtMs", value.getExpiresAtMs(), info.getExpirationTimeInMs());
@@ -2463,16 +2466,10 @@ public class IndexTest {
                 containerId, indexSegment.getVersion()));
         indexSegment.addEntry(entry, fileSpan.getEndOffset());
       } else {
-        if (createV0IndexValue) {
-          entry =
-              new IndexEntry(putId, IndexValueTest.getIndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, -1L));
-          state.index.addToIndex(entry, fileSpan);
-        } else {
-          entry = new IndexEntry(putId,
-              new IndexValue(size, prevEntryEndOffset, (byte) 0, expiresAtMs, state.time.milliseconds(), accountId,
-                  containerId));
-          state.index.addToIndex(entry, fileSpan);
-        }
+        entry = new IndexEntry(putId,
+            IndexValueTest.getIndexValue(size, prevEntryEndOffset, expiresAtMs, state.time.milliseconds(), accountId,
+                containerId, createV0IndexValue ? PersistentIndex.VERSION_0 : PersistentIndex.CURRENT_VERSION));
+        state.index.addToIndex(entry, fileSpan);
       }
       indexEntries.add(entry);
       prevEntryEndOffset = fileSpan.getEndOffset();
@@ -2494,8 +2491,8 @@ public class IndexTest {
       assertEquals("Expiration value mismatch for " + entry.getKey(), expectedValue.getExpiresAtMs(),
           value.getExpiresAtMs());
       assertEquals("Flags mismatch for " + entry.getKey(), expectedValue.getFlags(), value.getFlags());
-      assertEquals("OriginalMessageOffset mismatch for " + entry.getKey(), expectedValue.getOriginalMessageOffset(),
-          value.getOriginalMessageOffset());
+      assertEquals("RelatedMessageOffset mismatch for " + entry.getKey(), expectedValue.getRelatedMessageOffset(),
+          value.getRelatedMessageOffset());
       assertEquals("OperationTime mismatch for " + entry.getKey(), expectedValue.getOperationTimeInMs(),
           value.getOperationTimeInMs());
       assertEquals("AccountId mismatch for " + entry.getKey(), expectedValue.getAccountId(), value.getAccountId());

@@ -33,27 +33,27 @@ import static com.github.ambry.account.Container.*;
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  * Version_1
- * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
- * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId |
- * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset    |   in secs     | (2 bytes) | (2 bytes)   |
- * |           |           |         |   ( 4 bytes)    | (8 bytes) |   (4 bytes)   |           |             |
- * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Related msg | OperationTime | ServiceId | ContainerId |
+ * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset      |   in secs     | (2 bytes) | (2 bytes)   |
+ * |           |           |         |   ( 4 bytes)    | (8 bytes)   |   (4 bytes)   |           |             |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  */
 class IndexValue implements Comparable<IndexValue> {
 
   enum Flags {
-    Delete_Index
+    Delete_Index, Ttl_Update_Index
   }
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
-  final static long UNKNOWN_ORIGINAL_MESSAGE_OFFSET = -1;
+  final static long UNKNOWN_RELATED_MESSAGE_OFFSET = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
   private final static int OFFSET_SIZE_IN_BYTES = 8;
   private final static int FLAG_SIZE_IN_BYTES = 1;
   private final static int EXPIRES_AT_MS_SIZE_IN_BYTES_V0 = 8;
-  private final static int ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES = 8;
+  private final static int RELATED_MESSAGE_OFFSET_SIZE_IN_BYTES = 8;
 
   private final static int EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 = 4;
   private final static int OPERATION_TIME_SECS_SIZE_IN_BYTES = 4;
@@ -62,18 +62,18 @@ class IndexValue implements Comparable<IndexValue> {
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
       BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
-          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES;
+          + RELATED_MESSAGE_OFFSET_SIZE_IN_BYTES;
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V1 =
       BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
-          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
+          + RELATED_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
           + CONTAINER_ID_SIZE_IN_BYTES;
 
   private long size;
   private Offset offset;
   private byte flags;
-  private final long expiresAtMs;
-  private long originalMessageOffset;
+  private long expiresAtMs;
+  private long relatedMessageOffset;
   private final long operationTimeInMs;
   private final short accountId;
   private final short containerId;
@@ -96,7 +96,7 @@ class IndexValue implements Comparable<IndexValue> {
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
         expiresAtMs = value.getLong();
-        originalMessageOffset = value.getLong();
+        relatedMessageOffset = value.getLong();
         operationTimeInMs = (int) Utils.Infinite_Time;
         accountId = UNKNOWN_ACCOUNT_ID;
         containerId = UNKNOWN_CONTAINER_ID;
@@ -110,8 +110,9 @@ class IndexValue implements Comparable<IndexValue> {
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
         long expiresAt = value.getInt();
-        expiresAtMs = expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt) : Utils.Infinite_Time;
-        originalMessageOffset = value.getLong();
+        expiresAtMs = expiresAtMs != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
+            : Utils.Infinite_Time;
+        relatedMessageOffset = value.getLong();
         long operationTimeInSecs = value.getInt();
         operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? TimeUnit.SECONDS.toMillis(operationTimeInSecs)
             : Utils.Infinite_Time;
@@ -157,24 +158,19 @@ class IndexValue implements Comparable<IndexValue> {
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
    * @param flags the flags that needs to be set for the Index Value
    * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param originalMessageOffset the original message offset where the Put record pertaining to a delete record exists
-   *                              in the same log segment. Set to {@link #UNKNOWN_ORIGINAL_MESSAGE_OFFSET} otherwise.
+   * @param relatedMessageOffset the related message offset where another record related to this record exists
+   *                              in the same log segment. Set to {@link #UNKNOWN_RELATED_MESSAGE_OFFSET} otherwise.
    * @param operationTimeInMs the time in ms at which the operation occurred.
    * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
-  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
+  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long relatedMessageOffset,
       long operationTimeInMs, short accountId, short containerId) {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
-    // if expiry in secs > Integer.MAX_VALUE, treat it as permanent blob
-    if (TimeUnit.MILLISECONDS.toSeconds(expiresAtMs) > Integer.MAX_VALUE) {
-      this.expiresAtMs = Utils.Infinite_Time;
-    } else {
-      this.expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
-    }
-    this.originalMessageOffset = originalMessageOffset;
+    setExpiresAtMs(expiresAtMs);
+    this.relatedMessageOffset = relatedMessageOffset;
     this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
     this.accountId = accountId;
     this.containerId = containerId;
@@ -219,10 +215,10 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   /**
-   * @return the original message offset of the {@link IndexValue}
+   * @return the related message offset of the {@link IndexValue}
    */
-  long getOriginalMessageOffset() {
-    return originalMessageOffset;
+  long getRelatedMessageOffset() {
+    return relatedMessageOffset;
   }
 
   /**
@@ -255,17 +251,34 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   /**
+   * Clears the provided {@code flag}
+   * @param flag the flag to clear
+   */
+  void clearFlag(Flags flag) {
+    flags = (byte) (flags & ~(1 << flag.ordinal()));
+  }
+
+  /**
    * Updates the {@link Offset} of the {@link IndexValue}
    * @param newOffset the new {@link Offset} to be updated for the {@link IndexValue}
    */
   void setNewOffset(Offset newOffset) {
-    originalMessageOffset =
-        offset.getName().equals(newOffset.getName()) ? offset.getOffset() : UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
+    Offset oldOffset = offset;
     offset = newOffset;
+    setRelatedMessageOffset(oldOffset);
   }
 
-  void clearOriginalMessageOffset() {
-    originalMessageOffset = UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
+  /**
+   * Sets the related message offset if the offset is in the same {@link LogSegment}
+   * @param relatedOffset the offset to set as the related message offset
+   */
+  void setRelatedMessageOffset(Offset relatedOffset) {
+    relatedMessageOffset =
+        offset.getName().equals(relatedOffset.getName()) ? relatedOffset.getOffset() : UNKNOWN_RELATED_MESSAGE_OFFSET;
+  }
+
+  void clearRelatedMessageOffset() {
+    relatedMessageOffset = UNKNOWN_RELATED_MESSAGE_OFFSET;
   }
 
   /**
@@ -288,7 +301,7 @@ class IndexValue implements Comparable<IndexValue> {
         value.putLong(offset.getOffset());
         value.put(flags);
         value.putLong(expiresAtMs);
-        value.putLong(originalMessageOffset);
+        value.putLong(relatedMessageOffset);
         value.position(0);
         break;
       case PersistentIndex.VERSION_1:
@@ -298,7 +311,7 @@ class IndexValue implements Comparable<IndexValue> {
         value.putLong(offset.getOffset());
         value.put(flags);
         value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
-        value.putLong(originalMessageOffset);
+        value.putLong(relatedMessageOffset);
         value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
             : (int) operationTimeInMs);
         value.putShort(accountId);
@@ -314,9 +327,28 @@ class IndexValue implements Comparable<IndexValue> {
   @Override
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
-        + ", ExpiresAtMs: " + getExpiresAtMs() + ", Original Message Offset: " + getOriginalMessageOffset() + (
-        version != PersistentIndex.VERSION_0 ? (", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId "
-            + getAccountId() + ", ContainerId " + getContainerId()) : "");
+        + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", ExpiresAtMs: " + getExpiresAtMs()
+        + ", Related Message Offset: " + getRelatedMessageOffset() + (version != PersistentIndex.VERSION_0 ? (
+        ", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId "
+            + getContainerId()) : "");
+  }
+
+  /**
+   * @return the version of this {@link IndexValue}
+   */
+  short getVersion() {
+    return version;
+  }
+
+  void setExpiresAtMs(long expiresAtMsLocal) {
+    // if expiry in secs > Integer.MAX_VALUE, treat it as permanent blob
+    if (TimeUnit.MILLISECONDS.toSeconds(expiresAtMsLocal) > Integer.MAX_VALUE) {
+      expiresAtMs = Utils.Infinite_Time;
+    } else if (expiresAtMsLocal != Utils.Infinite_Time && expiresAtMsLocal < 0) {
+      expiresAtMs = Utils.Infinite_Time;
+    } else {
+      expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMsLocal);
+    }
   }
 
   /**

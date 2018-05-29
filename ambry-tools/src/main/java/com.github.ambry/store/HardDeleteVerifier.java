@@ -445,7 +445,7 @@ public class HardDeleteVerifier {
                         (int) output.getSize()))) {
                     /* If the offset in the index is different from that in the log, hard delete wouldn't have been
                        possible and we just saw a duplicate put for the same key, otherwise we missed a hard delete. */
-                  if (currentOffset == indexValue.getOriginalMessageOffset()) {
+                  if (currentOffset == indexValue.getRelatedMessageOffset()) {
                     notHardDeletedErrorCount++;
                   } else {
                     // the assumption here is that this put has been lost as far as the index is concerned due to
@@ -587,7 +587,7 @@ public class HardDeleteVerifier {
                 boolean asExpected = deserializeUserMetadataAndBlob(streamlog, oldStreamlog, isDeleted);
                 if (!asExpected) {
                   if (isDeleted) {
-                    if (indexValue.getOriginalMessageOffset() != currentOffset) {
+                    if (indexValue.getRelatedMessageOffset() != currentOffset) {
                       duplicatePuts++;
                     } else {
                       notHardDeletedErrorCount++;
