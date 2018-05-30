@@ -481,7 +481,7 @@ public class IndexTest {
    * @throws StoreException
    */
   @Test
-  public void changeIndexSegmentsTest() throws IOException, StoreException {
+  public void changeIndexSegmentsTest() throws StoreException {
     ConcurrentSkipListMap<Offset, IndexSegment> indexes = state.index.getIndexSegments();
     Set<Offset> saved = indexes.clone().keySet();
 
@@ -670,6 +670,29 @@ public class IndexTest {
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
+    // recovery info contains a Ttl Update for a key that does not exist
+    info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
+    doRecoveryFailureTest(info, StoreErrorCodes.ID_Not_Found);
+    // recovery info contains a Ttl Update for a key that is already Ttl updated
+    MockId updatedId = null;
+    for (MockId id : state.ttlUpdatedKeys) {
+      if (state.liveKeys.contains(id)) {
+        updatedId = id;
+        break;
+      }
+    }
+    assertNotNull("There is no key that is ttl updated but not deleted", updatedId);
+    info =
+        new MessageInfo(updatedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, updatedId.getAccountId(),
+            updatedId.getContainerId(), state.time.milliseconds());
+    doRecoveryFailureTest(info, StoreErrorCodes.TTL_Already_Updated);
+    // recovery info contains a Ttl Update for a key that is already deleted
+    MockId deletedId = state.deletedKeys.iterator().next();
+    info =
+        new MessageInfo(deletedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, deletedId.getAccountId(),
+            deletedId.getContainerId(), state.time.milliseconds());
+    doRecoveryFailureTest(info, StoreErrorCodes.ID_Deleted);
     // recovery info contains a DELETE for a key that has been deleted
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
@@ -1547,9 +1570,8 @@ public class IndexTest {
    */
   private void singleSegmentRecoveryTest() throws IOException, StoreException {
     Offset indexEndOffsetBeforeRecovery = state.index.getCurrentEndOffset();
-    MockId idToCreateAndDelete = state.getUniqueId();
     // recover a few messages in a single segment
-    final List<MessageInfo> infos = getCuratedSingleSegmentRecoveryInfos(idToCreateAndDelete);
+    final List<MessageInfo> infos = getCuratedSingleSegmentRecoveryInfos();
     final AtomicInteger returnTracker = new AtomicInteger(0);
     state.recovery = new MessageStoreRecovery() {
       @Override
@@ -1571,7 +1593,7 @@ public class IndexTest {
 
     state.reloadIndex(true, false);
     assertEquals("End offset not as expected", expectedSegmentEndOffset, activeSegment.getEndOffset());
-    checkInfos(infos, idToCreateAndDelete, indexEndOffsetBeforeRecovery);
+    checkInfos(infos, indexEndOffsetBeforeRecovery);
   }
 
   /**
@@ -1586,12 +1608,28 @@ public class IndexTest {
     final List<MessageInfo> activeSegmentInfos = new ArrayList<>();
     // 1 PUT record that will be deleted in the next log segment
     MockId idToCreateAndDeleteAcrossSegments = state.getUniqueId();
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short pdAccountId = idToCreateAndDeleteAcrossSegments.getAccountId();
+    short pdContainerId = idToCreateAndDeleteAcrossSegments.getContainerId();
     state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
     activeSegmentInfos.add(
-        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId,
-            state.time.milliseconds()));
+        new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE, pdAccountId,
+            pdContainerId, state.time.milliseconds()));
+    // 1 PUT record that will be ttl updated in the next log segment
+    MockId idToCreateAndUpdateAcrossSegments = state.getUniqueId();
+    short puAccountId = idToCreateAndUpdateAcrossSegments.getAccountId();
+    short puContainerId = idToCreateAndUpdateAcrossSegments.getContainerId();
+    state.appendToLog(CuratedLogIndexState.PUT_RECORD_SIZE);
+    activeSegmentInfos.add(
+        new MessageInfo(idToCreateAndUpdateAcrossSegments, CuratedLogIndexState.PUT_RECORD_SIZE, puAccountId,
+            puContainerId, state.time.milliseconds()));
+    // 1 TTL update record that will be deleted in the next log segment
+    MockId idToUpdateAndDeleteAcrossSegments = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
+    short udAccountId = idToUpdateAndDeleteAcrossSegments.getAccountId();
+    short udContainerId = idToUpdateAndDeleteAcrossSegments.getContainerId();
+    state.appendToLog(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
+    activeSegmentInfos.add(
+        new MessageInfo(idToUpdateAndDeleteAcrossSegments, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+            udAccountId, udContainerId, state.time.milliseconds()));
     // 1 PUT record that will remain and covers almost the rest of the active segment.
     long size =
         activeSegment.getCapacityInBytes() - activeSegment.getEndOffset() - (CuratedLogIndexState.DELETE_RECORD_SIZE
@@ -1599,13 +1637,22 @@ public class IndexTest {
     state.appendToLog(size);
     activeSegmentInfos.add(new MessageInfo(state.getUniqueId(), size, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
-    MockId idToCreateAndDeleteInSameSegment = state.getUniqueId();
-    final List<MessageInfo> nextSegmentInfos = getCuratedSingleSegmentRecoveryInfos(idToCreateAndDeleteInSameSegment);
+    final List<MessageInfo> nextSegmentInfos = getCuratedSingleSegmentRecoveryInfos();
     // 1 DELETE record for the PUT in the previous segment
     state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
     nextSegmentInfos.add(
         new MessageInfo(idToCreateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
-            accountId, containerId, state.time.milliseconds()));
+            pdAccountId, pdContainerId, state.time.milliseconds()));
+    // 1 TTL update for the PUT in the previous segment
+    state.appendToLog(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
+    nextSegmentInfos.add(
+        new MessageInfo(idToCreateAndUpdateAcrossSegments, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+            puAccountId, puContainerId, state.time.milliseconds()));
+    // 1 DELETE for the TTL update in the previous segment
+    state.appendToLog(CuratedLogIndexState.DELETE_RECORD_SIZE);
+    nextSegmentInfos.add(
+        new MessageInfo(idToUpdateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
+            udAccountId, udContainerId, state.time.milliseconds()));
     final AtomicInteger returnTracker = new AtomicInteger(0);
     state.recovery = new MessageStoreRecovery() {
       @Override
@@ -1633,74 +1680,187 @@ public class IndexTest {
     assertNotNull("A new segment has not been created", activeSegment);
     assertEquals("End offset active segment not as expected", nextSegmentExpectedEndOffset,
         activeSegment.getEndOffset());
-    checkInfos(activeSegmentInfos, idToCreateAndDeleteAcrossSegments, indexEndOffsetBeforeRecovery);
-    checkInfos(nextSegmentInfos, idToCreateAndDeleteInSameSegment,
-        new Offset(activeSegment.getName(), activeSegment.getStartOffset()));
+    List<MessageInfo> infos = new ArrayList<>(activeSegmentInfos);
+    infos.addAll(nextSegmentInfos);
+    checkInfos(infos, indexEndOffsetBeforeRecovery);
   }
 
   /**
    * Creates a few curated recovery entries. For understanding the created entries, please read the source code which is
    * annotated with comments.
-   * @param idToCreateAndDelete the {@link MockId} that will have both a PUT and DELETE entry.
-   * @return curated revovery entries.
+   * @return curated recovery entries.
    * @throws IOException
    */
-  private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos(MockId idToCreateAndDelete) throws IOException {
+  private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos() throws IOException {
     List<MessageInfo> infos = new ArrayList<>();
-    state.appendToLog(3 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE);
+    state.appendToLog(4 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE
+        + 4 * TTL_UPDATE_RECORD_SIZE);
+    // 1 TTL update for a PUT not in the infos (won't be deleted)
+    MockId idToUpdate = state.getIdToTtlUpdateFromLogSegment(state.log.getFirstSegment());
+    infos.add(
+        new MessageInfo(idToUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, idToUpdate.getAccountId(),
+            idToUpdate.getContainerId(), state.time.milliseconds()));
+    // 1 TTL update for a PUT not in the infos (will be deleted)
+    MockId idToUpdateAndDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
+    infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(), state.time.milliseconds()));
     // 1 DELETE for a PUT not in the infos
-    MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
-    IndexValue putValue = state.getExpectedValue(idToDelete, true);
     // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
     // has been a ttl update
-    infos.add(new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, putValue.getAccountId(),
-        putValue.getContainerId(), state.time.milliseconds()));
+    infos.add(new MessageInfo(idToUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
+        idToUpdateAndDelete.getAccountId(), idToUpdateAndDelete.getContainerId(), state.time.milliseconds()));
+    // 1 DELETE for a PUT + ttl update not in the infos
+    MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), true);
+    // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
+    // has been a ttl update
+    infos.add(
+        new MessageInfo(idToDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, idToDelete.getAccountId(),
+            idToDelete.getContainerId(), state.time.milliseconds()));
     // 3 PUT
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
-    infos.add(new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId,
+    MockId idToCreateUpdateAndDelete = state.getUniqueId();
+    short accountId = idToCreateUpdateAndDelete.getAccountId();
+    short containerId = idToCreateUpdateAndDelete.getContainerId();
+    infos.add(new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.PUT_RECORD_SIZE, accountId, containerId,
         Utils.Infinite_Time));
-    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
-    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
-    // 1 DELETE for a PUT in the infos
-    infos.add(new MessageInfo(idToCreateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId,
-        containerId, state.time.milliseconds()));
+    MockId idToCreateAndUpdate = state.getUniqueId();
+    infos.add(
+        new MessageInfo(idToCreateAndUpdate, CuratedLogIndexState.PUT_RECORD_SIZE, idToCreateAndUpdate.getAccountId(),
+            idToCreateAndUpdate.getContainerId(), state.time.milliseconds()));
+    MockId id = state.getUniqueId();
+    infos.add(new MessageInfo(id, CuratedLogIndexState.PUT_RECORD_SIZE, id.getAccountId(), id.getContainerId(),
+        Utils.Infinite_Time));
+    // 1 TTL update for a PUT in the infos (will get deleted)
+    infos.add(
+        new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, accountId,
+            containerId, state.time.milliseconds()));
+    // 1 DELETE for a PUT + ttl update in the infos
+    infos.add(
+        new MessageInfo(idToCreateUpdateAndDelete, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, accountId,
+            containerId, state.time.milliseconds()));
+    // 1 TTL update for a PUT in the infos (won't get deleted)
+    infos.add(new MessageInfo(idToCreateAndUpdate, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        idToCreateAndUpdate.getAccountId(), idToCreateAndUpdate.getContainerId(), state.time.milliseconds()));
     // 1 expired PUT
-    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE, 0,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
+    id = state.getUniqueId();
+    infos.add(new MessageInfo(id, CuratedLogIndexState.PUT_RECORD_SIZE, 0, id.getAccountId(), id.getContainerId(),
+        Utils.Infinite_Time));
     // 1 delete for PUT that does not exist in the index
-    infos.add(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds()));
+    id = state.getUniqueId();
+    infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
+        id.getContainerId(), state.time.milliseconds()));
     return infos;
   }
 
   /**
    * Checks that the provided {@code infos} is present in the index.
    * @param infos the {@link List} of {@link MessageInfo} whose presence needs to be checked in the index.
-   * @param putRecordIdToIgnore the {@link MockId} whose PUT {@link MessageInfo} has to be ignored.
    * @param indexEndOffsetBeforeRecovery the end offset of the {@link PersistentIndex} before recovery.
    * @throws StoreException
    */
-  private void checkInfos(List<MessageInfo> infos, MockId putRecordIdToIgnore, Offset indexEndOffsetBeforeRecovery)
-      throws StoreException {
+  private void checkInfos(List<MessageInfo> infos, Offset indexEndOffsetBeforeRecovery) throws StoreException {
+    Map<MockId, MessageInfo> effectiveInfos = getEffectiveInfos(infos);
+    Map<StoreKey, Boolean> checked = new HashMap<>();
+    effectiveInfos.forEach((id, messageInfo) -> checked.put(id, false));
     Offset currCheckOffset = indexEndOffsetBeforeRecovery;
-    for (MessageInfo info : infos) {
-      FileSpan expectedFileSpan = state.log.getFileSpanForMessage(currCheckOffset, info.getSize());
-      if (!info.getStoreKey().equals(putRecordIdToIgnore) || info.isDeleted()) {
-        IndexValue value = state.index.findKey(info.getStoreKey());
-        assertEquals("Incorrect value for start offset", currCheckOffset, value.getOffset());
-        assertEquals("Inconsistent size", info.getSize(), value.getSize());
-        assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
-        assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
-        assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
-        assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
-        assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
-            value.getOperationTimeInMs());
-      }
+    for (MessageInfo rawInfo : infos) {
+      MessageInfo info = effectiveInfos.get(rawInfo.getStoreKey());
+      checked.put(info.getStoreKey(), checkRecoveryInfoEquivalence(info, currCheckOffset));
+      FileSpan expectedFileSpan = state.log.getFileSpanForMessage(currCheckOffset, rawInfo.getSize());
       currCheckOffset = expectedFileSpan.getEndOffset();
     }
+    checked.forEach((key, aBoolean) -> {
+      if (!aBoolean) {
+        // these are keys for which only a ttl update is available in the provided infos
+        // in that case, the value obtained from the index will have the size and offset of the put record
+        // getEffectiveInfos() updates the size correctly so everything other than the offset can be checked
+        MessageInfo info = effectiveInfos.get(key);
+        assertTrue("Only ttl update effective infos should have been skipped: " + info, info.isTtlUpdated());
+        try {
+          checkRecoveryInfoEquivalence(info, null);
+        } catch (Exception e) {
+          throw new IllegalStateException(e);
+        }
+      }
+    });
+  }
+
+  /**
+   * Checks that the details in {@code info} are equivalent to the value returned from the index. Does not perform the
+   * check if {@code checkOffset} does not match the offset in the value.
+   * @param info the {@link MessageInfo} to check.
+   * @param checkOffset the offset expected in the value if the check is to be performed. Can be {@code null} in which
+   *                    case the checks will be performed regardless of the offset in the value.
+   * @return {@code true} if {@code checkOffset} matched the offset in the value from the index (or was {@code null}.
+   *          {@code false} otherwise
+   * @throws StoreException
+   */
+  private boolean checkRecoveryInfoEquivalence(MessageInfo info, Offset checkOffset) throws StoreException {
+    IndexValue value = state.index.findKey(info.getStoreKey());
+    boolean checked = false;
+    if (checkOffset == null || checkOffset.equals(value.getOffset())) {
+      assertEquals("Inconsistent size", info.getSize(), value.getSize());
+      assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
+      assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
+      assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
+      assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
+      assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
+          value.getOperationTimeInMs());
+      checked = true;
+    }
+    return checked;
+  }
+
+  /**
+   * Gets the "effective" {@link MessageInfo} based on what the current {@link IndexValue} should be in that index
+   * @param infos the {@link MessageInfo} that are part of the recovery
+   * @return a map from {@link MockId} to the "effective" {@link MessageInfo}
+   */
+  private Map<MockId, MessageInfo> getEffectiveInfos(List<MessageInfo> infos) {
+    Map<MockId, MessageInfo> effectiveInfos = new HashMap<>();
+    for (MessageInfo info : infos) {
+      MessageInfo effectiveInfo;
+      MockId id = (MockId) info.getStoreKey();
+      if (effectiveInfos.containsKey(info.getStoreKey())) {
+        MessageInfo prevInfo = effectiveInfos.get(info.getStoreKey());
+        if (info.isDeleted()) {
+          // this info takes precedence but the expire time must come from the previous info
+          effectiveInfo =
+              new MessageInfo(id, info.getSize(), true, prevInfo.isTtlUpdated(), prevInfo.getExpirationTimeInMs(),
+                  id.getAccountId(), id.getContainerId(), info.getOperationTimeMs());
+        } else if (info.isTtlUpdated()) {
+          if (prevInfo.isDeleted()) {
+            throw new IllegalStateException("There cannot have been a ttl update entry after a delete entry");
+          } else {
+            // the size and op time comes from the previous info
+            effectiveInfo = new MessageInfo(id, prevInfo.getSize(), false, true, Utils.Infinite_Time, id.getAccountId(),
+                id.getContainerId(), prevInfo.getOperationTimeMs());
+          }
+        } else {
+          throw new IllegalStateException("There cannot have been a put entry after a ttl update or delete entry");
+        }
+      } else {
+        if (info.isDeleted()) {
+          // expire time must come from the value in the index if any
+          IndexValue value = state.getExpectedValue(id, false);
+          if (value != null) {
+            effectiveInfo =
+                new MessageInfo(id, info.getSize(), true, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
+                    value.getExpiresAtMs(), id.getAccountId(), id.getContainerId(), info.getOperationTimeMs());
+          } else {
+            effectiveInfo = info;
+          }
+        } else if (info.isTtlUpdated()) {
+          // value returned from the find will be that of the put
+          IndexValue value = state.getExpectedValue(id, false);
+          effectiveInfo = new MessageInfo(id, value.getSize(), false, true, Utils.Infinite_Time, id.getAccountId(),
+              id.getContainerId(), value.getOperationTimeInMs());
+        } else {
+          effectiveInfo = info;
+        }
+      }
+      effectiveInfos.put(id, effectiveInfo);
+    }
+    return effectiveInfos;
   }
 
   /**

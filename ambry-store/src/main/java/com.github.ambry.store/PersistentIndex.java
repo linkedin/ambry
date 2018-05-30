@@ -570,8 +570,8 @@ class PersistentIndex {
           if (retValue != null) {
             // merge entries if required to account for updated fields
             IndexValue latest = foundValues.get(0);
-            if (Utils.getTimeInMsToTheNearestSec(latest.getExpiresAtMs()) != Utils.getTimeInMsToTheNearestSec(
-                retValue.getExpiresAtMs())) {
+            if (latest.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && !retValue.isFlagSet(
+                IndexValue.Flags.Ttl_Update_Index)) {
               retValue = new IndexValue(retValue.getOffset().getName(), retValue.getBytes(), retValue.getVersion());
               retValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
               retValue.setExpiresAtMs(latest.getExpiresAtMs());

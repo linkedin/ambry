@@ -558,6 +558,8 @@ class CuratedLogIndexState {
       }
     }
     if (updateCandidate != null) {
+      // adding here because recovery tests don't immediately add to the index and may call this function multiple
+      // times
       ttlUpdatedKeys.add(updateCandidate);
     }
     return updateCandidate;
@@ -584,6 +586,8 @@ class CuratedLogIndexState {
       }
     }
     if (deleteCandidate != null) {
+      // adding here because recovery tests don't immediately add to the index and may call this function multiple
+      // times
       markAsDeleted(deleteCandidate);
     }
     return deleteCandidate;
