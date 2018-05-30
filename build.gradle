@@ -104,6 +104,8 @@ project(':ambry-api') {
     dependencies {
         compile project(':ambry-utils')
         compile "com.codahale.metrics:metrics-core:$metricsVersion"
+        compile "org.codehaus.jackson:jackson-core-asl:$jacksonVersion"
+        compile "org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
     }
 }

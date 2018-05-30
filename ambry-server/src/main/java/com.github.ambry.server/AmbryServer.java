@@ -19,8 +19,6 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.WriteStatusDelegate;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.ClusterMapConfig;
@@ -165,11 +163,7 @@ public class AmbryServer {
       networkServer.start();
 
       logger.info("Creating StatsManager to publish stats");
-      List<PartitionId> partitionIds = new ArrayList<>();
-      for (ReplicaId replicaId : clusterMap.getReplicaIds(nodeId)) {
-        partitionIds.add(replicaId.getPartitionId());
-      }
-      statsManager = new StatsManager(storageManager, partitionIds, registry, statsConfig, time);
+      statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time);
       if (serverConfig.serverStatsPublishLocalEnabled) {
         statsManager.start();
       }

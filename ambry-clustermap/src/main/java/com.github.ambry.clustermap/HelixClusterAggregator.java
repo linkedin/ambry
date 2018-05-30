@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +36,6 @@ public class HelixClusterAggregator {
 
   HelixClusterAggregator(long relevantTimePeriodInMinutes) {
     relevantTimePeriodInMs = TimeUnit.MINUTES.toMillis(relevantTimePeriodInMinutes);
-    mapper.setVisibilityChecker(mapper.getVisibilityChecker().withFieldVisibility(JsonAutoDetect.Visibility.ANY));
   }
 
   /**
@@ -157,7 +155,7 @@ public class HelixClusterAggregator {
     StatsSnapshot reducedSnapshot = new StatsSnapshot(0L, null);
     if (statsSnapshot.getSubMap() != null) {
       for (StatsSnapshot snapshot : statsSnapshot.getSubMap().values()) {
-        statsSnapshot.aggregate(reducedSnapshot, snapshot);
+        StatsSnapshot.aggregate(reducedSnapshot, snapshot);
       }
     }
     return reducedSnapshot;

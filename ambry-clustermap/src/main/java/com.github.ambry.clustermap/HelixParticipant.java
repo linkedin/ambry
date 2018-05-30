@@ -56,7 +56,7 @@ class HelixParticipant implements ClusterParticipant {
    * Instantiate a HelixParticipant.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this participant.
    * @param helixFactory the {@link HelixFactory} to use to get the {@link HelixManager}.
-   * @throws JSONException if there is an error in parsing the JSON serialized ZK connect string config.
+   * @throws IOException if there is an error in parsing the JSON serialized ZK connect string config.
    */
   HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) throws IOException {
     clusterName = clusterMapConfig.clusterMapClusterName;

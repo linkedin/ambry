@@ -118,6 +118,7 @@ public class HelixClusterWideAggregationTool {
               String.format("Failed to delete %s. Workflow not found in cluster %s at %s", workflowName, clusterName,
                   zkAddress));
         }
+        System.out.println(String.format("Successfully delete the workflow: %s from %s", workflowName, clusterName));
       } else {
         try {
           Workflow.Builder workflowBuilder = new Workflow.Builder(workflowName);

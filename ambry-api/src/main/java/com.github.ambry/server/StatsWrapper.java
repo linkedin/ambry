@@ -14,10 +14,16 @@
 
 package com.github.ambry.server;
 
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
+
+
 /**
  * A wrapper model object that contains a {@link StatsSnapshot} and a {@link StatsHeader} with metadata about the
  * {@link StatsSnapshot}.
  */
+@JsonPropertyOrder({"header", "snapshot"})
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY)
 public class StatsWrapper {
   private StatsHeader header;
   private StatsSnapshot snapshot;

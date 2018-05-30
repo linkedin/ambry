@@ -14,7 +14,11 @@
 
 package com.github.ambry.server;
 
+import java.util.HashMap;
 import java.util.Map;
+import org.codehaus.jackson.annotate.JsonAnyGetter;
+import org.codehaus.jackson.annotate.JsonAnySetter;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
 
 
 /**
@@ -25,6 +29,7 @@ import java.util.Map;
  * {@link StatsSnapshot}'s subMap will contain all the containers in the account that is mapped with. At the leaf level
  * {@link StatsSnapshot}'s subMap will be null.
  */
+@JsonPropertyOrder({"value", "subMap"})
 public class StatsSnapshot {
   private long value;
   private Map<String, StatsSnapshot> subMap;
@@ -61,6 +66,7 @@ public class StatsSnapshot {
     return value;
   }
 
+  @JsonAnyGetter
   public Map<String, StatsSnapshot> getSubMap() {
     return subMap;
   }
@@ -71,6 +77,12 @@ public class StatsSnapshot {
 
   public void setSubMap(Map<String, StatsSnapshot> subMap) {
     this.subMap = subMap;
+  }
+
+  @JsonAnySetter
+  public void add(String str, StatsSnapshot statsSnapshot) {
+    subMap = subMap == null ? new HashMap<>() : subMap;
+    subMap.put(str, statsSnapshot);
   }
 
   @Override
