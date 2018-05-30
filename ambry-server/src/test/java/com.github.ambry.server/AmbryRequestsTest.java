@@ -128,7 +128,7 @@ public class AmbryRequestsTest {
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false);
+        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false, null);
   }
 
   /**
