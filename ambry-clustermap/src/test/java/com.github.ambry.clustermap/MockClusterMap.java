@@ -55,8 +55,8 @@ public class MockClusterMap implements ClusterMap {
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 default partitions/replicas
    * per mount point. It will also add replicas for a "special" partition. The distribution of these replicas will be
-   * 3 in the chosen "local" datacenter and 2 everywhere else. This will amount to a total of 9/10 replicas per node and
-   * 88 replicas across the cluster.
+   * 3 in the chosen "local" datacenter and 2 everywhere else. This will amount to a total of 9 or 10 replicas per node
+   * and 88 replicas across the cluster.
    *
    * If this cluster map is going to be used to start a cluster, use it judiciously to avoid resource consumption issues
    * on the test machine.
