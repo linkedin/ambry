@@ -61,6 +61,13 @@ public class ServerConfig {
   @Default("false")
   public final boolean serverEnableStoreDataPrefetch;
 
+  /**
+   * Implementation class for StoreKeyConverterFactory
+   */
+  @Config("server.store.key.converter.factory.class")
+  @Default("com.github.ambry.server.StoreKeyConverterFactoryImpl")
+  public final String serverStoreKeyConverterFactoryClass;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -70,5 +77,6 @@ public class ServerConfig {
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
     serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
+    serverStoreKeyConverterFactoryClass = verifiableProperties.getString("server.store.key.converter.factory.class", "com.github.ambry.server.StoreKeyConverterFactoryImpl");
   }
 }

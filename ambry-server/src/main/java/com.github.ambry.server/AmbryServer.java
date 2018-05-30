@@ -45,6 +45,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
@@ -84,6 +85,7 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
+  private StoreKeyConverterFactory storeKeyConverterFactory = null;
   private Time time;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
@@ -155,11 +157,13 @@ public class AmbryServer {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
 
+      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactoryClass, properties, registry);
+
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory,
-              serverConfig.serverEnableStoreDataPrefetch);
+              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();

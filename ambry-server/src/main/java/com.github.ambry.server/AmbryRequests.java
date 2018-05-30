@@ -70,6 +70,7 @@ import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -110,11 +111,12 @@ public class AmbryRequests implements RequestAPI {
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final boolean enableDataPrefetch;
+  private final StoreKeyConverterFactory storeKeyConverterFactory;
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
       NotificationSystem operationNotification, ReplicationManager replicationManager, StoreKeyFactory storeKeyFactory,
-      boolean enableDataPrefetch) {
+      boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
     this.storageManager = storageManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -126,6 +128,7 @@ public class AmbryRequests implements RequestAPI {
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
     this.enableDataPrefetch = enableDataPrefetch;
+    this.storeKeyConverterFactory = storeKeyConverterFactory;
 
     requestsDisableInfo.put(RequestOrResponseType.PutRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     requestsDisableInfo.put(RequestOrResponseType.GetRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
