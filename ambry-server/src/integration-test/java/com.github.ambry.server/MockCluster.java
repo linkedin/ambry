@@ -122,7 +122,6 @@ public class MockCluster {
     props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
     props.setProperty("store.deleted.message.retention.days", "1");
     props.setProperty("replication.token.flush.interval.seconds", "5");
-    props.setProperty("replication.wait.time.between.replicas.ms", "50");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");

@@ -81,7 +81,6 @@ class ReplicaThread implements Runnable {
   private final Set<PartitionId> allReplicatedPartitions;
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
-  private boolean waitEnabled;
   private final FindTokenFactory findTokenFactory;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
@@ -126,7 +125,6 @@ class ReplicaThread implements Runnable {
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
-    this.waitEnabled = !replicatingFromRemoteColo;
     this.replicatingOverSsl = replicatingOverSsl;
     this.datacenterName = datacenterName;
     Set<PartitionId> partitions = new HashSet<>();
@@ -329,7 +327,6 @@ class ReplicaThread implements Runnable {
         ReplicaMetadataResponse response =
             getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
         long startTimeInMs = SystemTime.getInstance().milliseconds();
-        waitEnabled = !replicatingFromRemoteColo;
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
@@ -340,9 +337,6 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
-              if (waitEnabled) {
-                waitIfRequired(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
-              }
               Set<StoreKey> missingStoreKeys =
                   getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
@@ -590,38 +584,6 @@ class ReplicaThread implements Runnable {
       replicationMetrics.intraColoProcessMetadataResponseTime.update(
           SystemTime.getInstance().milliseconds() - startTime);
     }
-  }
-
-  /**
-   * Checks to see if we need to wait between replication iterations
-   * @param replicaMetadataResponseInfo The replica metadata response from the remote node
-   * @param remoteNode The remote node from which replication needs to happen
-   * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @throws InterruptedException
-   */
-  private void waitIfRequired(ReplicaMetadataResponseInfo replicaMetadataResponseInfo, DataNodeId remoteNode,
-      RemoteReplicaInfo remoteReplicaInfo) throws InterruptedException {
-    long remoteReplicaLag = replicaMetadataResponseInfo.getRemoteReplicaLagInBytes();
-    long startTime = SystemTime.getInstance().milliseconds();
-    if (remoteReplicaLag < replicationConfig.replicationMaxLagForWaitTimeInBytes) {
-      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote replica lag: {} "
-              + "ReplicationMaxLagForWaitTimeInBytes: {} Waiting for {} ms", remoteNode, threadName,
-          remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getRemoteReplicaLagInBytes(),
-          replicationConfig.replicationMaxLagForWaitTimeInBytes, replicationConfig.replicaWaitTimeBetweenReplicasMs);
-      // We apply the wait time between replication from remote replicas here. Any new objects that get written
-      // in the remote replica are given time to be written to the local replica and avoids failing the request
-      // from the client. This is done only when the replication lag with that node is less than
-      // replicationMaxLagForWaitTimeInBytes
-      Thread.sleep(replicationConfig.replicaWaitTimeBetweenReplicasMs);
-      waitEnabled = false;
-    }
-    //TODO do we need interColo metrics here?
-//    if (remoteColo) {
-//      replicationMetrics.interColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
-//    } else {
-//      replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
-//    }
-    replicationMetrics.intraColoReplicationWaitTime.update(SystemTime.getInstance().milliseconds() - startTime);
   }
 
   /**

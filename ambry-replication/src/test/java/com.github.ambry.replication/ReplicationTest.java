@@ -120,7 +120,6 @@ public class ReplicationTest {
     }
 
     Properties properties = new Properties();
-    properties.put("replication.wait.time.between.replicas.ms", "0");
     ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
@@ -216,7 +215,6 @@ public class ReplicationTest {
     }
 
     Properties properties = new Properties();
-    properties.put("replication.wait.time.between.replicas.ms", "0");
     ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
@@ -371,7 +369,6 @@ public class ReplicationTest {
     }
 
     Properties properties = new Properties();
-    properties.put("replication.wait.time.between.replicas.ms", "0");
     ReplicationConfig config = new ReplicationConfig(new VerifiableProperties(properties));
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));

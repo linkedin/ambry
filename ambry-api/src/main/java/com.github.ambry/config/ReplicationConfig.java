@@ -69,22 +69,6 @@ public class ReplicationConfig {
   public final long replicationFetchSizeInBytes;
 
   /**
-   * The time for which replication waits between replication of remote replicas of a partition
-   */
-  @Config("replication.wait.time.between.replicas.ms")
-  @Default("1000")
-  public final int replicaWaitTimeBetweenReplicasMs;
-
-  /**
-   * The max lag above which replication does not wait between replicas. A larger value would slow down replication
-   * while reduces the chance of conflicts with direct puts. A smaller value would speed up replication but
-   * increase the chance of conflicts with direct puts
-   */
-  @Config("replication.max.lag.for.wait.time.in.bytes")
-  @Default("5242880")
-  public final long replicationMaxLagForWaitTimeInBytes;
-
-  /**
    * Whether message stream should be tested for validity so that only valid ones are considered during replication
    */
   @Config("replication.validate.message.stream")
@@ -107,10 +91,6 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
-    replicaWaitTimeBetweenReplicasMs =
-        verifiableProperties.getIntInRange("replication.wait.time.between.replicas.ms", 1000, 0, 1000000);
-    replicationMaxLagForWaitTimeInBytes =
-        verifiableProperties.getLongInRange("replication.max.lag.for.wait.time.in.bytes", 5242880, 0, 104857600);
     replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
   }
 }
