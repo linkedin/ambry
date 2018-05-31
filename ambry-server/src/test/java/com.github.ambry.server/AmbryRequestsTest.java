@@ -1160,7 +1160,7 @@ public class AmbryRequestsTest {
         public StoreKey getStoreKey(String input) {
           return null;
         }
-      }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null);
+      }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, null);
       this.dataNodeId = dataNodeId;
       reset();
     }

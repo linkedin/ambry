@@ -148,7 +148,7 @@ public class AmbryServer {
 
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem);
+              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory);
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
