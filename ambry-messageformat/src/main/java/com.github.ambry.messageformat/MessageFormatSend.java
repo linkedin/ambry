@@ -20,6 +20,7 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
+import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -51,6 +52,7 @@ public class MessageFormatSend implements Send {
   private long sizeWrittenFromCurrentIndex;
   private StoreKeyFactory storeKeyFactory;
   private Logger logger = LoggerFactory.getLogger(getClass());
+  private final static int BUFFERED_INPUT_STREAM_BUFFER_SIZE = 256;
 
   private class SendInfo {
     private long relativeOffset;
@@ -110,44 +112,45 @@ public class MessageFormatSend implements Send {
             readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
           }
         } else {
-          // read header version
           long startTime = SystemTime.getInstance().milliseconds();
-          ByteBuffer headerVersion = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
-          readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(headerVersion)), 0,
-              Version_Field_Size_In_Bytes);
-          logger.trace("Calculate offsets, read header version time: {}",
-              SystemTime.getInstance().milliseconds() - startTime);
-
-          headerVersion.flip();
-          short version = headerVersion.getShort();
+          BufferedInputStream bufferedInputStream =
+              new BufferedInputStream(new MessageReadSetIndexInputStream(readSet, i, 0),
+                  BUFFERED_INPUT_STREAM_BUFFER_SIZE);
+          // read and verify header version
+          byte[] headerVersionBytes = new byte[Version_Field_Size_In_Bytes];
+          bufferedInputStream.read(headerVersionBytes, 0, Version_Field_Size_In_Bytes);
+          short version = ByteBuffer.wrap(headerVersionBytes).getShort();
           if (!isValidHeaderVersion(version)) {
             throw new MessageFormatException(
                 "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(i),
                 MessageFormatErrorCodes.Unknown_Format_Version);
           }
-          ByteBuffer header = ByteBuffer.allocate(getHeaderSizeForVersion(version));
-          // read the header
-          startTime = SystemTime.getInstance().milliseconds();
-          headerVersion.clear();
-          header.putShort(headerVersion.getShort());
-          readSet.writeTo(i, Channels.newChannel(new ByteBufferOutputStream(header)), Version_Field_Size_In_Bytes,
-              header.capacity() - Version_Field_Size_In_Bytes);
-          logger.trace("Calculate offsets, read header time: {}", SystemTime.getInstance().milliseconds() - startTime);
+          logger.trace("Calculate offsets, read and verify header version time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
 
+          // read and verify header
           startTime = SystemTime.getInstance().milliseconds();
-          header.flip();
+          byte[] headerBytes = new byte[getHeaderSizeForVersion(version)];
+          bufferedInputStream.read(headerBytes, Version_Field_Size_In_Bytes,
+              headerBytes.length - Version_Field_Size_In_Bytes);
+
+          ByteBuffer header = ByteBuffer.wrap(headerBytes);
+          header.putShort(version);
+          header.rewind();
           MessageHeader_Format headerFormat = getMessageHeader(version, header);
           headerFormat.verifyHeader();
-          int storeKeyRelativeOffset = header.capacity();
+          logger.trace("Calculate offsets, read and verify header time: {}",
+              SystemTime.getInstance().milliseconds() - startTime);
 
-          StoreKey storeKey = storeKeyFactory.getStoreKey(
-              new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, storeKeyRelativeOffset)));
+          // read and verify storeKey
+          startTime = SystemTime.getInstance().milliseconds();
+          StoreKey storeKey = storeKeyFactory.getStoreKey(new DataInputStream(bufferedInputStream));
           if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
             throw new MessageFormatException(
                 "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId " + storeKey,
                 MessageFormatErrorCodes.Store_Key_Id_MisMatch);
           }
-          logger.trace("Calculate offsets, verify header time: {}",
+          logger.trace("Calculate offsets, read and verify storeKey time: {}",
               SystemTime.getInstance().milliseconds() - startTime);
 
           startTime = SystemTime.getInstance().milliseconds();
@@ -298,8 +301,8 @@ class MessageReadSetIndexInputStream extends InputStream {
 
   @Override
   public int read() throws IOException {
-    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
-      throw new IOException("Reached end of stream of message read set");
+    if (currentOffset >= messageReadSet.sizeInBytes(indexToRead)) {
+      return -1;
     }
     ByteBuffer buf = ByteBuffer.allocate(1);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
@@ -317,12 +320,16 @@ class MessageReadSetIndexInputStream extends InputStream {
     if (off < 0 || len < 0 || len > b.length - off) {
       throw new IndexOutOfBoundsException();
     }
-    if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
-      throw new IOException("Reached end of stream of message read set");
+    if (len == 0) {
+      return 0;
+    }
+    if (currentOffset >= messageReadSet.sizeInBytes(indexToRead)) {
+      return -1;
     }
     ByteBuffer buf = ByteBuffer.wrap(b);
+    buf.position(off);
     ByteBufferOutputStream bufferStream = new ByteBufferOutputStream(buf);
-    long sizeToRead = Math.min(len - off, messageReadSet.sizeInBytes(indexToRead) - currentOffset);
+    long sizeToRead = Math.min(len, messageReadSet.sizeInBytes(indexToRead) - currentOffset);
     long bytesWritten =
         messageReadSet.writeTo(indexToRead, Channels.newChannel(bufferStream), currentOffset, sizeToRead);
     currentOffset += bytesWritten;
