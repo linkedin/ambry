@@ -676,8 +676,8 @@ public class PutManagerTest {
     requestAndResultsList.add(new RequestAndResult(chunkSize, container));
     mockClusterMap.clearLastNRequestedPartitionClasses();
     submitPutsAndAssertFailure(new RouterException("", RouterErrorCode.UnexpectedInternalError), true, false, false);
-    // because of how the non-encrypted flow is, prepareForSending() will be called twice
-    checkLastRequestPartitionClasses(testEncryption ? 1 : 2, nonExistentClass);
+    // because of how the non-encrypted flow is, prepareForSending() may be called twice. So not checking for count
+    checkLastRequestPartitionClasses(-1, nonExistentClass);
   }
 
   /**
@@ -1071,14 +1071,16 @@ public class PutManagerTest {
   /**
    * Checks the last {@code expectedCount} partition classes requested from the clustermap to make sure they match with
    * {@code expectedClass}
-   * @param expectedCount the number of times the {@code expectedClass} was requested.
+   * @param expectedCount the number of times the {@code expectedClass} was requested. If < 0, the check is ignored
    * @param expectedClass the partition class requested
    */
   private void checkLastRequestPartitionClasses(int expectedCount, String expectedClass) {
     List<String> lastNRequestedPartitionClasses = mockClusterMap.getLastNRequestedPartitionClasses();
-    assertEquals("Last requested partition class count is not as expected", expectedCount,
-        lastNRequestedPartitionClasses.size());
-    List<String> partitionClassesExpected = Collections.nCopies(expectedCount, expectedClass);
+    if (expectedCount >= 0) {
+      assertEquals("Last requested partition class count is not as expected", expectedCount,
+          lastNRequestedPartitionClasses.size());
+    }
+    List<String> partitionClassesExpected = Collections.nCopies(lastNRequestedPartitionClasses.size(), expectedClass);
     assertEquals("Last requested partition classes not as expected", partitionClassesExpected,
         lastNRequestedPartitionClasses);
   }
