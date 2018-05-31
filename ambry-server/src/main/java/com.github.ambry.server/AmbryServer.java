@@ -157,7 +157,7 @@ public class AmbryServer {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
 
-      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactoryClass, properties, registry);
+      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
