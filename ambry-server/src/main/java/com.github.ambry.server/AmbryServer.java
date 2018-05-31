@@ -146,6 +146,8 @@ public class AmbryServer {
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
+      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
+
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
               clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory);
@@ -156,8 +158,6 @@ public class AmbryServer {
       if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
-
-      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       requests =
