@@ -87,8 +87,8 @@ public class MockCluster {
       if (sslEnabledDataCenterList != null) {
         dataNodes.get(i).setSslEnabledDataCenters(sslEnabledDataCenterList);
       }
-      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i,
-          notificationSystem, time);
+      initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, prefetchDataNodeIndex == i, notificationSystem,
+          time);
     }
   }
 
@@ -293,7 +293,7 @@ class MockNotificationSystem implements NotificationSystem {
       PartitionId partitionId = blobIdObj.getPartition();
       numberOfReplicas = partitionId.getReplicaIds().size();
     } catch (Exception e) {
-      throw new IllegalArgumentException("Invalid blob ID: " + blobId);
+      throw new IllegalArgumentException("Invalid blob ID: " + blobId, e);
     }
     objectTracker.computeIfAbsent(blobId, k -> new Tracker(numberOfReplicas)).trackCreation(sourceHost, port);
   }

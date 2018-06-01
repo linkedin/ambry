@@ -76,7 +76,7 @@ import static org.junit.Assert.*;
 @RunWith(Parameterized.class)
 public class PutManagerTest {
   static final GeneralSecurityException GSE = new GeneralSecurityException("Exception to throw for tests");
-  private static final long MAX_WAIT_MS = 2000;
+  private static final long MAX_WAIT_MS = 5000;
   private final boolean testEncryption;
   private final MockServerLayout mockServerLayout;
   private final MockTime mockTime = new MockTime();
@@ -221,7 +221,7 @@ public class PutManagerTest {
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();
-    Assert.assertTrue("Callback not called.", callbackCalled.await(2, TimeUnit.SECONDS));
+    Assert.assertTrue("Callback not called.", callbackCalled.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS));
     assertEquals("All operations should be finished.", 0, router.getOperationsCount());
     Assert.assertTrue("Router should not be closed", router.isOpen());
     // Test that PutManager is still operational
@@ -527,7 +527,7 @@ public class PutManagerTest {
             putChannel, null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
-    future.await(5, TimeUnit.SECONDS);
+    future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
     requestAndResult.result = future;
   }
 
@@ -551,7 +551,7 @@ public class PutManagerTest {
     putChannel.beBad();
 
     pushWithDelay(src, putChannel, blobSize, future);
-    future.await(5, TimeUnit.SECONDS);
+    future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
     requestAndResult.result = future;
     Exception expectedException = new Exception("Channel encountered an error");
     assertFailure(expectedException, true);
@@ -760,7 +760,7 @@ public class PutManagerTest {
    * @param shouldCloseRouterAfter whether the router should be closed after the operation.
    */
   private void submitPutsAndAssertSuccess(boolean shouldCloseRouterAfter) throws Exception {
-    submitPut().await(5, TimeUnit.SECONDS);
+    submitPut().await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
     assertSuccess();
     if (shouldCloseRouterAfter) {
       assertCloseCleanup();
@@ -787,7 +787,7 @@ public class PutManagerTest {
         mockTime.sleep(CHECKOUT_TIMEOUT_MS + 1);
       } while (!doneLatch.await(1, TimeUnit.MILLISECONDS));
     } else {
-      doneLatch.await(5, TimeUnit.SECONDS);
+      doneLatch.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
     }
     assertFailure(expectedException, testNotifications);
     if (shouldCloseRouterAfter) {
@@ -816,7 +816,7 @@ public class PutManagerTest {
                 new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
                 requestAndResult.putUserMetadata, putChannel, null);
-            requestAndResult.result.await(5, TimeUnit.SECONDS);
+            requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
           } catch (Exception e) {
             requestAndResult.result = new FutureResult<>();
             requestAndResult.result.done(null, e);
