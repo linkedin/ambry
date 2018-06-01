@@ -90,6 +90,23 @@ public class RestUtils {
      * {@code "Range"}
      */
     public static final String RANGE = "Range";
+    /**
+     * Header to contain the Cookies
+     */
+    public final static String COOKIE = "Cookie";
+    /**
+     * Header to be set by the clients during a Get blob call to denote, that blob should be served only if the blob
+     * has been modified after the value set for this header.
+     */
+    public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
+    /**
+     * Header that is set in the response of OPTIONS request that specifies the allowed methods.
+     */
+    public static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
+    /**
+     * Header that is set in the response of OPTIONS request that specifies the validity of the options returned.
+     */
+    public static final String ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
 
     // ambry specific headers
     /**
@@ -127,6 +144,11 @@ public class RestUtils {
      */
     public final static String OWNER_ID = "x-ambry-owner-id";
     /**
+     * Header that is set in the response of GetBlobInfo.
+     * 'true' or 'false'; case insensitive; true indicates content is encrypted at the storage layer. false otherwise
+     */
+    public final static String ENCRYPTED_IN_STORAGE = "x-ambry-encrypted-in-storage";
+    /**
      * optional in request; defines an option while getting the blob and is optional support in a
      * {@link BlobStorageService}. Valid values are available in {@link GetOption}. Defaults to {@link GetOption#None}
      */
@@ -152,6 +174,10 @@ public class RestUtils {
      */
     public static final String BLOB_ID = "x-ambry-blob-id";
     /**
+     * A signed Blob ID with additional metadata.
+     */
+    public static final String SIGNED_BLOB_ID = "x-ambry-signed-blob-id";
+    /**
      * The signed URL header name in the response for signed url requests.
      */
     public static final String SIGNED_URL = "x-ambry-signed-url";
@@ -159,31 +185,6 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
-
-    /**
-     * Header to contain the Cookies
-     */
-    public final static String COOKIE = "Cookie";
-    /**
-     * Header to be set by the clients during a Get blob call to denote, that blob should be served only if the blob
-     * has been modified after the value set for this header.
-     */
-    public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
-
-    /**
-     * Header that is set in the response of OPTIONS request that specifies the allowed methods.
-     */
-    public static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
-
-    /**
-     * Header that is set in the response of OPTIONS request that specifies the validity of the options returned.
-     */
-    public static final String ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
-    /**
-     * Header that is set in the response of GetBlobInfo
-     * 'true' or 'false' case insensitive; true indicates content is encrypted at the storage layer. false otherwise
-     */
-    public final static String ENCRYPTED_IN_STORAGE = "x-ambry-encrypted-in-storage";
   }
 
   /**
@@ -252,18 +253,13 @@ public class RestUtils {
     String ownerId = getHeader(args, Headers.OWNER_ID, false);
 
     long ttl = Utils.Infinite_Time;
-    String ttlStr = getHeader(args, Headers.TTL, false);
-    if (ttlStr != null) {
-      try {
-        ttl = Long.parseLong(ttlStr);
-        if (ttl < -1) {
-          throw new RestServiceException(Headers.TTL + "[" + ttl + "] is not valid (has to be >= -1)",
-              RestServiceErrorCode.InvalidArgs);
-        }
-      } catch (NumberFormatException e) {
-        throw new RestServiceException(Headers.TTL + "[" + ttlStr + "] could not parsed into a number",
+    Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
+    if (ttlFromHeader != null) {
+      if (ttlFromHeader < -1) {
+        throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",
             RestServiceErrorCode.InvalidArgs);
       }
+      ttl = ttlFromHeader;
     }
 
     // This field should not matter on newly created blobs, because all privacy/cacheability decisions should be made
@@ -308,7 +304,7 @@ public class RestUtils {
    * @return the user metadata extracted from arguments.
    * @throws RestServiceException if usermetadata arguments have null values.
    */
-  public static byte[] buildUsermetadata(Map<String, Object> args) throws RestServiceException {
+  public static byte[] buildUserMetadata(Map<String, Object> args) throws RestServiceException {
     ByteBuffer userMetadata;
     if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
       userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
@@ -577,18 +573,7 @@ public class RestUtils {
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isPrivate(Map<String, Object> args) throws RestServiceException {
-    boolean isPrivate;
-    String isPrivateStr = getHeader(args, Headers.PRIVATE, false);
-    if (isPrivateStr == null || isPrivateStr.toLowerCase().equals("false")) {
-      isPrivate = false;
-    } else if (isPrivateStr.toLowerCase().equals("true")) {
-      isPrivate = true;
-    } else {
-      throw new RestServiceException(
-          Headers.PRIVATE + "[" + isPrivateStr + "] has an invalid value (allowed values:true, false)",
-          RestServiceErrorCode.InvalidArgs);
-    }
-    return isPrivate;
+    return getBooleanHeader(args, Headers.PRIVATE, false);
   }
 
   /**
@@ -638,7 +623,7 @@ public class RestUtils {
    * Gets the value of a header as a {@link Long}
    * @param args a map of arguments to be used to look for {@code header}.
    * @param header the name of the header.
-   * @param required if {@code true}, {@link IllegalArgumentException} will be thrown if {@code header} is not present
+   * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
    *                 in {@code args}.
    * @return the value of {@code header} in {@code args} if it exists. If it does not exist and {@code required} is
    *          {@code false}, then returns null.
@@ -658,6 +643,34 @@ public class RestUtils {
       }
     }
     return null;
+  }
+
+  /**
+   * Gets the value of a header as a {@code boolean}.
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
+   *                 in {@code args}.
+   * @return {@code true} if the header's value is {@code "true"} (case-insensitive), or {@code false} if the header's
+   *         value is {@code "false} (case-insensitive) or the header is not present and {@code required} is
+   *         {@code false}.
+   * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
+   *                              converted to a {@code boolean}.
+   */
+  public static boolean getBooleanHeader(Map<String, Object> args, String header, boolean required)
+      throws RestServiceException {
+    boolean booleanValue;
+    String stringValue = getHeader(args, header, required);
+    if (stringValue == null || stringValue.toLowerCase().equals("false")) {
+      booleanValue = false;
+    } else if (stringValue.toLowerCase().equals("true")) {
+      booleanValue = true;
+    } else {
+      throw new RestServiceException(
+          header + "[" + stringValue + "] has an invalid value (allowed values: true, false)",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return booleanValue;
   }
 
   /**

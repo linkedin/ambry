@@ -103,7 +103,7 @@ public class MockBlobStorageService implements BlobStorageService {
         restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
         restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
-        byte[] usermetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
+        byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
         router.putBlob(blobProperties, usermetadata, restRequest,
             new MockPostCallback(this, restRequest, restResponseChannel, blobProperties));
       } catch (RestServiceException e) {

@@ -124,20 +124,6 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Requests for blob data asynchronously with user-set {@link GetBlobOptions} and returns a future that will
-   * eventually contain a {@link GetBlobResult} that can contain either the {@link BlobInfo}, the
-   * {@link ReadableStreamChannel} containing the blob data, or both.
-   * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The options associated with the request. This cannot be null.
-   * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
-   *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
-   */
-  @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
-    return getBlob(blobId, options, null);
-  }
-
-  /**
    * Requests for the blob data asynchronously with user-set {@link GetBlobOptions} and invokes the {@link Callback}
    * when the request completes.
    * @param blobIdStr The ID of the blob for which blob data is requested.
@@ -186,20 +172,6 @@ class NonBlockingRouter implements Router {
   }
 
   /**
-   * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
-   * the new blob on a successful response.
-   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
-   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param userMetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @return A future that would contain the BlobId eventually.
-   */
-  @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel) {
-    return putBlob(blobProperties, userMetadata, channel, null);
-  }
-
-  /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
@@ -235,18 +207,6 @@ class NonBlockingRouter implements Router {
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;
-  }
-
-  /**
-   * Requests for a blob to be deleted asynchronously and returns a future that will eventually contain information
-   * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs to be deleted.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @return A future that would contain information about whether the deletion succeeded or not, eventually.
-   */
-  @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId) {
-    return deleteBlob(blobId, serviceId, null);
   }
 
   /**

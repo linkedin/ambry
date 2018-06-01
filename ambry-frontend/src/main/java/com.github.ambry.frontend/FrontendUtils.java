@@ -17,6 +17,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.Callback;
+import com.github.ambry.utils.ThrowingConsumer;
 
 
 /**
@@ -37,5 +39,39 @@ class FrontendUtils {
     } catch (Exception e) {
       throw new RestServiceException("Invalid blob id=" + blobIdStr, RestServiceErrorCode.BadRequest);
     }
+  }
+
+  /**
+   * Create a {@link Callback} that handles common tasks like updating metrics via a {@link CallbackTracker} and
+   * handling errors that may occur in the callback body.
+   * @param <T> the result type that the callback accepts.
+   * @param callbackTracker the {@link CallbackTracker} to use to update metrics for an async call. The operation is
+   *                        marked as started right before the callback is constructed.
+   * @param failureCallback the callback to call if this callback was called with an exception or if the
+   *                        {@code successAction} call throws an exception.
+   * @param successAction the action to take when the callback is called successfully. The result of the callback is
+   *                      provided to this consumer. This consumer is allowed to throw an exception, in which case the
+   *                      {@code failureCallback} will be called.
+   * @return the managed {@link Callback}.
+   */
+  static <T> Callback<T> managedCallback(CallbackTracker callbackTracker, Callback<?> failureCallback,
+      ThrowingConsumer<? super T> successAction) {
+    callbackTracker.markOperationStart();
+    return (result, exception) -> {
+      try {
+        callbackTracker.markOperationEnd();
+        if (exception == null) {
+          successAction.accept(result);
+        }
+      } catch (Exception e) {
+        callbackTracker.markCallbackProcessingError();
+        exception = e;
+      } finally {
+        if (exception != null) {
+          failureCallback.onCompletion(null, exception);
+        }
+        callbackTracker.markCallbackProcessingEnd();
+      }
+    };
   }
 }

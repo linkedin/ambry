@@ -70,17 +70,6 @@ class PerfRouter implements Router {
     logger.trace("Instantiated PerfRouter");
   }
 
-  /**
-   * Returns a stream of repeating data up to a pre-set size. {@code blobId} is ignored.
-   * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The options associated with the request. This cannot be null.
-   * @return a {@link Future} that will eventually contain a {@link GetBlobResult}.
-   */
-  @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
-    return getBlob(blobId, options, null);
-  }
-
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
     logger.trace("Received getBlob call");
@@ -104,19 +93,6 @@ class PerfRouter implements Router {
       completeOperation(futureResult, callback, result, null);
     }
     return futureResult;
-  }
-
-  /**
-   * Consumes the data in {@code channel} and simply throws it away. {@code blobProperties} and {@code usermetadata} are
-   * ignored.
-   * @param blobProperties The properties of the blob.
-   * @param usermetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @return a {@link Future} that will contain a (dummy) blob id.
-   */
-  @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
-    return putBlob(blobProperties, usermetadata, channel, null);
   }
 
   /**
@@ -154,17 +130,6 @@ class PerfRouter implements Router {
       });
     }
     return futureResult;
-  }
-
-  /**
-   * Does nothing. Simply indicates success immediately.
-   * @param blobId (ignored).
-   * @param serviceId (ignored).
-   * @return a {@link FutureResult} that will eventually contain the result of the operation.
-   */
-  @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId) {
-    return deleteBlob(blobId, serviceId, null);
   }
 
   /**

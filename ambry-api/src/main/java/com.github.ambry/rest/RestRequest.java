@@ -41,19 +41,19 @@ public interface RestRequest extends ReadableStreamChannel {
    * Gets the generic {@link RestMethod} that this request desires.
    * @return RestMethod the {@link RestMethod} defined by the request.
    */
-  public RestMethod getRestMethod();
+  RestMethod getRestMethod();
 
   /**
    * Return the path (the parts of the URI after the domain excluding query parameters).
    * @return path String that represents part of the uri excluding domain and query parameters.
    */
-  public String getPath();
+  String getPath();
 
   /**
    * Return the request URI.
    * @return the URI defined by the request.
    */
-  public String getUri();
+  String getUri();
 
   /**
    * Gets all the arguments passed as a part of the request.
@@ -62,7 +62,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * these, the implementation can decide what constitute as arguments.
    * @return the arguments and their values (if any) as a map.
    */
-  public Map<String, Object> getArgs();
+  Map<String, Object> getArgs();
 
   /**
    * Sets one argument as a key-value pair.
@@ -70,13 +70,13 @@ public interface RestRequest extends ReadableStreamChannel {
    * @param value The value of the argument.
    * @return The old value if the argument was previously set.
    */
-  public Object setArg(String key, Object value);
+  Object setArg(String key, Object value);
 
   /**
    * If this request was over HTTPS, gets the {@link SSLSession} associated with the request.
    * @return The {@link SSLSession} for the request and response, or {@code null} if SSL was not used.
    */
-  public SSLSession getSSLSession();
+  SSLSession getSSLSession();
 
   /**
    * Prepares the request for reading.
@@ -85,7 +85,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * bound thread. Calling this from an I/O bound thread will impact throughput.
    * @throws RestServiceException if request channel is closed or if the request could not be prepared for reading.
    */
-  public void prepare() throws RestServiceException;
+  void prepare() throws RestServiceException;
 
   /**
    * Closes this request channel and releases all of the resources associated with it. Also records some metrics via
@@ -98,13 +98,13 @@ public interface RestRequest extends ReadableStreamChannel {
    * @throws IOException if there is an I/O error while closing the request channel.
    */
   @Override
-  public void close() throws IOException;
+  void close() throws IOException;
 
   /**
    * Gets the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
    * @return the {@link RestRequestMetricsTracker} instance attached to this RestRequest.
    */
-  public RestRequestMetricsTracker getMetricsTracker();
+  RestRequestMetricsTracker getMetricsTracker();
 
   /**
    * Set the digest algorithm to use on the data that is being streamed from the request. Once the data is emptied,
@@ -117,7 +117,7 @@ public interface RestRequest extends ReadableStreamChannel {
    * @throws NoSuchAlgorithmException if the {@code digestAlgorithm} does not exist or is not supported.
    * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
    */
-  public void setDigestAlgorithm(String digestAlgorithm) throws NoSuchAlgorithmException;
+  void setDigestAlgorithm(String digestAlgorithm) throws NoSuchAlgorithmException;
 
   /**
    * Gets the digest as specified by the digest algorithm set through {@link #setDigestAlgorithm(String)}. If none was
@@ -132,5 +132,12 @@ public interface RestRequest extends ReadableStreamChannel {
    * was set, {@code null}.
    * @throws IllegalStateException if called before the data has been emptied.
    */
-  public byte[] getDigest();
+  byte[] getDigest();
+
+  /**
+   * @return {@code true} if SSL was used for this request (i.e. the request has an associated {@link SSLSession})
+   */
+  default boolean isSslUsed() {
+    return getSSLSession() != null;
+  }
 }

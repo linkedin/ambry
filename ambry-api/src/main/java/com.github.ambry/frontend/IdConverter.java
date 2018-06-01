@@ -34,5 +34,5 @@ public interface IdConverter extends Closeable {
    * @param callback the {@link Callback} to invoke once the converted ID is available. Can be null.
    * @return a {@link Future} that will eventually contain the converted ID.
    */
-  public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback);
+  Future<String> convert(RestRequest restRequest, String input, Callback<String> callback);
 }

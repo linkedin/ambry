@@ -192,17 +192,13 @@ public class FrontendIntegrationTest {
     Container publicContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
     Container privateContainer = refAccount.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
     int refContentSize = FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3;
-    for (int i = 0; i < 2; i++) {
-      ACCOUNT_SERVICE.createAndAddRandomAccount();
-    }
 
     // with valid account and containers
-    for (Account account : ACCOUNT_SERVICE.getAllAccounts()) {
-      if (account.getId() != Account.UNKNOWN_ACCOUNT_ID) {
-        for (Container container : account.getAllContainers()) {
-          doPostGetHeadDeleteTest(refContentSize, account, container, account.getName(), !container.isCacheable(),
-              account.getName(), container.getName(), false);
-        }
+    for (int i = 0; i < 2; i++) {
+      Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
+      for (Container container : account.getAllContainers()) {
+        doPostGetHeadDeleteTest(refContentSize, account, container, account.getName(), !container.isCacheable(),
+            account.getName(), container.getName(), false);
       }
     }
     // valid account and container names but only serviceId passed as part of POST

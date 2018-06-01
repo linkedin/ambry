@@ -2448,11 +2448,6 @@ class FrontendTestRouter implements Router {
   String ttlUpdateServiceId = null;
 
   @Override
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
-    return getBlob(blobId, options, null);
-  }
-
-  @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
     GetBlobResult result;
     switch (options.getOperationType()) {
@@ -2474,19 +2469,9 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
-    return putBlob(blobProperties, usermetadata, channel, null);
-  }
-
-  @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback) {
     return completeOperation(UtilsTest.getRandomString(10), callback, OpType.PutBlob);
-  }
-
-  @Override
-  public Future<Void> deleteBlob(String blobId, String serviceId) {
-    return deleteBlob(blobId, serviceId, null);
   }
 
   @Override
