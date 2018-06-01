@@ -191,8 +191,10 @@ public class HelixParticipantTest {
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(props)), helixManagerFactory);
     HelixParticipant helixParticipantDummy =
         new HelixParticipant(new ClusterMapConfig(new VerifiableProperties(propsDummy)), helixManagerFactory);
+    HelixParticipant helixParticipantSpy = Mockito.spy(helixParticipant);
     helixParticipant.participate(Collections.EMPTY_LIST);
     helixParticipantDummy.participate(Collections.EMPTY_LIST);
+    helixParticipantSpy.participate(Collections.EMPTY_LIST);
     HelixManager helixManager = helixManagerFactory.getZKHelixManager(null, null, null, null);
     HelixAdmin helixAdmin = helixManager.getClusterManagmentTool();
     InstanceConfig instanceConfig = new InstanceConfig("testInstanceId");
@@ -222,13 +224,16 @@ public class HelixParticipantTest {
       // expected. Nothing to do.
     }
 
-    //Check that invoking setReplicaStoppedState adds the partitions to the list of stopped replicas
+    //Check that invoking setReplicaStoppedState adds the replicaId1, replicaId2 to the list of stopped replicas
     helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), true);
     stoppedReplicas = helixParticipant.getStoppedReplicas();
     listIsExpectedSize(stoppedReplicas, 2, listName);
-    System.out.println(stoppedReplicas.get(0));
     assertTrue(stoppedReplicas.contains(partitionId1));
     assertTrue(stoppedReplicas.contains(partitionId2));
+
+    //Invoke setReplicaStoppedState to add replicaId1, replicaId2 again, ensure no more set operations performed on stopped list
+    helixParticipantSpy.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), true);
+    verify(helixParticipantSpy, never()).setStoppedReplicas(anyList());
 
     //Add replicaId1 again as well as replicaId3 to ensure new replicaId is correctly added and no duplicates in the stopped list
     helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId3), true);
@@ -246,9 +251,10 @@ public class HelixParticipantTest {
     assertFalse(stoppedReplicas.contains(partitionId1));
     assertFalse(stoppedReplicas.contains(partitionId2));
 
-    //Removing replicaIds which have already been removed doesn't hurt anything
-    helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), false);
-    stoppedReplicas = helixParticipant.getStoppedReplicas();
+    //Removing replicaIds which have already been removed doesn't hurt anything and will not update InstanceConfig in Helix
+    helixParticipantSpy.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), false);
+    verify(helixParticipantSpy, never()).setStoppedReplicas(anyList());
+    stoppedReplicas = helixParticipantSpy.getStoppedReplicas();
     listIsExpectedSize(stoppedReplicas, 1, listName);
     assertTrue(stoppedReplicas.contains(partitionId3));
 

@@ -151,22 +151,32 @@ class HelixParticipant implements ClusterParticipant {
     boolean setResult;
     synchronized (helixAdministrationLock) {
       logger.trace("Getting stopped replicas from instanceConfig");
-      List<String> stoppedList = getStoppedReplicas();
-      if (stoppedList == null) {
-        stoppedList = new ArrayList<>();
+      List<String> stoppedListInHelix = getStoppedReplicas();
+      if (stoppedListInHelix == null) {
+        stoppedListInHelix = new ArrayList<>();
       }
-      Set<String> stoppedReplicas = new HashSet<>(stoppedList);
+      Set<String> stoppedListInHelixCopy = new HashSet<>(stoppedListInHelix);
       if (!isStopped) {
-        replicasToUpdate.retainAll(stoppedReplicas);
-        logger.info("Removing replicas {} from stopped list", Arrays.toString(replicasToUpdate.toArray()));
-        stoppedList.removeAll(replicasToUpdate);
-        setResult = setStoppedReplicas(stoppedList);
+        replicasToUpdate.retainAll(stoppedListInHelixCopy);
+        if (replicasToUpdate.isEmpty()) {
+          logger.info("Replicas not present in current stopped list, no need to update InstanceConfig in Helix");
+          setResult = true;
+        } else {
+          logger.info("Removing replicas {} from stopped list", Arrays.toString(replicasToUpdate.toArray()));
+          stoppedListInHelix.removeAll(replicasToUpdate);
+          setResult = setStoppedReplicas(stoppedListInHelix);
+        }
       } else {
-        stoppedReplicas.retainAll(replicasToUpdate);
-        replicasToUpdate.removeAll(stoppedReplicas);
-        logger.info("Adding replicas {} to stopped list", Arrays.toString(replicasToUpdate.toArray()));
-        stoppedList.addAll(replicasToUpdate);
-        setResult = setStoppedReplicas(stoppedList);
+        stoppedListInHelixCopy.retainAll(replicasToUpdate);
+        replicasToUpdate.removeAll(stoppedListInHelixCopy);
+        if (replicasToUpdate.isEmpty()) {
+          logger.info("Replicas already present in stopped list, no need to update InstanceConfig in Helix");
+          setResult = true;
+        } else {
+          logger.info("Adding replicas {} to stopped list", Arrays.toString(replicasToUpdate.toArray()));
+          stoppedListInHelix.addAll(replicasToUpdate);
+          setResult = setStoppedReplicas(stoppedListInHelix);
+        }
       }
     }
     return setResult;
@@ -184,8 +194,7 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Get the list of sealed replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
+   * Get the list of sealed replicas from the HelixAdmin.
    * @return list of sealed replicas from HelixAdmin
    */
   @Override
@@ -199,8 +208,7 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   /**
-   * Get the list of stopped replicas from the HelixAdmin. This method is called only after the helixAdministrationLock
-   * is taken.
+   * Get the list of stopped replicas from the HelixAdmin.
    * @return list of stopped replicas from HelixAdmin
    */
   @Override
@@ -264,7 +272,7 @@ class HelixParticipant implements ClusterParticipant {
    * @param stoppedReplicas list of stopped replicas to be set in the HelixAdmin
    * @return whether the operation succeeded or not
    */
-  private boolean setStoppedReplicas(List<String> stoppedReplicas) {
+  boolean setStoppedReplicas(List<String> stoppedReplicas) {
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalStateException(

@@ -25,6 +25,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,7 @@ class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
-    this.stoppedReplicas = stoppedReplicas == null ? new ArrayList<>() : stoppedReplicas;
+    this.stoppedReplicas = stoppedReplicas == null ? Collections.emptyList() : stoppedReplicas;
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         BlobStore store =

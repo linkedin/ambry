@@ -594,7 +594,7 @@ class BlobStore implements Store {
    * @throws StoreException
    */
   DiskSpaceRequirements getDiskSpaceRequirements() throws StoreException {
-    //checkStarted();
+    checkStarted();
     DiskSpaceRequirements requirements = log.isLogSegmented() ? new DiskSpaceRequirements(log.getSegmentCapacity(),
         log.getRemainingUnallocatedSegments(), compactor.getSwapSegmentsInUse()) : null;
     logger.debug("Store {} has disk space requirements: {}", storeId, requirements);

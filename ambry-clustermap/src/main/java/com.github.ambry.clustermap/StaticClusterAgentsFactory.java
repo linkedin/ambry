@@ -17,7 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.server.AmbryHealthReport;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.json.JSONException;
@@ -97,12 +97,12 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
 
         @Override
         public List<String> getSealedReplicas() {
-          return new ArrayList<>();
+          return Collections.emptyList();
         }
 
         @Override
         public List<String> getStoppedReplicas() {
-          return new ArrayList<>();
+          return Collections.emptyList();
         }
       };
     }
