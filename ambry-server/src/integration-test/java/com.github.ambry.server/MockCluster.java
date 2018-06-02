@@ -272,6 +272,11 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+    // ignore
+  }
+
+  @Override
   public void onBlobDeleted(String blobId, String serviceId) {
     // ignore
   }
