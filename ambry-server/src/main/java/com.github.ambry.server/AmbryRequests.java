@@ -77,6 +77,7 @@ import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -806,8 +807,11 @@ public class AmbryRequests implements RequestAPI {
               if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
                 error = ServerErrorCode.No_Error;
                 logger.info("Store is successfully started and functional for partition: {}", partitionId);
-                if (!storageManager.setBlobStoreStoppedState(partitionId, false)) {
-                  logger.info("Fail to remove BlobStore {} from stoppedReplicas list after it is started", partitionId);
+                List<PartitionId> failToUpdateList =
+                    storageManager.setBlobStoreStoppedState(Arrays.asList(partitionId), false);
+                if (!failToUpdateList.isEmpty()) {
+                  logger.info("Fail to remove BlobStore(s) {} from stopped list after start operation completed",
+                      Arrays.toString(failToUpdateList.toArray()));
                 }
               } else {
                 error = ServerErrorCode.Unknown_Error;
@@ -846,8 +850,11 @@ public class AmbryRequests implements RequestAPI {
                   if (storageManager.shutdownBlobStore(partitionId)) {
                     error = ServerErrorCode.No_Error;
                     logger.info("Store is successfully shutdown for partition: {}", partitionId);
-                    if (!storageManager.setBlobStoreStoppedState(partitionId, true)) {
-                      logger.info("Fail to add BlobStore {} to stoppedReplicas list after it is stopped", partitionId);
+                    List<PartitionId> failToUpdateList =
+                        storageManager.setBlobStoreStoppedState(Arrays.asList(partitionId), true);
+                    if (!failToUpdateList.isEmpty()) {
+                      logger.info("Fail to add BlobStore(s) {} to stopped list after stop operation completed",
+                          Arrays.toString(failToUpdateList.toArray()));
                     }
                   } else {
                     error = ServerErrorCode.Unknown_Error;

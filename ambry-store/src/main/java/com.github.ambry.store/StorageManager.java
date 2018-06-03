@@ -228,13 +228,27 @@ public class StorageManager {
 
   /**
    * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link Store} whose stopped state should be set.
+   * @param partitionIds a list {@link PartitionId} of the {@link Store} whose stopped state should be set.
    * @param isStopped whether to mark BlobStore as stopped ({@code true}) or started.
-   * @return {@code true} if set stopped state of store was successful. {@code false} if not.
+   * @return a list of {@link PartitionId} whose stopped state fails to be updated.
    */
-  public boolean setBlobStoreStoppedState(PartitionId id, boolean isStopped) {
-    DiskManager diskManager = partitionToDiskManager.get(id);
-    return diskManager != null && diskManager.setBlobStoreStoppedState(id, isStopped);
+  public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean isStopped) {
+    Map<DiskManager, List<PartitionId>> diskManagerToPartitionMap = new HashMap<>();
+    List<PartitionId> failToUpdateStores = new ArrayList<>();
+    for (PartitionId id : partitionIds) {
+      DiskManager diskManager = partitionToDiskManager.get(id);
+      if (diskManager != null) {
+        diskManagerToPartitionMap.computeIfAbsent(diskManager, disk -> new ArrayList<>()).add(id);
+      } else {
+        failToUpdateStores.add(id);
+      }
+    }
+    for (Map.Entry<DiskManager, List<PartitionId>> diskToPartitions : diskManagerToPartitionMap.entrySet()) {
+      List<PartitionId> failList =
+          diskToPartitions.getKey().setBlobStoreStoppedState(diskToPartitions.getValue(), isStopped);
+      failToUpdateStores.addAll(failList);
+    }
+    return failToUpdateStores;
   }
 
   /**

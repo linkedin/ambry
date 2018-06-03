@@ -25,10 +25,13 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,6 +46,7 @@ class DiskManager {
   static final String CLEANUP_OPS_JOB_NAME = "cleanupOps";
 
   private final Map<PartitionId, BlobStore> stores = new HashMap<>();
+  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new HashMap<>();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -51,6 +55,7 @@ class DiskManager {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
   private final List<String> stoppedReplicas;
+  private final ReplicaStatusDelegate replicaStatusDelegate;
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -83,6 +88,7 @@ class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
+    this.replicaStatusDelegate = replicaStatusDelegate;
     this.stoppedReplicas = stoppedReplicas == null ? Collections.emptyList() : stoppedReplicas;
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
@@ -91,6 +97,7 @@ class DiskManager {
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
                 time);
         stores.put(replica.getPartitionId(), store);
+        partitionToReplicaMap.put(replica.getPartitionId(), replica);
       }
     }
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
@@ -299,18 +306,37 @@ class DiskManager {
 
   /**
    * Set the BlobStore stopped state with given {@link PartitionId} {@code id}.
-   * @param id the {@link PartitionId} of the {@link BlobStore} whose stopped state should be set.
+   * @param partitionIds a list of {@link PartitionId} of the {@link BlobStore} whose stopped state should be set.
    * @param isStopped whether to mark BlobStore as stopped ({@code true}) or started.
-   * @return {@code true} if set stopped state of store was successful. {@code false} if not.
+   * @return a list of {@link PartitionId} whose stopped state fails to be updated.
    */
-  boolean setBlobStoreStoppedState(PartitionId id, boolean isStopped) {
-    BlobStore store = stores.get(id);
-    if (store == null) {
-      // no need to check if the store is started because this method could be called after store is successfully shutdown.
-      logger.error("store is not found on this disk when trying to update stoppedReplicas list");
-      return false;
+  List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean isStopped) {
+    Set<PartitionId> failToUpdateStores = new HashSet<>();
+    List<ReplicaId> replicasToUpdate = new ArrayList<>();
+    for (PartitionId id : partitionIds) {
+      BlobStore store = stores.get(id);
+      if (store == null) {
+        // no need to check if the store is started because this method could be called after store is successfully shutdown.
+        logger.error("store is not found on this disk when trying to update stoppedReplicas list");
+        failToUpdateStores.add(id);
+      } else {
+        replicasToUpdate.add(partitionToReplicaMap.get(id));
+      }
     }
-    return store.updateStoppedReplicasList(isStopped);
+    boolean updated = false;
+    if (replicaStatusDelegate != null) {
+      logger.trace("Setting replica stopped state via ReplicaStatusDelegate on replica {}",
+          Arrays.toString(replicasToUpdate.toArray()));
+      updated = isStopped ? replicaStatusDelegate.markStopped(replicasToUpdate)
+          : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
+    } else {
+      logger.error("The ReplicaStatusDelegate is not instantiated");
+    }
+    if (!updated) {
+      // either mark/unmark operation fails or ReplicaStatusDelegate is not instantiated.
+      failToUpdateStores.addAll(partitionIds);
+    }
+    return new ArrayList<>(failToUpdateStores);
   }
 
   /**

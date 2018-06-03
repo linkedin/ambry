@@ -23,7 +23,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -339,24 +338,6 @@ class BlobStore implements Store {
     } else {
       logger.debug("The ReplicaStatusDelegate is not instantiated");
     }
-  }
-
-  /**
-   * Update the stopped replicas list based on the state of this store.
-   * @param isStopped whether the store is stopped ({@code true}) or started.
-   * @return {@code true} if StoppedReplicas list has been updated successfully.
-   */
-  boolean updateStoppedReplicasList(boolean isStopped) {
-    boolean updated = false;
-    if (replicaStatusDelegate != null) {
-      logger.info("Setting replica stopped state via ReplicaStatusDelegate on replica {}", replicaId);
-      List<ReplicaId> replicasToUpdate = Arrays.asList(replicaId);
-      updated = isStopped ? replicaStatusDelegate.markStopped(replicasToUpdate)
-          : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
-    } else {
-      logger.error("The ReplicaStatusDelegate is not instantiated");
-    }
-    return updated;
   }
 
   @Override

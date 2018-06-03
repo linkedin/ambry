@@ -17,6 +17,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -35,6 +36,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +46,7 @@ import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -163,7 +166,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test start BlobStore with given {@link PartitionId} {@code id}.
+   * Test start BlobStore with given {@link PartitionId}.
    */
   @Test
   public void startBlobStoreTest() throws Exception {
@@ -201,7 +204,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test get DiskManager with given {@link PartitionId} {@code id}.
+   * Test get DiskManager with given {@link PartitionId}.
    */
   @Test
   public void getDiskManagerTest() throws Exception {
@@ -227,7 +230,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test shutdown blobstore with given {@link PartitionId} {@code id}.
+   * Test shutdown blobstore with given {@link PartitionId}.
    */
   @Test
   public void shutdownBlobStoreTest() throws Exception {
@@ -265,7 +268,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test set stopped state of blobstore with given {@link PartitionId} {@code id} in failure cases.
+   * Test set stopped state of blobstore with given list of {@link PartitionId} in failure cases.
    */
   @Test
   public void setBlobStoreStoppedStateFailureTest() throws Exception {
@@ -282,35 +285,64 @@ public class StorageManagerTest {
     ReplicaId replica = replicas.get(0);
     PartitionId id = replica.getPartitionId();
     storageManager.getDiskManager(id).shutdown();
-    assertFalse("Set store stopped state should fail on given store whose replicaStatusDelegate is null",
-        storageManager.setBlobStoreStoppedState(id, true));
+    List<PartitionId> failToUpdateList = storageManager.setBlobStoreStoppedState(Arrays.asList(id), true);
+    assertEquals("Set store stopped state should fail on given store whose replicaStatusDelegate is null", id,
+        failToUpdateList.get(0));
     // test invalid partition case (where diskManager == null)
     replica = invalidPartitionReplicas.get(0);
     id = replica.getPartitionId();
-    assertFalse("Set store stopped state should fail on given invalid replica",
-        storageManager.setBlobStoreStoppedState(id, true));
+    failToUpdateList = storageManager.setBlobStoreStoppedState(Arrays.asList(id), true);
+    assertEquals("Set store stopped state should fail on given invalid replica", id, failToUpdateList.get(0));
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
 
   /**
-   * Test successfully set stopped state of blobstore with given {@link PartitionId} {@code id}.
+   * Test successfully set stopped state of blobstore with given list of {@link PartitionId}.
    */
   @Test
   public void setBlobStoreStoppedStateSuccessTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    List<MockDataNodeId> dataNodes = new ArrayList<>();
-    dataNodes.add(dataNode);
+    List<PartitionId> partitionIds = new ArrayList<>();
+    Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
     // test set the state of store with instantiated replicaStatusDelegate
-    ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
-    StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegate);
+    ReplicaStatusDelegate replicaStatusDelegate = new MockReplicaStatusDelegate();
+    ReplicaStatusDelegate replicaStatusDelegateSpy = Mockito.spy(replicaStatusDelegate);
+    StorageManager storageManager = createStorageManager(replicas, metricRegistry, replicaStatusDelegateSpy);
     storageManager.start();
     for (ReplicaId replica : replicas) {
-      PartitionId id = replica.getPartitionId();
-      storageManager.setBlobStoreStoppedState(id, true);
-      verify(replicaStatusDelegate, times(1)).markStopped(Arrays.asList(replica));
-      storageManager.setBlobStoreStoppedState(id, false);
-      verify(replicaStatusDelegate, times(1)).unmarkStopped(Arrays.asList(replica));
+      partitionIds.add(replica.getPartitionId());
+      diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
+    }
+    List<PartitionId> failToUpdateList;
+
+    // add a list of stores to STOPPED list. Note that the stores are residing on 3 disks.
+    failToUpdateList = storageManager.setBlobStoreStoppedState(partitionIds, true);
+    // make sure the update operation succeeds
+    assertTrue("Add stores to stopped list should succeed, failToUpdateList should be empty",
+        failToUpdateList.isEmpty());
+    // make sure the stopped list contains all the added stores
+    Set<String> stoppedReplicasCopy = new HashSet<>(replicaStatusDelegateSpy.getStoppedReplicas());
+    for (ReplicaId replica : replicas) {
+      assertTrue("The stopped list should contain the replica: " + replica.getPartitionId().toPathString(),
+          stoppedReplicasCopy.contains(replica.getPartitionId().toPathString()));
+    }
+    // make sure replicaStatusDelegate is invoked 3 times and each time the input replica list conforms with stores on particular disk
+    for (List<ReplicaId> replicasPerDisk : diskToReplicas.values()) {
+      verify(replicaStatusDelegateSpy, times(1)).markStopped(replicasPerDisk);
+    }
+
+    // remove a list of stores from STOPPED list. Note that the stores are residing on 3 disks.
+    storageManager.setBlobStoreStoppedState(partitionIds, false);
+    // make sure the update operation succeeds
+    assertTrue("Remove stores from stopped list should succeed, failToUpdateList should be empty",
+        failToUpdateList.isEmpty());
+    // make sure the stopped list is empty because all the stores are successfully removed.
+    assertTrue("The stopped list should be empty after removing all stores",
+        replicaStatusDelegateSpy.getStoppedReplicas().isEmpty());
+    // make sure replicaStatusDelegate is invoked 3 times and each time the input replica list conforms with stores on particular disk
+    for (List<ReplicaId> replicasPerDisk : diskToReplicas.values()) {
+      verify(replicaStatusDelegateSpy, times(1)).unmarkStopped(replicasPerDisk);
     }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
   }
@@ -644,6 +676,26 @@ public class StorageManagerTest {
         }
       });
       stoppedReplicas = new ArrayList<>();
+    }
+
+    @Override
+    public boolean markStopped(List<ReplicaId> replicaIds) {
+      Set<String> stoppedReplicasSet = new HashSet<>(this.stoppedReplicas);
+      for (ReplicaId replica : replicaIds) {
+        stoppedReplicasSet.add(replica.getPartitionId().toPathString());
+      }
+      stoppedReplicas = new ArrayList<>(stoppedReplicasSet);
+      return true;
+    }
+
+    @Override
+    public boolean unmarkStopped(List<ReplicaId> replicaIds) {
+      Set<String> stoppedReplicasSet = new HashSet<>(this.stoppedReplicas);
+      for (ReplicaId replica : replicaIds) {
+        stoppedReplicasSet.remove(replica.getPartitionId().toPathString());
+      }
+      stoppedReplicas = new ArrayList<>(stoppedReplicasSet);
+      return true;
     }
 
     @Override

@@ -353,29 +353,6 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests update stopped state of blob store via {@link ReplicaStatusDelegate}
-   * Add/remove store into/from stopped replicas list.
-   */
-  @Test
-  public void updateStoppedReplicasListTest() {
-    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
-    store = createBlobStore(replicaId);
-    // test update stopped replicas list when replicaStatusDelegate == null, which should fail
-    assertFalse("Update stopped replica list should fail when delegate is not instantiated",
-        store.updateStoppedReplicasList(true));
-    StoreConfig defaultConfig = changeThreshold(65, 5, true);
-    ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
-    store = createBlobStore(replicaId, defaultConfig, replicaStatusDelegate);
-    List<ReplicaId> replicaIds = Arrays.asList(replicaId);
-    // test add a new replica into stopped list, which should trigger replicaStatusDelegate to mark replica as stopped
-    store.updateStoppedReplicasList(true);
-    verify(replicaStatusDelegate, times(1)).markStopped(replicaIds);
-    // test remove a replica from stopped list, which should trigger replicaStatusDelegate to mark replica as started
-    store.updateStoppedReplicasList(false);
-    verify(replicaStatusDelegate, times(1)).unmarkStopped(replicaIds);
-  }
-
-  /**
    * Tests {@link BlobStore#start()} for corner cases and error cases.
    * Corner cases
    * 1. Creating a directory on first startup
@@ -900,8 +877,9 @@ public class BlobStoreTest {
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId(accountId, containerId);
       long crc = random.nextLong();
-      MessageInfo info = new MessageInfo(id, size, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
-          Utils.Infinite_Time);
+      MessageInfo info =
+          new MessageInfo(id, size, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+              Utils.Infinite_Time);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);
