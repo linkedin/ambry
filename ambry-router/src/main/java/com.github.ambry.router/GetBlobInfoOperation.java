@@ -31,13 +31,16 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +51,8 @@ import org.slf4j.LoggerFactory;
  * which is either the only chunk in the case of a simple blob, or the metadata chunk in the case of composite blobs.
  */
 class GetBlobInfoOperation extends GetOperation {
+  // whether the operationCallback has been called already.
+  private final AtomicBoolean operationCallbackInvoked = new AtomicBoolean(false);
   // the callback to use to notify the router about events and state changes
   private final RouterCallback routerCallback;
   private final OperationTracker operationTracker;
@@ -93,8 +98,10 @@ class GetBlobInfoOperation extends GetOperation {
 
   @Override
   void abort(Exception abortCause) {
-    NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
-    operationCompleted = true;
+    if (operationCallbackInvoked.compareAndSet(false, true)) {
+      NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
+      operationCompleted = true;
+    }
   }
 
   /**
@@ -276,7 +283,8 @@ class GetBlobInfoOperation extends GetOperation {
             onErrorResponse(getRequestInfo.replicaId);
           } else {
             MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
-            handleBody(getResponse.getInputStream(), messageMetadata);
+            MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
+            handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
             operationTracker.onResponse(getRequestInfo.replicaId, true);
             if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
               logger.trace("Cross colo request successful for remote replica in {} ",
@@ -322,13 +330,19 @@ class GetBlobInfoOperation extends GetOperation {
    * If decryption is required, submit a job for decryption.
    * @param payload the body of the response.
    * @param messageMetadata the {@link MessageMetadata} associated with the message.
+   * @param messageInfo the {@link MessageInfo} associated with the message.
    * @throws IOException if there is an IOException while deserializing the body.
    * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
    */
-  private void handleBody(InputStream payload, MessageMetadata messageMetadata)
+  private void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
       throws IOException, MessageFormatException {
     ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
     serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
+    if (messageInfo.isTtlUpdated()) {
+      long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(messageInfo.getExpirationTimeInMs(),
+          serverBlobProperties.getCreationTimeInMs());
+      serverBlobProperties.setTimeToLiveInSeconds(newTtlSecs);
+    }
     ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete
@@ -403,7 +417,7 @@ class GetBlobInfoOperation extends GetOperation {
       operationCompleted = true;
     }
 
-    if (operationCompleted) {
+    if (operationCompleted && operationCallbackInvoked.compareAndSet(false, true)) {
       Exception e = operationException.get();
       if (operationResult == null && e == null) {
         e = new RouterException("Operation failed, but exception was not set", RouterErrorCode.UnexpectedInternalError);

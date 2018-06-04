@@ -36,6 +36,8 @@ import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -101,6 +103,9 @@ class MockServer {
         break;
       case DeleteRequest:
         response = makeDeleteResponse((DeleteRequest) send, serverError);
+        break;
+      case TtlUpdateRequest:
+        response = makeTtlUpdateResponse((TtlUpdateRequest) send, serverError);
         break;
       default:
         throw new IOException("Unknown request type received");
@@ -328,11 +333,15 @@ class MockServer {
 
       byteBuffer.flip();
       ByteBufferSend responseSend = new ByteBufferSend(byteBuffer);
-      List<MessageInfo> messageInfoList = new ArrayList<>(1);
-      List<MessageMetadata> messageMetadataList = new ArrayList<>(1);
+      List<MessageInfo> messageInfoList = new ArrayList<>();
+      List<MessageMetadata> messageMetadataList = new ArrayList<>();
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<PartitionResponseInfo>();
-      messageInfoList.add(new MessageInfo(key, byteBufferSize, accountId, containerId, operationTimeMs));
-      messageMetadataList.add(msgMetadata);
+      if (partitionError == ServerErrorCode.No_Error) {
+        messageInfoList.add(
+            new MessageInfo(key, byteBufferSize, false, blob.isTtlUpdated(), blob.expiresAt, accountId, containerId,
+                operationTimeMs));
+        messageMetadataList.add(msgMetadata);
+      }
       PartitionResponseInfo partitionResponseInfo =
           partitionError == ServerErrorCode.No_Error ? new PartitionResponseInfo(
               getRequest.getPartitionInfoList().get(0).getPartition(), messageInfoList, messageMetadataList)
@@ -370,11 +379,25 @@ class MockServer {
    * @return the constructed {@link DeleteResponse}
    * @throws IOException if there was an error constructing the response.
    */
-  DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) throws IOException {
+  DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) {
     if (deleteError == ServerErrorCode.No_Error) {
       updateBlobMap(deleteRequest);
     }
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
+  }
+
+  /**
+   * Make a {@link TtlUpdateResponse} for the given {@link TtlUpdateRequest} for which the given {@link ServerErrorCode}
+   * was encountered.
+   * @param ttlUpdateRequest the {@link TtlUpdateRequest} for which the response is being constructed.
+   * @param ttlUpdateError the {@link ServerErrorCode} that was encountered.
+   * @return the constructed {@link TtlUpdateResponse}
+   */
+  private TtlUpdateResponse makeTtlUpdateResponse(TtlUpdateRequest ttlUpdateRequest, ServerErrorCode ttlUpdateError) {
+    if (ttlUpdateError == ServerErrorCode.No_Error) {
+      ttlUpdateError = updateBlobMap(ttlUpdateRequest);
+    }
+    return new TtlUpdateResponse(ttlUpdateRequest.getCorrelationId(), ttlUpdateRequest.getClientId(), ttlUpdateError);
   }
 
   /**
@@ -387,11 +410,30 @@ class MockServer {
     blobs.put(blob.id, blob);
   }
 
-  private void updateBlobMap(DeleteRequest deleteRequest) throws IOException {
+  private void updateBlobMap(DeleteRequest deleteRequest) {
     StoredBlob blob = blobs.get(deleteRequest.getBlobId().getID());
     if (blob != null) {
       blob.markAsDeleted();
     }
+  }
+
+  /**
+   * Updates the blob map based on the {@code ttlUpdateRequest}.
+   * @param ttlUpdateRequest the {@link TtlUpdateRequest} that needs to be processed
+   */
+  private ServerErrorCode updateBlobMap(TtlUpdateRequest ttlUpdateRequest) {
+    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    StoredBlob blob = blobs.get(ttlUpdateRequest.getBlobId().getID());
+    if (blob != null && !blob.isDeleted() && !blob.hasExpired()) {
+      blob.updateExpiry(ttlUpdateRequest.getExpiresAtMs());
+    } else if (blob == null) {
+      errorCode = ServerErrorCode.Blob_Not_Found;
+    } else if (blob.isDeleted()) {
+      errorCode = ServerErrorCode.Blob_Deleted;
+    } else {
+      errorCode = ServerErrorCode.Blob_Expired;
+    }
+    return errorCode;
   }
 
   /**
@@ -481,12 +523,10 @@ class StoredBlob {
   final String id;
   final BlobType type;
   final BlobProperties properties;
-  final ByteBuffer userMetadata;
-  final ByteBuffer blobEncryptionKey;
   final ByteBuffer serializedSentPutRequest;
-  final PutRequest.ReceivedPutRequest receivedPutRequest;
-  private final long expiresAt;
+  long expiresAt;
   private boolean deleted = false;
+  private boolean ttlUpdated = false;
 
   StoredBlob(PutRequest putRequest, ClusterMap clusterMap) throws IOException {
     serializedSentPutRequest = ByteBuffer.allocate((int) putRequest.sizeInBytes());
@@ -499,25 +539,31 @@ class StoredBlob {
     receivedStream.readLong();
     // read of the RequestResponse type.
     receivedStream.readShort();
-    receivedPutRequest = PutRequest.readFrom(receivedStream, clusterMap);
+    PutRequest.ReceivedPutRequest receivedPutRequest = PutRequest.readFrom(receivedStream, clusterMap);
     id = receivedPutRequest.getBlobId().getID();
     type = receivedPutRequest.getBlobType();
     properties = receivedPutRequest.getBlobProperties();
-    userMetadata = receivedPutRequest.getUsermetadata();
-    blobEncryptionKey = receivedPutRequest.getBlobEncryptionKey();
-    expiresAt = properties.getTimeToLiveInSeconds() == Utils.Infinite_Time ? Utils.Infinite_Time
-        : SystemTime.getInstance().milliseconds() + properties.getTimeToLiveInSeconds();
+    expiresAt = Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
   }
 
   boolean isDeleted() {
     return deleted;
   }
 
+  boolean isTtlUpdated() {
+    return ttlUpdated;
+  }
+
   boolean hasExpired() {
-    return expiresAt != Utils.Infinite_Time && expiresAt <= SystemTime.getInstance().milliseconds();
+    return expiresAt != Utils.Infinite_Time && SystemTime.getInstance().milliseconds() > expiresAt;
   }
 
   void markAsDeleted() {
     deleted = true;
+  }
+
+  void updateExpiry(long expiresAtMs) {
+    ttlUpdated = true;
+    expiresAt = expiresAtMs;
   }
 }

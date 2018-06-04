@@ -190,6 +190,20 @@ public class RouterConfig {
   public final int routerCryptoJobsWorkerCount;
 
   /**
+   * The maximum number of parallel requests issued at a time by the TTL update manager for a chunk.
+   */
+  @Config("router.ttl.update.request.parallelism")
+  @Default("3")
+  public final int routerTtlUpdateRequestParallelism;
+
+  /**
+   * The minimum number of successful responses required for a TTL update operation.
+   */
+  @Config("router.ttl.update.success.target")
+  @Default("2")
+  public final int routerTtlUpdateSuccessTarget;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -236,5 +250,9 @@ public class RouterConfig {
         "com.github.ambry.router.GCMCryptoServiceFactory");
     routerCryptoJobsWorkerCount =
         verifiableProperties.getIntInRange("router.crypto.jobs.worker.count", 1, 1, Integer.MAX_VALUE);
+    routerTtlUpdateRequestParallelism =
+        verifiableProperties.getIntInRange("router.ttl.update.request.parallelism", 3, 1, Integer.MAX_VALUE);
+    routerTtlUpdateSuccessTarget =
+        verifiableProperties.getIntInRange("router.ttl.update.success.target", 2, 1, Integer.MAX_VALUE);
   }
 }

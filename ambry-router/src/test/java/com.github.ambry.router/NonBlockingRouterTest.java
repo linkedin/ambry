@@ -31,6 +31,7 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.MockTime;
@@ -79,6 +80,7 @@ public class NonBlockingRouterTest {
   private static final int DELETE_SUCCESS_TARGET = 2;
   private static final int AWAIT_TIMEOUT_MS = 2000;
   private static final int PUT_CONTENT_SIZE = 1000;
+  private static final long TTL_SECS = 7200;
   private int maxPutChunkSize = PUT_CONTENT_SIZE;
   private final Random random = new Random();
   private NonBlockingRouter router;
@@ -86,7 +88,7 @@ public class NonBlockingRouterTest {
   private PutManager putManager;
   private GetManager getManager;
   private DeleteManager deleteManager;
-  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<MockSelectorState>();
+  private AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   private final MockTime mockTime;
   private final KeyManagementService kms;
   private final String singleKeyForKMS;
@@ -131,7 +133,7 @@ public class NonBlockingRouterTest {
 
   @After
   public void after() {
-    Assert.assertEquals(0, NonBlockingRouter.currentOperationsCount.get());
+    Assert.assertEquals("Current operations count should be 0", 0, NonBlockingRouter.currentOperationsCount.get());
   }
 
   /**
@@ -164,25 +166,28 @@ public class NonBlockingRouterTest {
    * router with them.
    */
   private void setRouter() throws IOException {
-    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap));
+    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap),
+        new LoggingNotificationSystem());
   }
 
   /**
    * Initialize and set the router with the given {@link Properties} and {@link MockServerLayout}
    * @param props the {@link Properties}
    * @param mockServerLayout the {@link MockServerLayout}
+   * @param notificationSystem the {@link NotificationSystem} to use.
    */
-  private void setRouter(Properties props, MockServerLayout mockServerLayout) throws IOException {
+  private void setRouter(Properties props, MockServerLayout mockServerLayout, NotificationSystem notificationSystem)
+      throws IOException {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), routerMetrics,
-        new MockNetworkClientFactory(verifiableProperties, null, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
-        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
+        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
   }
 
   private void setOperationParams() {
-    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+    putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), testEncryption);
     putUserMetadata = new byte[10];
     random.nextBytes(putUserMetadata);
@@ -226,6 +231,8 @@ public class NonBlockingRouterTest {
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
     // NonBlockingRouter class, and to ensure that operations submitted to a router eventually completes.
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+    router.updateBlobTtl(blobId, null, Utils.Infinite_Time);
     router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
     router.getBlob(blobId, new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build())
         .get();
@@ -280,6 +287,11 @@ public class NonBlockingRouterTest {
       Assert.fail("null blobId should have resulted in IllegalArgumentException");
     } catch (IllegalArgumentException expected) {
     }
+    try {
+      router.updateBlobTtl(null, null, Utils.Infinite_Time);
+      Assert.fail("null blobId should have resulted in IllegalArgumentException");
+    } catch (IllegalArgumentException expected) {
+    }
     // null user metadata should work.
     router.putBlob(putBlobProperties, null, putChannel).get();
 
@@ -319,7 +331,7 @@ public class NonBlockingRouterTest {
   public void testRouterNoPartitionInLocalDC() throws Exception {
     // set the local DC to invalid, so that for puts, no partitions are available locally.
     Properties props = getNonBlockingRouterProperties("invalidDC");
-    setRouter(props, new MockServerLayout(mockClusterMap));
+    setRouter(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
     setOperationParams();
     try {
       router.putBlob(putBlobProperties, putUserMetadata, putChannel).get();
@@ -346,7 +358,8 @@ public class NonBlockingRouterTest {
     router = new NonBlockingRouter(new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap),
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, new MockServerLayout(mockClusterMap), mockTime), new LoggingNotificationSystem(),
-        mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS);
+        mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime,
+        MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     assertExpectedThreadCounts(2, 1);
 
@@ -598,6 +611,24 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Tests basic TTL update for simple (one chunk) blobs
+   * @throws Exception
+   */
+  @Test
+  public void testSimpleBlobTtlUpdate() throws Exception {
+    doTtlUpdateTest(1);
+  }
+
+  /**
+   * Tests basic TTL update for composite (multiple chunk) blobs
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobTtlUpdate() throws Exception {
+    doTtlUpdateTest(4);
+  }
+
+  /**
    * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test
@@ -605,7 +636,7 @@ public class NonBlockingRouterTest {
     final int SCALING_UNITS = 3;
     Properties props = getNonBlockingRouterProperties("DC1");
     props.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
-    setRouter(props, new MockServerLayout(mockClusterMap));
+    setRouter(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
     assertExpectedThreadCounts(SCALING_UNITS + 1, SCALING_UNITS);
 
     // Submit a few jobs so that all the scaling units get exercised.
@@ -649,7 +680,7 @@ public class NonBlockingRouterTest {
 
     // Instantiate a router just to put a blob successfully.
     MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
-    setRouter(props, mockServerLayout);
+    setRouter(props, mockServerLayout, new LoggingNotificationSystem());
     setOperationParams();
 
     // More extensive test for puts present elsewhere - these statements are here just to exercise the flow within the
@@ -899,6 +930,76 @@ public class NonBlockingRouterTest {
     Assert.assertTrue(future.isDone());
     RouterException e = (RouterException) ((FutureResult<String>) future).error();
     Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
+  }
+
+  /**
+   * Does the TTL update test by putting a blob, checking its TTL, updating TTL and then rechecking the TTL again.
+   * @param numChunks the number of chunks required when the blob is put. Has to divide {@link #PUT_CONTENT_SIZE}
+   *                  perfectly for test to work.
+   * @throws Exception
+   */
+  private void doTtlUpdateTest(int numChunks) throws Exception {
+    Assert.assertEquals("This test works only if the number of chunks is a perfect divisor of PUT_CONTENT_SIZE", 0,
+        PUT_CONTENT_SIZE % numChunks);
+    maxPutChunkSize = PUT_CONTENT_SIZE / numChunks;
+    String updateServiceId = "update-service";
+    final AtomicInteger updatesInitiated = new AtomicInteger();
+    final AtomicReference<String> receivedUpdateServiceId = new AtomicReference<>();
+    final AtomicReference<Long> receivedUpdateExpiresAtMs = new AtomicReference<>(null);
+    final AtomicReference<Boolean> mismatchedData = new AtomicReference<>(false);
+    LoggingNotificationSystem notificationSystem = new LoggingNotificationSystem() {
+      @Override
+      public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+        updatesInitiated.incrementAndGet();
+        if (receivedUpdateServiceId.get() == null) {
+          receivedUpdateServiceId.set(serviceId);
+        } else if (!receivedUpdateServiceId.get().equals(serviceId)) {
+          mismatchedData.set(true);
+        }
+        if (receivedUpdateExpiresAtMs.get() == null) {
+          receivedUpdateExpiresAtMs.set(expiresAtMs);
+        } else if (receivedUpdateExpiresAtMs.get() != expiresAtMs) {
+          mismatchedData.set(true);
+        }
+      }
+    };
+    setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap), notificationSystem);
+    setOperationParams();
+    Assert.assertFalse("The original ttl should not be infinite for this test to work",
+        putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
+    String blobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertTtl(blobId, TTL_SECS);
+    router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    // if more than one chunk is created, also account for metadata blob
+    Assert.assertEquals("Incorrect number of updates", numChunks == 1 ? 1 : numChunks + 1, updatesInitiated.get());
+    Assert.assertEquals("The updated expiry time should match the expected value", Utils.Infinite_Time,
+        receivedUpdateExpiresAtMs.get().longValue());
+    Assert.assertEquals("The update service ID should match the expected value", updateServiceId,
+        receivedUpdateServiceId.get());
+    Assert.assertFalse("Received mismatched data in notification system update", mismatchedData.get());
+    assertTtl(blobId, Utils.Infinite_Time);
+    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+    router.close();
+  }
+
+  /**
+   * Asserts that {@code blobId} has ttl {@code expectedTtl}.
+   * @param blobId the blob id to query
+   * @param expectedTtlSecs the expected ttl in seconds
+   * @throws Exception
+   */
+  private void assertTtl(String blobId, long expectedTtlSecs) throws Exception {
+    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(), new GetBlobOptionsBuilder().operationType(
+        GetBlobOptions.OperationType.BlobInfo).build()};
+    for (GetBlobOptions option : options) {
+      GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      Assert.assertEquals("TTL not as expected", expectedTtlSecs,
+          result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
+      if (result.getBlobDataChannel() != null) {
+        result.getBlobDataChannel().close();
+      }
+    }
   }
 
   /**

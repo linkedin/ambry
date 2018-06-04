@@ -253,7 +253,8 @@ class NonBlockingRouter implements Router {
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobId The ID of the blob that needs to be deleted.
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   *@param callback The {@link Callback} which will be invoked on the completion of a request.  @return A future that would contain information about whether the deletion succeeded or not, eventually.
+   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
@@ -272,6 +273,47 @@ class NonBlockingRouter implements Router {
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onDeleteBlobError(routerException);
       completeOperation(futureResult, callback, null, routerException);
+    }
+    return futureResult;
+  }
+
+  /**
+   * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob that needs its TTL updated.
+   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs the new expiry time of the blob (in ms)
+   * @return A future that would contain information about whether the update succeeded or not, eventually.
+   */
+  @Override
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    return updateBlobTtl(blobId, serviceId, expiresAtMs, null);
+  }
+
+  /**
+   * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob that needs its TTL updated.
+   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs the new expiry time of the blob (in ms)
+   * @param callback The {@link Callback} which will be invoked on the completion of a request.
+   * @return A future that would contain information about whether the update succeeded or not, eventually.
+   */
+  @Override
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
+    if (blobId == null) {
+      throw new IllegalArgumentException("blobId must not be null");
+    }
+    currentOperationsCount.incrementAndGet();
+    routerMetrics.updateBlobTtlOperationRate.mark();
+    routerMetrics.operationQueuingRate.mark();
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (isOpen.get()) {
+      getOperationController().updateBlobTtl(blobId, serviceId, expiresAtMs, futureResult, callback);
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+      completeUpdateBlobTtlOperation(routerException, futureResult, callback);
     }
     return futureResult;
   }
@@ -341,6 +383,20 @@ class NonBlockingRouter implements Router {
       FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback, boolean isEncrypted) {
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.onGetBlobError(routerException, internalOptions, isEncrypted);
+    completeOperation(futureResult, callback, null, routerException);
+  }
+
+  /**
+   * Completes a updateBlobTtl operation by invoking the {@code callback} and setting the {@code futureResult} with the
+   * given {@code routerException}.
+   * @param routerException {@link RouterException} to be set in the callback and future result
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   */
+  private void completeUpdateBlobTtlOperation(RouterException routerException, FutureResult<Void> futureResult,
+      Callback<Void> callback) {
+    routerMetrics.operationDequeuingRate.mark();
+    routerMetrics.onUpdateBlobTtlError(routerException);
     completeOperation(futureResult, callback, null, routerException);
   }
 
@@ -426,15 +482,32 @@ class NonBlockingRouter implements Router {
   /**
    * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
    * {@code operationResult} (if any) and {@code exception} (if any).
+   * @param <T> the type of the operation result, which depends on the kind of operation.
    * @param futureResult the {@link FutureResult} that needs to be set.
    * @param callback that {@link Callback} that needs to be invoked. Can be null.
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
-   * @param <T> the type of the operation result, which depends on the kind of operation.
    */
   static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception) {
-    NonBlockingRouter.currentOperationsCount.decrementAndGet();
+    completeOperation(futureResult, callback, operationResult, exception, true);
+  }
+
+  /**
+   * Completes a router operation by invoking the {@code callback} and setting the {@code futureResult} with
+   * {@code operationResult} (if any) and {@code exception} (if any).
+   * @param <T> the type of the operation result, which depends on the kind of operation.
+   * @param futureResult the {@link FutureResult} that needs to be set.
+   * @param callback that {@link Callback} that needs to be invoked. Can be null.
+   * @param operationResult the result of the operation (if any).
+   * @param exception {@link Exception} encountered while performing the operation (if any).
+   * @param decrementOperationsCount if {@code true}, decrements current outstanding operations count.
+   */
+  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+      Exception exception, boolean decrementOperationsCount) {
+    if (decrementOperationsCount) {
+      NonBlockingRouter.currentOperationsCount.decrementAndGet();
+    }
     try {
       if (futureResult != null) {
         futureResult.done(operationResult, exception);
@@ -459,6 +532,7 @@ class NonBlockingRouter implements Router {
     final PutManager putManager;
     final GetManager getManager;
     final DeleteManager deleteManager;
+    final TtlUpdateManager ttlUpdateManager;
     private final NetworkClient networkClient;
     private final Thread requestResponseHandlerThread;
     private final CountDownLatch shutDownLatch = new CountDownLatch(1);
@@ -485,6 +559,8 @@ class NonBlockingRouter implements Router {
               cryptoJobHandler, time);
       deleteManager = new DeleteManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
           routerCallback, time);
+      ttlUpdateManager =
+          new TtlUpdateManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics, time);
       requestResponseHandlerThread = Utils.newThread("RequestResponseHandlerThread-" + suffix, this, true);
       requestResponseHandlerThread.start();
       routerMetrics.initializeOperationControllerMetrics(requestResponseHandlerThread);
@@ -515,7 +591,7 @@ class NonBlockingRouter implements Router {
         FutureResult<String> futureResult, Callback<String> callback) {
       if (!putManager.isOpen()) {
         RouterException routerException =
-            new RouterException(" because Router is closed", RouterErrorCode.RouterClosed);
+            new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
         completeOperation(futureResult, callback, null, routerException);
@@ -564,6 +640,48 @@ class NonBlockingRouter implements Router {
     }
 
     /**
+     * Requests for the ttl of a blob to be updated asynchronously and invokes the {@link Callback} when the request
+     * completes.
+     * @param blobIdStr The ID of the blob that needs the ttl update in string form
+     * @param serviceId The service ID of the service updating the ttl of the blob. This can be null if unknown.
+     * @param expiresAtMs The new expiry time (in ms) of the blob
+     * @param futureResult A future that would contain the BlobId eventually.
+     * @param callback The {@link Callback} which will be invoked on the completion of the request .
+     */
+    protected void updateBlobTtl(final String blobIdStr, final String serviceId, long expiresAtMs,
+        FutureResult<Void> futureResult, Callback<Void> callback) {
+      Callback<GetBlobResultInternal> internalCallback = (GetBlobResultInternal result, Exception exception) -> {
+        List<String> blobIdStrs = new ArrayList<>();
+        blobIdStrs.add(blobIdStr);
+        if (exception != null) {
+          completeOperation(futureResult, callback, null, exception, false);
+        } else if (result.getBlobResult != null) {
+          exception = new RouterException("Unexpected result returned by GET operation before TTL update",
+              RouterErrorCode.UnexpectedInternalError);
+          completeOperation(futureResult, callback, null, exception, false);
+        } else if (result.storeKeys != null) {
+          result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));
+        }
+        try {
+          currentOperationsCount.addAndGet(blobIdStrs.size());
+          ttlUpdateManager.submitTtlUpdateOperation(blobIdStrs, serviceId, expiresAtMs, futureResult, callback);
+          routerCallback.onPollReady();
+        } catch (RouterException e) {
+          currentOperationsCount.addAndGet(1 - blobIdStrs.size());
+          completeUpdateBlobTtlOperation(e, futureResult, callback);
+        }
+      };
+      GetBlobOptionsInternal options =
+          new GetBlobOptionsInternal(new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null), true,
+              routerMetrics.ageAtTtlUpdate);
+      try {
+        getBlob(blobIdStr, options, internalCallback);
+      } catch (RouterException e) {
+        completeUpdateBlobTtlOperation(e, futureResult, callback);
+      }
+    }
+
+    /**
      * Shuts down the OperationController and cleans up all the resources associated with it.
      */
     private void shutdown() {
@@ -579,6 +697,7 @@ class NonBlockingRouter implements Router {
       putManager.close();
       getManager.close();
       deleteManager.close();
+      ttlUpdateManager.close();
     }
 
     /**
@@ -593,6 +712,7 @@ class NonBlockingRouter implements Router {
         initiateBackgroundDeletes(backgroundDeleteRequests);
         backgroundDeleteRequests.clear();
         deleteManager.poll(requests);
+        ttlUpdateManager.poll(requests);
       } catch (Exception e) {
         logger.error("Operation Manager poll received an unexpected error: ", e);
         routerMetrics.operationManagerPollErrorCount.inc();
@@ -618,6 +738,9 @@ class NonBlockingRouter implements Router {
               break;
             case DeleteRequest:
               deleteManager.handleResponse(responseInfo);
+              break;
+            case TtlUpdateRequest:
+              ttlUpdateManager.handleResponse(responseInfo);
               break;
             default:
               logger.error("Unexpected response type: " + type + " received, discarding");
@@ -682,6 +805,7 @@ class NonBlockingRouter implements Router {
     BackgroundDeleter() throws IOException {
       super("backgroundDeleter", null, accountService);
       putManager.close();
+      ttlUpdateManager.close();
     }
 
     /**
@@ -690,12 +814,23 @@ class NonBlockingRouter implements Router {
     @Override
     protected void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
         FutureResult<String> futureResult, Callback<String> callback) {
-      RouterException routerException =
-          new RouterException("Illegal attempt to put blob through backgroundDeleteOperationController",
-              RouterErrorCode.UnexpectedInternalError);
+      RouterException routerException = new RouterException("Illegal attempt to put blob through BackgroundDeleter",
+          RouterErrorCode.UnexpectedInternalError);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties != null && blobProperties.isEncrypted());
       completeOperation(futureResult, callback, null, routerException);
+    }
+
+    /**
+     * TTL update operations are disallowed in the BackgroundDeleter.
+     */
+    @Override
+    protected void updateBlobTtl(String blobIdStr, final String serviceId, long expiresAtMs,
+        FutureResult<Void> futureResult, Callback<Void> callback) {
+      RouterException routerException =
+          new RouterException("Illegal attempt to update TTL of blob through BackgroundDeleter",
+              RouterErrorCode.UnexpectedInternalError);
+      completeUpdateBlobTtlOperation(routerException, futureResult, callback);
     }
 
     /**
