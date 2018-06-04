@@ -724,25 +724,24 @@ class BlobStoreCompactor {
   }
 
   /**
-   * Calculate the farthest index that can be used for a bundle IO read based on startIndex and bundleReadBuffer capacity.
-   * @param srcIndexEntries all available index entries.
-   * @param startIndex the startIndex for a bundle read.
-   * @return the endIndex which can be used for a bundle read.
+   * Calculate the farthest index that can be used for a bundle IO read based on start index and bundleReadBuffer capacity.
+   * @param sortedSrcIndexEntries all available index entries and ordered by offset.
+   * @param start the staring index for the given list, not {@link IndexEntry}.
+   * @return the farthest index, inclusively, which can be used for a bundle read.
    */
-  private int getBundleReadEndIndex(List<IndexEntry> srcIndexEntries, int startIndex) {
-    long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
-    int endIndex;
-    // [startIndex, endIndex) for a bundle of read.
-    for (endIndex = startIndex; endIndex < srcIndexEntries.size(); endIndex++) {
+  private int getBundleReadEndIndex(List<IndexEntry> sortedSrcIndexEntries, int start) {
+    long startOffset = sortedSrcIndexEntries.get(start).getValue().getOffset().getOffset();
+    int end;
+    for (end = start; end < sortedSrcIndexEntries.size(); end++) {
       long currentSize =
-          srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
+          sortedSrcIndexEntries.get(end).getValue().getOffset().getOffset() + sortedSrcIndexEntries.get(end)
               .getValue()
               .getSize() - startOffset;
       if (currentSize > bundleReadBuffer.capacity()) {
         break;
       }
     }
-    return endIndex - 1;
+    return end - 1;
   }
 
   /**
@@ -761,25 +760,25 @@ class BlobStoreCompactor {
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
-      int startIndex = 0;
-      while (startIndex < srcIndexEntries.size()) {
+      // the index number of the list to start with.
+      int start = 0;
+      while (start < srcIndexEntries.size()) {
         // try to do a bundle of read to reduce disk IO
         ByteBuffer bufferToUse;
-        long startOffset = srcIndexEntries.get(startIndex).getValue().getOffset().getOffset();
-        int endIndex;
-        if (bundleReadBuffer == null
-            || srcIndexEntries.get(startIndex).getValue().getSize() > bundleReadBuffer.capacity()) {
-          endIndex = startIndex;
-          bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(startIndex).getValue().getSize());
+        long startOffset = srcIndexEntries.get(start).getValue().getOffset().getOffset();
+        int end;
+        if (bundleReadBuffer == null || srcIndexEntries.get(start).getValue().getSize() > bundleReadBuffer.capacity()) {
+          end = start;
+          bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(start).getValue().getSize());
           srcMetrics.compactionBundleReadBufferNotFitIn.inc();
           logger.trace("Record size greater than bundleReadBuffer capacity, key: {} size: {}",
-              srcIndexEntries.get(startIndex).getKey(), srcIndexEntries.get(startIndex).getValue().getSize());
+              srcIndexEntries.get(start).getKey(), srcIndexEntries.get(start).getValue().getSize());
         } else {
-          endIndex = getBundleReadEndIndex(srcIndexEntries, startIndex);
+          end = getBundleReadEndIndex(srcIndexEntries, start);
           bufferToUse = bundleReadBuffer;
           bufferToUse.position(0);
           bufferToUse.limit((int) (
-              srcIndexEntries.get(endIndex).getValue().getOffset().getOffset() + srcIndexEntries.get(endIndex)
+              srcIndexEntries.get(end).getValue().getOffset().getOffset() + srcIndexEntries.get(end)
                   .getValue()
                   .getSize() - startOffset));
         }
@@ -791,7 +790,7 @@ class BlobStoreCompactor {
         }
 
         // copy from buffer to tgtLog
-        for (int i = startIndex; i <= endIndex; i++) {
+        for (int i = start; i <= end; i++) {
           IndexEntry srcIndexEntry = srcIndexEntries.get(i);
           IndexValue srcValue = srcIndexEntry.getValue();
           long usedCapacity = tgtIndex.getLogUsedCapacity();
@@ -848,7 +847,7 @@ class BlobStoreCompactor {
           break;
         }
         tgtLog.flush();
-        startIndex = endIndex + 1;
+        start = end + 1;
       }
     } finally {
       logSegmentToCopy.closeView();
