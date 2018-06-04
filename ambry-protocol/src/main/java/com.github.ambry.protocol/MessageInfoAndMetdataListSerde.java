@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -36,11 +35,14 @@ import java.util.ListIterator;
 class MessageInfoAndMetadataListSerde {
   private final List<MessageInfo> messageInfoList;
   private final List<MessageMetadata> messageMetadataList;
+  static final short DETERMINE_VERSION = -1;
   static final short VERSION_1 = 1;
   static final short VERSION_2 = 2;
   static final short VERSION_3 = 3;
   static final short VERSION_4 = 4;
   static final short VERSION_5 = 5;
+
+  static final short AUTO_VERSION = VERSION_5;
 
   private final short version;
 
@@ -57,7 +59,7 @@ class MessageInfoAndMetadataListSerde {
     }
     this.messageInfoList = messageInfoList;
     this.messageMetadataList = messageMetadataList;
-    this.version = version;
+    this.version = version == DETERMINE_VERSION ? AUTO_VERSION : version;
   }
 
   MessageInfoAndMetadataListSerde(List<MessageInfo> messageInfoList, short version) {
@@ -69,10 +71,16 @@ class MessageInfoAndMetadataListSerde {
    * @return the size in bytes that serialization of this MessageInfoAndMetadataList will result in.
    */
   int getMessageInfoAndMetadataListSize() {
-    if (messageInfoList == null) {
-      return Integer.BYTES;
+    int size = 0;
+    if (version >= VERSION_5) {
+      // version
+      size += Short.BYTES;
     }
-    int size = Integer.BYTES;
+    // num elements in list
+    size += Integer.BYTES;
+    if (messageInfoList == null) {
+      return size;
+    }
     ListIterator<MessageInfo> infoListIterator = messageInfoList.listIterator();
     ListIterator<MessageMetadata> metadataListIterator = messageMetadataList.listIterator();
     while (infoListIterator.hasNext()) {
@@ -124,6 +132,9 @@ class MessageInfoAndMetadataListSerde {
    * @param outputBuffer the ByteBuffer to serialize into.
    */
   void serializeMessageInfoAndMetadataList(ByteBuffer outputBuffer) {
+    if (version >= VERSION_5) {
+      outputBuffer.putShort(version);
+    }
     outputBuffer.putInt(messageInfoList == null ? 0 : messageInfoList.size());
     if (messageInfoList != null) {
       ListIterator<MessageInfo> infoListIterator = messageInfoList.listIterator();
@@ -172,11 +183,22 @@ class MessageInfoAndMetadataListSerde {
    * @param stream the stream to deserialize from.
    * @param map the clustermap to use.
    * @param versionToDeserializeIn the SerDe version to use to deserialize.
-   * @return a pair of {@link MessageInfo} list and {@link MessageMetadata} list.
+   * @return the deserialized {@link MessageInfoAndMetadataListSerde}.
    * @throws IOException if an I/O error occurs while reading from the stream.
    */
-  static Pair<List<MessageInfo>, List<MessageMetadata>> deserializeMessageInfoAndMetadataList(DataInputStream stream,
-      ClusterMap map, short versionToDeserializeIn) throws IOException {
+  static MessageInfoAndMetadataListSerde deserializeMessageInfoAndMetadataList(DataInputStream stream, ClusterMap map,
+      short versionToDeserializeIn) throws IOException {
+    if (versionToDeserializeIn >= VERSION_5) {
+      short versionFromStream = stream.readShort();
+      if (versionFromStream != versionToDeserializeIn) {
+        throw new IllegalArgumentException(
+            "Argument provided [" + versionToDeserializeIn + "] and stream [" + versionFromStream
+                + "] disagree on version");
+      }
+    } else {
+      versionToDeserializeIn =
+          versionToDeserializeIn == DETERMINE_VERSION ? stream.readShort() : versionToDeserializeIn;
+    }
     int messageCount = stream.readInt();
     ArrayList<MessageInfo> messageInfoList = new ArrayList<>(messageCount);
     ArrayList<MessageMetadata> messageMetadataList = new ArrayList<>(messageCount);
@@ -216,7 +238,7 @@ class MessageInfoAndMetadataListSerde {
         messageMetadataList.add(null);
       }
     }
-    return new Pair<>(messageInfoList, messageMetadataList);
+    return new MessageInfoAndMetadataListSerde(messageInfoList, messageMetadataList, versionToDeserializeIn);
   }
 
   List<MessageInfo> getMessageInfoList() {

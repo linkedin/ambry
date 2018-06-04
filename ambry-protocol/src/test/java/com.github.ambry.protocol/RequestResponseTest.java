@@ -272,6 +272,7 @@ public class RequestResponseTest {
 
   @Test
   public void getRequestResponseTest() throws IOException {
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_5);
     testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_4);
     testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_3);
   }
@@ -327,7 +328,7 @@ public class RequestResponseTest {
     Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
     Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().size(),
         1);
-    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_4) {
+    if (GetResponse.getCurrentVersion() >= GetResponse.GET_RESPONSE_VERSION_V_4) {
       MessageMetadata messageMetadataInResponse =
           deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0);
       Assert.assertEquals(messageMetadata.getEncryptionKey().rewind(), messageMetadataInResponse.getEncryptionKey());

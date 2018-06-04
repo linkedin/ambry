@@ -40,6 +40,7 @@ public class ReplicaMetadataResponse extends Response {
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_2 = 2;
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_3 = 3;
   static final short REPLICA_METADATA_RESPONSE_VERSION_V_4 = 4;
+  static final short REPLICA_METADATA_RESPONSE_VERSION_V_5 = 5;
 
   private static final short CURRENT_VERSION = REPLICA_METADATA_RESPONSE_VERSION_V_4;
 

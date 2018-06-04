@@ -22,7 +22,6 @@ import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -49,7 +48,7 @@ public class MessageInfoAndMetadataListSerDeTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{MessageInfoAndMetadataListSerde.VERSION_1}, {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3}, {MessageInfoAndMetadataListSerde.VERSION_4}, {MessageInfoAndMetadataListSerde.VERSION_5}});
+        new Object[][]{{MessageInfoAndMetadataListSerde.DETERMINE_VERSION}, {MessageInfoAndMetadataListSerde.VERSION_1}, {MessageInfoAndMetadataListSerde.VERSION_2}, {MessageInfoAndMetadataListSerde.VERSION_3}, {MessageInfoAndMetadataListSerde.VERSION_4}, {MessageInfoAndMetadataListSerde.VERSION_5}});
   }
 
   public MessageInfoAndMetadataListSerDeTest(short serDeVersion) {
@@ -97,13 +96,24 @@ public class MessageInfoAndMetadataListSerDeTest {
     ByteBuffer buffer = ByteBuffer.allocate(messageInfoAndMetadataListSerde.getMessageInfoAndMetadataListSize());
     messageInfoAndMetadataListSerde.serializeMessageInfoAndMetadataList(buffer);
     buffer.flip();
-    Pair<List<MessageInfo>, List<MessageMetadata>> messageInfoAndMetadataList =
+    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_5) {
+      // should fail if the wrong version is provided
+      try {
+        MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(
+            new DataInputStream(new ByteBufferInputStream(buffer)), mockMap, (short) (serDeVersion - 1));
+        Assert.fail("Should have failed to deserialize");
+      } catch (IllegalArgumentException e) {
+        // expected. Nothing to do
+      }
+    }
+    buffer.rewind();
+    MessageInfoAndMetadataListSerde messageInfoAndMetadataList =
         MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(
             new DataInputStream(new ByteBufferInputStream(buffer)), mockMap, serDeVersion);
 
     // Verify
-    List<MessageInfo> responseMessageInfoList = messageInfoAndMetadataList.getFirst();
-    List<MessageMetadata> responseMessageMetadataList = messageInfoAndMetadataList.getSecond();
+    List<MessageInfo> responseMessageInfoList = messageInfoAndMetadataList.getMessageInfoList();
+    List<MessageMetadata> responseMessageMetadataList = messageInfoAndMetadataList.getMessageMetadataList();
     Assert.assertEquals(4, responseMessageInfoList.size());
     Assert.assertEquals(4, responseMessageMetadataList.size());
     for (int i = 0; i < 4; i++) {
@@ -113,17 +123,20 @@ public class MessageInfoAndMetadataListSerDeTest {
   }
 
   private void assertMessageInfoEquality(MessageInfo exp, MessageInfo act) {
+    short version =
+        serDeVersion == MessageInfoAndMetadataListSerde.DETERMINE_VERSION ? MessageInfoAndMetadataListSerde.AUTO_VERSION
+            : serDeVersion;
     Assert.assertEquals(exp.getExpirationTimeInMs(), act.getExpirationTimeInMs());
     Assert.assertEquals(exp.getSize(), act.getSize());
     Assert.assertEquals(exp.getStoreKey(), act.getStoreKey());
     Assert.assertEquals(exp.isDeleted(), act.isDeleted());
     Assert.assertEquals(exp.isExpired(), act.isExpired());
-    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_2) {
+    if (version >= MessageInfoAndMetadataListSerde.VERSION_2) {
       Assert.assertEquals(exp.getCrc(), act.getCrc());
     } else {
       Assert.assertNull("Crc should be null for version < 2", act.getCrc());
     }
-    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_3) {
+    if (version >= MessageInfoAndMetadataListSerde.VERSION_3) {
       Assert.assertEquals(exp.getAccountId(), act.getAccountId());
       Assert.assertEquals(exp.getContainerId(), act.getContainerId());
       Assert.assertEquals(exp.getOperationTimeMs(), act.getOperationTimeMs());
@@ -132,7 +145,7 @@ public class MessageInfoAndMetadataListSerDeTest {
       Assert.assertEquals("Container ID should be unknown", Container.UNKNOWN_CONTAINER_ID, act.getContainerId());
       Assert.assertEquals("Operation time should be unknown", Utils.Infinite_Time, act.getOperationTimeMs());
     }
-    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_5) {
+    if (version >= MessageInfoAndMetadataListSerde.VERSION_5) {
       Assert.assertEquals("TtlUpdated not as expected", exp.isTtlUpdated(), act.isTtlUpdated());
     } else {
       Assert.assertFalse("TtlUpdated should be false for version < 5", act.isTtlUpdated());
@@ -140,7 +153,10 @@ public class MessageInfoAndMetadataListSerDeTest {
   }
 
   private void assertMessageMetadataEquality(MessageMetadata expected, MessageMetadata actual) {
-    if (serDeVersion >= MessageInfoAndMetadataListSerde.VERSION_4) {
+    short version =
+        serDeVersion == MessageInfoAndMetadataListSerde.DETERMINE_VERSION ? MessageInfoAndMetadataListSerde.AUTO_VERSION
+            : serDeVersion;
+    if (version >= MessageInfoAndMetadataListSerde.VERSION_4) {
       if (expected == null) {
         Assert.assertNull(actual);
       } else {

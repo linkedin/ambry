@@ -16,11 +16,9 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.utils.Pair;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -102,11 +100,11 @@ public class ReplicaMetadataResponseInfo {
       return new ReplicaMetadataResponseInfo(partitionId, error);
     } else {
       FindToken token = factory.getFindToken(stream);
-      Pair<List<MessageInfo>, List<MessageMetadata>> messageInfoAndMetadataList =
+      MessageInfoAndMetadataListSerde messageInfoAndMetadataList =
           MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, clusterMap,
               getMessageInfoAndMetadataListSerDeVersion(replicaMetadataResponseVersion));
       long remoteReplicaLag = stream.readLong();
-      return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoAndMetadataList.getFirst(),
+      return new ReplicaMetadataResponseInfo(partitionId, token, messageInfoAndMetadataList.getMessageInfoList(),
           remoteReplicaLag, replicaMetadataResponseVersion);
     }
   }
@@ -154,6 +152,8 @@ public class ReplicaMetadataResponseInfo {
         return MessageInfoAndMetadataListSerde.VERSION_3;
       case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4:
         return MessageInfoAndMetadataListSerde.VERSION_4;
+      case ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5:
+        return MessageInfoAndMetadataListSerde.DETERMINE_VERSION;
       default:
         throw new IllegalArgumentException(
             "Unknown ReplicaMetadataResponse version encountered: " + replicaMetadataResponseVersion);

@@ -41,6 +41,7 @@ public class GetResponse extends Response {
   static final short GET_RESPONSE_VERSION_V_2 = 2;
   static final short GET_RESPONSE_VERSION_V_3 = 3;
   static final short GET_RESPONSE_VERSION_V_4 = 4;
+  static final short GET_RESPONSE_VERSION_V_5 = 5;
 
   static short CURRENT_VERSION = GET_RESPONSE_VERSION_V_4;
 
