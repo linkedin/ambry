@@ -273,6 +273,8 @@ public class RequestResponseTest {
 
   @Test
   public void getRequestResponseTest() throws IOException {
+    testGetRequestResponse(GetResponse.CURRENT_VERSION);
+    testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_5);
     testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_4);
     testGetRequestResponse(GetResponse.GET_RESPONSE_VERSION_V_3);
   }
@@ -328,7 +330,7 @@ public class RequestResponseTest {
     Assert.assertEquals(msgInfo.getExpirationTimeInMs(), 1000);
     Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().size(),
         1);
-    if (GetResponse.getCurrentVersion() == GetResponse.GET_RESPONSE_VERSION_V_4) {
+    if (GetResponse.getCurrentVersion() >= GetResponse.GET_RESPONSE_VERSION_V_4) {
       MessageMetadata messageMetadataInResponse =
           deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageMetadataList().get(0);
       Assert.assertEquals(messageMetadata.getEncryptionKey().rewind(), messageMetadataInResponse.getEncryptionKey());
@@ -388,6 +390,13 @@ public class RequestResponseTest {
 
   @Test
   public void replicaMetadataRequestTest() throws IOException {
+    doReplicaMetadataRequestTest(ReplicaMetadataResponse.CURRENT_VERSION);
+    doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_4);
+    doReplicaMetadataRequestTest(ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5);
+  }
+
+  private void doReplicaMetadataRequestTest(short responseVersionToUse) throws IOException {
+    ReplicaMetadataResponse.CURRENT_VERSION = responseVersionToUse;
     MockClusterMap clusterMap = new MockClusterMap();
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);

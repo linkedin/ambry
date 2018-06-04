@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.utils.Pair;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -76,17 +75,15 @@ public class PartitionResponseInfo {
   public static PartitionResponseInfo readFrom(DataInputStream stream, ClusterMap map, short getResponseVersion)
       throws IOException {
     PartitionId partitionId = map.getPartitionIdFromStream(stream);
-    Pair<List<MessageInfo>, List<MessageMetadata>> messageInfoAndMetadataList =
+    MessageInfoAndMetadataListSerde messageInfoAndMetadataList =
         MessageInfoAndMetadataListSerde.deserializeMessageInfoAndMetadataList(stream, map,
             getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     if (error != ServerErrorCode.No_Error) {
-      return new PartitionResponseInfo(partitionId, new ArrayList<>(), new ArrayList<>(), error,
-          getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
+      return new PartitionResponseInfo(partitionId, new ArrayList<>(), new ArrayList<>(), error, getResponseVersion);
     } else {
-      return new PartitionResponseInfo(partitionId, messageInfoAndMetadataList.getFirst(),
-          messageInfoAndMetadataList.getSecond(), ServerErrorCode.No_Error,
-          getMessageInfoAndMetadataListSerDeVersion(getResponseVersion));
+      return new PartitionResponseInfo(partitionId, messageInfoAndMetadataList.getMessageInfoList(),
+          messageInfoAndMetadataList.getMessageMetadataList(), ServerErrorCode.No_Error, getResponseVersion);
     }
   }
 
@@ -126,6 +123,8 @@ public class PartitionResponseInfo {
         return MessageInfoAndMetadataListSerde.VERSION_3;
       case GetResponse.GET_RESPONSE_VERSION_V_4:
         return MessageInfoAndMetadataListSerde.VERSION_4;
+      case GetResponse.GET_RESPONSE_VERSION_V_5:
+        return MessageInfoAndMetadataListSerde.DETERMINE_VERSION;
       default:
         throw new IllegalArgumentException("Unknown GetResponse version encountered: " + getResponseVersion);
     }
