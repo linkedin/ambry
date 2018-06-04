@@ -13,6 +13,9 @@
  */
 package com.github.ambry.server;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
@@ -53,9 +56,9 @@ import org.junit.Assert;
  * This class provides a framework for creating router/server integration test cases. It instantiates a non-blocking
  * router from the provided properties, cluster and notification system. The user defines chains of operations on a
  * certain blob (i.e. putBlob, getBlobInfo, deleteBlob). These chains can be executed asynchronously using the
- * {@link #startOperationChain(int, int, Queue)} method. The results of each stage of the chains can be checked using
- * the {@link #checkOperationChains(List)} method. See {@link RouterServerPlaintextTest} and {@link RouterServerSSLTest}
- * for example usage.
+ * {@link #startOperationChain(int, Container, int, Queue)} method. The results of each stage of the chains can be
+ * checked using the {@link #checkOperationChains(List)} method. See {@link RouterServerPlaintextTest} and
+ * {@link RouterServerSSLTest} for example usage.
  */
 class RouterServerTestFramework {
   static final int AWAIT_TIMEOUT = 20;
@@ -66,6 +69,8 @@ class RouterServerTestFramework {
   private final MockNotificationSystem notificationSystem;
   private final Router router;
   private boolean testEncryption = false;
+
+  final InMemAccountService accountService = new InMemAccountService(false, true);
 
   public static String sslSendBytesMetricName = Selector.class.getName() + ".SslSendBytesRate";
   public static String sslReceiveBytesMetricName = Selector.class.getName() + ".SslReceiveBytesRate";
@@ -84,10 +89,9 @@ class RouterServerTestFramework {
       MockNotificationSystem notificationSystem) throws Exception {
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
-
     VerifiableProperties routerVerifiableProps = new VerifiableProperties(routerProps);
     router = new NonBlockingRouterFactory(routerVerifiableProps, clusterMap, notificationSystem,
-        ServerTestUtil.getSSLFactoryIfRequired(routerVerifiableProps)).getRouter();
+        ServerTestUtil.getSSLFactoryIfRequired(routerVerifiableProps), accountService).getRouter();
   }
 
   /**
@@ -130,7 +134,7 @@ class RouterServerTestFramework {
       if (opChain.blobId != null) {
         blobsPut++;
         PartitionId partitionId = new BlobId(opChain.blobId, clusterMap).getPartition();
-        int count = partitionCount.containsKey(partitionId) ? partitionCount.get(partitionId) : 0;
+        int count = partitionCount.getOrDefault(partitionId, 0);
         partitionCount.put(partitionId, count + 1);
       }
     }
@@ -148,17 +152,18 @@ class RouterServerTestFramework {
   /**
    * Create an {@link OperationChain} from a queue of {@link OperationType}s.  Start the operation chain asynchronously.
    * @param blobSize the size of the blob generated for put operations.
+   * @param container the {@link Container} to put the blob into (can be {@code null}}
    * @param chainId a numeric identifying the operation chain.
    * @param operations the queue of operations to perform in the chain
    * @return an {@link OperationChain} object describing the started chain.
    */
-  OperationChain startOperationChain(int blobSize, int chainId, Queue<OperationType> operations) {
+  OperationChain startOperationChain(int blobSize, Container container, int chainId, Queue<OperationType> operations) {
     byte[] userMetadata = new byte[1000];
     byte[] data = new byte[blobSize];
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
-    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
-    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short accountId = container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getParentAccountId();
+    short containerId = container == null ? Utils.getRandomShort(TestUtils.RANDOM) : container.getId();
     BlobProperties properties = new BlobProperties(blobSize, "serviceid1", accountId, containerId, testEncryption);
     OperationChain opChain = new OperationChain(chainId, properties, userMetadata, data, operations);
     continueChain(opChain);
@@ -190,10 +195,23 @@ class RouterServerTestFramework {
   /**
    * Check for blob ID validity.
    * @param blobId the blobId
+   * @param properties the blob properties associated with the blob (to check that the blob was put in the right
+   *                   partition)
    * @param operationName a name for the operation being checked
    */
-  private static void checkBlobId(String blobId, String operationName) {
+  private void checkBlobId(String blobId, BlobProperties properties, String operationName) throws IOException {
     Assert.assertNotNull("Null blobId for operation: " + operationName, blobId);
+    BlobId id = new BlobId(blobId, clusterMap);
+    String partitionClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
+    Account account = accountService.getAccountById(properties.getAccountId());
+    if (account != null) {
+      Container container = account.getContainerById(properties.getContainerId());
+      if (container != null && container.getReplicationPolicy() != null) {
+        partitionClass = container.getReplicationPolicy();
+      }
+    }
+    Assert.assertTrue("Partition that blob was put not as required by container",
+        clusterMap.getWritablePartitionIds(partitionClass).contains(id.getPartition()));
   }
 
   /**
@@ -274,7 +292,7 @@ class RouterServerTestFramework {
     TestFuture<String> testFuture = new TestFuture<String>(future, genLabel("putBlob", false), opChain) {
       @Override
       void check() throws Exception {
-        checkBlobId(get(), getOperationName());
+        checkBlobId(get(), opChain.properties, getOperationName());
       }
     };
     opChain.testFutures.add(testFuture);

@@ -81,7 +81,7 @@ public class BlobIdTest {
     referenceDatacenterId = bytes[0];
     referenceAccountId = getRandomShort(random);
     referenceContainerId = getRandomShort(random);
-    referencePartitionId = referenceClusterMap.getWritablePartitionIds(null).get(0);
+    referencePartitionId = referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     referenceIsEncrypted = random.nextBoolean();
   }
 
@@ -169,7 +169,8 @@ public class BlobIdTest {
     for (boolean isEncrypted : isEncryptedValues) {
       BlobId blobIdV4 =
           new BlobId(BLOB_ID_V4, random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED, (byte) 1, (short) 1,
-              (short) 1, referenceClusterMap.getWritablePartitionIds(null).get(random.nextInt(3)), isEncrypted);
+              (short) 1, referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
+              .get(random.nextInt(3)), isEncrypted);
       assertEquals("V4 should return true or false based on its encrypted bit", isEncrypted,
           BlobId.isEncrypted(blobIdV4.getID()));
     }
@@ -601,7 +602,8 @@ public class BlobIdTest {
     short accountId = getRandomShort(random);
     short containerId = getRandomShort(random);
     BlobIdType type = random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED;
-    PartitionId partitionId = referenceClusterMap.getWritablePartitionIds(null).get(random.nextInt(3));
+    PartitionId partitionId =
+        referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(random.nextInt(3));
     boolean isEncrypted = random.nextBoolean();
     return new BlobId(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted);
   }

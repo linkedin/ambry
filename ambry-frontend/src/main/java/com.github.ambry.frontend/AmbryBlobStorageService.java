@@ -149,7 +149,6 @@ class AmbryBlobStorageService implements BlobStorageService {
         idConverter.close();
         idConverter = null;
       }
-      accountAndContainerInjector.close();
       logger.info("AmbryBlobStorageService shutdown complete");
     } catch (IOException e) {
       logger.error("Downstream service close failed", e);

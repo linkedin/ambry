@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -44,6 +45,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final NetworkConfig networkConfig;
   private final NetworkMetrics networkMetrics;
   private final NotificationSystem notificationSystem;
+  private final AccountService accountService;
   private final Time time;
   private final NetworkClientFactory networkClientFactory;
   private final KeyManagementService kms;
@@ -60,10 +62,11 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @param notificationSystem the {@link NotificationSystem} to use to log operations.
    * @param sslFactory the {@link SSLFactory} to support SSL transmissions. Required if SSL is enabled for any
    *                   datacenters.
+   * @param accountService the {@link AccountService} to use.
    * @throws Exception if any of the arguments are null or if instantiation of KMS or CryptoService fails
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, SSLFactory sslFactory) throws Exception {
+      NotificationSystem notificationSystem, SSLFactory sslFactory, AccountService accountService) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null argument passed in");
     }
@@ -78,6 +81,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     }
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
+    this.accountService = accountService;
     MetricRegistry registry = clusterMap.getMetricRegistry();
     routerMetrics = new NonBlockingRouterMetrics(clusterMap);
     networkConfig = new NetworkConfig(verifiableProperties);
@@ -106,7 +110,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   public Router getRouter() {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, time, defaultPartitionClass);
+          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass);
     } catch (IOException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

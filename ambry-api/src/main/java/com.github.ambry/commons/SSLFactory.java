@@ -15,7 +15,6 @@ package com.github.ambry.commons;
 
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.utils.Utils;
-import java.lang.reflect.InvocationTargetException;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 

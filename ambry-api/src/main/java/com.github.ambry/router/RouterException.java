@@ -49,6 +49,6 @@ public class RouterException extends Exception {
     }
 
     RouterException that = (RouterException) o;
-    return this.errorCode == that.errorCode && this.getCause() == that.getCause();
+    return this.errorCode == that.errorCode && this.getCause().equals(that.getCause());
   }
 }

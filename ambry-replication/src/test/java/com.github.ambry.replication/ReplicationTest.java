@@ -110,8 +110,9 @@ public class ReplicationTest {
   @Test
   public void replicationAllPauseTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
-    Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
-    Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
+    Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    Host localHost = localAndRemoteHosts.getFirst();
+    Host remoteHost = localAndRemoteHosts.getSecond();
 
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
@@ -205,8 +206,9 @@ public class ReplicationTest {
   @Test
   public void replicationPauseTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
-    Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
-    Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
+    Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    Host localHost = localAndRemoteHosts.getFirst();
+    Host remoteHost = localAndRemoteHosts.getSecond();
 
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
     for (PartitionId partitionId : partitionIds) {
@@ -305,8 +307,9 @@ public class ReplicationTest {
   @Test
   public void replicaThreadTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
-    Host localHost = new Host(clusterMap.getDataNodeIds().get(0), clusterMap);
-    Host remoteHost = new Host(clusterMap.getDataNodeIds().get(1), clusterMap);
+    Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    Host localHost = localAndRemoteHosts.getFirst();
+    Host remoteHost = localAndRemoteHosts.getSecond();
 
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
@@ -553,6 +556,20 @@ public class ReplicationTest {
     assertEquals(token4, remoteReplicaInfo.getToken());
     assertEquals(token4, remoteReplicaInfo.getTokenToPersist());
     remoteReplicaInfo.onTokenPersisted();
+  }
+
+  /**
+   * Selects a local and remote host for replication tests that need it.
+   * @param clusterMap the {@link MockClusterMap} to use.
+   * @return a {@link Pair} with the first entry being the "local" host and the second, the "remote" host.
+   */
+  private Pair<Host, Host> getLocalAndRemoteHosts(MockClusterMap clusterMap) {
+    // to make sure we select hosts with the SPECIAL_PARTITION_CLASS, pick hosts from the replicas of that partition
+    PartitionId specialPartitionId = clusterMap.getWritablePartitionIds(MockClusterMap.SPECIAL_PARTITION_CLASS).get(0);
+    // these hosts have replicas of the "special" partition and all the other partitions.
+    Host localHost = new Host(specialPartitionId.getReplicaIds().get(0).getDataNodeId(), clusterMap);
+    Host remoteHost = new Host(specialPartitionId.getReplicaIds().get(1).getDataNodeId(), clusterMap);
+    return new Pair<>(localHost, remoteHost);
   }
 
   /**

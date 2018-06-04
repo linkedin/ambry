@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -185,7 +186,8 @@ public class GetBlobOperationTest {
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap);
     options = new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet);
     mockServerLayout = new MockServerLayout(mockClusterMap);
-    replicasCount = mockClusterMap.getWritablePartitionIds(null).get(0).getReplicaIds().size();
+    replicasCount =
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
@@ -197,7 +199,8 @@ public class GetBlobOperationTest {
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     }
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap), networkClientFactory,
-        new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler, time, null);
+        new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService, cryptoJobHandler,
+        new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS);
     mockNetworkClient = networkClientFactory.getMockNetworkClient();
     routerCallback = new RouterCallback(mockNetworkClient, new ArrayList<BackgroundDeleteRequest>());
   }
@@ -235,7 +238,8 @@ public class GetBlobOperationTest {
 
     blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
         mockClusterMap.getLocalDatacenterId(), Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), mockClusterMap.getWritablePartitionIds(null).get(0), false);
+        Utils.getRandomShort(TestUtils.RANDOM),
+        mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false);
     blobIdStr = blobId.getID();
     // test a good case
     // operationCount is not incremented here as this operation is not taken to completion.

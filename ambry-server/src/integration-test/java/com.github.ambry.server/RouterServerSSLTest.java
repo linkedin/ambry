@@ -77,8 +77,9 @@ public class RouterServerSSLTest {
     Properties routerProps = getRouterProperties("DC1");
     TestSSLUtils.addSSLProperties(routerProps, sslEnabledDataCentersStr, SSLFactory.Mode.CLIENT, trustStoreFile,
         "router-client");
-    MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
-    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(serverSSLProps, false, SystemTime.getInstance());
+    MockNotificationSystem notificationSystem = new MockNotificationSystem(sslCluster.getClusterMap());
+    sslCluster.initializeServers(notificationSystem);
     sslCluster.startServers();
     MockClusterMap routerClusterMap = sslCluster.getClusterMap();
     // MockClusterMap returns a new registry by default. This is to ensure that each node (server, router and so on,
@@ -166,7 +167,7 @@ public class RouterServerSSLTest {
           break;
       }
       int blobSize = random.nextInt(100 * 1024);
-      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
+      opChains.add(testFramework.startOperationChain(blobSize, null, i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }

@@ -37,7 +37,8 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
   @Override
   public MockClusterMap getClusterMap() throws IOException {
     if (mockClusterMap == null) {
-      mockClusterMap = new MockClusterMap(enableSslPorts, numNodes, numMountPointsPerNode, numStoresPerMountPoint);
+      mockClusterMap = new MockClusterMap(enableSslPorts, numNodes, numMountPointsPerNode, numStoresPerMountPoint,
+          false);
     }
     return mockClusterMap;
   }

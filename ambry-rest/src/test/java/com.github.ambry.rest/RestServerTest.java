@@ -185,6 +185,7 @@ public class RestServerTest {
     doBadFactoryClassTest("rest.server.router.factory");
     doBadFactoryClassTest("rest.server.response.handler.factory");
     doBadFactoryClassTest("rest.server.request.handler.factory");
+    doBadFactoryClassTest("rest.server.account.service.factory");
   }
 
   /**

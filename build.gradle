@@ -264,6 +264,8 @@ project(':ambry-rest') {
         testCompile project(':ambry-commons').sourceSets.test.output
         testCompile project(':ambry-router').sourceSets.main.output
         testCompile project(':ambry-router').sourceSets.test.output
+        testCompile project(':ambry-account').sourceSets.main.output
+        testCompile project(':ambry-account').sourceSets.test.output
         testCompile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
@@ -284,6 +286,8 @@ project(':ambry-router') {
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-network').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile project(':ambry-account').sourceSets.main.output
+        testCompile project(':ambry-account').sourceSets.test.output
     }
 }
 

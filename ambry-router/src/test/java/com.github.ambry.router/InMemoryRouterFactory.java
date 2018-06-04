@@ -13,7 +13,9 @@
  */
 package com.github.ambry.router;
 
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 
@@ -32,14 +34,14 @@ public class InMemoryRouterFactory implements RouterFactory {
   private final ClusterMap clusterMap;
 
   public InMemoryRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      NotificationSystem notificationSystem, Object sslFactory) {
+      NotificationSystem notificationSystem, SSLFactory sslFactory, AccountService accountService) {
     this.verifiableProperties = verifiableProperties;
     this.notificationSystem = notificationSystem;
     this.clusterMap = clusterMap;
   }
 
   @Override
-  public Router getRouter() throws InstantiationException {
+  public Router getRouter() {
     latestInstance = new InMemoryRouter(verifiableProperties, notificationSystem, clusterMap);
     return latestInstance;
   }

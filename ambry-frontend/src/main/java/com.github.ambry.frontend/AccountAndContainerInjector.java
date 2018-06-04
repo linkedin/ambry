@@ -23,8 +23,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -39,7 +37,7 @@ import static com.github.ambry.rest.RestUtils.*;
 /**
  * Helper class to resolve and add {@link Account} and {@link Container} details to requests.
  */
-public class AccountAndContainerInjector implements Closeable {
+public class AccountAndContainerInjector {
   private static final Set<String> requiredAmbryHeadersForPutWithServiceId = Collections.singleton(Headers.SERVICE_ID);
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
@@ -252,10 +250,5 @@ public class AccountAndContainerInjector implements Closeable {
               + accountNameFromHeader + "'. Account returned by backend: '" + account.getName() + "'.",
           RestServiceErrorCode.InternalServerError);
     }
-  }
-
-  @Override
-  public void close() throws IOException {
-    accountService.close();
   }
 }

@@ -477,6 +477,7 @@ public class FrontendIntegrationTest {
     properties.put("rest.server.blob.storage.service.factory",
         "com.github.ambry.frontend.AmbryBlobStorageServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
+    properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
     properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
     properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
     properties.put("netty.server.enable.ssl", "true");
@@ -485,7 +486,6 @@ public class FrontendIntegrationTest {
     // to test that multipart requests over a certain size fail
     properties.put("netty.multipart.post.max.size.bytes", Long.toString(MAX_MULTIPART_POST_SIZE_BYTES));
     TestSSLUtils.addSSLProperties(properties, "", SSLFactory.Mode.SERVER, trustStoreFile, "frontend");
-    properties.put("frontend.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
     // add key for singleKeyManagementService
     properties.put("kms.default.container.key", TestUtils.getRandomKey(32));
     return new VerifiableProperties(properties);

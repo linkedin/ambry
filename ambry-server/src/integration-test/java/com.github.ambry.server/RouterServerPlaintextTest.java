@@ -15,6 +15,8 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.server.RouterServerTestFramework.*;
 import com.github.ambry.utils.SystemTime;
@@ -22,6 +24,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +51,9 @@ public class RouterServerPlaintextTest {
   private static long plainTextSendBytesCountBeforeTest;
   private static long plainTextReceiveBytesCountBeforeTest;
 
+  private static Account refAccount;
+  private static List<Container> refContainers = new ArrayList<>();
+
   /**
    * Running for both regular and encrypted blobs
    * @return an array with both {@code false} and {@code true}.
@@ -67,9 +73,10 @@ public class RouterServerPlaintextTest {
 
   @BeforeClass
   public static void initializeTests() throws Exception {
-    MockNotificationSystem notificationSystem = new MockNotificationSystem(9);
     Properties properties = getRouterProperties("DC1");
-    plaintextCluster = new MockCluster(notificationSystem, false, SystemTime.getInstance());
+    plaintextCluster = new MockCluster(false, SystemTime.getInstance());
+    MockNotificationSystem notificationSystem = new MockNotificationSystem(plaintextCluster.getClusterMap());
+    plaintextCluster.initializeServers(notificationSystem);
     plaintextCluster.startServers();
     MockClusterMap routerClusterMap = plaintextCluster.getClusterMap();
     // MockClusterMap returns a new registry by default. This is to ensure that each node (server, router and so on,
@@ -78,6 +85,23 @@ public class RouterServerPlaintextTest {
     routerClusterMap.createAndSetPermanentMetricRegistry();
     testFramework = new RouterServerTestFramework(properties, routerClusterMap, notificationSystem);
     routerMetricRegistry = routerClusterMap.getMetricRegistry();
+
+    refAccount = testFramework.accountService.createAndAddRandomAccount();
+    Iterator<Container> allContainers = refAccount.getAllContainers().iterator();
+    // container with null replication policy
+    Container container = allContainers.next();
+    container = testFramework.accountService.addReplicationPolicyToContainer(container, null);
+    refContainers.add(container);
+    // container with configured default replication policy
+    container = allContainers.next();
+    container =
+        testFramework.accountService.addReplicationPolicyToContainer(container, MockClusterMap.DEFAULT_PARTITION_CLASS);
+    refContainers.add(container);
+    // container with a special replication policy
+    container = allContainers.next();
+    container =
+        testFramework.accountService.addReplicationPolicyToContainer(container, MockClusterMap.SPECIAL_PARTITION_CLASS);
+    refContainers.add(container);
   }
 
   @AfterClass
@@ -156,7 +180,8 @@ public class RouterServerPlaintextTest {
           break;
       }
       int blobSize = random.nextInt(100 * 1024);
-      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
+      int contIdx = i % refContainers.size();
+      opChains.add(testFramework.startOperationChain(blobSize, refContainers.get(contIdx), i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }
@@ -182,8 +207,9 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET_DELETED_SUCCESS);
       operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
       int blobSize = random.nextInt(100 * 1024);
-      testFramework.checkOperationChains(
-          Collections.singletonList(testFramework.startOperationChain(blobSize, i, operations)));
+      int contIdx = i % refContainers.size();
+      testFramework.checkOperationChains(Collections.singletonList(
+          testFramework.startOperationChain(blobSize, refContainers.get(contIdx), i, operations)));
     }
   }
 
@@ -207,7 +233,7 @@ public class RouterServerPlaintextTest {
       operations.add(OperationType.GET_DELETED);
       operations.add(OperationType.GET_DELETED_SUCCESS);
       operations.add(OperationType.GET_INFO_DELETED_SUCCESS);
-      opChains.add(testFramework.startOperationChain(blobSize, i, operations));
+      opChains.add(testFramework.startOperationChain(blobSize, null, i, operations));
     }
     testFramework.checkOperationChains(opChains);
   }

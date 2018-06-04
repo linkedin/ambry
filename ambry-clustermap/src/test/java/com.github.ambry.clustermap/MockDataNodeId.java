@@ -61,7 +61,7 @@ public class MockDataNodeId extends DataNodeId {
    * {@link #getPortToConnectTo()}
    * @param sslEnabledDataCenters list of datacenters to which ssl is enabled.
    */
-  public void setSslEnabledDataCenters(ArrayList<String> sslEnabledDataCenters) {
+  public void setSslEnabledDataCenters(List<String> sslEnabledDataCenters) {
     this.sslEnabledDataCenters = sslEnabledDataCenters;
   }
 

@@ -62,7 +62,7 @@ public class StorageManagerTest {
    */
   @Before
   public void initializeCluster() throws IOException {
-    clusterMap = new MockClusterMap(false, 1, 3, 3);
+    clusterMap = new MockClusterMap(false, 1, 3, 3, false);
     metricRegistry = clusterMap.getMetricRegistry();
     generateConfigs(false);
   }
@@ -73,7 +73,9 @@ public class StorageManagerTest {
    */
   @After
   public void cleanupCluster() throws IOException {
-    clusterMap.cleanup();
+    if (clusterMap != null) {
+      clusterMap.cleanup();
+    }
   }
 
   /**
