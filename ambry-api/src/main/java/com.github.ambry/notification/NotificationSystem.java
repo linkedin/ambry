@@ -34,7 +34,7 @@ public interface NotificationSystem extends Closeable {
 
   /**
    * Notifies the underlying system when the ttl of an existing blob is updated
-   * @param blobId The id of the blob whose ttl was update
+   * @param blobId The id of the blob whose ttl was updated
    * @param serviceId The service ID of the service that updated the tll of the blob. This can be null if unknown
    * @param expiresAtMs the new expiry time (in ms) of the blob
    */
