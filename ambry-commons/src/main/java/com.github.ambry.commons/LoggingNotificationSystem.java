@@ -39,6 +39,11 @@ public class LoggingNotificationSystem implements NotificationSystem {
   }
 
   @Override
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+    logger.debug("onBlobTtlUpdated " + blobId + ", " + serviceId + ", " + expiresAtMs);
+  }
+
+  @Override
   public void onBlobDeleted(String blobId, String serviceId) {
     logger.debug("onBlobDeleted " + blobId, ", " + serviceId);
   }

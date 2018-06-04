@@ -441,6 +441,11 @@ public class NettyMessageProcessorTest {
     }
 
     @Override
+    public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void onBlobDeleted(String blobId, String serviceId) {
       throw new IllegalStateException("Not implemented");
     }

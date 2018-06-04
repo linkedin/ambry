@@ -33,6 +33,14 @@ public interface NotificationSystem extends Closeable {
   public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType);
 
   /**
+   * Notifies the underlying system when the ttl of an existing blob is updated
+   * @param blobId The id of the blob whose ttl was updated
+   * @param serviceId The service ID of the service that updated the tll of the blob. This can be null if unknown
+   * @param expiresAtMs the new expiry time (in ms) of the blob
+   */
+  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs);
+
+  /**
    * Notifies the underlying system when an existing blob is deleted
    * @param blobId The id of the blob that was deleted
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
