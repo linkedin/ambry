@@ -135,6 +135,20 @@ public class BlobPropertiesTest {
       verifyBlobProperties(blobProperties, blobSize, serviceId, ownerId, contentType, true, ttl, accountIdToExpect,
           containerIdToExpect, encryptFlagToExpect);
     }
+
+    blobProperties =
+        new BlobProperties(blobSize, serviceId, null, null, false, timeToLiveInSeconds, creationTimeMs, accountId,
+            containerId, isEncrypted);
+    verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds, accountId,
+        containerId, isEncrypted);
+    blobProperties.setTimeToLiveInSeconds(timeToLiveInSeconds + 1);
+    verifyBlobProperties(blobProperties, blobSize, serviceId, null, null, false, timeToLiveInSeconds + 1, accountId,
+        containerId, isEncrypted);
+    serializedBuffer = serializeBlobPropertiesInVersion(blobProperties);
+    blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
+        new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
+    verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, timeToLiveInSeconds + 1, accountIdToExpect,
+        containerIdToExpect, encryptFlagToExpect);
   }
 
   /**

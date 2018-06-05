@@ -190,7 +190,7 @@ public class NonBlockingRouterMetrics {
     deleteBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationRate"));
     updateBlobTtlOperationRate =
-        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "UpdateBlobTtlOperationRate"));
+        metricRegistry.meter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
     operationDequeuingRate =
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationDequeuingRate"));
@@ -198,8 +198,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(GetBlobOperation.class, "GetBlobNotOriginateLocalOperationRate"));
     deleteBlobNotOriginateLocalOperationRate =
         metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "DeleteBlobNotOriginateLocalOperationRate"));
-    ttlUpdateBlobNotOriginateLocalOperationRate =
-        metricRegistry.meter(MetricRegistry.name(DeleteOperation.class, "TtlUpdateBlobNotOriginateLocalOperationRate"));
+    ttlUpdateBlobNotOriginateLocalOperationRate = metricRegistry.meter(
+        MetricRegistry.name(TtlUpdateOperation.class, "TtlUpdateBlobNotOriginateLocalOperationRate"));
 
     // Latency.
     putBlobOperationLatencyMs =
@@ -225,7 +225,7 @@ public class NonBlockingRouterMetrics {
     deleteBlobOperationLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "DeleteBlobOperationLatencyMs"));
     updateBlobTtlOperationLatencyMs =
-        metricRegistry.histogram(MetricRegistry.name(DeleteOperation.class, "UpdateBlobTtlOperationLatencyMs"));
+        metricRegistry.histogram(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationLatencyMs"));
     routerRequestLatencyMs =
         metricRegistry.histogram(MetricRegistry.name(NonBlockingRouter.class, "RouterRequestLatencyMs"));
 

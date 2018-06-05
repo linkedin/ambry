@@ -984,7 +984,8 @@ public class NonBlockingRouterTest {
   }
 
   /**
-   * Asserts that {@code blobId} has ttl {@code expectedTtl}.
+   * Asserts that {@code blobId} has ttl {@code expectedTtl} (also doubles up as checking of GetBlobInfoOp and
+   * GetBlobOp).
    * @param blobId the blob id to query
    * @param expectedTtlSecs the expected ttl in seconds
    * @throws Exception

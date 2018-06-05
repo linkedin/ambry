@@ -77,6 +77,7 @@ public class ServerConfig {
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
     serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
-    serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory", "com.github.ambry.server.StoreKeyConverterFactoryImpl");
+    serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
+        "com.github.ambry.server.StoreKeyConverterFactoryImpl");
   }
 }

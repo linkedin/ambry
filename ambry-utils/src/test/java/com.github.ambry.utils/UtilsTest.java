@@ -444,6 +444,23 @@ public class UtilsTest {
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
   }
 
+  @Test
+  public void getTtlInSecsFromExpiryMsTest() {
+    long creationTimeMs = SystemTime.getInstance().milliseconds();
+    for (long ttlInSecs : new long[]{1, 20, 1000, Integer.MAX_VALUE, Utils.Infinite_Time, -100, -(
+        TimeUnit.MILLISECONDS.toSeconds(creationTimeMs) + 1)}) {
+      long expectedTtlSecs = ttlInSecs;
+      if (ttlInSecs == Utils.Infinite_Time) {
+        expectedTtlSecs = Utils.Infinite_Time;
+      } else if (ttlInSecs < 0) {
+        expectedTtlSecs = 0;
+      }
+      long expiresAtMs = Utils.addSecondsToEpochTime(creationTimeMs, ttlInSecs);
+      long returnedTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, creationTimeMs);
+      assertEquals("TTL not as expected", expectedTtlSecs, returnedTtlSecs);
+    }
+  }
+
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 
