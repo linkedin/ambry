@@ -13,7 +13,6 @@
  */
 package com.github.ambry.router;
 
-import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -88,7 +87,7 @@ class RouterTestHelpers {
       RouterErrorCode expectedError, ErrorCodeChecker errorCodeChecker) throws Exception {
     setServerErrorCodes(serverErrorCodesInOrder, serverLayout);
     errorCodeChecker.testAndAssert(expectedError);
-    resetServerErrorCodes(serverLayout);
+    serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
   /**
@@ -108,7 +107,7 @@ class RouterTestHelpers {
       throws Exception {
     setServerErrorCodes(serverErrorCodesInOrder, partition, serverLayout);
     errorCodeChecker.testAndAssert(expectedError);
-    resetServerErrorCodes(serverLayout);
+    serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
   /**
@@ -159,42 +158,6 @@ class RouterTestHelpers {
   }
 
   /**
-   * Reset all preset error codes on the servers in the specified layout.
-   * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to reset error codes
-   *                     on.
-   */
-  static void resetServerErrorCodes(MockServerLayout serverLayout) {
-    for (MockServer server : serverLayout.getMockServers()) {
-      server.resetServerErrors();
-    }
-  }
-
-  /**
-   * Set the blob format version that the server should respond to get requests with.
-   * @param blobFormatVersion The blob format version to use.
-   * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
-   */
-  static void setBlobFormatVersionForAllServers(short blobFormatVersion, MockServerLayout serverLayout) {
-    ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
-    for (MockServer mockServer : mockServers) {
-      mockServer.setBlobFormatVersion(blobFormatVersion);
-    }
-  }
-
-  /**
-   * Set whether all servers should send the preset error code on data blob get requests
-   * only
-   * @param getErrorOnDataBlobOnly {@code true} if the preset error code should only be used for data blobs requests
-   * @param serverLayout A {@link MockServerLayout} containing the {@link MockServer}s to change settings on.
-   */
-  static void setGetErrorOnDataBlobOnlyForAllServers(boolean getErrorOnDataBlobOnly, MockServerLayout serverLayout) {
-    ArrayList<MockServer> mockServers = new ArrayList<>(serverLayout.getMockServers());
-    for (MockServer mockServer : mockServers) {
-      mockServer.setGetErrorOnDataBlobOnly(getErrorOnDataBlobOnly);
-    }
-  }
-
-  /**
    * Asserts that expected threads are not running after the router is closed.
    */
   static void assertCloseCleanup(NonBlockingRouter router) {
@@ -204,19 +167,6 @@ class RouterTestHelpers {
     Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
         TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
-  }
-
-  /**
-   * Sets all the servers if they should respond requests or not.
-   * @param serverLayout the {@link MockServerLayout} to use.
-   * @param clusterMap the {@link ClusterMap} to use.
-   * @param shouldRespond {@code true} if the servers should respond, otherwise {@code false}.
-   */
-  static void setServerResponse(MockServerLayout serverLayout, ClusterMap clusterMap, boolean shouldRespond) {
-    for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
-      MockServer server = serverLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-      server.setShouldRespond(shouldRespond);
-    }
   }
 
   /**

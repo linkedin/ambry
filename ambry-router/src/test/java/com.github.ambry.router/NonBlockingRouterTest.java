@@ -629,6 +629,37 @@ public class NonBlockingRouterTest {
   }
 
   /**
+   * Test for most error cases involving TTL updates
+   * @throws Exception
+   */
+  @Test
+  public void testBlobTtlUpdateErrors() throws Exception {
+    String updateServiceId = "update-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+    setOperationParams();
+    String blobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
+    testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+    testsAndExpected.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
+    testsAndExpected.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    testsAndExpected.put(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
+    for (Map.Entry<ServerErrorCode, RouterErrorCode> testAndExpected : testsAndExpected.entrySet()) {
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
+      RouterTestHelpers.TestCallback<Void> testCallback = new RouterTestHelpers.TestCallback<>();
+      Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback);
+      RouterTestHelpers.assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
+    }
+    layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    // bad blob id
+    RouterTestHelpers.TestCallback<Void> testCallback = new RouterTestHelpers.TestCallback<>();
+    Future<Void> future = router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback);
+    RouterTestHelpers.assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
+    router.close();
+  }
+
+  /**
    * Test that multiple scaling units can be instantiated, exercised and closed.
    */
   @Test
@@ -981,6 +1012,11 @@ public class NonBlockingRouterTest {
     assertTtl(blobId, Utils.Infinite_Time);
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
     router.close();
+    // check that ttl update won't work after router close
+    Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time);
+    Assert.assertTrue(future.isDone());
+    RouterException e = (RouterException) ((FutureResult<Void>) future).error();
+    Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
   }
 
   /**

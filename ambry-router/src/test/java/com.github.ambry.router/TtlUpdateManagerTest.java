@@ -85,7 +85,7 @@ public class TtlUpdateManagerTest {
    */
   @Test
   public void routerClosedDuringOperationTest() throws Exception {
-    setServerResponse(serverLayout, clusterMap, false);
+    serverLayout.getMockServers().forEach(mockServer -> mockServer.setShouldRespond(false));
     testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout,
         RouterErrorCode.RouterClosed, expectedError -> {
           TestCallback<Void> callback = new TestCallback<>();
