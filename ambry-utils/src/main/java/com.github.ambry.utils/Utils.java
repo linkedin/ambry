@@ -722,6 +722,27 @@ public class Utils {
   }
 
   /**
+   * Read {@link FileChannel} from a given offset to fill up a {@link ByteBuffer}. Total bytes read should be buffer's
+   * remaining size(limit - position).
+   * @param fileChannel from which data to be read from
+   * @param offset starting offset of the fileChanel to be read from
+   * @param buffer the destination of the read
+   * @throws IOException
+   */
+  public static void readFileToByteBuffer(FileChannel fileChannel, long offset, ByteBuffer buffer) throws IOException {
+    int read = 0;
+    int expectedRead = buffer.remaining();
+    while (buffer.hasRemaining()) {
+      int sizeRead = fileChannel.read(buffer, offset);
+      if (sizeRead == 0 || sizeRead == -1) {
+        throw new IOException("Total size read " + read + " is less than the size to be read " + expectedRead);
+      }
+      read += sizeRead;
+      offset += sizeRead;
+    }
+  }
+
+  /**
    * Split the input string "data" using the delimiter and return as list of strings for the slices obtained
    * @param data
    * @param delimiter

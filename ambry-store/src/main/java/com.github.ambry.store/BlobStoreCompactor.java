@@ -41,6 +41,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.utils.Utils.*;
+
 
 /**
  * Component that removes the "dead" data from the set of provided log segments and reclaims space.
@@ -725,7 +727,7 @@ class BlobStoreCompactor {
 
   /**
    * Calculate the farthest index that can be used for a bundle IO read based on start index and bundleReadBuffer capacity.
-   * @param sortedSrcIndexEntries all available index entries and ordered by offset.
+   * @param sortedSrcIndexEntries all available entries, which are ordered by offset.
    * @param start the staring index for the given list, not {@link IndexEntry}.
    * @return the farthest index, inclusively, which can be used for a bundle read.
    */
@@ -783,11 +785,7 @@ class BlobStoreCompactor {
                   .getSize() - startOffset));
         }
         // do IO read
-        int bytesRead = fileChannel.read(bufferToUse, startOffset);
-        if (bytesRead != bufferToUse.limit()) {
-          srcMetrics.compactionBundleReadBufferReadExtra.inc();
-          logger.warn("fileChannel is reading more than expected: {}/{}", bufferToUse.limit(), bytesRead);
-        }
+        readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
 
         // copy from buffer to tgtLog
         for (int i = start; i <= end; i++) {
