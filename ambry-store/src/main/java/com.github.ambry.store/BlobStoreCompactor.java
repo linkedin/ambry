@@ -728,7 +728,7 @@ class BlobStoreCompactor {
   /**
    * Calculate the farthest index that can be used for a bundle IO read based on start index and bundleReadBuffer capacity.
    * @param sortedSrcIndexEntries all available entries, which are ordered by offset.
-   * @param start the staring index for the given list, not {@link IndexEntry}.
+   * @param start the starting index for the given list.
    * @return the farthest index, inclusively, which can be used for a bundle read.
    */
   private int getBundleReadEndIndex(List<IndexEntry> sortedSrcIndexEntries, int start) {
