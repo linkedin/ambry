@@ -1210,8 +1210,9 @@ class PersistentIndex {
   /**
    * We can have duplicate entries in the message entries since updates can happen to the same key. For example,
    * insert a key followed by a delete. This would create two entries in the journal or the index. A single findInfo
-   * could read both the entries. The findInfo should return as clean information as possible. This method removes
-   * the oldest duplicate in the list.
+   * could read both the entries. The findInfo should return as clean information as possible.
+   * <p/>
+   * This function choose a delete entry over all entries but chooses a put entry over a ttl update entry
    * @param messageEntries The message entry list where duplicates need to be removed
    */
   private void eliminateDuplicates(List<MessageInfo> messageEntries) {
