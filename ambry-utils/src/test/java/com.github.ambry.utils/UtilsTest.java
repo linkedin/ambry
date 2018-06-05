@@ -17,12 +17,14 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.io.FileUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -205,6 +207,50 @@ public class UtilsTest {
     Utils.writeStringToFile("Test", file.getPath());
     String outputString = Utils.readStringFromFile(file.getPath());
     Assert.assertEquals("Test", outputString);
+  }
+
+  @Test
+  public void testReadFileToByteBuffer() throws IOException {
+    File file = File.createTempFile("test", "1");
+    file.deleteOnExit();
+    FileChannel fileChannel = Utils.openChannel(file, false);
+    byte[] referenceBytes = new byte[20];
+    new Random().nextBytes(referenceBytes);
+    FileUtils.writeByteArrayToFile(file, referenceBytes);
+
+    // fill up fresh byteBuffer
+    ByteBuffer buffer = ByteBuffer.allocate(20);
+    Utils.readFileToByteBuffer(fileChannel, 0, buffer);
+    assertArrayEquals("Data mismatch", referenceBytes, buffer.array());
+
+    // write to byteBuffer based on buffer remaining
+    buffer.limit(10);
+    buffer.position(0);
+    assertEquals("buffer remaining should be 10", 10, buffer.remaining());
+    Utils.readFileToByteBuffer(fileChannel, 10, buffer);
+    assertEquals("buffer remaining should be 0", 0, buffer.remaining());
+    for (int i = 0; i < 10; i++) {
+      assertEquals("First 10 bytes in buffer should match last 10 bytes in file", buffer.array()[i],
+          referenceBytes[i + 10]);
+    }
+
+    // byteBuffer.remaining() + starting offset > file size, exception is expected.
+    buffer.clear();
+    assertEquals("buffer remaining should be 20", 20, buffer.remaining());
+    try {
+      Utils.readFileToByteBuffer(fileChannel, 1, buffer);
+      fail("Should fail");
+    } catch (IOException e) {
+    }
+
+    // starting offset exceeds file size, exception is expected.
+    buffer.clear();
+    assertEquals("buffer remaining should be 20", 20, buffer.remaining());
+    try {
+      Utils.readFileToByteBuffer(fileChannel, 21, buffer);
+      fail("Should fail");
+    } catch (IOException e) {
+    }
   }
 
   @Test

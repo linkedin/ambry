@@ -41,8 +41,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.utils.Utils.*;
-
 
 /**
  * Component that removes the "dead" data from the set of provided log segments and reclaims space.
@@ -785,7 +783,7 @@ class BlobStoreCompactor {
                   .getSize() - startOffset));
         }
         // do IO read
-        readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
+        Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
 
         // copy from buffer to tgtLog
         for (int i = start; i <= end; i++) {
