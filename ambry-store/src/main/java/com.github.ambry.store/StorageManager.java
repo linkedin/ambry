@@ -24,6 +24,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +66,7 @@ public class StorageManager {
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
     StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
     List<String> stoppedReplicas =
-        replicaStatusDelegate == null ? new ArrayList<>() : replicaStatusDelegate.getStoppedReplicas();
+        replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
     this.time = time;
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -229,10 +230,10 @@ public class StorageManager {
   /**
    * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
    * @param partitionIds a list {@link PartitionId} of the {@link Store} whose stopped state should be set.
-   * @param isStopped whether to mark BlobStore as stopped ({@code true}) or started.
+   * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
    * @return a list of {@link PartitionId} whose stopped state fails to be updated.
    */
-  public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean isStopped) {
+  public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
     Map<DiskManager, List<PartitionId>> diskManagerToPartitionMap = new HashMap<>();
     List<PartitionId> failToUpdateStores = new ArrayList<>();
     for (PartitionId id : partitionIds) {
@@ -245,7 +246,7 @@ public class StorageManager {
     }
     for (Map.Entry<DiskManager, List<PartitionId>> diskToPartitions : diskManagerToPartitionMap.entrySet()) {
       List<PartitionId> failList =
-          diskToPartitions.getKey().setBlobStoreStoppedState(diskToPartitions.getValue(), isStopped);
+          diskToPartitions.getKey().setBlobStoreStoppedState(diskToPartitions.getValue(), markStop);
       failToUpdateStores.addAll(failList);
     }
     return failToUpdateStores;

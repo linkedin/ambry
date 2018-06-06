@@ -26,7 +26,6 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -89,7 +88,7 @@ class DiskManager {
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     this.replicaStatusDelegate = replicaStatusDelegate;
-    this.stoppedReplicas = stoppedReplicas == null ? Collections.emptyList() : stoppedReplicas;
+    this.stoppedReplicas = stoppedReplicas;
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         BlobStore store =
@@ -116,7 +115,6 @@ class DiskManager {
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
         if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
-          // if the store is in stopped replica list, skip start process and leave it in stopped state.
           logger.info("Skip the store {} because it is on the stopped list", partitionAndStore.getKey());
           continue;
         }
@@ -182,8 +180,7 @@ class DiskManager {
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
-        if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
-          // if the store is in stopped replica list, skip stop process and leave it in stopped state.
+        if (!partitionAndStore.getValue().isStarted()) {
           continue;
         }
         Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), () -> {
@@ -307,10 +304,10 @@ class DiskManager {
   /**
    * Set the BlobStore stopped state with given {@link PartitionId} {@code id}.
    * @param partitionIds a list of {@link PartitionId} of the {@link BlobStore} whose stopped state should be set.
-   * @param isStopped whether to mark BlobStore as stopped ({@code true}) or started.
+   * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
    * @return a list of {@link PartitionId} whose stopped state fails to be updated.
    */
-  List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean isStopped) {
+  List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
     Set<PartitionId> failToUpdateStores = new HashSet<>();
     List<ReplicaId> replicasToUpdate = new ArrayList<>();
     for (PartitionId id : partitionIds) {
@@ -327,10 +324,10 @@ class DiskManager {
     if (replicaStatusDelegate != null) {
       logger.trace("Setting replica stopped state via ReplicaStatusDelegate on replica {}",
           Arrays.toString(replicasToUpdate.toArray()));
-      updated = isStopped ? replicaStatusDelegate.markStopped(replicasToUpdate)
+      updated = markStop ? replicaStatusDelegate.markStopped(replicasToUpdate)
           : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
     } else {
-      logger.error("The ReplicaStatusDelegate is not instantiated");
+      logger.warn("The ReplicaStatusDelegate is not instantiated");
     }
     if (!updated) {
       // either mark/unmark operation fails or ReplicaStatusDelegate is not instantiated.

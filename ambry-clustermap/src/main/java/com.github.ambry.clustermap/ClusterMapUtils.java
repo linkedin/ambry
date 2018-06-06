@@ -18,6 +18,7 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,7 +148,8 @@ public class ClusterMapUtils {
    * @return the list of stopped replicas.
    */
   static List<String> getStoppedReplicas(InstanceConfig instanceConfig) {
-    return instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
+    List<String> stoppedReplicas = instanceConfig.getRecord().getListField(ClusterMapUtils.STOPPED_REPLICAS_STR);
+    return stoppedReplicas == null ? Collections.emptyList() : stoppedReplicas;
   }
 
   /**

@@ -203,7 +203,7 @@ public class HelixParticipantTest {
 
     //Make sure the current stoppedReplicas list is null
     List<String> stoppedReplicas = helixParticipant.getStoppedReplicas();
-    assertNull("stoppedReplicas is not null", stoppedReplicas);
+    assertTrue("stoppedReplicas list should be empty", stoppedReplicas.isEmpty());
 
     String listName = "stoppedReplicas list";
 
@@ -243,7 +243,7 @@ public class HelixParticipantTest {
     assertTrue(stoppedReplicas.contains(partitionId2));
     assertTrue(stoppedReplicas.contains(partitionId3));
 
-    //Check that invoking setReplicaStoppedState with isStopped == false removes replicaId1, replicaId2 from stopped list
+    //Check that invoking setReplicaStoppedState with markStop == false removes replicaId1, replicaId2 from stopped list
     helixParticipant.setReplicaStoppedState(Arrays.asList(replicaId1, replicaId2), false);
     stoppedReplicas = helixParticipant.getStoppedReplicas();
     listIsExpectedSize(stoppedReplicas, 1, listName);

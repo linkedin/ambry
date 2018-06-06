@@ -91,7 +91,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
+        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop) {
           return false;
         }
 

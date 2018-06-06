@@ -69,13 +69,13 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
+        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop) {
           for (ReplicaId replicaId : replicaIds) {
             if (!(replicaId instanceof MockReplicaId)) {
               throw new IllegalArgumentException("Not MockReplicaId");
             }
             MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
-            mockReplicaId.markReplicaDownStatus(isStopped);
+            mockReplicaId.markReplicaDownStatus(markStop);
           }
           return true;
         }

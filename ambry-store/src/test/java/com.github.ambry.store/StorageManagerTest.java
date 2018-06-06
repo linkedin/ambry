@@ -27,7 +27,6 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -118,8 +117,6 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, mountPaths.size() - 1);
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
-    assertEquals(downReplicaCount,
-        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -385,8 +382,6 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, dataNode.getMountPaths().size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
-    assertEquals(badReplicaIndexes.size(),
-        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -420,8 +415,6 @@ public class StorageManagerTest {
     verifyCompactionThreadCount(storageManager, mountPaths.size());
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
     assertEquals("Compaction thread count is incorrect", 0, storageManager.getCompactionThreadCount());
-    assertEquals(downReplicaCount,
-        getCounterValue(counters, DiskManager.class.getName(), "TotalStoreShutdownFailures"));
   }
 
   /**
@@ -641,66 +634,27 @@ public class StorageManagerTest {
    * An extension of {@link ReplicaStatusDelegate} to help with tests.
    */
   private static class MockReplicaStatusDelegate extends ReplicaStatusDelegate {
-    List<String> stoppedReplicas;
+    Set<String> stoppedReplicas = new HashSet<>();
 
-    public MockReplicaStatusDelegate() {
-      super(new ClusterParticipant() {
-        @Override
-        public void participate(List<AmbryHealthReport> ambryHealthReports) throws IOException {
-
-        }
-
-        @Override
-        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
-          return false;
-        }
-
-        @Override
-        public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
-          return false;
-        }
-
-        @Override
-        public List<String> getSealedReplicas() {
-          return null;
-        }
-
-        @Override
-        public List<String> getStoppedReplicas() {
-          return null;
-        }
-
-        @Override
-        public void close() {
-
-        }
-      });
-      stoppedReplicas = new ArrayList<>();
+    MockReplicaStatusDelegate() {
+      super(mock(ClusterParticipant.class));
     }
 
     @Override
     public boolean markStopped(List<ReplicaId> replicaIds) {
-      Set<String> stoppedReplicasSet = new HashSet<>(this.stoppedReplicas);
-      for (ReplicaId replica : replicaIds) {
-        stoppedReplicasSet.add(replica.getPartitionId().toPathString());
-      }
-      stoppedReplicas = new ArrayList<>(stoppedReplicasSet);
+      replicaIds.forEach(replicaId -> stoppedReplicas.add(replicaId.getPartitionId().toPathString()));
       return true;
     }
 
     @Override
     public boolean unmarkStopped(List<ReplicaId> replicaIds) {
-      Set<String> stoppedReplicasSet = new HashSet<>(this.stoppedReplicas);
-      for (ReplicaId replica : replicaIds) {
-        stoppedReplicasSet.remove(replica.getPartitionId().toPathString());
-      }
-      stoppedReplicas = new ArrayList<>(stoppedReplicasSet);
+      replicaIds.forEach(replicaId -> stoppedReplicas.remove(replicaId.getPartitionId().toPathString()));
       return true;
     }
 
     @Override
     public List<String> getStoppedReplicas() {
-      return stoppedReplicas;
+      return new ArrayList<>(stoppedReplicas);
     }
   }
 }

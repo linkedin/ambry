@@ -42,10 +42,10 @@ public interface ClusterParticipant extends AutoCloseable {
   /**
    * Set or reset the stopped state of the given replica.
    * @param replicaIds a list of replicas whose stopped state will be updated
-   * @param isStopped if true, the replica will be marked as stopped; otherwise it will be marked as started.
+   * @param markStop if true, the replica will be marked as stopped; otherwise it will be marked as started.
    * @return {@code true} if set replica stopped state was successful. {@code false} if not.
    */
-  boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped);
+  boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop);
 
   /**
    * Get a list of replicas that are marked as sealed (read-only).

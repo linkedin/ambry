@@ -139,7 +139,7 @@ class HelixParticipant implements ClusterParticipant {
   }
 
   @Override
-  public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean isStopped) {
+  public boolean setReplicaStoppedState(List<ReplicaId> replicaIds, boolean markStop) {
     Set<String> replicasToUpdate = new HashSet<>();
     for (ReplicaId replicaId : replicaIds) {
       if (!(replicaId instanceof AmbryReplica)) {
@@ -148,38 +148,24 @@ class HelixParticipant implements ClusterParticipant {
       }
       replicasToUpdate.add(replicaId.getPartitionId().toPathString());
     }
-    boolean setResult;
+    boolean setStoppedResult;
     synchronized (helixAdministrationLock) {
       logger.trace("Getting stopped replicas from instanceConfig");
       List<String> stoppedListInHelix = getStoppedReplicas();
       if (stoppedListInHelix == null) {
         stoppedListInHelix = new ArrayList<>();
       }
-      Set<String> stoppedListInHelixCopy = new HashSet<>(stoppedListInHelix);
-      if (!isStopped) {
-        replicasToUpdate.retainAll(stoppedListInHelixCopy);
-        if (replicasToUpdate.isEmpty()) {
-          logger.info("Replicas not present in current stopped list, no need to update InstanceConfig in Helix");
-          setResult = true;
-        } else {
-          logger.info("Removing replicas {} from stopped list", Arrays.toString(replicasToUpdate.toArray()));
-          stoppedListInHelix.removeAll(replicasToUpdate);
-          setResult = setStoppedReplicas(stoppedListInHelix);
-        }
-      } else {
-        stoppedListInHelixCopy.retainAll(replicasToUpdate);
-        replicasToUpdate.removeAll(stoppedListInHelixCopy);
-        if (replicasToUpdate.isEmpty()) {
-          logger.info("Replicas already present in stopped list, no need to update InstanceConfig in Helix");
-          setResult = true;
-        } else {
-          logger.info("Adding replicas {} to stopped list", Arrays.toString(replicasToUpdate.toArray()));
-          stoppedListInHelix.addAll(replicasToUpdate);
-          setResult = setStoppedReplicas(stoppedListInHelix);
-        }
+      Set<String> stoppedSet = new HashSet<>(stoppedListInHelix);
+      boolean stoppedSetUpdated = markStop ? stoppedSet.addAll(replicasToUpdate) : stoppedSet.removeAll(replicasToUpdate);
+      if(stoppedSetUpdated){
+        logger.trace("Updating the stopped list in Helix InstanceConfig");
+        setStoppedResult = setStoppedReplicas(new ArrayList<>(stoppedSet));
+      }else{
+        logger.trace("No replicas should be added or removed, no need to update the stopped list");
+        setStoppedResult = true;
       }
     }
-    return setResult;
+    return setStoppedResult;
   }
 
   /**
