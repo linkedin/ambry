@@ -83,6 +83,13 @@ public class StoreConfig {
   public final int storeCleanupOperationsBytesPerSec;
 
   /**
+   * The minimum buffer size for compaction copy phase.
+   */
+  @Config("store.compaction.min.buffer.size")
+  @Default("10*1024*1024")
+  public final int storeCompactionMinBufferSize;
+
+  /**
    * Whether hard deletes are to be enabled or not
    */
   @Config("store.enable.hard.delete")
@@ -230,6 +237,9 @@ public class StoreConfig {
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
     storeCleanupOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.cleanup.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
+            Integer.MAX_VALUE);
+    storeCompactionMinBufferSize =
+        verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =

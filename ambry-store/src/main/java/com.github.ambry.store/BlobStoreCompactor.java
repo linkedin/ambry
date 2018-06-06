@@ -20,6 +20,7 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,6 +87,7 @@ class BlobStoreCompactor {
   private StoreFindToken recoveryStartToken = null;
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
+  private ByteBuffer bundleReadBuffer;
 
   /**
    * Constructs the compactor component.
@@ -156,13 +158,14 @@ class BlobStoreCompactor {
    * Compacts the store by copying valid data from the log segments in {@code details} to swap spaces and switching
    * the compacted segments out for the swap spaces. Returns once the compaction is complete.
    * @param details the {@link CompactionDetails} for the compaction.
+   * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    * @throws IllegalArgumentException if any of the provided segments doesn't exist in the log or if one or more offsets
    * in the segments to compact are in the journal.
    * @throws IllegalStateException if the compactor has not been initialized.
    * @throws IOException if there were I/O errors creating the {@link CompactionLog}
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
-  void compact(CompactionDetails details) throws IOException, StoreException {
+  void compact(CompactionDetails details, ByteBuffer bundleReadBuffer) throws IOException, StoreException {
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog != null) {
@@ -171,15 +174,17 @@ class BlobStoreCompactor {
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
     compactionLog = new CompactionLog(dataDir.getAbsolutePath(), storeId, time, details);
-    resumeCompaction();
+    resumeCompaction(bundleReadBuffer);
   }
 
   /**
    * Resumes compaction from where it was left off.
    * @throws IllegalStateException if the compactor has not been initialized or if there is no compaction to resume.
    * @throws StoreException if there were exceptions reading to writing to store components.
+   * @param bundleReadBuffer the preAllocated buffer for bundle read in compaction copy phase.
    */
-  void resumeCompaction() throws StoreException {
+  void resumeCompaction(ByteBuffer bundleReadBuffer) throws StoreException {
+    this.bundleReadBuffer = bundleReadBuffer;
     if (srcIndex == null) {
       throw new IllegalStateException("Compactor has not been initialized");
     } else if (compactionLog == null) {
@@ -238,6 +243,7 @@ class BlobStoreCompactor {
       runningLatch.countDown();
       logger.trace("resumeCompaction() ended for {}", storeId);
     }
+    this.bundleReadBuffer = null;
   }
 
   /**
@@ -254,7 +260,7 @@ class BlobStoreCompactor {
 
   /**
    * If a compaction was in progress during a crash/shutdown, fixes the state so that the store is loaded correctly
-   * and compaction can resume smoothly on a call to {@link #resumeCompaction()}. Expected to be called before the
+   * and compaction can resume smoothly on a call to {@link #resumeCompaction(ByteBuffer)}. Expected to be called before the
    * {@link PersistentIndex} is instantiated in the {@link BlobStore}.
    * @throws IOException if the {@link CompactionLog} could not be created or if commit or cleanup failed.
    * @throws StoreException if the commit failed.
@@ -718,6 +724,27 @@ class BlobStoreCompactor {
   }
 
   /**
+   * Calculate the farthest index that can be used for a bundle IO read based on start index and bundleReadBuffer capacity.
+   * @param sortedSrcIndexEntries all available entries, which are ordered by offset.
+   * @param start the starting index for the given list.
+   * @return the farthest index, inclusively, which can be used for a bundle read.
+   */
+  private int getBundleReadEndIndex(List<IndexEntry> sortedSrcIndexEntries, int start) {
+    long startOffset = sortedSrcIndexEntries.get(start).getValue().getOffset().getOffset();
+    int end;
+    for (end = start; end < sortedSrcIndexEntries.size(); end++) {
+      long currentSize =
+          sortedSrcIndexEntries.get(end).getValue().getOffset().getOffset() + sortedSrcIndexEntries.get(end)
+              .getValue()
+              .getSize() - startOffset;
+      if (currentSize > bundleReadBuffer.capacity()) {
+        break;
+      }
+    }
+    return end - 1;
+  }
+
+  /**
    * Copies the given {@code srcIndexEntries} from the given log segment into the swap spaces.
    * @param logSegmentToCopy the {@link LogSegment} to copy from.
    * @param srcIndexEntries the {@link IndexEntry}s to copy.
@@ -733,53 +760,90 @@ class BlobStoreCompactor {
     long totalCapacity = tgtLog.getCapacityInBytes();
     long writtenLastTime = 0;
     try (FileChannel fileChannel = Utils.openChannel(logSegmentToCopy.getView().getFirst(), false)) {
-      for (IndexEntry srcIndexEntry : srcIndexEntries) {
-        IndexValue srcValue = srcIndexEntry.getValue();
-        long usedCapacity = tgtIndex.getLogUsedCapacity();
-        if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
-          fileChannel.position(srcValue.getOffset().getOffset());
-          Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
-          // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
-          diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME, writtenLastTime);
-          tgtLog.appendFrom(fileChannel, srcValue.getSize());
-          FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
-          if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
-            IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
-            if (putValue != null) {
-              tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
+      // the index number of the list to start with.
+      int start = 0;
+      while (start < srcIndexEntries.size()) {
+        // try to do a bundle of read to reduce disk IO
+        ByteBuffer bufferToUse;
+        long startOffset = srcIndexEntries.get(start).getValue().getOffset().getOffset();
+        int end;
+        if (bundleReadBuffer == null || srcIndexEntries.get(start).getValue().getSize() > bundleReadBuffer.capacity()) {
+          end = start;
+          bufferToUse = ByteBuffer.allocate((int) srcIndexEntries.get(start).getValue().getSize());
+          srcMetrics.compactionBundleReadBufferNotFitIn.inc();
+          logger.trace("Record size greater than bundleReadBuffer capacity, key: {} size: {}",
+              srcIndexEntries.get(start).getKey(), srcIndexEntries.get(start).getValue().getSize());
+        } else {
+          end = getBundleReadEndIndex(srcIndexEntries, start);
+          bufferToUse = bundleReadBuffer;
+          bufferToUse.position(0);
+          bufferToUse.limit((int) (
+              srcIndexEntries.get(end).getValue().getOffset().getOffset() + srcIndexEntries.get(end)
+                  .getValue()
+                  .getSize() - startOffset));
+        }
+        // do IO read
+        Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
+
+        // copy from buffer to tgtLog
+        for (int i = start; i <= end; i++) {
+          IndexEntry srcIndexEntry = srcIndexEntries.get(i);
+          IndexValue srcValue = srcIndexEntry.getValue();
+          long usedCapacity = tgtIndex.getLogUsedCapacity();
+          if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
+            Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
+            // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
+            diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME,
+                writtenLastTime);
+            long bufferPosition = srcValue.getOffset().getOffset() - startOffset;
+            bufferToUse.limit((int) (bufferPosition + srcIndexEntry.getValue().getSize()));
+            bufferToUse.position((int) (bufferPosition));
+            tgtLog.appendFrom(bufferToUse);
+            FileSpan fileSpan = tgtLog.getFileSpanForMessage(endOffsetOfLastMessage, srcValue.getSize());
+            if (srcValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              IndexValue putValue = tgtIndex.findKey(srcIndexEntry.getKey());
+              if (putValue != null) {
+                tgtIndex.markAsDeleted(srcIndexEntry.getKey(), fileSpan, srcValue.getOperationTimeInMs());
+              } else {
+                IndexValue tgtValue =
+                    new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
+                        srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
+                tgtValue.setFlag(IndexValue.Flags.Delete_Index);
+                tgtValue.clearOriginalMessageOffset();
+                tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+              }
             } else {
               IndexValue tgtValue =
                   new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
                       srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
-              tgtValue.setFlag(IndexValue.Flags.Delete_Index);
-              tgtValue.clearOriginalMessageOffset();
               tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
             }
+            long lastModifiedTimeSecsToSet =
+                srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
+                    : lastModifiedTimeSecs;
+            tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
+            writtenLastTime = srcValue.getSize();
+            srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
+          } else if (!isActive) {
+            logger.info("Stopping copying in {} because shutdown is in progress", storeId);
+            copiedAll = false;
+            break;
           } else {
-            IndexValue tgtValue =
-                new IndexValue(srcValue.getSize(), fileSpan.getStartOffset(), srcValue.getExpiresAtMs(),
-                    srcValue.getOperationTimeInMs(), srcValue.getAccountId(), srcValue.getContainerId());
-            tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
+            // this is the extra segment, so it is ok to run out of space.
+            logger.info(
+                "There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
+                    + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity,
+                logSegmentToCopy.getName());
+            copiedAll = false;
+            break;
           }
-          long lastModifiedTimeSecsToSet =
-              srcValue.getOperationTimeInMs() != Utils.Infinite_Time ? srcValue.getOperationTimeInMs() / Time.MsPerSec
-                  : lastModifiedTimeSecs;
-          tgtIndex.getIndexSegments().lastEntry().getValue().setLastModifiedTimeSecs(lastModifiedTimeSecsToSet);
-          writtenLastTime = srcValue.getSize();
-          srcMetrics.compactionCopyRateInBytes.mark(srcValue.getSize());
-        } else if (!isActive) {
-          logger.info("Stopping copying in {} because shutdown is in progress", storeId);
-          copiedAll = false;
-          break;
-        } else {
-          // this is the extra segment, so it is ok to run out of space.
-          logger.info(
-              "There is no more capacity in the destination log in {}. Total capacity is {}. Used capacity is {}."
-                  + " Segment that was being copied is {}", storeId, totalCapacity, usedCapacity,
-              logSegmentToCopy.getName());
-          copiedAll = false;
+        }
+        if (!copiedAll) {
+          // break outer while loop
           break;
         }
+        tgtLog.flush();
+        start = end + 1;
       }
     } finally {
       logSegmentToCopy.closeView();

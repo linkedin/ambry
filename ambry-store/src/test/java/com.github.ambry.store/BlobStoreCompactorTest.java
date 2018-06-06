@@ -71,6 +71,9 @@ public class BlobStoreCompactorTest {
 
   private MetricRegistry metricRegistry;
 
+  private ByteBuffer bundleReadBuffer =
+      ByteBuffer.allocateDirect((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1);
+
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
@@ -126,7 +129,7 @@ public class BlobStoreCompactorTest {
         new CompactionDetails(state.time.milliseconds(), Collections.singletonList(firstSegmentName));
 
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
       fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -134,7 +137,7 @@ public class BlobStoreCompactorTest {
 
     // create compaction log so that resumeCompaction() thinks there is a compaction in progress
     try (CompactionLog cLog = new CompactionLog(tempDirStr, STORE_ID, state.time, details)) {
-      compactor.resumeCompaction();
+      compactor.resumeCompaction(bundleReadBuffer);
       fail("Should have failed to do anything because compactor has not been initialized");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -168,7 +171,7 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails)} fails when a compaction is already
+   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails when a compaction is already
    * in progress.
    * @throws Exception
    */
@@ -183,7 +186,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
       fail("compact() should have failed because a compaction is already in progress");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -194,7 +197,7 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where {@link BlobStoreCompactor#resumeCompaction()} is called without any compaction being in
+   * Tests the case where {@link BlobStoreCompactor#resumeCompaction(ByteBuffer)} is called without any compaction being in
    * progress.
    * @throws Exception
    */
@@ -206,7 +209,7 @@ public class BlobStoreCompactorTest {
     assertFalse("Compaction should not be in progress", CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID));
     assertEquals("Temp log segment should not be found", 0, compactor.getSwapSegmentsInUse());
     try {
-      compactor.resumeCompaction();
+      compactor.resumeCompaction(bundleReadBuffer);
       fail("Should have failed because there is no compaction in progress");
     } catch (IllegalStateException e) {
       // expected. Nothing to do.
@@ -221,6 +224,20 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void basicTest() throws Exception {
+    refreshState(false, true);
+    List<String> segmentsUnderCompaction = getLogSegments(0, 2);
+    long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
+        state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE);
+    compactAndVerify(segmentsUnderCompaction, deleteReferenceTimeMs, true);
+  }
+
+  /**
+   * A test similar to basicTest but doesn't use bundleReadBuffer.
+   * @throws Exception
+   */
+  @Test
+  public void basicTestNoBundleReadBuffer() throws Exception {
+    bundleReadBuffer = null;
     refreshState(false, true);
     List<String> segmentsUnderCompaction = getLogSegments(0, 2);
     long deleteReferenceTimeMs = reduceValidDataSizeInLogSegments(segmentsUnderCompaction,
@@ -303,7 +320,7 @@ public class BlobStoreCompactorTest {
       compactor.initialize(state.index);
       long logSegmentsBeforeCompaction = state.index.getLogSegmentCount();
       try {
-        compactor.compact(details);
+        compactor.compact(details, bundleReadBuffer);
       } finally {
         compactor.close(0);
       }
@@ -542,7 +559,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
     } finally {
       compactor.close(0);
     }
@@ -820,7 +837,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
     long logSegmentCountBeforeCompaction = state.index.getLogSegmentCount();
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
     } finally {
       compactor.close(0);
     }
@@ -1096,7 +1113,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(state.index);
 
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
     } finally {
       compactor.close(0);
     }
@@ -1155,7 +1172,7 @@ public class BlobStoreCompactorTest {
     compactor.initialize(index);
 
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
       if (throwExceptionInsteadOfClose) {
         fail("Compact should have thrown exception");
       }
@@ -1182,7 +1199,7 @@ public class BlobStoreCompactorTest {
         tempDir.list(BlobStoreCompactor.TEMP_LOG_SEGMENTS_FILTER).length, compactor.getSwapSegmentsInUse());
     try {
       if (CompactionLog.isCompactionInProgress(tempDirStr, STORE_ID)) {
-        compactor.resumeCompaction();
+        compactor.resumeCompaction(bundleReadBuffer);
       }
     } finally {
       compactor.close(0);
@@ -1495,7 +1512,7 @@ public class BlobStoreCompactorTest {
       PersistentIndex.IndexEntryType entryType =
           entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) ? PersistentIndex.IndexEntryType.DELETE
               : PersistentIndex.IndexEntryType.PUT;
-      logEntriesInOrder.add(new LogEntry(id, entryType));
+      logEntriesInOrder.add(new LogEntry(id, entryType, entry.getValue().getSize()));
     }
   }
 
@@ -1558,7 +1575,7 @@ public class BlobStoreCompactorTest {
   // badInputTest() helpers
 
   /**
-   * Ensures that {@link BlobStoreCompactor#compact(CompactionDetails)} fails because {@code details} is invalid.
+   * Ensures that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails because {@code details} is invalid.
    * @param details the invalid {@link CompactionDetails}
    * @param msg the message to print on failure if no exception is thrown.
    * @throws Exception
@@ -1567,7 +1584,7 @@ public class BlobStoreCompactorTest {
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
     try {
-      compactor.compact(details);
+      compactor.compact(details, bundleReadBuffer);
       fail(msg);
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -2049,15 +2066,18 @@ public class BlobStoreCompactorTest {
      * The type of the entry.
      */
     PersistentIndex.IndexEntryType entryType;
+    long size;
 
     /**
      * Create an instance with {@code id} and {@code entryType}
      * @param id the {@link MockId} of the entry.
      * @param entryType the type of the entry.
+     * @param size the size of the log entry.
      */
-    LogEntry(MockId id, PersistentIndex.IndexEntryType entryType) {
+    LogEntry(MockId id, PersistentIndex.IndexEntryType entryType, long size) {
       this.id = id;
       this.entryType = entryType;
+      this.size = size;
     }
 
     @Override
@@ -2070,14 +2090,20 @@ public class BlobStoreCompactorTest {
       }
 
       LogEntry logEntry = (LogEntry) o;
-      return id.equals(logEntry.id) && entryType == logEntry.entryType;
+      return id.equals(logEntry.id) && entryType == logEntry.entryType && size == logEntry.size;
     }
 
     @Override
     public int hashCode() {
       int result = id.hashCode();
       result = 31 * result + entryType.hashCode();
+      result = 31 * result + (int) size;
       return result;
+    }
+
+    @Override
+    public String toString() {
+      return "[id: " + id + " entryType: " + entryType + " size: " + size + "]";
     }
   }
 }
