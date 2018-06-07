@@ -781,9 +781,11 @@ class BlobStoreCompactor {
               srcIndexEntries.get(end).getValue().getOffset().getOffset() + srcIndexEntries.get(end)
                   .getValue()
                   .getSize() - startOffset));
+          srcMetrics.compactionBundleReadBufferUsed.inc();
         }
         // do IO read
-        Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
+        int ioCount = Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
+        srcMetrics.compactionBundleReadBufferIoCount.inc(ioCount);
 
         // copy from buffer to tgtLog
         for (int i = start; i <= end; i++) {
