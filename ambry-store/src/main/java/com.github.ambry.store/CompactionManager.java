@@ -71,8 +71,8 @@ class CompactionManager {
       for (String trigger : storeConfig.storeCompactionTriggers) {
         triggers.add(Trigger.valueOf(trigger.toUpperCase()));
       }
-      compactionExecutor = new CompactionExecutor(triggers,
-          Math.max(2 * storeConfig.storeCleanupOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
+      compactionExecutor = new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
+          : Math.max(2 * storeConfig.storeCleanupOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
       try {
         CompactionPolicyFactory compactionPolicyFactory =
             Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
@@ -185,10 +185,11 @@ class CompactionManager {
 
     /**
      * @param triggers the {@link EnumSet} of active compaction triggers.
+     * @param bundleReadBufferSize the size of buffer to reuse in compaction copy phase. Bundle read is disabled if 0.
      */
     CompactionExecutor(EnumSet<Trigger> triggers, int bundleReadBufferSize) {
       this.triggers = triggers;
-      bundleReadBuffer = ByteBuffer.allocateDirect(bundleReadBufferSize);
+      bundleReadBuffer = bundleReadBufferSize == 0 ? null : ByteBuffer.allocateDirect(bundleReadBufferSize);
     }
 
     /**
