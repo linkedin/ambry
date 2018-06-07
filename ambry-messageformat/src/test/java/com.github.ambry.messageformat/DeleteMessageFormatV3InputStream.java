@@ -31,7 +31,7 @@ import java.nio.ByteBuffer;
  *
  */
 public class DeleteMessageFormatV3InputStream extends MessageFormatInputStream {
-  DeleteMessageFormatV3InputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
+  public DeleteMessageFormatV3InputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.DELETE);
