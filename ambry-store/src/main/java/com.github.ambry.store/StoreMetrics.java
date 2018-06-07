@@ -74,6 +74,8 @@ public class StoreMetrics {
   public final Meter compactionCopyRateInBytes;
   public final Counter compactionBytesReclaimedCount;
   public final Counter compactionBundleReadBufferNotFitIn;
+  public final Counter compactionBundleReadBufferUsed;
+  public final Counter compactionBundleReadBufferIoCount;
 
   // BlobStoreStats metrics
   public final Counter blobStoreStatsIndexScannerErrorCount;
@@ -153,8 +155,12 @@ public class StoreMetrics {
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBytesReclaimedCount"));
-    compactionBundleReadBufferNotFitIn=
+    compactionBundleReadBufferNotFitIn =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferNotFitIn"));
+    compactionBundleReadBufferUsed =
+        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferUsed"));
+    compactionBundleReadBufferIoCount =
+        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
     blobStoreStatsIndexScannerErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
     blobStoreStatsQueueProcessorErrorCount =
