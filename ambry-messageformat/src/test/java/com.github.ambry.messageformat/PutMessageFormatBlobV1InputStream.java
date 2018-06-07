@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
  * PutMessageFormatInputStream which uses Blob Format V1 instead of the default V2
  */
 public class PutMessageFormatBlobV1InputStream extends MessageFormatInputStream {
-  PutMessageFormatBlobV1InputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
+  public PutMessageFormatBlobV1InputStream(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
       InputStream blobStream, long streamSize, BlobType blobType) throws MessageFormatException {
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize =
