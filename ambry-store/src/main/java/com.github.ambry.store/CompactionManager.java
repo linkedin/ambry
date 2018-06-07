@@ -190,6 +190,7 @@ class CompactionManager {
     CompactionExecutor(EnumSet<Trigger> triggers, int bundleReadBufferSize) {
       this.triggers = triggers;
       bundleReadBuffer = bundleReadBufferSize == 0 ? null : ByteBuffer.allocateDirect(bundleReadBufferSize);
+      logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
     }
 
     /**
