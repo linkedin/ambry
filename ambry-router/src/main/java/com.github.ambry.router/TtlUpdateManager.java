@@ -31,6 +31,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -102,7 +103,7 @@ class TtlUpdateManager {
    * @param callback The {@link Callback} that will be called on completion of the request.
    * @throws RouterException if the blobIdStr is invalid.
    */
-  void submitTtlUpdateOperation(List<String> blobIdStrs, String serviceId, long expiresAtMs,
+  void submitTtlUpdateOperation(Collection<String> blobIdStrs, String serviceId, long expiresAtMs,
       FutureResult<Void> futureResult, Callback<Void> callback) throws RouterException {
     List<BlobId> blobIds = new ArrayList<>();
     for (String blobIdStr : blobIdStrs) {
@@ -292,9 +293,10 @@ class TtlUpdateManager {
     Callback<Void> getCallback(final BlobId blobId) {
       return (result, exception) -> {
         if (exception == null) {
-          if (blobIdToAck.putIfAbsent(blobId, true)) {
+          if (blobIdToAck.put(blobId, true)) {
             // already acked once
-            complete(new IllegalStateException("Ack for " + blobId + " arrived more than once"));
+            complete(new RouterException("Ack for " + blobId + " arrived more than once",
+                RouterErrorCode.UnexpectedInternalError));
           } else if (ackedCount.incrementAndGet() >= numBlobIds) {
             // acked for the first time for this blob id and all the blob ids have been acked
             complete(null);

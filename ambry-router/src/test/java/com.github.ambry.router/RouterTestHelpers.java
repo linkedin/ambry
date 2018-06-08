@@ -20,6 +20,7 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.TestUtils;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -37,6 +38,7 @@ import static org.junit.Assert.*;
  */
 class RouterTestHelpers {
   private static final int AWAIT_TIMEOUT_SECONDS = 10;
+  static final int AWAIT_TIMEOUT_MS = 2000;
 
   /**
    * Test whether two {@link BlobProperties} have the same fields
@@ -85,7 +87,7 @@ class RouterTestHelpers {
    */
   static void testWithErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, MockServerLayout serverLayout,
       RouterErrorCode expectedError, ErrorCodeChecker errorCodeChecker) throws Exception {
-    setServerErrorCodes(serverErrorCodesInOrder, serverLayout);
+    setServerErrorCodes(Arrays.asList(serverErrorCodesInOrder), serverLayout);
     errorCodeChecker.testAndAssert(expectedError);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
@@ -118,15 +120,15 @@ class RouterTestHelpers {
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @throws IllegalArgumentException If there are more error codes in the input array then there are servers.
    */
-  static void setServerErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, MockServerLayout serverLayout) {
+  static void setServerErrorCodes(List<ServerErrorCode> serverErrorCodesInOrder, MockServerLayout serverLayout) {
     Collection<MockServer> servers = serverLayout.getMockServers();
-    if (serverErrorCodesInOrder.length > servers.size()) {
+    if (serverErrorCodesInOrder.size() > servers.size()) {
       throw new IllegalArgumentException("More server error codes provided than servers in cluster");
     }
     int i = 0;
     for (MockServer server : servers) {
-      if (i < serverErrorCodesInOrder.length) {
-        server.setServerErrorForAllRequests(serverErrorCodesInOrder[i++]);
+      if (i < serverErrorCodesInOrder.size()) {
+        server.setServerErrorForAllRequests(serverErrorCodesInOrder.get(i++));
       } else {
         server.setServerErrorForAllRequests(ServerErrorCode.No_Error);
       }
@@ -178,7 +180,7 @@ class RouterTestHelpers {
   static <T> void assertFailureAndCheckErrorCode(Future<T> future, TestCallback<T> callback,
       RouterErrorCode expectedError) {
     try {
-      callback.getLatch().await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      assertTrue("Callback was not called", callback.getLatch().await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS));
       future.get(1, TimeUnit.SECONDS);
       fail("Operation should be unsuccessful. Exception is expected.");
     } catch (Exception e) {
@@ -188,6 +190,29 @@ class RouterTestHelpers {
         assertEquals("RouterErrorCode should be " + expectedError + " (callback)", expectedError,
             ((RouterException) callback.getException()).getErrorCode());
         assertNull("Result should be null", callback.getResult());
+      }
+    }
+  }
+
+  /**
+   * Asserts that {@code blobId} has ttl {@code expectedTtl} (also doubles up as checking of GetBlobInfoOp and
+   * GetBlobOp).
+   * @param router the {@link Router} to use
+   * @param blobIds the blob ids to query
+   * @param expectedTtlSecs the expected ttl in seconds
+   * @throws Exception
+   */
+  static void assertTtl(Router router, Collection<String> blobIds, long expectedTtlSecs) throws Exception {
+    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(), new GetBlobOptionsBuilder().operationType(
+        GetBlobOptions.OperationType.BlobInfo).build()};
+    for (String blobId : blobIds) {
+      for (GetBlobOptions option : options) {
+        GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals("TTL not as expected", expectedTtlSecs,
+            result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
+        if (result.getBlobDataChannel() != null) {
+          result.getBlobDataChannel().close();
+        }
       }
     }
   }

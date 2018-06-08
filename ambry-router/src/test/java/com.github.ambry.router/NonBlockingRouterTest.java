@@ -42,6 +42,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -62,6 +63,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.router.RouterTestHelpers.*;
+import static org.junit.Assert.*;
+
 
 /**
  * Class to test the {@link NonBlockingRouter}
@@ -78,7 +82,6 @@ public class NonBlockingRouterTest {
   private static final int GET_SUCCESS_TARGET = 1;
   private static final int DELETE_REQUEST_PARALLELISM = 3;
   private static final int DELETE_SUCCESS_TARGET = 2;
-  private static final int AWAIT_TIMEOUT_MS = 2000;
   private static final int PUT_CONTENT_SIZE = 1000;
   private static final long TTL_SECS = 7200;
   private int maxPutChunkSize = PUT_CONTENT_SIZE;
@@ -647,15 +650,47 @@ public class NonBlockingRouterTest {
     testsAndExpected.put(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
     for (Map.Entry<ServerErrorCode, RouterErrorCode> testAndExpected : testsAndExpected.entrySet()) {
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
-      RouterTestHelpers.TestCallback<Void> testCallback = new RouterTestHelpers.TestCallback<>();
+      TestCallback<Void> testCallback = new TestCallback<>();
       Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback);
-      RouterTestHelpers.assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
+      assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
     }
     layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
     // bad blob id
-    RouterTestHelpers.TestCallback<Void> testCallback = new RouterTestHelpers.TestCallback<>();
+    TestCallback<Void> testCallback = new TestCallback<>();
     Future<Void> future = router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback);
-    RouterTestHelpers.assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
+    assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
+    router.close();
+  }
+
+  /**
+   * Test that a bad user defined callback will not crash the router or the manager.
+   * @throws Exception
+   */
+  @Test
+  public void testBadCallbackForUpdateTtl() throws Exception {
+    MockServerLayout serverLayout = new MockServerLayout(mockClusterMap);
+    setRouter(getNonBlockingRouterProperties("DC1"), serverLayout, new LoggingNotificationSystem());
+    setOperationParams();
+    String blobId =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+    String blobIdCheck =
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null, expectedError -> {
+      final CountDownLatch callbackCalled = new CountDownLatch(1);
+      router.updateBlobTtl(blobId, null, Utils.Infinite_Time, (result, exception) -> {
+        callbackCalled.countDown();
+        throw new RuntimeException("Throwing an exception in the user callback");
+      }).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Callback not called.", callbackCalled.await(10, TimeUnit.MILLISECONDS));
+      assertEquals("All operations should be finished.", 0, router.getOperationsCount());
+      assertTrue("Router should not be closed", router.isOpen());
+      assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
+
+      //Test that TtlUpdateManager is still functional
+      router.updateBlobTtl(blobIdCheck, null, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTtl(router, Collections.singleton(blobIdCheck), Utils.Infinite_Time);
+    });
     router.close();
   }
 
@@ -974,42 +1009,18 @@ public class NonBlockingRouterTest {
         PUT_CONTENT_SIZE % numChunks);
     maxPutChunkSize = PUT_CONTENT_SIZE / numChunks;
     String updateServiceId = "update-service";
-    final AtomicInteger updatesInitiated = new AtomicInteger();
-    final AtomicReference<String> receivedUpdateServiceId = new AtomicReference<>();
-    final AtomicReference<Long> receivedUpdateExpiresAtMs = new AtomicReference<>(null);
-    final AtomicReference<Boolean> mismatchedData = new AtomicReference<>(false);
-    LoggingNotificationSystem notificationSystem = new LoggingNotificationSystem() {
-      @Override
-      public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs) {
-        updatesInitiated.incrementAndGet();
-        if (receivedUpdateServiceId.get() == null) {
-          receivedUpdateServiceId.set(serviceId);
-        } else if (!receivedUpdateServiceId.get().equals(serviceId)) {
-          mismatchedData.set(true);
-        }
-        if (receivedUpdateExpiresAtMs.get() == null) {
-          receivedUpdateExpiresAtMs.set(expiresAtMs);
-        } else if (receivedUpdateExpiresAtMs.get() != expiresAtMs) {
-          mismatchedData.set(true);
-        }
-      }
-    };
+    TtlUpdateNotificationSystem notificationSystem = new TtlUpdateNotificationSystem();
     setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap), notificationSystem);
     setOperationParams();
     Assert.assertFalse("The original ttl should not be infinite for this test to work",
         putBlobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time);
     String blobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    assertTtl(blobId, TTL_SECS);
+    assertTtl(router, Collections.singleton(blobId), TTL_SECS);
     router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // if more than one chunk is created, also account for metadata blob
-    Assert.assertEquals("Incorrect number of updates", numChunks == 1 ? 1 : numChunks + 1, updatesInitiated.get());
-    Assert.assertEquals("The updated expiry time should match the expected value", Utils.Infinite_Time,
-        receivedUpdateExpiresAtMs.get().longValue());
-    Assert.assertEquals("The update service ID should match the expected value", updateServiceId,
-        receivedUpdateServiceId.get());
-    Assert.assertFalse("Received mismatched data in notification system update", mismatchedData.get());
-    assertTtl(blobId, Utils.Infinite_Time);
+    notificationSystem.checkNotifications(numChunks == 1 ? 1 : numChunks + 1, updateServiceId, Utils.Infinite_Time);
+    assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
     Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
     router.close();
     // check that ttl update won't work after router close
@@ -1017,26 +1028,6 @@ public class NonBlockingRouterTest {
     Assert.assertTrue(future.isDone());
     RouterException e = (RouterException) ((FutureResult<Void>) future).error();
     Assert.assertEquals(e.getErrorCode(), RouterErrorCode.RouterClosed);
-  }
-
-  /**
-   * Asserts that {@code blobId} has ttl {@code expectedTtl} (also doubles up as checking of GetBlobInfoOp and
-   * GetBlobOp).
-   * @param blobId the blob id to query
-   * @param expectedTtlSecs the expected ttl in seconds
-   * @throws Exception
-   */
-  private void assertTtl(String blobId, long expectedTtlSecs) throws Exception {
-    GetBlobOptions options[] = {new GetBlobOptionsBuilder().build(), new GetBlobOptionsBuilder().operationType(
-        GetBlobOptions.OperationType.BlobInfo).build()};
-    for (GetBlobOptions option : options) {
-      GetBlobResult result = router.getBlob(blobId, option).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      Assert.assertEquals("TTL not as expected", expectedTtlSecs,
-          result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
-      if (result.getBlobDataChannel() != null) {
-        result.getBlobDataChannel().close();
-      }
-    }
   }
 
   /**

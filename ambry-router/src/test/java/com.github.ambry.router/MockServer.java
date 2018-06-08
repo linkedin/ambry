@@ -50,6 +50,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +73,7 @@ class MockServer {
   private final ClusterMap clusterMap;
   private final String dataCenter;
   private final ConcurrentHashMap<RequestOrResponseType, LongAdder> requestCounts = new ConcurrentHashMap<>();
+  private final Map<String, ServerErrorCode> errorCodeForBlobs = new HashMap<>();
 
   MockServer(ClusterMap clusterMap, String dataCenter) {
     this.clusterMap = clusterMap;
@@ -186,7 +188,7 @@ class MockServer {
       short containerId = Container.UNKNOWN_CONTAINER_ID;
       long operationTimeMs = Utils.Infinite_Time;
       StoredBlob blob = blobs.get(key.getID());
-      ServerErrorCode processedError = errorForGet(blob, getRequest);
+      ServerErrorCode processedError = errorForGet(key.getID(), blob, getRequest);
       MessageMetadata msgMetadata = null;
       if (processedError == ServerErrorCode.No_Error) {
         ByteBuffer buf = blobs.get(key.getID()).serializedSentPutRequest.duplicate();
@@ -356,8 +358,8 @@ class MockServer {
     return getResponse;
   }
 
-  ServerErrorCode errorForGet(StoredBlob blob, GetRequest getRequest) {
-    ServerErrorCode retCode = ServerErrorCode.No_Error;
+  private ServerErrorCode errorForGet(String blobId, StoredBlob blob, GetRequest getRequest) {
+    ServerErrorCode retCode = errorCodeForBlobs.getOrDefault(blobId, ServerErrorCode.No_Error);
     if (blob == null) {
       retCode = ServerErrorCode.Blob_Not_Found;
     } else if (blob.isDeleted() && !getRequest.getGetOption().equals(GetOption.Include_All)
@@ -381,6 +383,9 @@ class MockServer {
    */
   DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) {
     if (deleteError == ServerErrorCode.No_Error) {
+      deleteError = errorCodeForBlobs.getOrDefault(deleteRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    }
+    if (deleteError == ServerErrorCode.No_Error) {
       updateBlobMap(deleteRequest);
     }
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
@@ -394,6 +399,9 @@ class MockServer {
    * @return the constructed {@link TtlUpdateResponse}
    */
   private TtlUpdateResponse makeTtlUpdateResponse(TtlUpdateRequest ttlUpdateRequest, ServerErrorCode ttlUpdateError) {
+    if (ttlUpdateError == ServerErrorCode.No_Error) {
+      ttlUpdateError = errorCodeForBlobs.getOrDefault(ttlUpdateRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    }
     if (ttlUpdateError == ServerErrorCode.No_Error) {
       ttlUpdateError = updateBlobMap(ttlUpdateRequest);
     }
@@ -516,6 +524,20 @@ class MockServer {
    */
   public int getCount(RequestOrResponseType type) {
     return requestCounts.getOrDefault(type, new LongAdder()).intValue();
+  }
+
+  /**
+   * Sets up this {@link MockServer} such that it returns the given {@code errorCode} for the given {@code blobId} for
+   * get, ttl update and delete (not put).
+   * @param blobId the blob id for which the error code must apply
+   * @param errorCode the error code to apply
+   */
+  public void setErrorCodeForBlob(String blobId, ServerErrorCode errorCode) {
+    if (errorCode == null) {
+      errorCodeForBlobs.remove(blobId);
+    } else {
+      errorCodeForBlobs.put(blobId, errorCode);
+    }
   }
 }
 

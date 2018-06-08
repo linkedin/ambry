@@ -115,7 +115,7 @@ public class DeleteManagerTest {
    */
   @After
   public void cleanUp() {
-    assertCloseCleanup();
+    assertCloseCleanup(router);
   }
 
   /**
@@ -293,7 +293,7 @@ public class DeleteManagerTest {
    */
   @Test
   public void testVariousServerErrorCodesForThreeParallelism() throws Exception {
-    assertCloseCleanup();
+    assertCloseCleanup(router);
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "3");
     VerifiableProperties vProps = new VerifiableProperties(props);
@@ -401,18 +401,6 @@ public class DeleteManagerTest {
     public void onCompletion(Void t, Exception e) {
       operationCompleteLatch.countDown();
     }
-  }
-
-  /**
-   * Asserts that expected threads are not running after the router is closed.
-   */
-  private void assertCloseCleanup() {
-    router.close();
-    Assert.assertEquals("No ChunkFiller Thread should be running after the router is closed", 0,
-        TestUtils.numThreadsByThisName("ChunkFillerThread"));
-    Assert.assertEquals("No RequestResponseHandler should be running after the router is closed", 0,
-        TestUtils.numThreadsByThisName("RequestResponseHandlerThread"));
-    Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
   }
 
   /**

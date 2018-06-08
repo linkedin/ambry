@@ -249,9 +249,6 @@ class TtlUpdateOperation {
       case Blob_Not_Found:
         updateOperationState(replica, RouterErrorCode.BlobDoesNotExist);
         break;
-      case Partition_Unknown:
-        updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
-        break;
       case Disk_Unavailable:
         updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
         break;
