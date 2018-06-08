@@ -239,7 +239,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.cleanup.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
     storeCompactionMinBufferSize =
-        verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 1,
+        verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0,
             Integer.MAX_VALUE);
     storeEnableHardDelete = verifiableProperties.getBoolean("store.enable.hard.delete", false);
     storeSegmentSizeInBytes =
