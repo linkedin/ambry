@@ -2651,8 +2651,8 @@ public class IndexTest {
       assertEquals("Expiration value mismatch for " + entry.getKey(), expectedValue.getExpiresAtMs(),
           value.getExpiresAtMs());
       assertEquals("Flags mismatch for " + entry.getKey(), expectedValue.getFlags(), value.getFlags());
-      assertEquals("RelatedMessageOffset mismatch for " + entry.getKey(), expectedValue.getRelatedMessageOffset(),
-          value.getRelatedMessageOffset());
+      assertEquals("OriginalMessageOffset mismatch for " + entry.getKey(), expectedValue.getOriginalMessageOffset(),
+          value.getOriginalMessageOffset());
       assertEquals("OperationTime mismatch for " + entry.getKey(), expectedValue.getOperationTimeInMs(),
           value.getOperationTimeInMs());
       assertEquals("AccountId mismatch for " + entry.getKey(), expectedValue.getAccountId(), value.getAccountId());

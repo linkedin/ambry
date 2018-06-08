@@ -124,57 +124,57 @@ public class IndexValueTest {
     IndexValue value =
         getIndexValue(size, new Offset(logSegmentName, offset), expiresAtMs, operationTimeAtMs, accountId, containerId,
             version);
-    long relatedMsgOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
-    long relatedMsgSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    long originalMsgOffset = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    long originalMsgSize = Utils.getRandomLong(TestUtils.RANDOM, 1000);
 
     long expectedOffset;
     long expectedSize;
-    long expectedRelatedMsgOffset;
+    long expectedOriginalMsgOffset;
     for (IndexValue.Flags flag : IndexValue.Flags.values()) {
       // update in the same log segment
       IndexValue newValue = new IndexValue(logSegmentName, value.getBytes(), version);
       newValue.setFlag(flag);
 
-      Offset relatedMsgOff = new Offset(logSegmentName, relatedMsgOffset);
+      Offset originalMsgOff = new Offset(logSegmentName, originalMsgOffset);
       if (flag.equals(IndexValue.Flags.Delete_Index)) {
-        expectedOffset = relatedMsgOffset;
-        expectedSize = relatedMsgSize;
-        expectedRelatedMsgOffset = offset;
+        expectedOffset = originalMsgOffset;
+        expectedSize = originalMsgSize;
+        expectedOriginalMsgOffset = offset;
 
-        newValue.setNewOffset(relatedMsgOff);
-        newValue.setNewSize(relatedMsgSize);
+        newValue.setNewOffset(originalMsgOff);
+        newValue.setNewSize(originalMsgSize);
       } else {
         expectedOffset = offset;
         expectedSize = size;
-        expectedRelatedMsgOffset = relatedMsgOffset;
+        expectedOriginalMsgOffset = originalMsgOffset;
 
-        newValue.setRelatedMessageOffset(relatedMsgOff);
+        newValue.setOriginalMessageOffset(originalMsgOff);
       }
       verifyIndexValue(newValue, logSegmentName, expectedSize, expectedOffset, EnumSet.of(flag), expiresAtMs,
-          expectedRelatedMsgOffset, expectedOperationTimeMs, accountId, containerId);
+          expectedOriginalMsgOffset, expectedOperationTimeMs, accountId, containerId);
 
-      // related message offset cleared
-      newValue.clearRelatedMessageOffset();
+      // original message offset cleared
+      newValue.clearOriginalMessageOffset();
       verifyIndexValue(newValue, logSegmentName, expectedSize, expectedOffset, EnumSet.of(flag), expiresAtMs,
-          IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId);
+          IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId);
 
       newValue = new IndexValue(logSegmentName, value.getBytes(), version);
       String newLogSegmentName = LogSegmentNameHelper.getNextPositionName(logSegmentName);
       String expectedLogSegmentName;
       // update not in the same log segment
       newValue.setFlag(flag);
-      relatedMsgOff = new Offset(newLogSegmentName, relatedMsgOffset);
+      originalMsgOff = new Offset(newLogSegmentName, originalMsgOffset);
       if (flag.equals(IndexValue.Flags.Delete_Index)) {
         expectedLogSegmentName = newLogSegmentName;
         // no need to set the other "expected" because they have already been set
-        newValue.setNewOffset(relatedMsgOff);
-        newValue.setNewSize(relatedMsgSize);
+        newValue.setNewOffset(originalMsgOff);
+        newValue.setNewSize(originalMsgSize);
       } else {
         expectedLogSegmentName = logSegmentName;
-        newValue.setRelatedMessageOffset(relatedMsgOff);
+        newValue.setOriginalMessageOffset(originalMsgOff);
       }
       verifyIndexValue(newValue, expectedLogSegmentName, expectedSize, expectedOffset, EnumSet.of(flag), expiresAtMs,
-          IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId);
+          IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET, expectedOperationTimeMs, accountId, containerId);
     }
 
     // clearFlag() test
@@ -207,13 +207,13 @@ public class IndexValueTest {
    * @param offset the offset expected in {@code value}.
    * @param flags the expected flags in {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
-   * @param relatedMessageOffset the related message offset expected in {@code value}.
+   * @param originalMessageOffset the original message offset expected in {@code value}.
    * @param operationTimeInMs the operation time in ms
    * @param accountId the accountId of the Index value
    * @param containerId the containerId of the Index value
    */
   private void verifyIndexValue(IndexValue value, String logSegmentName, long size, long offset,
-      EnumSet<IndexValue.Flags> flags, long expiresAtMs, long relatedMessageOffset, long operationTimeInMs,
+      EnumSet<IndexValue.Flags> flags, long expiresAtMs, long originalMessageOffset, long operationTimeInMs,
       short accountId, short containerId) {
     switch (version) {
       case PersistentIndex.VERSION_0:
@@ -228,11 +228,11 @@ public class IndexValueTest {
             TimeUnit.MILLISECONDS.toSeconds(expiresAtMs) > Integer.MAX_VALUE ? Utils.Infinite_Time : expiresAtMs;
         break;
     }
-    verifyGetters(value, logSegmentName, size, offset, flags, expiresAtMs, relatedMessageOffset, operationTimeInMs,
+    verifyGetters(value, logSegmentName, size, offset, flags, expiresAtMs, originalMessageOffset, operationTimeInMs,
         accountId, containerId);
     // check value after ser-deser
     verifyGetters(new IndexValue(logSegmentName, value.getBytes(), version), logSegmentName, size, offset, flags,
-        expiresAtMs, relatedMessageOffset, operationTimeInMs, accountId, containerId);
+        expiresAtMs, originalMessageOffset, operationTimeInMs, accountId, containerId);
     verifyInvalidValueSize(value, logSegmentName);
   }
 
@@ -245,13 +245,13 @@ public class IndexValueTest {
    * @param offset the offset expected in {@code value}.
    * @param flags the flags set in {@code value}.
    * @param expiresAtMs the expected expiration time in {@code value}.
-   * @param relatedMessageOffset the related message offset expected in {@code value}.
+   * @param originalMessageOffset the original message offset expected in {@code value}.
    * @param operationTimeInMs the operation time in ms
    * @param accountId the accountId of the Index value
    * @param containerId the containerId of the Index value
    */
   private void verifyGetters(IndexValue value, String logSegmentName, long size, long offset,
-      EnumSet<IndexValue.Flags> flags, long expiresAtMs, long relatedMessageOffset, long operationTimeInMs,
+      EnumSet<IndexValue.Flags> flags, long expiresAtMs, long originalMessageOffset, long operationTimeInMs,
       short accountId, short containerId) {
     assertEquals("Version is not as expected", version, value.getVersion());
     assertEquals("Size is not as expected", size, value.getSize());
@@ -264,7 +264,7 @@ public class IndexValueTest {
     assertEquals("Operation time mismatch", operationTimeInMs, value.getOperationTimeInMs());
     assertEquals("AccountId mismatch ", accountId, value.getAccountId());
     assertEquals("ContainerId mismatch ", containerId, value.getContainerId());
-    assertEquals("Related message offset not as expected", relatedMessageOffset, value.getRelatedMessageOffset());
+    assertEquals("Original message offset not as expected", originalMessageOffset, value.getOriginalMessageOffset());
   }
 
   /**
@@ -309,7 +309,7 @@ public class IndexValueTest {
    */
   static IndexValue getIndexValue(IndexValue value, short version) {
     return getIndexValue(value.getSize(), value.getOffset(), value.getFlags(), value.getExpiresAtMs(),
-        value.getRelatedMessageOffset(), value.getOperationTimeInMs(), value.getAccountId(), value.getContainerId(),
+        value.getOriginalMessageOffset(), value.getOperationTimeInMs(), value.getAccountId(), value.getContainerId(),
         version);
   }
 
@@ -320,13 +320,13 @@ public class IndexValueTest {
    * @param size the size of the blob that this index value refers to
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
    * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param relatedMessageOffset the related message offset
+   * @param originalMessageOffset the original message offset
    * @param operationTimeMs the time of the operation in ms (irrelevant to V0)
    * @param accountId the account that the blob represented by this value belongs to (irrelevant to V0)
    * @param containerId the container that the blob represented by this value belongs to (irrelevant to V0)
    * @return the {@link IndexValue} thus constructed
    */
-  static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs, long relatedMessageOffset,
+  static IndexValue getIndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
       long operationTimeMs, short accountId, short containerId, short version) {
     IndexValue indexValue;
     switch (version) {
@@ -336,7 +336,7 @@ public class IndexValueTest {
         value.putLong(offset.getOffset());
         value.put(flags);
         value.putLong(expiresAtMs);
-        value.putLong(relatedMessageOffset);
+        value.putLong(originalMessageOffset);
         value.position(0);
         indexValue = new IndexValue(offset.getName(), value, PersistentIndex.VERSION_0);
         break;

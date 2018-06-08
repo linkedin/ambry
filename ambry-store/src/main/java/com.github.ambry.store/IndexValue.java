@@ -33,11 +33,11 @@ import static com.github.ambry.account.Container.*;
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  * Version_1
- * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
- * | Blob Size |   Offset  |  Flags  | Expiration Time | Related msg | OperationTime | ServiceId | ContainerId |
- * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset      |   in secs     | (2 bytes) | (2 bytes)   |
- * |           |           |         |   ( 4 bytes)    | (8 bytes)   |   (4 bytes)   |           |             |
- * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | Orig msg  | OperationTime | ServiceId | ContainerId |
+ * | (8 bytes) | (8 bytes) | (1 byte)|   in  Secs      | offset    |   in secs     | (2 bytes) | (2 bytes)   |
+ * |           |           |         |   ( 4 bytes)    | (8 bytes) |   (4 bytes)   |           |             |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  */
 class IndexValue implements Comparable<IndexValue> {
@@ -47,13 +47,13 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
-  final static long UNKNOWN_RELATED_MESSAGE_OFFSET = -1;
+  final static long UNKNOWN_ORIGINAL_MESSAGE_OFFSET = -1;
 
   private final static int BLOB_SIZE_IN_BYTES = 8;
   private final static int OFFSET_SIZE_IN_BYTES = 8;
   private final static int FLAG_SIZE_IN_BYTES = 1;
   private final static int EXPIRES_AT_MS_SIZE_IN_BYTES_V0 = 8;
-  private final static int RELATED_MESSAGE_OFFSET_SIZE_IN_BYTES = 8;
+  private final static int ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES = 8;
 
   private final static int EXPIRES_AT_SECS_SIZE_IN_BYTES_V1 = 4;
   private final static int OPERATION_TIME_SECS_SIZE_IN_BYTES = 4;
@@ -62,18 +62,18 @@ class IndexValue implements Comparable<IndexValue> {
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V0 =
       BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_MS_SIZE_IN_BYTES_V0
-          + RELATED_MESSAGE_OFFSET_SIZE_IN_BYTES;
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES;
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V1 =
       BLOB_SIZE_IN_BYTES + OFFSET_SIZE_IN_BYTES + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
-          + RELATED_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
+          + ORIGINAL_MESSAGE_OFFSET_SIZE_IN_BYTES + OPERATION_TIME_SECS_SIZE_IN_BYTES + ACCOUNT_ID_SIZE_IN_BYTES
           + CONTAINER_ID_SIZE_IN_BYTES;
 
   private long size;
   private Offset offset;
   private byte flags;
   private long expiresAtMs;
-  private long relatedMessageOffset;
+  private long originalMessageOffset;
   private final long operationTimeInMs;
   private final short accountId;
   private final short containerId;
@@ -96,7 +96,7 @@ class IndexValue implements Comparable<IndexValue> {
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
         expiresAtMs = value.getLong();
-        relatedMessageOffset = value.getLong();
+        originalMessageOffset = value.getLong();
         operationTimeInMs = (int) Utils.Infinite_Time;
         accountId = UNKNOWN_ACCOUNT_ID;
         containerId = UNKNOWN_CONTAINER_ID;
@@ -110,9 +110,9 @@ class IndexValue implements Comparable<IndexValue> {
         offset = new Offset(logSegmentName, value.getLong());
         flags = value.get();
         long expiresAt = value.getInt();
-        expiresAtMs = expiresAtMs != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
+        expiresAtMs = expiresAt != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
             : Utils.Infinite_Time;
-        relatedMessageOffset = value.getLong();
+        originalMessageOffset = value.getLong();
         long operationTimeInSecs = value.getInt();
         operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? TimeUnit.SECONDS.toMillis(operationTimeInSecs)
             : Utils.Infinite_Time;
@@ -158,19 +158,19 @@ class IndexValue implements Comparable<IndexValue> {
    * @param offset the {@link Offset} in the {@link Log} where the blob that this index value refers to resides
    * @param flags the flags that needs to be set for the Index Value
    * @param expiresAtMs the expiration time in ms at which the blob expires
-   * @param relatedMessageOffset the related message offset where another record related to this record exists
-   *                              in the same log segment. Set to {@link #UNKNOWN_RELATED_MESSAGE_OFFSET} otherwise.
+   * @param originalMessageOffset the offset where the PUT record pertaining to this record exists if in the same log
+   *                              segment. Set to {@link #UNKNOWN_ORIGINAL_MESSAGE_OFFSET} otherwise.
    * @param operationTimeInMs the time in ms at which the operation occurred.
    * @param accountId the accountId that this blob belongs to
    * @param containerId the containerId that this blob belongs to
    */
-  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long relatedMessageOffset,
+  private IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset,
       long operationTimeInMs, short accountId, short containerId) {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
     setExpiresAtMs(expiresAtMs);
-    this.relatedMessageOffset = relatedMessageOffset;
+    this.originalMessageOffset = originalMessageOffset;
     this.operationTimeInMs = Utils.getTimeInMsToTheNearestSec(operationTimeInMs);
     this.accountId = accountId;
     this.containerId = containerId;
@@ -215,10 +215,11 @@ class IndexValue implements Comparable<IndexValue> {
   }
 
   /**
-   * @return the related message offset of the {@link IndexValue}
+   * @return the offset of the PUT record related to this {@link IndexValue} if it is in the same log segment.
+   * {@link #UNKNOWN_ORIGINAL_MESSAGE_OFFSET} otherwise.
    */
-  long getRelatedMessageOffset() {
-    return relatedMessageOffset;
+  long getOriginalMessageOffset() {
+    return originalMessageOffset;
   }
 
   /**
@@ -265,20 +266,21 @@ class IndexValue implements Comparable<IndexValue> {
   void setNewOffset(Offset newOffset) {
     Offset oldOffset = offset;
     offset = newOffset;
-    setRelatedMessageOffset(oldOffset);
+    setOriginalMessageOffset(oldOffset);
   }
 
   /**
-   * Sets the related message offset if the offset is in the same {@link LogSegment}
-   * @param relatedOffset the offset to set as the related message offset
+   * Sets the offset of the PUT record if the offset is in the same {@link LogSegment}
+   * @param originalMessageOffset the offset to set as the original message offset
    */
-  void setRelatedMessageOffset(Offset relatedOffset) {
-    relatedMessageOffset =
-        offset.getName().equals(relatedOffset.getName()) ? relatedOffset.getOffset() : UNKNOWN_RELATED_MESSAGE_OFFSET;
+  void setOriginalMessageOffset(Offset originalMessageOffset) {
+    this.originalMessageOffset =
+        offset.getName().equals(originalMessageOffset.getName()) ? originalMessageOffset.getOffset()
+            : UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
   }
 
-  void clearRelatedMessageOffset() {
-    relatedMessageOffset = UNKNOWN_RELATED_MESSAGE_OFFSET;
+  void clearOriginalMessageOffset() {
+    originalMessageOffset = UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
   }
 
   /**
@@ -301,7 +303,7 @@ class IndexValue implements Comparable<IndexValue> {
         value.putLong(offset.getOffset());
         value.put(flags);
         value.putLong(expiresAtMs);
-        value.putLong(relatedMessageOffset);
+        value.putLong(originalMessageOffset);
         value.position(0);
         break;
       case PersistentIndex.VERSION_1:
@@ -311,7 +313,7 @@ class IndexValue implements Comparable<IndexValue> {
         value.putLong(offset.getOffset());
         value.put(flags);
         value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
-        value.putLong(relatedMessageOffset);
+        value.putLong(originalMessageOffset);
         value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
             : (int) operationTimeInMs);
         value.putShort(accountId);
@@ -328,7 +330,7 @@ class IndexValue implements Comparable<IndexValue> {
   public String toString() {
     return "Offset: " + offset + ", Size: " + getSize() + ", Deleted: " + isFlagSet(Flags.Delete_Index)
         + ", TTL Updated: " + isFlagSet(Flags.Ttl_Update_Index) + ", ExpiresAtMs: " + getExpiresAtMs()
-        + ", Related Message Offset: " + getRelatedMessageOffset() + (version != PersistentIndex.VERSION_0 ? (
+        + ", Original Message Offset: " + getOriginalMessageOffset() + (version != PersistentIndex.VERSION_0 ? (
         ", OperationTimeAtSecs " + getOperationTimeInMs() + ", AccountId " + getAccountId() + ", ContainerId "
             + getContainerId()) : "");
   }

@@ -450,9 +450,9 @@ class BlobStoreStats implements StoreStats, Closeable {
               indexValue.getOperationTimeInMs() == Utils.Infinite_Time ? indexSegment.getLastModifiedTimeMs()
                   : indexValue.getOperationTimeInMs();
           deletedKeys.put(indexEntry.getKey(), operationTimeInMs);
-          if (indexValue.getRelatedMessageOffset() != IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET
-              && indexValue.getRelatedMessageOffset() != indexValue.getOffset().getOffset()
-              && indexValue.getRelatedMessageOffset() >= indexSegment.getStartOffset().getOffset()
+          if (indexValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+              && indexValue.getOriginalMessageOffset() != indexValue.getOffset().getOffset()
+              && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()
               && operationTimeInMs >= referenceTimeInMs) {
             // delete is not relevant yet and it's in the same index segment as the original put. We need to find the
             // original put since it's still valid
@@ -854,11 +854,11 @@ class BlobStoreStats implements StoreStats, Closeable {
             if (indexValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
               // delete record
               IndexValue originalPut;
-              if (indexValue.getRelatedMessageOffset() == indexValue.getOffset().getOffset()) {
+              if (indexValue.getOriginalMessageOffset() == indexValue.getOffset().getOffset()) {
                 // delete record with no put record due to compaction and legacy bugs
                 originalPut = null;
-              } else if (indexValue.getRelatedMessageOffset() != IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET
-                  && indexValue.getRelatedMessageOffset() >= indexSegment.getStartOffset().getOffset()) {
+              } else if (indexValue.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+                  && indexValue.getOriginalMessageOffset() >= indexSegment.getStartOffset().getOffset()) {
                 // delete and put are in the same index segment
                 originalPut = getPutRecordForDeletedKey(entry.getKey(), indexValue);
                 if (originalPut.getOffset().compareTo(startOffset) >= 0) {

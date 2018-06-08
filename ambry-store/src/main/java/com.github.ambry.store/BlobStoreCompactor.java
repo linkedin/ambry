@@ -669,8 +669,8 @@ class BlobStoreCompactor {
         if (!deletesInEffect && !srcIndex.isExpired(value)) {
           logger.trace("Fetching the PUT entry of a deleted blob with entry {} in index segment with start offset {} in"
               + " {} because it needs to be retained", indexEntry, indexSegmentStartOffset, storeId);
-          long putRecordOffset = value.getRelatedMessageOffset();
-          if (putRecordOffset != IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET && putRecordOffset != value.getOffset()
+          long putRecordOffset = value.getOriginalMessageOffset();
+          if (putRecordOffset != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && putRecordOffset != value.getOffset()
               .getOffset() && indexSegmentStartOffset.getOffset() <= putRecordOffset) {
             try (BlobReadOptions options = srcIndex.getBlobReadInfo(indexEntry.getKey(),
                 EnumSet.allOf(StoreGetOptions.class))) {
@@ -811,7 +811,7 @@ class BlobStoreCompactor {
                     srcValue.getExpiresAtMs(), srcValue.getOperationTimeInMs(), srcValue.getAccountId(),
                     srcValue.getContainerId());
                 tgtValue.setFlag(IndexValue.Flags.Delete_Index);
-                tgtValue.clearRelatedMessageOffset();
+                tgtValue.clearOriginalMessageOffset();
                 tgtIndex.addToIndex(new IndexEntry(srcIndexEntry.getKey(), tgtValue), fileSpan);
               }
             } else {

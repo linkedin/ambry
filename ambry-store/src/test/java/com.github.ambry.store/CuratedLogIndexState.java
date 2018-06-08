@@ -285,7 +285,7 @@ class CuratedLogIndexState {
     } else {
       newValue = new IndexValue(CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, startOffset, Utils.Infinite_Time,
           time.milliseconds(), id.getAccountId(), id.getContainerId());
-      newValue.clearRelatedMessageOffset();
+      newValue.clearOriginalMessageOffset();
     }
     newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
     if (forcePut) {
@@ -355,12 +355,12 @@ class CuratedLogIndexState {
       newValue =
           new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, value.getFlags(), value.getExpiresAtMs(),
               time.milliseconds(), value.getAccountId(), value.getContainerId());
-      newValue.clearRelatedMessageOffset();
+      newValue.clearOriginalMessageOffset();
       forcePut = true;
     } else {
       newValue = new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, info.getExpirationTimeInMs(),
           info.getOperationTimeMs(), info.getAccountId(), info.getContainerId());
-      newValue.clearRelatedMessageOffset();
+      newValue.clearOriginalMessageOffset();
       forcePut = true;
     }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
@@ -1162,8 +1162,8 @@ class CuratedLogIndexState {
           assertEquals("Size does not match", referenceValue.getSize(), value.getSize());
           assertEquals("Account ID does not match", referenceValue.getAccountId(), value.getAccountId());
           assertEquals("Container ID does not match", referenceValue.getContainerId(), value.getContainerId());
-          assertEquals("Related message offset does not match", referenceValue.getRelatedMessageOffset(),
-              value.getRelatedMessageOffset());
+          assertEquals("Original message offset does not match", referenceValue.getOriginalMessageOffset(),
+              value.getOriginalMessageOffset());
           assertEquals("Flags do not match", referenceValue.getFlags(), value.getFlags());
           if (index.hardDeleter.enabled.get() && !deletedKeys.contains(referenceIndexSegmentEntry.getKey())) {
             assertEquals("Operation time does not match", referenceValue.getOperationTimeInMs(),
@@ -1248,9 +1248,9 @@ class CuratedLogIndexState {
         if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
           // delete record is always valid
           validEntries.add(new IndexEntry(key, value));
-          if (value.getRelatedMessageOffset() != IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET
-              && value.getRelatedMessageOffset() != value.getOffset().getOffset()
-              && value.getRelatedMessageOffset() >= indexSegmentStartOffset.getOffset() && !isDeletedAt(key,
+          if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
+              && value.getOriginalMessageOffset() != value.getOffset().getOffset()
+              && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset() && !isDeletedAt(key,
               deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)) {
             // delete is irrelevant but it's in the same index segment as the put and the put is still valid
             validEntries.add(new IndexEntry(key, getExpectedValue(key, true)));

@@ -487,7 +487,7 @@ class IndexSegment {
       logger.trace("IndexSegment {} inserting key - {} value - offset {} size {} ttl {} "
               + "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
           entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getExpiresAtMs(),
-          entry.getValue().getRelatedMessageOffset(), fileEndOffset);
+          entry.getValue().getOriginalMessageOffset(), fileEndOffset);
       boolean isPresent = index.containsKey(entry.getKey());
       index.computeIfAbsent(entry.getKey(), key -> new ConcurrentSkipListSet<>()).add(entry.getValue());
       if (!isPresent) {
@@ -835,13 +835,13 @@ class IndexSegment {
             bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
           }
           // add to the journal
-          long oMsgOff = blobValue.getRelatedMessageOffset();
-          if (oMsgOff != IndexValue.UNKNOWN_RELATED_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
+          long oMsgOff = blobValue.getOriginalMessageOffset();
+          if (oMsgOff != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
               && oMsgOff >= startOffset.getOffset()
               && journal.getKeyAtOffset(new Offset(startOffset.getName(), oMsgOff)) == null) {
             // we add an entry for the original message offset if it is within the same index segment and
             // an entry is not already in the journal
-            journal.addEntry(new Offset(startOffset.getName(), blobValue.getRelatedMessageOffset()), key);
+            journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
           }
           journal.addEntry(blobValue.getOffset(), key);
           // sizeWritten is only used for in-memory segments, and for those the padding does not come into picture.
@@ -987,22 +987,12 @@ class IndexSegment {
    */
   private void eliminateDuplicates(List<IndexEntry> entries) {
     Set<StoreKey> setToFindDuplicate = new HashSet<>();
-    ListIterator<IndexEntry> iterator;
     // first choose PUTs over update entries (omitting DELETEs)
-    iterator = entries.listIterator();
-    while (iterator.hasNext()) {
-      IndexEntry entry = iterator.next();
-      if (!entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
-        if (setToFindDuplicate.contains(entry.getKey())) {
-          iterator.remove();
-        } else {
-          setToFindDuplicate.add(entry.getKey());
-        }
-      }
-    }
+    entries.removeIf(
+        entry -> !entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) && !setToFindDuplicate.add(entry.getKey()));
     // then choose DELETEs over all other entries
     setToFindDuplicate.clear();
-    iterator = entries.listIterator(entries.size());
+    ListIterator<IndexEntry> iterator = entries.listIterator(entries.size());
     while (iterator.hasPrevious()) {
       IndexEntry entry = iterator.previous();
       if (setToFindDuplicate.contains(entry.getKey())) {
