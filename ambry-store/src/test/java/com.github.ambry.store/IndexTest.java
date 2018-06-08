@@ -122,7 +122,7 @@ public class IndexTest {
   }
 
   /**
-   * Tests for {@link PersistentIndex#findKey(StoreKey, FileSpan)}.
+   * Tests for {@link PersistentIndex#findKey(StoreKey, FileSpan, EnumSet)}.
    * Cases:
    * 1. FileSpan exactly that of the message
    * 2. FileSpan before and after message including it on the boundary
@@ -134,42 +134,10 @@ public class IndexTest {
   public void findKeyWithFileSpanTest() throws StoreException {
     // using only liveKeys to simplify the test - behavior does not differ based on the type of entry.
     for (MockId id : state.liveKeys) {
-      IndexValue expectedValue = state.getExpectedValue(id, true);
-      FileSpan fileSpanForMessage = state.log.getFileSpanForMessage(expectedValue.getOffset(), expectedValue.getSize());
-
-      // FileSpan that is exactly that of the message
-      verifyValue(id, state.index.findKey(id, fileSpanForMessage), fileSpanForMessage);
-
-      Offset putRecordOffset = state.getExpectedValue(id, true).getOffset();
-      Offset indexSegmentStartOffset = state.referenceIndex.floorKey(putRecordOffset);
-      Offset lowerSegmentStartOffset = state.referenceIndex.lowerKey(indexSegmentStartOffset);
-      Offset higherSegmentStartOffset = state.referenceIndex.higherKey(indexSegmentStartOffset);
-
-      // FileSpan from start offset of message to index end offset
-      FileSpan fileSpan = new FileSpan(fileSpanForMessage.getStartOffset(), state.index.getCurrentEndOffset());
-      verifyValue(id, state.index.findKey(id, fileSpan), fileSpan);
-
-      // FileSpan from start offset of index to end offset of message
-      fileSpan = new FileSpan(state.index.getStartOffset(), fileSpanForMessage.getEndOffset());
-      verifyValue(id, state.index.findKey(id, fileSpan), fileSpan);
-
-      // FileSpan that includes the message
-      Offset startOffset = lowerSegmentStartOffset == null ? indexSegmentStartOffset : lowerSegmentStartOffset;
-      Offset endOffset =
-          higherSegmentStartOffset == null ? state.index.getCurrentEndOffset() : higherSegmentStartOffset;
-      fileSpan = new FileSpan(startOffset, endOffset);
-      verifyValue(id, state.index.findKey(id, fileSpan), fileSpan);
-
-      if (higherSegmentStartOffset != null) {
-        // FileSpan higher than the entry (does not include entry)
-        fileSpan = new FileSpan(higherSegmentStartOffset, state.log.getEndOffset());
-        assertNull("There should have been no value returned", state.index.findKey(id, fileSpan));
-      }
-
-      if (lowerSegmentStartOffset != null) {
-        // FileSpan lower than the entry (does not include entry)
-        fileSpan = new FileSpan(state.index.getStartOffset(), lowerSegmentStartOffset);
-        assertNull("There should have been no value returned", state.index.findKey(id, fileSpan));
+      doFindKeyWithFileSpanTest(id,
+          EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
+      if (state.ttlUpdatedKeys.contains(id)) {
+        doFindKeyWithFileSpanTest(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
       }
     }
   }
@@ -1361,7 +1329,8 @@ public class IndexTest {
    * @param valueFromFind the {@link IndexValue} that needs to be verified.
    */
   private void verifyValue(MockId id, IndexValue valueFromFind) {
-    verifyValue(id, valueFromFind, null);
+    verifyValue(id, valueFromFind, null,
+        EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
   }
 
   /**
@@ -1369,11 +1338,13 @@ public class IndexTest {
    * @param id the {@link MockId} whose value is required.
    * @param valueFromFind the {@link IndexValue} that needs to be verified.
    * @param fileSpan the {@link FileSpan} to use to get expected value. Can be {@code null}
+   * @param types the types of {@link PersistentIndex.IndexEntryType} to look for. The latest entry matching one of the
+   *              types will be returned
    */
-  private void verifyValue(MockId id, IndexValue valueFromFind, FileSpan fileSpan) {
+  private void verifyValue(MockId id, IndexValue valueFromFind, FileSpan fileSpan,
+      EnumSet<PersistentIndex.IndexEntryType> types) {
     if (state.allKeys.containsKey(id)) {
-      IndexValue expectedValue =
-          state.getExpectedValue(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class), fileSpan);
+      IndexValue expectedValue = state.getExpectedValue(id, types, fileSpan);
       if (expectedValue != null) {
         assertNotNull("Value should be successfully fetched", valueFromFind);
         assertEquals("Bytes from value from index not as expected for " + id + " ex: " + expectedValue + ", actual: "
@@ -1383,6 +1354,61 @@ public class IndexTest {
       }
     } else {
       assertNull("There should have been no value returned", valueFromFind);
+    }
+  }
+
+  // findKeyWithFileSpanTest() helpers
+
+  /**
+   * Does the test for {@link PersistentIndex#findKey(StoreKey, FileSpan, EnumSet)} with the given {@code id}
+   * @param id the {@link MockId} to do the test for
+   * @param types the types of {@link PersistentIndex.IndexEntryType} to look for. The latest entry matching one of the
+   *              types will be returned
+   * @throws StoreException
+   */
+  private void doFindKeyWithFileSpanTest(MockId id, EnumSet<PersistentIndex.IndexEntryType> types)
+      throws StoreException {
+    IndexValue expectedValue = state.getExpectedValue(id, types, null);
+    FileSpan fileSpanForMessage = state.log.getFileSpanForMessage(expectedValue.getOffset(), expectedValue.getSize());
+
+    // FileSpan that is exactly that of the message
+    verifyValue(id, state.index.findKey(id, fileSpanForMessage, types), fileSpanForMessage, types);
+
+    Offset recordOffset = expectedValue.getOffset();
+    Offset indexSegmentStartOffset = state.referenceIndex.floorKey(recordOffset);
+    Offset lowerSegmentStartOffset = state.referenceIndex.lowerKey(indexSegmentStartOffset);
+    Offset higherSegmentStartOffset = state.referenceIndex.higherKey(indexSegmentStartOffset);
+
+    // FileSpan from start offset of message to index end offset
+    FileSpan fileSpan = new FileSpan(fileSpanForMessage.getStartOffset(), state.index.getCurrentEndOffset());
+    verifyValue(id, state.index.findKey(id, fileSpan, types), fileSpan, types);
+
+    // FileSpan from start offset of index to end offset of message
+    fileSpan = new FileSpan(state.index.getStartOffset(), fileSpanForMessage.getEndOffset());
+    verifyValue(id, state.index.findKey(id, fileSpan, types), fileSpan, types);
+
+    // FileSpan that includes the message
+    Offset startOffset = lowerSegmentStartOffset == null ? indexSegmentStartOffset : lowerSegmentStartOffset;
+    Offset endOffset = higherSegmentStartOffset == null ? state.index.getCurrentEndOffset() : higherSegmentStartOffset;
+    fileSpan = new FileSpan(startOffset, endOffset);
+    verifyValue(id, state.index.findKey(id, fileSpan, types), fileSpan, types);
+
+    if (higherSegmentStartOffset != null) {
+      // FileSpan higher than the entry (does not include entry)
+      fileSpan = new FileSpan(higherSegmentStartOffset, state.log.getEndOffset());
+      assertNull("There should have been no value returned", state.index.findKey(id, fileSpan, types));
+    }
+
+    if (lowerSegmentStartOffset != null) {
+      // FileSpan lower than the entry (does not include entry)
+      fileSpan = new FileSpan(state.index.getStartOffset(), lowerSegmentStartOffset);
+      IndexValue valueFromIndex = state.index.findKey(id, fileSpan, types);
+      if (expectedValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        assertTrue("The TTL update entry should not be returned",
+            valueFromIndex == null || !valueFromIndex.getOffset().equals(expectedValue.getOffset()));
+      } else {
+        assertNull("There should have been no value returned", valueFromIndex);
+      }
     }
   }
 
@@ -2644,7 +2670,8 @@ public class IndexTest {
    */
   private void verifyIndexValues(List<IndexEntry> indexEntries) throws StoreException {
     for (IndexEntry entry : indexEntries) {
-      IndexValue value = state.index.findKey(entry.getKey(), null);
+      IndexValue value = state.index.findKey(entry.getKey(), null,
+          EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
       IndexValue expectedValue = entry.getValue();
       assertEquals("Offset mismatch for " + entry.getKey(), expectedValue.getOffset(), value.getOffset());
       assertEquals("Size mismatch for " + entry.getKey(), expectedValue.getSize(), value.getSize());

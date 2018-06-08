@@ -494,11 +494,13 @@ class IndexSegment {
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       if (resetKey == null) {
-        // even if it is TTL update entry, we set the "reset" key as the PUT record. Reset key is intended only to
-        // be a hint so this does not affect correctness.
-        resetKey = new Pair<>(entry.getKey(),
-            entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) ? PersistentIndex.IndexEntryType.DELETE
-                : PersistentIndex.IndexEntryType.PUT);
+        PersistentIndex.IndexEntryType type = PersistentIndex.IndexEntryType.PUT;
+        if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+          type = PersistentIndex.IndexEntryType.DELETE;
+        } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+          type = PersistentIndex.IndexEntryType.TTL_UPDATE;
+        }
+        resetKey = new Pair<>(entry.getKey(), type);
       }
       numberOfItems.incrementAndGet();
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity());

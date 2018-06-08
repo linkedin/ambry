@@ -279,13 +279,14 @@ class BlobStore implements Store {
    * @param messageSetToWrite Non-empty set of messages to write to the store.
    * @param fileSpan The fileSpan on which the check for existence of the messages have to be made.
    * @return {@link MessageWriteSetStateInStore} representing the outcome of the state check.
-   * @throws StoreException relays those encountered from {@link PersistentIndex#findKey(StoreKey, FileSpan)}.
+   * @throws StoreException relays those encountered from {@link PersistentIndex#findKey(StoreKey, FileSpan, EnumSet)}.
    */
   private MessageWriteSetStateInStore checkWriteSetStateInStore(MessageWriteSet messageSetToWrite, FileSpan fileSpan)
       throws StoreException {
     int existingIdenticalEntries = 0;
     for (MessageInfo info : messageSetToWrite.getMessageSetInfo()) {
-      if (index.findKey(info.getStoreKey(), fileSpan) != null) {
+      if (index.findKey(info.getStoreKey(), fileSpan,
+          EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE)) != null) {
         if (index.wasRecentlySeen(info)) {
           existingIdenticalEntries++;
           metrics.identicalPutAttemptCount.inc();
@@ -448,7 +449,8 @@ class BlobStore implements Store {
         if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
           FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
           for (MessageInfo info : infoList) {
-            IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan,
+                EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
             if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               throw new StoreException(
                   "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",

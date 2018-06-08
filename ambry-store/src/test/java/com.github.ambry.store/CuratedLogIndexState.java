@@ -447,9 +447,8 @@ class CuratedLogIndexState {
    * @return the value that is expected to obtained from the {@link PersistentIndex}
    */
   IndexValue getExpectedValue(MockId id, boolean wantPut) {
-    return getExpectedValue(id,
-        wantPut ? EnumSet.of(PersistentIndex.IndexEntryType.PUT) : EnumSet.allOf(PersistentIndex.IndexEntryType.class),
-        null);
+    return getExpectedValue(id, wantPut ? EnumSet.of(PersistentIndex.IndexEntryType.PUT)
+        : EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE), null);
   }
 
   /**
@@ -480,29 +479,34 @@ class CuratedLogIndexState {
       }
     }
 
-    IndexValue toRet = null;
+    IndexValue retCandidate = null;
     ListIterator<IndexValue> iterator = toConsider.listIterator(toConsider.size());
     while (iterator.hasPrevious()) {
       IndexValue value = iterator.previous();
       if (types.contains(PersistentIndex.IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
-        toRet = value;
+        retCandidate = value;
+        break;
+      } else if (types.contains(PersistentIndex.IndexEntryType.TTL_UPDATE) && !value.isFlagSet(
+          IndexValue.Flags.Delete_Index) && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        retCandidate = value;
         break;
       } else if (types.contains(PersistentIndex.IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)
           && !value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-        toRet = value;
+        retCandidate = value;
         break;
       }
     }
 
-    if (toRet != null) {
+    if (retCandidate != null) {
       IndexValue latest = toConsider.get(toConsider.size() - 1);
-      if (latest.getExpiresAtMs() != toRet.getExpiresAtMs()) {
-        toRet = new IndexValue(toRet.getOffset().getName(), toRet.getBytes(), toRet.getVersion());
-        toRet.setFlag(IndexValue.Flags.Ttl_Update_Index);
-        toRet.setExpiresAtMs(latest.getExpiresAtMs());
+      if (latest.getExpiresAtMs() != retCandidate.getExpiresAtMs()) {
+        retCandidate =
+            new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(), retCandidate.getVersion());
+        retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
+        retCandidate.setExpiresAtMs(latest.getExpiresAtMs());
       }
     }
-    return toRet;
+    return retCandidate;
   }
 
   /**

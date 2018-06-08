@@ -54,7 +54,7 @@ class PersistentIndex {
    * Represents the different types of index entries.
    */
   enum IndexEntryType {
-    PUT, DELETE,
+    TTL_UPDATE, PUT, DELETE
   }
 
   static final short VERSION_0 = 0;
@@ -500,27 +500,30 @@ class PersistentIndex {
    * @throws StoreException
    */
   IndexValue findKey(StoreKey key) throws StoreException {
-    return findKey(key, null);
+    return findKey(key, null, EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE));
   }
 
   /**
-   * Finds the value associated with a key if it is present in the index within the passed in filespan.
-   * Filespan represents the start offset and end offset in the log.
+   * Finds the latest {@link IndexValue} associated with the {@code key} that matches any of the provided {@code types}
+   * if present in the index within the given {@code fileSpan}.
    * @param key The key to do the exist check against
    * @param fileSpan FileSpan which specifies the range within which search should be made
+   * @param types the types of {@link IndexEntryType} to look for. The latest entry matching one of the types will be
+   *              returned
    * @return The associated IndexValue if one exists within the fileSpan, null otherwise.
    * @throws StoreException
    */
-  IndexValue findKey(StoreKey key, FileSpan fileSpan) throws StoreException {
-    return findKey(key, fileSpan, EnumSet.allOf(IndexEntryType.class), validIndexSegments);
+  IndexValue findKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types) throws StoreException {
+    return findKey(key, fileSpan, types, validIndexSegments);
   }
 
   /**
-   * Finds the {@link IndexValue} of type {@code type} associated with the {@code key} if it is present in the index
-   * within the given {@code fileSpan}.
+   * Finds the latest {@link IndexValue} associated with the {@code key} that matches any of the provided {@code types}
+   * if present in the index within the given {@code fileSpan}.
    * @param key the {@link StoreKey} whose {@link IndexValue} is required.
    * @param fileSpan {@link FileSpan} which specifies the range within which search should be made
-   * @param types the accepted {@link IndexEntryType}s.
+   * @param types the types of {@link IndexEntryType} to look for. The latest entry matching one of the types will be
+   *              returned
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
    * @return The associated {@link IndexValue} of the type {@code type} if it exists within the {@code fileSpan},
    * {@code null} otherwise.
@@ -559,6 +562,10 @@ class PersistentIndex {
             logger.trace("Index : {} found value offset {} size {} ttl {}", dataDir, value.getOffset(), value.getSize(),
                 value.getExpiresAtMs());
             if (types.contains(IndexEntryType.DELETE) && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+              retCandidate = value;
+              break;
+            } else if (types.contains(IndexEntryType.TTL_UPDATE) && !value.isFlagSet(IndexValue.Flags.Delete_Index)
+                && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
               retCandidate = value;
               break;
             } else if (types.contains(IndexEntryType.PUT) && !value.isFlagSet(IndexValue.Flags.Delete_Index)
@@ -694,7 +701,7 @@ class PersistentIndex {
    */
   BlobReadOptions getBlobReadInfo(StoreKey id, EnumSet<StoreGetOptions> getOptions) throws StoreException {
     ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
-    IndexValue value = findKey(id, null, EnumSet.allOf(IndexEntryType.class), indexSegments);
+    IndexValue value = findKey(id, null, EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
     BlobReadOptions readOptions;
     if (value == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
@@ -846,7 +853,7 @@ class PersistentIndex {
           for (JournalEntry entry : entries) {
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.allOf(IndexEntryType.class), indexSegments);
+                    EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
             messageEntries.add(
                 new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                     value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
@@ -1149,7 +1156,7 @@ class PersistentIndex {
           }
           newTokenOffsetInJournal = entry.getOffset();
           IndexValue value = findKey(entry.getKey(), new FileSpan(entry.getOffset(), endOffsetOfSnapshot),
-              EnumSet.allOf(IndexEntryType.class), indexSegments);
+              EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
           messageEntries.add(
               new MessageInfo(entry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
                   value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
@@ -1419,7 +1426,7 @@ class PersistentIndex {
 
             IndexValue value =
                 findKey(entry.getKey(), new FileSpan(entry.getOffset(), getCurrentEndOffset(indexSegments)),
-                    EnumSet.allOf(IndexEntryType.class), indexSegments);
+                    EnumSet.of(IndexEntryType.PUT, IndexEntryType.DELETE), indexSegments);
             if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
               messageEntries.add(new MessageInfo(entry.getKey(), value.getSize(), true,
                   value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),

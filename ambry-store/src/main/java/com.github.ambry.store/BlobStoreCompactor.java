@@ -607,7 +607,8 @@ class BlobStoreCompactor {
       IndexValue copyCandidateValue = copyCandidate.getValue();
       // search for duplicates in srcIndex if required
       if (duplicateSearchSpan != null) {
-        IndexValue possibleDuplicate = srcIndex.findKey(copyCandidate.getKey(), duplicateSearchSpan);
+        IndexValue possibleDuplicate = srcIndex.findKey(copyCandidate.getKey(), duplicateSearchSpan,
+            EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
         if (possibleDuplicate != null) {
           if (possibleDuplicate.isFlagSet(IndexValue.Flags.Delete_Index)) {
             // copyCandidate is surely a duplicate because srcIndex contains a DELETE index entry
@@ -690,7 +691,8 @@ class BlobStoreCompactor {
         if (deletesInEffect) {
           FileSpan deleteSearchSpan =
               new FileSpan(indexSegmentStartOffset, startOffsetOfLastIndexSegmentForDeleteCheck);
-          IndexValue searchedValue = srcIndex.findKey(indexEntry.getKey(), deleteSearchSpan);
+          IndexValue searchedValue = srcIndex.findKey(indexEntry.getKey(), deleteSearchSpan,
+              EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
           if (!searchedValue.isFlagSet(IndexValue.Flags.Delete_Index)) {
             // PUT entry that has not expired and is not considered deleted.
             validEntries.add(indexEntry);

@@ -1509,9 +1509,12 @@ public class BlobStoreCompactorTest {
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     for (IndexEntry entry : indexEntries) {
       MockId id = (MockId) entry.getKey();
-      PersistentIndex.IndexEntryType entryType =
-          entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) ? PersistentIndex.IndexEntryType.DELETE
-              : PersistentIndex.IndexEntryType.PUT;
+      PersistentIndex.IndexEntryType entryType = PersistentIndex.IndexEntryType.PUT;
+      if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        entryType = PersistentIndex.IndexEntryType.DELETE;
+      } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        entryType = PersistentIndex.IndexEntryType.TTL_UPDATE;
+      }
       logEntriesInOrder.add(new LogEntry(id, entryType, entry.getValue().getSize()));
     }
   }
