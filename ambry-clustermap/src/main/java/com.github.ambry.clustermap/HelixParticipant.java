@@ -18,7 +18,6 @@ import com.github.ambry.server.AmbryHealthReport;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -152,15 +151,13 @@ class HelixParticipant implements ClusterParticipant {
     synchronized (helixAdministrationLock) {
       logger.trace("Getting stopped replicas from instanceConfig");
       List<String> stoppedListInHelix = getStoppedReplicas();
-      if (stoppedListInHelix == null) {
-        stoppedListInHelix = new ArrayList<>();
-      }
       Set<String> stoppedSet = new HashSet<>(stoppedListInHelix);
-      boolean stoppedSetUpdated = markStop ? stoppedSet.addAll(replicasToUpdate) : stoppedSet.removeAll(replicasToUpdate);
-      if(stoppedSetUpdated){
+      boolean stoppedSetUpdated =
+          markStop ? stoppedSet.addAll(replicasToUpdate) : stoppedSet.removeAll(replicasToUpdate);
+      if (stoppedSetUpdated) {
         logger.trace("Updating the stopped list in Helix InstanceConfig");
         setStoppedResult = setStoppedReplicas(new ArrayList<>(stoppedSet));
-      }else{
+      } else {
         logger.trace("No replicas should be added or removed, no need to update the stopped list");
         setStoppedResult = true;
       }
@@ -247,7 +244,7 @@ class HelixParticipant implements ClusterParticipant {
       throw new IllegalStateException(
           "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
-    logger.trace("Setting InstanceConfig with list of sealed replicas: {}", Arrays.toString(sealedReplicas.toArray()));
+    logger.trace("Setting InstanceConfig with list of sealed replicas: {}", sealedReplicas.toArray());
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
@@ -264,8 +261,7 @@ class HelixParticipant implements ClusterParticipant {
       throw new IllegalStateException(
           "No instance config found for cluster: \"" + clusterName + "\", instance: \"" + instanceName + "\"");
     }
-    logger.trace("Setting InstanceConfig with list of stopped replicas: {}",
-        Arrays.toString(stoppedReplicas.toArray()));
+    logger.trace("Setting InstanceConfig with list of stopped replicas: {}", stoppedReplicas.toArray());
     instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
     return helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
   }
