@@ -15,7 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.WriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -282,47 +282,47 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests blob store use of {@link WriteStatusDelegate}
+   * Tests blob store use of {@link ReplicaStatusDelegate}
    * @throws StoreException
    */
   @Test
-  public void testClusterManagerWriteStatusDelegateUse() throws StoreException, IOException, InterruptedException {
-    //Setup threshold test properties, replicaId, mock write status delegate
+  public void testClusterManagerReplicaStatusDelegateUse() throws StoreException, IOException, InterruptedException {
+    //Setup threshold test properties, replicaId, mock replica status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
-    WriteStatusDelegate writeStatusDelegate = mock(WriteStatusDelegate.class);
-    when(writeStatusDelegate.unseal(any())).thenReturn(true);
-    when(writeStatusDelegate.seal(any())).thenReturn(true);
+    ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
+    when(replicaStatusDelegate.unseal(any())).thenReturn(true);
+    when(replicaStatusDelegate.seal(any())).thenReturn(true);
 
     //Restart store
-    restartStore(defaultConfig, replicaId, writeStatusDelegate);
+    restartStore(defaultConfig, replicaId, replicaStatusDelegate);
 
     //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
-    verifyZeroInteractions(writeStatusDelegate);
+    verifyZeroInteractions(replicaStatusDelegate);
 
     //Verify that putting in data that doesn't go over the threshold doesn't trigger the delegate
     put(1, 50, Utils.Infinite_Time);
-    verifyNoMoreInteractions(writeStatusDelegate);
+    verifyNoMoreInteractions(replicaStatusDelegate);
 
     //Verify that after putting in enough data, the store goes to read only
     List<MockId> addedIds = put(4, 900, Utils.Infinite_Time);
-    verify(writeStatusDelegate, times(1)).seal(replicaId);
+    verify(replicaStatusDelegate, times(1)).seal(replicaId);
 
     //Assumes ClusterParticipant sets replicaId status to true
     replicaId.setSealedState(true);
 
     //Change config threshold but with delegate disabled, verify that nothing happens
-    restartStore(changeThreshold(99, 1, false), replicaId, writeStatusDelegate);
-    verifyNoMoreInteractions(writeStatusDelegate);
+    restartStore(changeThreshold(99, 1, false), replicaId, replicaStatusDelegate);
+    verifyNoMoreInteractions(replicaStatusDelegate);
 
     //Change config threshold to higher, see that it gets changed to unsealed on reset
-    restartStore(changeThreshold(99, 1, true), replicaId, writeStatusDelegate);
-    verify(writeStatusDelegate, times(1)).unseal(replicaId);
+    restartStore(changeThreshold(99, 1, true), replicaId, replicaStatusDelegate);
+    verify(replicaStatusDelegate, times(1)).unseal(replicaId);
     replicaId.setSealedState(false);
 
     //Reset thresholds, verify that it changed back
-    restartStore(defaultConfig, replicaId, writeStatusDelegate);
-    verify(writeStatusDelegate, times(2)).seal(replicaId);
+    restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+    verify(replicaStatusDelegate, times(2)).seal(replicaId);
     replicaId.setSealedState(true);
 
     //Remaining tests only relevant for segmented logs
@@ -334,20 +334,20 @@ public class BlobStoreTest {
 
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
-      restartStore(defaultConfig, replicaId, writeStatusDelegate);
-      verifyNoMoreInteractions(writeStatusDelegate);
+      restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+      verifyNoMoreInteractions(replicaStatusDelegate);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
       //that the store is now read-write
       time.sleep(TimeUnit.DAYS.toMillis(8));
       store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)),
           ByteBuffer.allocateDirect(PUT_RECORD_SIZE * 2 + 1));
-      verify(writeStatusDelegate, times(2)).unseal(replicaId);
+      verify(replicaStatusDelegate, times(2)).unseal(replicaId);
 
       //Test if replicaId is erroneously true that it updates the status upon startup
       replicaId.setSealedState(true);
-      restartStore(defaultConfig, replicaId, writeStatusDelegate);
-      verify(writeStatusDelegate, times(3)).unseal(replicaId);
+      restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+      verify(replicaStatusDelegate, times(3)).unseal(replicaId);
     }
     store.shutdown();
   }
@@ -877,8 +877,9 @@ public class BlobStoreTest {
     for (int i = 0; i < count; i++) {
       MockId id = getUniqueId(accountId, containerId);
       long crc = random.nextLong();
-      MessageInfo info = new MessageInfo(id, size, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
-          Utils.Infinite_Time);
+      MessageInfo info =
+          new MessageInfo(id, size, false, false, expiresAtMs, crc, id.getAccountId(), id.getContainerId(),
+              Utils.Infinite_Time);
       ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
       ids.add(id);
       infos.add(info);
@@ -1380,11 +1381,12 @@ public class BlobStoreTest {
     return createBlobStore(replicaId, config, null);
   }
 
-  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config, WriteStatusDelegate writeStatusDelegate) {
+  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
+      ReplicaStatusDelegate replicaStatusDelegate) {
     MetricRegistry registry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(registry);
     return new BlobStore(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator,
-        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, writeStatusDelegate, time);
+        metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegate, time);
   }
 
   private StoreTestUtils.MockReplicaId getMockReplicaId(String filePath) {
@@ -1398,7 +1400,7 @@ public class BlobStoreTest {
    * @return StoreConfig object with new threshold values
    */
   private StoreConfig changeThreshold(int readOnlyThreshold, int readWriteDeltaThreshold, boolean delegateEnabled) {
-    properties.setProperty(StoreConfig.storeWriteStatusDelegateEnableName, Boolean.toString(delegateEnabled));
+    properties.setProperty(StoreConfig.storeReplicaStatusDelegateEnableName, Boolean.toString(delegateEnabled));
     properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName,
         Integer.toString(readOnlyThreshold));
     properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName,
@@ -1406,7 +1408,7 @@ public class BlobStoreTest {
     return new StoreConfig(new VerifiableProperties(properties));
   }
 
-  private void restartStore(StoreConfig config, ReplicaId replicaId, WriteStatusDelegate delegate)
+  private void restartStore(StoreConfig config, ReplicaId replicaId, ReplicaStatusDelegate delegate)
       throws StoreException {
     store.shutdown();
     store = createBlobStore(replicaId, config, delegate);

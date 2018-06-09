@@ -28,6 +28,7 @@ class AmbryReplica implements ReplicaId {
   private final AmbryDisk disk;
   private final long capacityBytes;
   private volatile boolean isSealed;
+  private volatile boolean isStopped = false;
 
   /**
    * Instantiate an AmbryReplica instance.
@@ -95,6 +96,10 @@ class AmbryReplica implements ReplicaId {
     this.isSealed = isSealed;
   }
 
+  void setStoppedState(boolean isStopped) {
+    this.isStopped = isStopped;
+  }
+
   @Override
   public AmbryDisk getDiskId() {
     return disk;
@@ -102,7 +107,7 @@ class AmbryReplica implements ReplicaId {
 
   @Override
   public boolean isDown() {
-    return disk.getState() == HardwareState.UNAVAILABLE;
+    return disk.getState() == HardwareState.UNAVAILABLE || isStopped;
   }
 
   @Override

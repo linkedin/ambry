@@ -532,6 +532,7 @@ class HelixBootstrapUpgradeUtil {
       instanceConfig.getRecord().setMapFields(diskInfos);
     }
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedPartitionsList);
+    instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, new ArrayList<>());
     return instanceConfig;
   }
 

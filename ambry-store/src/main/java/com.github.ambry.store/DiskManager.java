@@ -17,7 +17,7 @@ package com.github.ambry.store;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.WriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Throttler;
@@ -25,9 +25,12 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,6 +45,7 @@ class DiskManager {
   static final String CLEANUP_OPS_JOB_NAME = "cleanupOps";
 
   private final Map<PartitionId, BlobStore> stores = new HashMap<>();
+  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new HashMap<>();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -49,6 +53,8 @@ class DiskManager {
   private final ScheduledExecutorService longLivedTaskScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
+  private final List<String> stoppedReplicas;
+  private final ReplicaStatusDelegate replicaStatusDelegate;
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -71,7 +77,8 @@ class DiskManager {
   DiskManager(DiskId disk, List<ReplicaId> replicas, StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, StorageManagerMetrics metrics, StoreMetrics storeMainMetrics,
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, WriteStatusDelegate writeStatusDelegate, Time time) {
+      MessageStoreHardDelete hardDelete, ReplicaStatusDelegate replicaStatusDelegate, List<String> stoppedReplicas,
+      Time time) {
     this.disk = disk;
     this.metrics = metrics;
     this.time = time;
@@ -80,13 +87,16 @@ class DiskManager {
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling,
         new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName),
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
+    this.replicaStatusDelegate = replicaStatusDelegate;
+    this.stoppedReplicas = stoppedReplicas;
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
                 time);
         stores.put(replica.getPartitionId(), store);
+        partitionToReplicaMap.put(replica.getPartitionId(), replica);
       }
     }
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
@@ -104,6 +114,10 @@ class DiskManager {
 
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+        if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
+          logger.info("Skip the store {} because it is on the stopped list", partitionAndStore.getKey());
+          continue;
+        }
         Thread thread = Utils.newThread("store-startup-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().start();
@@ -166,6 +180,9 @@ class DiskManager {
       final AtomicInteger numFailures = new AtomicInteger(0);
       List<Thread> shutdownThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
+        if (!partitionAndStore.getValue().isStarted()) {
+          continue;
+        }
         Thread thread = Utils.newThread("store-shutdown-" + partitionAndStore.getKey(), () -> {
           try {
             partitionAndStore.getValue().shutdown();
@@ -243,6 +260,7 @@ class DiskManager {
   /**
    * Start the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be started.
+   * @return {@code true} if start store was successful. {@code false} if not.
    */
   boolean startBlobStore(PartitionId id) {
     BlobStore store = stores.get(id);
@@ -264,6 +282,7 @@ class DiskManager {
   /**
    * Shutdown the BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be shutdown.
+   * @return {@code true} if shutdown store was successful. {@code false} if not.
    */
   boolean shutdownBlobStore(PartitionId id) {
     BlobStore store = stores.get(id);
@@ -280,6 +299,41 @@ class DiskManager {
       }
       return true;
     }
+  }
+
+  /**
+   * Set the BlobStore stopped state with given {@link PartitionId} {@code id}.
+   * @param partitionIds a list of {@link PartitionId} of the {@link BlobStore} whose stopped state should be set.
+   * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
+   * @return a list of {@link PartitionId} whose stopped state fails to be updated.
+   */
+  List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
+    Set<PartitionId> failToUpdateStores = new HashSet<>();
+    List<ReplicaId> replicasToUpdate = new ArrayList<>();
+    for (PartitionId id : partitionIds) {
+      BlobStore store = stores.get(id);
+      if (store == null) {
+        // no need to check if the store is started because this method could be called after store is successfully shutdown.
+        logger.error("store is not found on this disk when trying to update stoppedReplicas list");
+        failToUpdateStores.add(id);
+      } else {
+        replicasToUpdate.add(partitionToReplicaMap.get(id));
+      }
+    }
+    boolean updated = false;
+    if (replicaStatusDelegate != null) {
+      logger.trace("Setting replica stopped state via ReplicaStatusDelegate on replica {}",
+          Arrays.toString(replicasToUpdate.toArray()));
+      updated = markStop ? replicaStatusDelegate.markStopped(replicasToUpdate)
+          : replicaStatusDelegate.unmarkStopped(replicasToUpdate);
+    } else {
+      logger.warn("The ReplicaStatusDelegate is not instantiated");
+    }
+    if (!updated) {
+      // either mark/unmark operation fails or ReplicaStatusDelegate is not instantiated.
+      failToUpdateStores.addAll(partitionIds);
+    }
+    return new ArrayList<>(failToUpdateStores);
   }
 
   /**

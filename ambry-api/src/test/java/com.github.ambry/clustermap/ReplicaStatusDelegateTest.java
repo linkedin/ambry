@@ -14,22 +14,25 @@
 
 package com.github.ambry.clustermap;
 
+import java.util.Arrays;
+import java.util.List;
 import org.junit.Test;
 
 import static org.mockito.Mockito.*;
 
 
-public class WriteStatusDelegateTest {
+public class ReplicaStatusDelegateTest {
 
   /**
-   * Tests WriteStatusDelegate
+   * Tests ReplicaStatusDelegate
    */
   @Test
   public void testDelegate() {
     //Initializes delegate and arguments
     ClusterParticipant clusterParticipant = mock(ClusterParticipant.class);
     ReplicaId replicaId = mock(ReplicaId.class);
-    WriteStatusDelegate delegate = new WriteStatusDelegate(clusterParticipant);
+    ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(clusterParticipant);
+    List<ReplicaId> replicaIds = Arrays.asList(replicaId);
 
     //Checks that the right underlying ClusterParticipant methods are called
     verifyZeroInteractions(clusterParticipant);
@@ -38,6 +41,15 @@ public class WriteStatusDelegateTest {
     verifyNoMoreInteractions(clusterParticipant);
     delegate.unseal(replicaId);
     verify(clusterParticipant).setReplicaSealedState(replicaId, false);
+    verifyNoMoreInteractions(clusterParticipant);
+    delegate.markStopped(replicaIds);
+    verify(clusterParticipant).setReplicaStoppedState(replicaIds, true);
+    verifyNoMoreInteractions(clusterParticipant);
+    delegate.unmarkStopped(replicaIds);
+    verify(clusterParticipant).setReplicaStoppedState(replicaIds, false);
+    verifyNoMoreInteractions(clusterParticipant);
+    delegate.getStoppedReplicas();
+    verify(clusterParticipant).getStoppedReplicas();
     verifyNoMoreInteractions(clusterParticipant);
   }
 }

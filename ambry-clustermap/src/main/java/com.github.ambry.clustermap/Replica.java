@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 class Replica implements ReplicaId {
   private final Partition partition;
   private Disk disk;
+  private volatile boolean isStopped = false;
 
   private Logger logger = LoggerFactory.getLogger(getClass());
 
@@ -91,7 +92,7 @@ class Replica implements ReplicaId {
   @Override
   public boolean isDown() {
     return getDataNodeId().getState() == HardwareState.UNAVAILABLE
-        || getDiskId().getState() == HardwareState.UNAVAILABLE;
+        || getDiskId().getState() == HardwareState.UNAVAILABLE || isStopped;
   }
 
   @Override
@@ -113,6 +114,10 @@ class Replica implements ReplicaId {
     return peers;
   }
 
+  void setStoppedState(boolean isStopped) {
+    this.isStopped = isStopped;
+  }
+  
   protected void validatePartition() {
     if (partition == null) {
       throw new IllegalStateException("Partition cannot be null.");

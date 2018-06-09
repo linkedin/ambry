@@ -18,12 +18,13 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-import com.github.ambry.clustermap.WriteStatusDelegate;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,11 +60,13 @@ public class StorageManager {
   public StorageManager(StoreConfig storeConfig, DiskManagerConfig diskManagerConfig,
       ScheduledExecutorService scheduler, MetricRegistry registry, List<? extends ReplicaId> replicas,
       StoreKeyFactory keyFactory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-      WriteStatusDelegate writeStatusDelegate, Time time) throws StoreException {
+      ReplicaStatusDelegate replicaStatusDelegate, Time time) throws StoreException {
     verifyConfigs(storeConfig, diskManagerConfig);
     metrics = new StorageManagerMetrics(registry);
     StoreMetrics storeMainMetrics = new StoreMetrics(registry);
     StoreMetrics storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
+    List<String> stoppedReplicas =
+        replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
     this.time = time;
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
@@ -75,7 +78,8 @@ public class StorageManager {
       List<ReplicaId> replicasForDisk = entry.getValue();
       DiskManager diskManager =
           new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
-              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, writeStatusDelegate, time);
+              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, stoppedReplicas,
+              time);
       diskManagers.add(diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
@@ -221,6 +225,31 @@ public class StorageManager {
   public boolean shutdownBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.shutdownBlobStore(id);
+  }
+
+  /**
+   * Set BlobStore Stopped state with given {@link PartitionId} {@code id}.
+   * @param partitionIds a list {@link PartitionId} of the {@link Store} whose stopped state should be set.
+   * @param markStop whether to mark BlobStore as stopped ({@code true}) or started.
+   * @return a list of {@link PartitionId} whose stopped state fails to be updated.
+   */
+  public List<PartitionId> setBlobStoreStoppedState(List<PartitionId> partitionIds, boolean markStop) {
+    Map<DiskManager, List<PartitionId>> diskManagerToPartitionMap = new HashMap<>();
+    List<PartitionId> failToUpdateStores = new ArrayList<>();
+    for (PartitionId id : partitionIds) {
+      DiskManager diskManager = partitionToDiskManager.get(id);
+      if (diskManager != null) {
+        diskManagerToPartitionMap.computeIfAbsent(diskManager, disk -> new ArrayList<>()).add(id);
+      } else {
+        failToUpdateStores.add(id);
+      }
+    }
+    for (Map.Entry<DiskManager, List<PartitionId>> diskToPartitions : diskManagerToPartitionMap.entrySet()) {
+      List<PartitionId> failList =
+          diskToPartitions.getKey().setBlobStoreStoppedState(diskToPartitions.getValue(), markStop);
+      failToUpdateStores.addAll(failList);
+    }
+    return failToUpdateStores;
   }
 
   /**
