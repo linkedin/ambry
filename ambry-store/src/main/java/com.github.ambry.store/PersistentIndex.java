@@ -510,7 +510,8 @@ class PersistentIndex {
    * @param fileSpan FileSpan which specifies the range within which search should be made
    * @param types the types of {@link IndexEntryType} to look for. The latest entry matching one of the types will be
    *              returned
-   * @return The associated IndexValue if one exists within the fileSpan, null otherwise.
+   * @return The latest {@link IndexValue} for {@code key} conforming to one of the types {@code types} - if one exists
+   * within the {@code fileSpan}, {@code null} otherwise.
    * @throws StoreException
    */
   IndexValue findKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types) throws StoreException {
@@ -525,8 +526,8 @@ class PersistentIndex {
    * @param types the types of {@link IndexEntryType} to look for. The latest entry matching one of the types will be
    *              returned
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
-   * @return The associated {@link IndexValue} of the type {@code type} if it exists within the {@code fileSpan},
-   * {@code null} otherwise.
+   * @return The latest {@link IndexValue} for {@code key} conforming to one of the types {@code types} - if one exists
+   * within the {@code fileSpan}, {@code null} otherwise.
    * @throws StoreException
    */
   private IndexValue findKey(StoreKey key, FileSpan fileSpan, EnumSet<IndexEntryType> types,
