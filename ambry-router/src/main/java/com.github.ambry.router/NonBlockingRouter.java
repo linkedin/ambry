@@ -656,8 +656,9 @@ class NonBlockingRouter implements Router {
         if (exception != null) {
           completeOperation(futureResult, callback, null, exception, false);
         } else if (result.getBlobResult != null) {
-          exception = new RouterException("Unexpected result returned by GET operation before TTL update",
-              RouterErrorCode.UnexpectedInternalError);
+          exception =
+              new RouterException("GET blob call returned the blob instead of just the store keys (before TTL update)",
+                  RouterErrorCode.UnexpectedInternalError);
           completeOperation(futureResult, callback, null, exception, false);
         } else if (result.storeKeys != null) {
           result.storeKeys.forEach(key -> blobIdStrs.add(key.getID()));

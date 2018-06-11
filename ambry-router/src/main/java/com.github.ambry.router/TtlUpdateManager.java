@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -56,7 +57,7 @@ class TtlUpdateManager {
   private final RouterConfig routerConfig;
   private final Set<TtlUpdateOperation> ttlUpdateOperations =
       Collections.newSetFromMap(new ConcurrentHashMap<TtlUpdateOperation, Boolean>());
-  private final HashMap<Integer, TtlUpdateOperation> correlationIdToTtlUpdateOperation = new HashMap<>();
+  private final Map<Integer, TtlUpdateOperation> correlationIdToTtlUpdateOperation = new HashMap<>();
   private static final Logger logger = LoggerFactory.getLogger(TtlUpdateManager.class);
 
   /**
@@ -80,7 +81,7 @@ class TtlUpdateManager {
    * Creates a TtlUpdateManager.
    * @param clusterMap The {@link ClusterMap} of the cluster.
    * @param responseHandler The {@link ResponseHandler} used to notify failures for failure detection.
-   * @param notificationSystem The {@link NotificationSystem} used for notifying blob deletions.
+   * @param notificationSystem The {@link NotificationSystem} used for notifying ttl updates for blobs.
    * @param routerConfig The {@link RouterConfig} containing the configs for the TtlUpdateManager.
    * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
    * @param time The {@link Time} instance to use.
@@ -271,8 +272,8 @@ class TtlUpdateManager {
     /**
      * Constructor
      * @param blobIds the {@link BlobId}s being tracked
-     * @param futureResult the {@link FutureResult} to be triggered once acks are recieved for all blobs
-     * @param callback the {@link Callback} to be triggered once acks are recieved for all blobs
+     * @param futureResult the {@link FutureResult} to be triggered once acks are received for all blobs
+     * @param callback the {@link Callback} to be triggered once acks are received for all blobs
      */
     BatchTtlUpdateOperationCallbackTracker(List<BlobId> blobIds, FutureResult<Void> futureResult,
         Callback<Void> callback) {
@@ -288,7 +289,7 @@ class TtlUpdateManager {
     /**
      * Gets a {@link Callback} personalized for {@code blobId}.
      * @param blobId the {@link BlobId} for which the
-     * @return
+     * @return the {@link Callback} to be used with the {@link TtlUpdateOperation} for {@code blobId}.
      */
     Callback<Void> getCallback(final BlobId blobId) {
       return (result, exception) -> {

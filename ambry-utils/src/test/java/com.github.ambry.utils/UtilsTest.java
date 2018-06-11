@@ -444,6 +444,9 @@ public class UtilsTest {
     assertTrue("Should be declared as a client termination", Utils.isPossibleClientTermination(exception));
   }
 
+  /**
+   * Tests for {@link Utils#getTtlInSecsFromExpiryMs(long, long)}.
+   */
   @Test
   public void getTtlInSecsFromExpiryMsTest() {
     long creationTimeMs = SystemTime.getInstance().milliseconds();

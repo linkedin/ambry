@@ -30,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -74,7 +75,8 @@ public class MessageInfoAndMetadataListSerDeTest {
             containerIds[3], partitionId, false)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
     long[] times = {SystemTime.getInstance().milliseconds(),
-        SystemTime.getInstance().milliseconds() - 1, SystemTime.getInstance().milliseconds() + 20, Utils.Infinite_Time};
+        SystemTime.getInstance().milliseconds() - 1,
+        SystemTime.getInstance().milliseconds() + TimeUnit.SECONDS.toMillis(5), Utils.Infinite_Time};
     MessageMetadata[] messageMetadata = new MessageMetadata[4];
     messageMetadata[0] = new MessageMetadata(ByteBuffer.wrap(getRandomBytes(100)));
     messageMetadata[1] = new MessageMetadata(null);

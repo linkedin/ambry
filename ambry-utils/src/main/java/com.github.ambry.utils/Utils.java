@@ -829,10 +829,8 @@ public class Utils {
    * @return the time to live (in secs)
    */
   public static long getTtlInSecsFromExpiryMs(long expiresAtMs, long creationTimeMs) {
-    if (expiresAtMs == Utils.Infinite_Time) {
-      return Utils.Infinite_Time;
-    }
-    return Math.max(0, TimeUnit.MILLISECONDS.toSeconds(expiresAtMs - creationTimeMs));
+    return expiresAtMs == Utils.Infinite_Time ? Utils.Infinite_Time
+        : Math.max(0, TimeUnit.MILLISECONDS.toSeconds(expiresAtMs - creationTimeMs));
   }
 
   /**

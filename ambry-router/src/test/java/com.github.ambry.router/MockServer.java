@@ -379,7 +379,6 @@ class MockServer {
    * @param deleteRequest the {@link DeleteRequest} for which the response is being constructed.
    * @param deleteError the {@link ServerErrorCode} that was encountered.
    * @return the constructed {@link DeleteResponse}
-   * @throws IOException if there was an error constructing the response.
    */
   DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) {
     if (deleteError == ServerErrorCode.No_Error) {
@@ -418,6 +417,10 @@ class MockServer {
     blobs.put(blob.id, blob);
   }
 
+  /**
+   * Updates the map of the blobs to indicate that the blob in question has been deleted
+   * @param deleteRequest the {@link DeleteRequest} that describes what needs to be done
+   */
   private void updateBlobMap(DeleteRequest deleteRequest) {
     StoredBlob blob = blobs.get(deleteRequest.getBlobId().getID());
     if (blob != null) {

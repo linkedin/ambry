@@ -253,8 +253,8 @@ public class InMemoryRouter implements Router {
       getBlobIdFromString(blobId, clusterMap);
       if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
         InMemoryBlob blob = blobs.get(blobId);
-        BlobProperties existing = blob.blobProperties;
-        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, existing.getCreationTimeInMs());
+        BlobProperties currentProps = blob.blobProperties;
+        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
         blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
         if (notificationSystem != null) {
           notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs);

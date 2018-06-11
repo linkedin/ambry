@@ -50,7 +50,7 @@ class TtlUpdateOperation {
   // The operation tracker that tracks the state of this operation.
   private final OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
-  private final HashMap<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfos = new HashMap<>();
+  private final Map<Integer, TtlUpdateRequestInfo> ttlUpdateRequestInfos = new HashMap<>();
   // The result of this operation to be set into FutureResult.
   private final Void operationResult = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
@@ -110,6 +110,8 @@ class TtlUpdateOperation {
 
   /**
    * Fetch {@link TtlUpdateRequest}s to send for the operation.
+   * @param requestRegistrationCallback the {@link RequestRegistrationCallback} to use for addition of requests that
+   *                                    need to be sent to the storage server
    */
   private void fetchRequests(RequestRegistrationCallback<TtlUpdateOperation> requestRegistrationCallback) {
     Iterator<ReplicaId> replicaIterator = operationTracker.getReplicaIterator();
