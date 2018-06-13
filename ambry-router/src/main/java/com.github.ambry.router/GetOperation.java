@@ -21,13 +21,16 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -269,6 +272,19 @@ abstract class GetOperation {
       throw new IllegalArgumentException("Unrecognized tracker type: " + trackerType);
     }
     return operationTracker;
+  }
+
+  /**
+   * Updates the TTL in {@code blobProperties} if required
+   * @param blobProperties the {@link BlobProperties} of the blob
+   * @param messageInfo the {@link MessageInfo} received with the GET response
+   */
+  protected void updateTtlIfRequired(BlobProperties blobProperties, MessageInfo messageInfo) {
+    if (messageInfo.isTtlUpdated()) {
+      long newTtlSecs =
+          Utils.getTtlInSecsFromExpiryMs(messageInfo.getExpirationTimeInMs(), blobProperties.getCreationTimeInMs());
+      blobProperties.setTimeToLiveInSeconds(newTtlSecs);
+    }
   }
 
   /**

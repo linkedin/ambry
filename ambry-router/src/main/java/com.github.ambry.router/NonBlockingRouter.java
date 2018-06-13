@@ -282,7 +282,8 @@ class NonBlockingRouter implements Router {
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs its TTL updated.
    * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs the new expiry time of the blob (in ms)
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   @Override
@@ -295,7 +296,8 @@ class NonBlockingRouter implements Router {
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs its TTL updated.
    * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs the new expiry time of the blob (in ms)
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
@@ -644,7 +646,8 @@ class NonBlockingRouter implements Router {
      * completes.
      * @param blobIdStr The ID of the blob that needs the ttl update in string form
      * @param serviceId The service ID of the service updating the ttl of the blob. This can be null if unknown.
-     * @param expiresAtMs The new expiry time (in ms) of the blob
+     * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+     *                    permanent
      * @param futureResult A future that would contain the BlobId eventually.
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */

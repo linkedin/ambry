@@ -309,7 +309,7 @@ class TtlUpdateOperation {
    * @param routerErrorCode The {@link RouterErrorCode} for which to get its precedence level.
    * @return The precedence level of the {@link RouterErrorCode}.
    */
-  private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
+  private int getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
       case BlobDeleted:
         return 0;

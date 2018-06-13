@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.concurrent.Future;
@@ -92,7 +93,8 @@ public interface Router extends Closeable {
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs its TTL updated.
    * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs the new expiry time of the blob (in ms)
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs);
@@ -102,7 +104,8 @@ public interface Router extends Closeable {
    * about whether the request succeeded or not.
    * @param blobId The ID of the blob that needs its TTL updated.
    * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs the new expiry time of the blob (in ms)
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */

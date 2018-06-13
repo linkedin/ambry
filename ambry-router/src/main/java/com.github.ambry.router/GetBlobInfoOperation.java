@@ -33,7 +33,6 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -338,11 +337,7 @@ class GetBlobInfoOperation extends GetOperation {
       throws IOException, MessageFormatException {
     ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
     serverBlobProperties = MessageFormatRecord.deserializeBlobProperties(payload);
-    if (messageInfo.isTtlUpdated()) {
-      long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(messageInfo.getExpirationTimeInMs(),
-          serverBlobProperties.getCreationTimeInMs());
-      serverBlobProperties.setTimeToLiveInSeconds(newTtlSecs);
-    }
+    updateTtlIfRequired(serverBlobProperties, messageInfo);
     ByteBuffer userMetadata = MessageFormatRecord.deserializeUserMetadata(payload);
     if (encryptionKey == null) {
       // if blob is not encrypted, move the state to Complete

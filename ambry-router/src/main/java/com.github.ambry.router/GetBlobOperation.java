@@ -42,7 +42,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -1020,11 +1019,7 @@ class GetBlobOperation extends GetOperation {
         } else {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
           BlobInfo serverBlobInfo = blobAll.getBlobInfo();
-          if (messageInfo.isTtlUpdated()) {
-            long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(messageInfo.getExpirationTimeInMs(),
-                serverBlobInfo.getBlobProperties().getCreationTimeInMs());
-            serverBlobInfo.getBlobProperties().setTimeToLiveInSeconds(newTtlSecs);
-          }
+          updateTtlIfRequired(serverBlobInfo.getBlobProperties(), messageInfo);
           getOptions().ageAtAccessTracker.trackAgeAtAccess(serverBlobInfo.getBlobProperties().getCreationTimeInMs());
           blobData = blobAll.getBlobData();
           encryptionKey = blobAll.getBlobEncryptionKey();

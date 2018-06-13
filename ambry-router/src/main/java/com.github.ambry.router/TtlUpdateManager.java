@@ -32,12 +32,12 @@ import com.github.ambry.utils.Time;
 import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -55,8 +55,7 @@ class TtlUpdateManager {
   private final ResponseHandler responseHandler;
   private final NonBlockingRouterMetrics routerMetrics;
   private final RouterConfig routerConfig;
-  private final Set<TtlUpdateOperation> ttlUpdateOperations =
-      Collections.newSetFromMap(new ConcurrentHashMap<TtlUpdateOperation, Boolean>());
+  private final Set<TtlUpdateOperation> ttlUpdateOperations = ConcurrentHashMap.newKeySet();
   private final Map<Integer, TtlUpdateOperation> correlationIdToTtlUpdateOperation = new HashMap<>();
   private static final Logger logger = LoggerFactory.getLogger(TtlUpdateManager.class);
 
@@ -265,7 +264,7 @@ class TtlUpdateManager {
     private final FutureResult<Void> futureResult;
     private final Callback<Void> callback;
     private final long numBlobIds;
-    private final ConcurrentHashMap<BlobId, Boolean> blobIdToAck = new ConcurrentHashMap<>();
+    private final ConcurrentMap<BlobId, Boolean> blobIdToAck = new ConcurrentHashMap<>();
     private final AtomicLong ackedCount = new AtomicLong(0);
     private final AtomicBoolean completed = new AtomicBoolean(false);
 
