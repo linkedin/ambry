@@ -155,7 +155,7 @@ public class ConsistencyCheckerTool {
       }
       Time time = SystemTime.getInstance();
       Throttler throttler = new Throttler(config.indexEntriesToProcessPerSec, 1000, true, time);
-      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, null);
+      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
       ConsistencyCheckerTool consistencyCheckerTool =
           new ConsistencyCheckerTool(clusterMap, blobIdFactory, storeConfig, filterKeySet, throttler, metrics, time, storeKeyConverterFactory.getStoreKeyConverter());
       boolean success =
@@ -228,7 +228,7 @@ public class ConsistencyCheckerTool {
    */
   private Map<StoreKey, StoreKey> createConversionKeyMap(File[] replicas,
     Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
-    List<StoreKey> storeKeys = new ArrayList<>();
+    Set<StoreKey> storeKeys = new HashSet<>();
     for (File replica : replicas) {
           DumpIndexTool.IndexProcessingResults result = results.get(replica);
           for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
