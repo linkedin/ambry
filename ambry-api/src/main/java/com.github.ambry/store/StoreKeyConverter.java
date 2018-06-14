@@ -27,13 +27,10 @@ public interface StoreKeyConverter {
 
   /**
    * Returns a mapping for every {@link StoreKey} in {@code input}. If a {@link StoreKey} is already in the format
-   * desired, returns the same {@link StoreKey} as the mapping. If no mapping exists, returns {@code null} as the
-   * mapping.
-   * (Note: TBD if we should return {@code null} if already in format requested but it is useful to diffrentiate
-   * b/w the cases)
+   * desired or no mapping exists, returns the same {@link StoreKey} as the mapping.
    * @param input the {@link StoreKey}s that need to be converted.
    * @return a mapping for each {@link StoreKey} in the new format.
    * @throws Exception that may be thrown when performing the conversion operation
    */
-  public Map<StoreKey, StoreKey> convert(Collection<StoreKey> input) throws Exception;
+  public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception;
 }

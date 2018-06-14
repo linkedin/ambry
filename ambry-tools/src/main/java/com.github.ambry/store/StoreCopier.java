@@ -22,6 +22,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.server.StoreKeyConverterFactoryImpl;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.Pair;

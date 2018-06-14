@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.server.StoreKeyConverterFactoryImpl;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;

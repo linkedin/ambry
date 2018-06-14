@@ -222,6 +222,7 @@ project(':ambry-tools') {
         compile project(':ambry-api'),
                 project(':ambry-account'),
                 project(':ambry-store'),
+                project(':ambry-server'),
                 project(':ambry-rest'),
                 project(':ambry-frontend')
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"

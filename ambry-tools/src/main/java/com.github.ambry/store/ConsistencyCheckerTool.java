@@ -20,13 +20,16 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.server.StoreKeyConverterFactoryImpl;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -132,6 +135,7 @@ public class ConsistencyCheckerTool {
   private final Set<StoreKey> filterSet;
   private final Throttler throttler;
   private final Time time;
+  private final StoreKeyConverter storeKeyConverter;
 
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
 
@@ -139,6 +143,7 @@ public class ConsistencyCheckerTool {
     VerifiableProperties properties = ToolUtils.getVerifiableProperties(args);
     ConsistencyCheckerToolConfig config = new ConsistencyCheckerToolConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+    ServerConfig serverConfig = new ServerConfig(properties);
     try (ClusterMap clusterMap = new StaticClusterAgentsFactory(clusterMapConfig, config.hardwareLayoutFilePath,
         config.partitionLayoutFilePath).getClusterMap()) {
       StoreToolsMetrics metrics = new StoreToolsMetrics(clusterMap.getMetricRegistry());
@@ -151,8 +156,9 @@ public class ConsistencyCheckerTool {
       }
       Time time = SystemTime.getInstance();
       Throttler throttler = new Throttler(config.indexEntriesToProcessPerSec, 1000, true, time);
+      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, null);
       ConsistencyCheckerTool consistencyCheckerTool =
-          new ConsistencyCheckerTool(clusterMap, blobIdFactory, storeConfig, filterKeySet, throttler, metrics, time);
+          new ConsistencyCheckerTool(clusterMap, blobIdFactory, storeConfig, filterKeySet, throttler, metrics, time, storeKeyConverterFactory.getStoreKeyConverter());
       boolean success =
           consistencyCheckerTool.checkConsistency(config.pathOfInput.listFiles(File::isDirectory)).getFirst();
       System.exit(success ? 0 : 1);
@@ -160,12 +166,13 @@ public class ConsistencyCheckerTool {
   }
 
   public ConsistencyCheckerTool(ClusterMap clusterMap, StoreKeyFactory storeKeyFactory, StoreConfig storeConfig,
-      Set<StoreKey> filterSet, Throttler throttler, StoreToolsMetrics metrics, Time time) {
+      Set<StoreKey> filterSet, Throttler throttler, StoreToolsMetrics metrics, Time time, StoreKeyConverter storeKeyConverter) {
     this.time = time;
     this.filterSet = filterSet;
     this.throttler = throttler;
     StoreMetrics storeMetrics = new StoreMetrics("ConsistencyCheckerTool", clusterMap.getMetricRegistry());
     dumpIndexTool = new DumpIndexTool(storeKeyFactory, storeConfig, time, metrics, storeMetrics);
+    this.storeKeyConverter = storeKeyConverter;
   }
 
   /**
@@ -212,19 +219,43 @@ public class ConsistencyCheckerTool {
   }
 
   /**
+   * Takes all the StoreKeys from the file replicas and runs them
+   * through the StoreKeyConverter in a batch operation
+   * @param replicas An Array of replica directories from which blobIds need to be collected
+   * @param results the results of processing the indexes of the given {@code replicas}.
+   * @return mapping of original keys to converted keys.  If there's no converted equivalent
+   * the value will be the same as the key.
+   * @throws Exception
+   */
+  private Map<StoreKey, StoreKey> createConversionKeyMap(File[] replicas,
+    Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
+    List<StoreKey> storeKeys = new ArrayList<>();
+    for (File replica : replicas) {
+          DumpIndexTool.IndexProcessingResults result = results.get(replica);
+          for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
+            storeKeys.add(entry.getKey());
+          }
+     }
+     return storeKeyConverter.convert(storeKeys);
+  }
+
+  /**
    * Walks through all replicas and collects blob status in each of them.
    * @param replicas An Array of replica directories from which blob status' need to be collected
    * @param results the results of processing the indexes of the given {@code replicas}.
-   * @return a {@link Map} of BlobId to {@link ReplicationStatus}.
+   * @return a {@link Map} of BlobId to {@link ReplicationStatus}.  If key has a conversion
+   * equivalent (vis a vis the storeKeyConverter), the map key will be of that converted equivalent
    * @throws Exception
    */
   private Map<StoreKey, ReplicationStatus> getBlobStatusByReplica(File[] replicas,
       Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
     Map<StoreKey, ReplicationStatus> keyReplicationStatusMap = new HashMap<>();
+    Map<StoreKey, StoreKey> convertMap = createConversionKeyMap(replicas, results);
     for (File replica : replicas) {
       DumpIndexTool.IndexProcessingResults result = results.get(replica);
       for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
         StoreKey key = entry.getKey();
+        key = convertMap.get(key);
         if (!keyReplicationStatusMap.containsKey(key)) {
           keyReplicationStatusMap.put(key, new ReplicationStatus(replicas));
         }
@@ -306,6 +337,7 @@ public class ConsistencyCheckerTool {
      * {@link ReplicationStatus} to keep track of the status of a blob in every replica.
      * @param replicas the list of replicas for which blob status needs to be collected
      */
+
     ReplicationStatus(File[] replicas) {
       unavailable.addAll(Arrays.asList(replicas));
     }
