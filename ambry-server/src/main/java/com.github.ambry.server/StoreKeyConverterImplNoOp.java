@@ -27,7 +27,7 @@ import java.util.Map;
 class StoreKeyConverterImplNoOp implements StoreKeyConverter {
 
   @Override
-  public Map<StoreKey, StoreKey> convert(Collection<StoreKey> input) throws Exception {
+  public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
     Map<StoreKey, StoreKey> output = new HashMap<>();
     if (input != null) {
       input.forEach((storeKey) -> output.put(storeKey, storeKey));

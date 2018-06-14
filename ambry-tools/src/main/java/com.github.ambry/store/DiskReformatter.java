@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
@@ -157,10 +158,12 @@ public class DiskReformatter {
     DiskReformatterConfig config = new DiskReformatterConfig(properties);
     StoreConfig storeConfig = new StoreConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+    ServerConfig serverConfig = new ServerConfig(properties);
     ClusterAgentsFactory clusterAgentsFactory =
         Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
             config.partitionLayoutFilePath);
     try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
+      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       DataNodeId dataNodeId = clusterMap.getDataNodeId(config.datanodeHostname, config.datanodePort);
       if (dataNodeId == null) {
@@ -170,7 +173,7 @@ public class DiskReformatter {
       }
       DiskReformatter reformatter =
           new DiskReformatter(dataNodeId, Collections.EMPTY_LIST, config.fetchSizeInBytes, storeConfig, storeKeyFactory,
-              clusterMap, SystemTime.getInstance());
+              clusterMap, SystemTime.getInstance(), storeKeyConverterFactory.getStoreKeyConverter());
       AtomicInteger exitStatus = new AtomicInteger(0);
       CountDownLatch latch = new CountDownLatch(config.diskMountPaths.length);
       for (int i = 0; i < config.diskMountPaths.length; i++) {
@@ -206,7 +209,7 @@ public class DiskReformatter {
    * @param time the {@link Time} instance to use.
    */
   public DiskReformatter(DataNodeId dataNodeId, List<StoreCopier.Transformer> transformers, long fetchSizeInBytes,
-      StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time) {
+      StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time, StoreKeyConverter storeKeyConverter) {
     this.dataNodeId = dataNodeId;
     this.transformers = transformers;
     this.fetchSizeInBytes = fetchSizeInBytes;
@@ -217,7 +220,7 @@ public class DiskReformatter {
     diskSpaceAllocator =
         new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(clusterMap.getMetricRegistry()));
     consistencyChecker = new ConsistencyCheckerTool(clusterMap, storeKeyFactory, storeConfig, null, null,
-        new StoreToolsMetrics(clusterMap.getMetricRegistry()), time);
+        new StoreToolsMetrics(clusterMap.getMetricRegistry()), time, storeKeyConverter);
   }
 
   /**
