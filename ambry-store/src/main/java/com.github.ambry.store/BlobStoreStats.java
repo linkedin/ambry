@@ -415,7 +415,7 @@ class BlobStoreStats implements StoreStats, Closeable {
   private List<IndexEntry> getIndexEntries(IndexSegment indexSegment) throws StoreException {
     List<IndexEntry> indexEntries = new ArrayList<>();
     try {
-      indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Integer.MAX_VALUE), indexEntries,
+      indexSegment.getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), indexEntries,
           new AtomicLong(0), true);
       diskIOScheduler.getSlice(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, BlobStoreStats.IO_SCHEDULER_JOB_ID,
           indexEntries.size());
