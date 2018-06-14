@@ -337,7 +337,6 @@ public class ConsistencyCheckerTool {
      * {@link ReplicationStatus} to keep track of the status of a blob in every replica.
      * @param replicas the list of replicas for which blob status needs to be collected
      */
-
     ReplicationStatus(File[] replicas) {
       unavailable.addAll(Arrays.asList(replicas));
     }
