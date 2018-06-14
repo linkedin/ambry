@@ -90,11 +90,11 @@ public class ServerSSLTokenTest {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
-    System.out.println("About to invoke cluster.cleanup()");
+    System.out.println("ServerSSLTokenTest::About to invoke cluster.cleanup()");
     if (sslCluster != null) {
       sslCluster.cleanup();
     }
-    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+    System.out.println("ServerSSLTokenTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
   @Test

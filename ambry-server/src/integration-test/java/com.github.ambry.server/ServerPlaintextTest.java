@@ -56,7 +56,7 @@ public class ServerPlaintextTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true}});
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   public ServerPlaintextTest(boolean testEncryption) {
@@ -68,11 +68,11 @@ public class ServerPlaintextTest {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.
-    System.out.println("About to invoke cluster.cleanup()");
+    System.out.println("ServerPlaintextTest::About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
       plaintextCluster.cleanup();
     }
-    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+    System.out.println("ServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
   @Test

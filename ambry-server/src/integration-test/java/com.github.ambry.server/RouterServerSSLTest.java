@@ -94,11 +94,11 @@ public class RouterServerSSLTest {
   public static void cleanup() throws IOException {
     testFramework.cleanup();
     long start = System.currentTimeMillis();
-    System.out.println("About to invoke cluster.cleanup()");
+    System.out.println("RouterServerSSLTest::About to invoke cluster.cleanup()");
     if (sslCluster != null) {
       sslCluster.cleanup();
     }
-    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+    System.out.println("RouterServerSSLTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
   @Before
