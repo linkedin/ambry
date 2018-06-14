@@ -74,11 +74,12 @@ public class ServerPlaintextTokenTest {
   @After
   public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
-    System.out.println("About to invoke cluster.cleanup()");
+    System.out.println("ServerPlaintextTokenTest::About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
       plaintextCluster.cleanup();
     }
-    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+    System.out.println(
+        "ServerPlaintextTokenTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
   @Test

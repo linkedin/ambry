@@ -100,15 +100,16 @@ public class MockClusterMap implements ClusterMap {
     dataNodes = new ArrayList<MockDataNodeId>(numNodes);
     //Every group of 3 nodes will be put in the same DC.
     int dcIndex = 0;
+    String dcName = null;
     int currentPlainTextPort = 62000;
     int currentSSLPort = 63000;
     Map<String, List<MockDataNodeId>> dcToDataNodes = new HashMap<>();
     for (int i = 0; i < numNodes; i++) {
       if (i % 3 == 0) {
         dcIndex++;
+        dcName = "DC" + dcIndex;
+        dataCentersInClusterMap.add(dcName);
       }
-      String dcName = "DC" + dcIndex;
-      dataCentersInClusterMap.add(dcName);
       MockDataNodeId dataNodeId;
       if (enableSSLPorts) {
         dataNodeId = createDataNode(getListOfPorts(currentPlainTextPort++, currentSSLPort++), dcName);

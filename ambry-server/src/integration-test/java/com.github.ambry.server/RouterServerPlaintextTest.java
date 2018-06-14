@@ -108,11 +108,11 @@ public class RouterServerPlaintextTest {
   public static void cleanup() throws IOException {
     testFramework.cleanup();
     long start = System.currentTimeMillis();
-    System.out.println("About to invoke cluster.cleanup()");
+    System.out.println("RouterServerPlaintextTest::About to invoke cluster.cleanup()");
     if (plaintextCluster != null) {
       plaintextCluster.cleanup();
     }
-    System.out.println("cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+    System.out.println("RouterServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
   @Before
