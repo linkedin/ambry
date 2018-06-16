@@ -134,10 +134,8 @@ class PostBlobHandler {
       RestResponseChannel restResponseChannel, BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
     CallbackTracker callbackTracker =
         new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityProcessRequestMetrics);
-    ThrowingConsumer<Void> successAction = securityCheckResult -> {
-      securityService.postProcessRequest(restRequest,
-          securityPostProcessRequestCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    };
+    ThrowingConsumer<Void> successAction = securityCheckResult -> securityService.postProcessRequest(restRequest,
+        securityPostProcessRequestCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
     return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
   }
 
@@ -154,10 +152,9 @@ class PostBlobHandler {
       RestResponseChannel restResponseChannel, BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
     CallbackTracker callbackTracker =
         new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityPostProcessRequestMetrics);
-    ThrowingConsumer<Void> successAction = securityCheckResult -> {
-      router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
-          routerPutBlobCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    };
+    ThrowingConsumer<Void> successAction =
+        securityCheckResult -> router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
+            routerPutBlobCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
     return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
   }
 
@@ -174,10 +171,8 @@ class PostBlobHandler {
       BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
     CallbackTracker callbackTracker =
         new CallbackTracker(restRequest, LOGGER, frontendMetrics.postRouterPutBlobMetrics);
-    ThrowingConsumer<String> successAction = blobId -> {
-      idConverter.convert(restRequest, blobId,
-          idConverterCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    };
+    ThrowingConsumer<String> successAction = blobId -> idConverter.convert(restRequest, blobId,
+        idConverterCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
     return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
   }
 
@@ -211,9 +206,7 @@ class PostBlobHandler {
       Callback<ReadableStreamChannel> finalCallback) {
     CallbackTracker callbackTracker =
         new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityProcessResponseMetrics);
-    ThrowingConsumer<Void> successAction = securityCheckResult -> {
-      finalCallback.onCompletion(null, null);
-    };
+    ThrowingConsumer<Void> successAction = securityCheckResult -> finalCallback.onCompletion(null, null);
     return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
   }
 }
