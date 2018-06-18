@@ -19,7 +19,11 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.ReadableStreamChannel;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -45,6 +49,22 @@ public class RestTestUtils {
    */
   public static HttpRequest createRequest(HttpMethod httpMethod, String uri, HttpHeaders headers) {
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri);
+    if (headers != null) {
+      httpRequest.headers().set(headers);
+    }
+    return httpRequest;
+  }
+
+  /**
+   * Creates a {@link FullHttpRequest} with the given parameters.
+   * @param httpMethod the {@link HttpMethod} required.
+   * @param uri the URI to hit.
+   * @param content the content to add to the request
+   * @return a {@link FullHttpRequest} with the given parameters.
+   */
+  public static FullHttpRequest createRequest(HttpMethod httpMethod, String uri, HttpHeaders headers, byte[] content) {
+    ByteBuf buf = content == null ? Unpooled.buffer(0) : Unpooled.wrappedBuffer(content);
+    FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, buf);
     if (headers != null) {
       httpRequest.headers().set(headers);
     }

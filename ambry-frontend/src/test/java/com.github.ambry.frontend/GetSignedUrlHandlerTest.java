@@ -33,7 +33,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.UtilsTest;
 import java.io.IOException;
 import java.util.Properties;
@@ -145,11 +144,12 @@ public class GetSignedUrlHandlerTest {
     verifyFailureWithMsg(msg);
   }
 
+  // helpers
+
   /**
-   * Sends the given {@link RestRequest} to the {@link GetPeersHandler} and waits for the response and returns it.
+   * Sends the given {@link RestRequest} to the {@link GetSignedUrlHandler} and waits for the response and returns it.
    * @param restRequest the {@link RestRequest} to send.
    * @param restResponseChannel the {@link RestResponseChannel} where headers will be set.
-   * @return the response body as a {@link ReadableStreamChannel}.
    * @throws Exception
    */
   private void sendRequestGetResponse(RestRequest restRequest, RestResponseChannel restResponseChannel)
@@ -166,10 +166,8 @@ public class GetSignedUrlHandlerTest {
     }
   }
 
-  // helpers
-
   /**
-   * Verifies that attempting to get peers of any datanode fails with the provided {@code msg}.
+   * Verifies that attempting to get signed urls fails with the provided {@code msg}.
    * @param msg the message in the {@link Exception} that will be thrown.
    * @throws Exception
    */

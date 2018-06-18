@@ -80,6 +80,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private PostBlobHandler postBlobHandler;
+  private TtlUpdateHandler ttlUpdateHandler;
   private boolean isUp = false;
 
   /**
@@ -123,6 +124,9 @@ class AmbryBlobStorageService implements BlobStorageService {
             frontendMetrics, clusterMap);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, accountAndContainerInjector, frontendMetrics, router);
+    ttlUpdateHandler =
+        new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
+            clusterMap);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -213,11 +217,32 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    long processingStartTime = System.currentTimeMillis();
+    long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    Exception exception =
-        isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
-            : new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
-    submitResponse(restRequest, restResponseChannel, null, exception);
+    try {
+      logger.trace("Handling PUT request - {}", restRequest.getUri());
+      checkAvailable();
+      // TODO: make this non blocking once all handling of individual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
+      String operationOrBlobId =
+          RestUtils.getOperationOrBlobIdFromUri(restRequest, null, frontendConfig.frontendPathPrefixesToRemove);
+      if (operationOrBlobId.startsWith("/")) {
+        operationOrBlobId = operationOrBlobId.substring(1);
+      }
+      if (operationOrBlobId.equalsIgnoreCase(Operations.UPDATE_TTL)) {
+        ttlUpdateHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
+      } else {
+        submitResponse(restRequest, restResponseChannel, null,
+            new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest));
+      }
+      preProcessingTime = System.currentTimeMillis() - processingStartTime;
+    } catch (Exception e) {
+      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
+    } finally {
+      frontendMetrics.putPreProcessingTimeInMs.update(preProcessingTime);
+    }
   }
 
   @Override

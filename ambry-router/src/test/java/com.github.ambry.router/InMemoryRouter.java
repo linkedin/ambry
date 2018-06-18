@@ -150,7 +150,9 @@ public class InMemoryRouter implements Router {
   @Override
   public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback) {
     FutureResult<GetBlobResult> futureResult = new FutureResult<>();
-    handlePrechecks(futureResult, callback);
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
     ReadableStreamChannel blobDataChannel = null;
     BlobInfo blobInfo = null;
     Exception exception = null;
@@ -191,7 +193,9 @@ public class InMemoryRouter implements Router {
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       PutBlobOptions options, Callback<String> callback) {
     FutureResult<String> futureResult = new FutureResult<>();
-    handlePrechecks(futureResult, callback);
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);
     operationPool.submit(new InMemoryBlobPoster(postData, blobs, notificationSystem, clusterMap,
         CommonTestUtils.getCurrentBlobIdVersion()));
@@ -201,7 +205,9 @@ public class InMemoryRouter implements Router {
   @Override
   public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback) {
     FutureResult<Void> futureResult = new FutureResult<>();
-    handlePrechecks(futureResult, callback);
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
     Exception exception = null;
     try {
       getBlobIdFromString(blobId, clusterMap);
@@ -226,7 +232,9 @@ public class InMemoryRouter implements Router {
   @Override
   public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
     FutureResult<Void> futureResult = new FutureResult<>();
-    handlePrechecks(futureResult, callback);
+    if (!handlePrechecks(futureResult, callback)) {
+      return futureResult;
+    }
     Exception exception = null;
     try {
       // to make sure Blob ID is ok
@@ -299,16 +307,21 @@ public class InMemoryRouter implements Router {
    * @param futureResult the {@link FutureResult} to update in case the operation has to be completed.
    * @param callback the {@link Callback} that needs to be invoked in case the operation has to be completed. Can be
    *                 null.
+   * @return if {@code true}, the rest of the code can continue.
    */
-  private void handlePrechecks(FutureResult futureResult, Callback callback) {
+  private boolean handlePrechecks(FutureResult futureResult, Callback callback) {
+    boolean continueOp = true;
     if (!routerOpen.get()) {
+      continueOp = false;
       completeOperation(futureResult, callback, null,
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed));
     } else if (verifiableProperties.containsKey(OPERATION_THROW_EARLY_RUNTIME_EXCEPTION)) {
       throw new RuntimeException(OPERATION_THROW_EARLY_RUNTIME_EXCEPTION);
     } else if (verifiableProperties.containsKey(OPERATION_THROW_LATE_RUNTIME_EXCEPTION)) {
+      continueOp = false;
       completeOperation(futureResult, callback, null, new RuntimeException(OPERATION_THROW_LATE_RUNTIME_EXCEPTION));
     } else if (verifiableProperties.containsKey(OPERATION_THROW_ROUTER_EXCEPTION)) {
+      continueOp = false;
       RouterErrorCode errorCode = RouterErrorCode.UnexpectedInternalError;
       try {
         errorCode = RouterErrorCode.valueOf(verifiableProperties.getString(OPERATION_THROW_ROUTER_EXCEPTION));
@@ -318,6 +331,7 @@ public class InMemoryRouter implements Router {
       RouterException routerException = new RouterException(OPERATION_THROW_ROUTER_EXCEPTION, errorCode);
       completeOperation(futureResult, callback, null, routerException);
     }
+    return continueOp;
   }
 
   /**

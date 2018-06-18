@@ -464,10 +464,15 @@ public class NettyResponseChannelTest {
     EmbeddedChannel channel = createEmbeddedChannel();
     for (HttpMethod httpMethod : HTTP_METHODS) {
       for (RestServiceErrorCode errorCode : RestServiceErrorCode.values()) {
-        channel = doKeepAliveTest(channel, httpMethod, errorCode, getExpectedHttpResponseStatus(errorCode));
+        channel = doKeepAliveTest(channel, httpMethod, errorCode, getExpectedHttpResponseStatus(errorCode), 0, null);
       }
-      channel = doKeepAliveTest(channel, httpMethod, null, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+      channel = doKeepAliveTest(channel, httpMethod, null, HttpResponseStatus.INTERNAL_SERVER_ERROR, 0, null);
+      channel = doKeepAliveTest(channel, httpMethod, null, HttpResponseStatus.INTERNAL_SERVER_ERROR, 0, true);
+      channel = doKeepAliveTest(channel, httpMethod, null, HttpResponseStatus.INTERNAL_SERVER_ERROR, 0, false);
     }
+    // special test for put because the keep alive depends on content size (0 already tested above)
+    channel = doKeepAliveTest(channel, HttpMethod.PUT, null, HttpResponseStatus.INTERNAL_SERVER_ERROR, 1, null);
+    channel = doKeepAliveTest(channel, HttpMethod.PUT, null, HttpResponseStatus.INTERNAL_SERVER_ERROR, 100, null);
     channel.close();
   }
 
@@ -762,11 +767,15 @@ public class NettyResponseChannelTest {
    * @param errorCode the {@link RestServiceErrorCode} to induce at {@link MockNettyMessageProcessor}. {@code null} if
    *                  {@link TestingUri#OnResponseCompleteWithNonRestException} is desired.
    * @param expectedResponseStatus the expected {@link HttpResponseStatus} from remote.
+   * @param contentSize the size of the content to attach with the request. No content attached if size is 0. If size >
+   *                    1, then {@link HttpHeaderNames#TRANSFER_ENCODING} is set to {@link HttpHeaderValues#CHUNKED}.
+   * @param keepAliveHint if {@code null}, no hint is added. If not {@code null}, hint is set to the given value
    * @return the {@link EmbeddedChannel} to use once this function is complete. If the channel did not close, this
    * function will return the {@code channel} instance that was passed, otherwise it returns a new channel.
    */
   private EmbeddedChannel doKeepAliveTest(EmbeddedChannel channel, HttpMethod httpMethod,
-      RestServiceErrorCode errorCode, HttpResponseStatus expectedResponseStatus) {
+      RestServiceErrorCode errorCode, HttpResponseStatus expectedResponseStatus, int contentSize,
+      Boolean keepAliveHint) {
     boolean keepAlive = true;
     for (int i = 0; i < 2; i++) {
       HttpHeaders httpHeaders = new DefaultHttpHeaders();
@@ -778,16 +787,39 @@ public class NettyResponseChannelTest {
       if (!keepAlive) {
         httpHeaders.set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
       }
-      channel.writeInbound(RestTestUtils.createRequest(httpMethod, uri.toString(), httpHeaders));
-      HttpResponse response = (HttpResponse) channel.readOutbound();
+      if (keepAliveHint != null) {
+        // this will get set in the NettyRequest when it is created
+        httpHeaders.set(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, keepAliveHint);
+      }
+      byte[] content = null;
+      if (contentSize > 0) {
+        content = TestUtils.getRandomBytes(contentSize);
+      }
+      HttpRequest request = RestTestUtils.createRequest(httpMethod, uri.toString(), httpHeaders, content);
+      if (contentSize > 1) {
+        HttpUtil.setTransferEncodingChunked(request, true);
+      } else {
+        HttpUtil.setContentLength(request, contentSize);
+      }
+      channel.writeInbound(request);
+      HttpResponse response = channel.readOutbound();
       assertEquals("Unexpected response status", expectedResponseStatus, response.status());
       if (!(response instanceof FullHttpResponse)) {
         // empty the channel
         while (channel.readOutbound() != null) {
         }
       }
-      boolean shouldBeAlive = keepAlive && !httpMethod.equals(HttpMethod.POST) && !httpMethod.equals(HttpMethod.PUT)
-          && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(expectedResponseStatus);
+      boolean shouldBeAlive = true;
+      if (keepAliveHint != null) {
+        shouldBeAlive = keepAliveHint;
+      } else if (httpMethod.equals(HttpMethod.POST)) {
+        shouldBeAlive = false;
+      } else if (httpMethod.equals(HttpMethod.PUT)) {
+        shouldBeAlive = contentSize == 0;
+      }
+      shouldBeAlive = shouldBeAlive && keepAlive && !NettyResponseChannel.CLOSE_CONNECTION_ERROR_STATUSES.contains(
+          expectedResponseStatus);
+
       assertEquals("Channel state (open/close) not as expected", shouldBeAlive, channel.isActive());
       assertEquals("Connection header should be consistent with channel state", shouldBeAlive,
           HttpUtil.isKeepAlive(response));

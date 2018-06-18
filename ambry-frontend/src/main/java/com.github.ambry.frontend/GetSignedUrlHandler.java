@@ -163,7 +163,7 @@ class GetSignedUrlHandler {
     @Override
     public void onCompletion(String result, Exception exception) {
       long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.getSignedUrlSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
+      metrics.idConverterProcessingTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
       try {
         if (exception == null) {
           BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
@@ -174,7 +174,7 @@ class GetSignedUrlHandler {
       } catch (Exception e) {
         exception = e;
       } finally {
-        metrics.getSignedUrlSecurityRequestCallbackProcessingTimeInMs.update(
+        metrics.getSignedUrlIdConverterCallbackProcessingTimeInMs.update(
             SystemTime.getInstance().milliseconds() - processingStartTimeMs);
         if (exception != null) {
           callback.onCompletion(null, exception);

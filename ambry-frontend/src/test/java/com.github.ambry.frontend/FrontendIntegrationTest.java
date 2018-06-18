@@ -98,6 +98,7 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class FrontendIntegrationTest {
+  private static final long TTL_SECS = 7200;
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
   private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;
@@ -182,11 +183,11 @@ public class FrontendIntegrationTest {
   }
 
   /**
-   * Tests blob POST, GET, HEAD and DELETE operations.
+   * Tests blob POST, GET, HEAD, TTL update and DELETE operations.
    * @throws Exception
    */
   @Test
-  public void postGetHeadDeleteTest() throws Exception {
+  public void postGetHeadUpdateDeleteTest() throws Exception {
     // add some accounts
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container publicContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
@@ -197,22 +198,22 @@ public class FrontendIntegrationTest {
     for (int i = 0; i < 2; i++) {
       Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
       for (Container container : account.getAllContainers()) {
-        doPostGetHeadDeleteTest(refContentSize, account, container, account.getName(), !container.isCacheable(),
+        doPostGetHeadUpdateDeleteTest(refContentSize, account, container, account.getName(), !container.isCacheable(),
             account.getName(), container.getName(), false);
       }
     }
     // valid account and container names but only serviceId passed as part of POST
-    doPostGetHeadDeleteTest(refContentSize, null, null, refAccount.getName(), false, refAccount.getName(),
+    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, refAccount.getName(), false, refAccount.getName(),
         publicContainer.getName(), false);
-    doPostGetHeadDeleteTest(refContentSize, null, null, refAccount.getName(), true, refAccount.getName(),
+    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, refAccount.getName(), true, refAccount.getName(),
         privateContainer.getName(), false);
     // unrecognized serviceId
-    doPostGetHeadDeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
-    doPostGetHeadDeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
+    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", false, null, null, false);
+    doPostGetHeadUpdateDeleteTest(refContentSize, null, null, "unknown_service_id", true, null, null, false);
     // different sizes
     for (int contentSize : new int[]{0, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes
         - 1, FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes, refContentSize}) {
-      doPostGetHeadDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
+      doPostGetHeadUpdateDeleteTest(contentSize, refAccount, publicContainer, refAccount.getName(),
           !publicContainer.isCacheable(), refAccount.getName(), publicContainer.getName(), false);
     }
   }
@@ -222,21 +223,22 @@ public class FrontendIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void multipartPostGetHeadTest() throws Exception {
+  public void multipartPostGetHeadUpdateDeleteTest() throws Exception {
     Account refAccount = ACCOUNT_SERVICE.createAndAddRandomAccount();
     Container refContainer = refAccount.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
-    doPostGetHeadDeleteTest(0, refAccount, refContainer, refAccount.getName(), !refContainer.isCacheable(),
+    doPostGetHeadUpdateDeleteTest(0, refAccount, refContainer, refAccount.getName(), !refContainer.isCacheable(),
         refAccount.getName(), refContainer.getName(), true);
-    doPostGetHeadDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, refAccount, refContainer,
-        refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(), true);
+    doPostGetHeadUpdateDeleteTest(FRONTEND_CONFIG.frontendChunkedGetResponseThresholdInBytes * 3, refAccount,
+        refContainer, refAccount.getName(), !refContainer.isCacheable(), refAccount.getName(), refContainer.getName(),
+        true);
 
     // failure case
     // size of content being POSTed is higher than what is allowed via multipart/form-data
     long maxAllowedSizeBytes = new NettyConfig(FRONTEND_VERIFIABLE_PROPS).nettyMultipartPostMaxSizeBytes;
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes((int) maxAllowedSizeBytes + 1));
     HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeadersForPut(headers, 7200, !refContainer.isCacheable(), refAccount.getName(), "application/octet-stream",
-        null, refAccount.getName(), refContainer.getName());
+    setAmbryHeadersForPut(headers, TTL_SECS, !refContainer.isCacheable(), refAccount.getName(),
+        "application/octet-stream", null, refAccount.getName(), refContainer.getName());
     HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.POST, "/", headers);
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, content, ByteBuffer.allocate(0));
     ResponseParts responseParts = nettyClient.sendRequest(encoder.finalizeRequest(), encoder, null).get();
@@ -302,13 +304,12 @@ public class FrontendIntegrationTest {
     Container container = account.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
     // setup
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
-    long blobTtl = 7200;
     String serviceId = "getAndUseSignedUrlTest";
     String contentType = "application/octet-stream";
     String ownerId = "getAndUseSignedUrlTest";
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(RestUtils.Headers.URL_TYPE, RestMethod.POST.name());
-    setAmbryHeadersForPut(headers, blobTtl, !container.isCacheable(), serviceId, contentType, ownerId,
+    setAmbryHeadersForPut(headers, TTL_SECS, !container.isCacheable(), serviceId, contentType, ownerId,
         account.getName(), container.getName());
     headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
@@ -487,7 +488,7 @@ public class FrontendIntegrationTest {
     return new VerifiableProperties(properties);
   }
 
-  // postGetHeadDeleteTest() and multipartPostGetHeadTest() helpers
+  // postGetHeadUpdateDeleteTest() and multipartPostGetHeadUpdateDeleteTest() helpers
 
   /**
    * Utility to test blob POST, GET, HEAD and DELETE operations for a specified size
@@ -501,7 +502,7 @@ public class FrontendIntegrationTest {
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doPostGetHeadDeleteTest(int contentSize, Account toPostAccount, Container toPostContainer,
+  private void doPostGetHeadUpdateDeleteTest(int contentSize, Account toPostAccount, Container toPostContainer,
       String serviceId, boolean isPrivate, String expectedAccountName, String expectedContainerName,
       boolean multipartPost) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentSize));
@@ -510,7 +511,7 @@ public class FrontendIntegrationTest {
     String accountNameInPost = toPostAccount != null ? toPostAccount.getName() : null;
     String containerNameInPost = toPostContainer != null ? toPostContainer.getName() : null;
     HttpHeaders headers = new DefaultHttpHeaders();
-    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
+    setAmbryHeadersForPut(headers, TTL_SECS, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
         containerNameInPost);
     String blobId;
     byte[] usermetadata = null;
@@ -543,9 +544,10 @@ public class FrontendIntegrationTest {
     getNotModifiedBlobAndVerify(blobId, null, isPrivate);
     getUserMetadataAndVerify(blobId, null, headers, usermetadata);
     getBlobInfoAndVerify(blobId, null, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
+    updateBlobTtlAndVerify(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, usermetadata);
     deleteBlobAndVerify(blobId);
 
-    // check GET, HEAD and DELETE after delete.
+    // check GET, HEAD, TTL update and DELETE after delete.
     verifyOperationsAfterDelete(blobId, headers, isPrivate, expectedAccountName, expectedContainerName, content,
         usermetadata);
   }
@@ -842,9 +844,12 @@ public class FrontendIntegrationTest {
         response.headers().get(RestUtils.Headers.AMBRY_CONTENT_TYPE));
     assertTrue("No " + RestUtils.Headers.CREATION_TIME,
         response.headers().get(RestUtils.Headers.CREATION_TIME, null) != null);
-    if (Long.parseLong(expectedHeaders.get(RestUtils.Headers.TTL)) != Utils.Infinite_Time) {
+    if (expectedHeaders.get(RestUtils.Headers.TTL) != null
+        && Long.parseLong(expectedHeaders.get(RestUtils.Headers.TTL)) != Utils.Infinite_Time) {
       assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.get(RestUtils.Headers.TTL),
           response.headers().get(RestUtils.Headers.TTL));
+    } else {
+      assertFalse("There should be no TTL in the response", response.headers().contains(RestUtils.Headers.TTL));
     }
     if (expectedHeaders.contains(RestUtils.Headers.OWNER_ID)) {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match", expectedHeaders.get(RestUtils.Headers.OWNER_ID),
@@ -905,6 +910,43 @@ public class FrontendIntegrationTest {
   }
 
   /**
+   * Updates the TTL of the given {@code blobId} and verifies it by doing a BlobInfo.
+   * @param blobId the blob ID of the blob to update and verify.
+   * @param getExpectedHeaders the expected headers in the getBlobInfo response after the TTL update.
+   * @param isPrivate {@code true} if the blob is expected to be private
+   * @param accountName the expected account name in the response.
+   * @param containerName the expected container name in response.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @throws ExecutionException
+   * @throws InterruptedException
+   */
+  private void updateBlobTtlAndVerify(String blobId, HttpHeaders getExpectedHeaders, boolean isPrivate,
+      String accountName, String containerName, byte[] usermetadata) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(RestUtils.Headers.BLOB_ID, blobId);
+    headers.set(RestUtils.Headers.SERVICE_ID, "updateBlobTtlAndVerify");
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UPDATE_TTL, headers, null);
+    ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    verifyUpdateBlobTtlResponse(responseParts);
+    getExpectedHeaders.remove(RestUtils.Headers.TTL);
+    getBlobInfoAndVerify(blobId, GetOption.None, getExpectedHeaders, isPrivate, accountName, containerName,
+        usermetadata);
+  }
+
+  /**
+   * Verifies the response received after updating the TTL of a blob
+   * @param responseParts the parts of the response received
+   */
+  private void verifyUpdateBlobTtlResponse(ResponseParts responseParts) {
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected response status", HttpResponseStatus.OK, response.status());
+    assertTrue("No Date header", response.headers().getTimeMillis(HttpHeaderNames.DATE, -1) != -1);
+    assertEquals("Content-Length is not 0", 0, HttpUtil.getContentLength(response));
+    discardContent(responseParts.queue, 1);
+    assertTrue("Channel should be active", HttpUtil.isKeepAlive(response));
+  }
+
+  /**
    * Deletes the blob with blob ID {@code blobId} and verifies the response returned.
    * @param blobId the blob ID of the blob to DELETE.
    * @throws ExecutionException
@@ -916,7 +958,7 @@ public class FrontendIntegrationTest {
   }
 
   /**
-   * Verifies that the right response code is returned for GET, HEAD and DELETE once a blob is deleted.
+   * Verifies that the right response code is returned for GET, HEAD, TTL update and DELETE once a blob is deleted.
    * @param blobId the ID of the blob that was deleted.
    * @param expectedHeaders the expected headers in the response if the right options are provided.
    * @param isPrivate {@code true} if the blob is expected to be private
@@ -937,6 +979,11 @@ public class FrontendIntegrationTest {
     httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
     httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
+    verifyDeleted(httpRequest, HttpResponseStatus.GONE);
+
+    headers = new DefaultHttpHeaders().set(RestUtils.Headers.BLOB_ID, blobId)
+        .set(RestUtils.Headers.SERVICE_ID, "verifyOperationsAfterDelete");
+    httpRequest = buildRequest(HttpMethod.PUT, "/" + Operations.UPDATE_TTL, headers, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 
     httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
