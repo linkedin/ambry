@@ -39,6 +39,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import java.io.IOException;
@@ -664,10 +665,12 @@ class GetBlobOperation extends GetOperation {
      * Handle the body of the response: Deserialize and add to the list of chunk buffers.
      * @param payload the body of the response.
      * @param messageMetadata the {@link MessageMetadata} associated with the message.
+     * @param messageInfo the {@link MessageInfo} associated with the message.
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(InputStream payload, MessageMetadata messageMetadata) throws IOException, MessageFormatException {
+    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+        throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
@@ -794,7 +797,8 @@ class GetBlobOperation extends GetOperation {
                       + objectsInPartitionResponse, RouterErrorCode.UnexpectedInternalError);
             } else {
               MessageMetadata messageMetadata = partitionResponseInfo.getMessageMetadataList().get(0);
-              handleBody(getResponse.getInputStream(), messageMetadata);
+              MessageInfo messageInfo = partitionResponseInfo.getMessageInfoList().get(0);
+              handleBody(getResponse.getInputStream(), messageMetadata, messageInfo);
               chunkOperationTracker.onResponse(getRequestInfo.replicaId, true);
               if (RouterUtils.isRemoteReplica(routerConfig, getRequestInfo.replicaId)) {
                 logger.trace("Cross colo request successful for remote replica in {} ",
@@ -1003,7 +1007,8 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(InputStream payload, MessageMetadata messageMetadata) throws IOException, MessageFormatException {
+    void handleBody(InputStream payload, MessageMetadata messageMetadata, MessageInfo messageInfo)
+        throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
         ByteBuffer encryptionKey;
@@ -1014,6 +1019,7 @@ class GetBlobOperation extends GetOperation {
         } else {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(payload, blobIdFactory);
           BlobInfo serverBlobInfo = blobAll.getBlobInfo();
+          updateTtlIfRequired(serverBlobInfo.getBlobProperties(), messageInfo);
           getOptions().ageAtAccessTracker.trackAgeAtAccess(serverBlobInfo.getBlobProperties().getCreationTimeInMs());
           blobData = blobAll.getBlobData();
           encryptionKey = blobAll.getBlobEncryptionKey();

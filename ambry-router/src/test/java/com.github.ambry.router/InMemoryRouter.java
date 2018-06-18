@@ -24,6 +24,7 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -95,7 +96,7 @@ public class InMemoryRouter implements Router {
    * Representation of a blob in memory. Contains blob properties, user metadata and blob data.
    */
   public static class InMemoryBlob {
-    private final BlobProperties blobProperties;
+    private BlobProperties blobProperties;
     private final byte[] userMetadata;
     private final ByteBuffer blob;
 
@@ -225,6 +226,42 @@ public class InMemoryRouter implements Router {
           notificationSystem.onBlobDeleted(blobId, serviceId);
         }
       } else if (!deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
+      }
+    } catch (RouterException e) {
+      exception = e;
+    } catch (Exception e) {
+      exception = new RouterException(e, RouterErrorCode.UnexpectedInternalError);
+    } finally {
+      completeOperation(futureResult, callback, null, exception);
+    }
+    return futureResult;
+  }
+
+  @Override
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    return updateBlobTtl(blobId, serviceId, expiresAtMs, null);
+  }
+
+  @Override
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
+    FutureResult<Void> futureResult = new FutureResult<>();
+    handlePrechecks(futureResult, callback);
+    Exception exception = null;
+    try {
+      // to make sure Blob ID is ok
+      getBlobIdFromString(blobId, clusterMap);
+      if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
+        InMemoryBlob blob = blobs.get(blobId);
+        BlobProperties currentProps = blob.blobProperties;
+        long newTtlSecs = Utils.getTtlInSecsFromExpiryMs(expiresAtMs, currentProps.getCreationTimeInMs());
+        blob.blobProperties.setTimeToLiveInSeconds(newTtlSecs);
+        if (notificationSystem != null) {
+          notificationSystem.onBlobTtlUpdated(blobId, serviceId, expiresAtMs);
+        }
+      } else if (deletedBlobs.contains(blobId)) {
+        exception = new RouterException("Blob has been deleted", RouterErrorCode.BlobDeleted);
+      } else {
         exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
       }
     } catch (RouterException e) {

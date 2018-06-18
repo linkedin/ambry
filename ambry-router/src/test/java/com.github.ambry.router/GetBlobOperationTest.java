@@ -565,14 +565,16 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testLegacyBlobGetSuccess() throws Exception {
-    RouterTestHelpers.setBlobFormatVersionForAllServers(MessageFormatRecord.Blob_Version_V1, mockServerLayout);
+    mockServerLayout.getMockServers()
+        .forEach(mockServer -> mockServer.setBlobFormatVersion(MessageFormatRecord.Blob_Version_V1));
     for (int i = 0; i < 10; i++) {
       // blobSize in the range [1, maxChunkSize]
       blobSize = random.nextInt(maxChunkSize) + 1;
       doPut();
       getAndAssertSuccess();
     }
-    RouterTestHelpers.setBlobFormatVersionForAllServers(MessageFormatRecord.Blob_Version_V2, mockServerLayout);
+    mockServerLayout.getMockServers()
+        .forEach(mockServer -> mockServer.setBlobFormatVersion(MessageFormatRecord.Blob_Version_V2));
   }
 
   /**
@@ -861,7 +863,7 @@ public class GetBlobOperationTest {
     final CountDownLatch readCompleteLatch = new CountDownLatch(1);
     final AtomicReference<Exception> readCompleteException = new AtomicReference<>(null);
     final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
-    RouterTestHelpers.setGetErrorOnDataBlobOnlyForAllServers(true, mockServerLayout);
+    mockServerLayout.getMockServers().forEach(mockServer -> mockServer.setGetErrorOnDataBlobOnly(true));
     RouterTestHelpers.testWithErrorCodes(Collections.singletonMap(serverErrorCode, 9), mockServerLayout,
         expectedErrorCode, new ErrorCodeChecker() {
           @Override

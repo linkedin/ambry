@@ -261,6 +261,8 @@ public class GetBlobInfoOperationTest {
     }
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
     assertSuccess(op);
+    // poll again to make sure that counters aren't triggered again (check in @After)
+    op.poll(requestRegistrationCallback);
   }
 
   /**

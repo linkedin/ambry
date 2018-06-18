@@ -90,7 +90,8 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
             case DELETE:
               MessageInfo info =
                   new MessageInfo(key, header.capacity() + key.sizeInBytes() + headerFormat.getMessageSize(), true,
-                      false, updateRecord.getAccountId(), updateRecord.getContainerId(), updateRecord.getUpdateTimeInMs());
+                      false, updateRecord.getAccountId(), updateRecord.getContainerId(),
+                      updateRecord.getUpdateTimeInMs());
               messageRecovered.add(info);
               break;
             default:

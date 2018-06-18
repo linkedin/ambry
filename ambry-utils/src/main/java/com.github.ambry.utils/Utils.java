@@ -850,6 +850,17 @@ public class Utils {
   }
 
   /**
+   * Returns a TTL (in secs) given an expiry and creation time (in ms)
+   * @param expiresAtMs the expiry time (in ms)
+   * @param creationTimeMs the creation time (in ms)
+   * @return the time to live (in secs)
+   */
+  public static long getTtlInSecsFromExpiryMs(long expiresAtMs, long creationTimeMs) {
+    return expiresAtMs == Utils.Infinite_Time ? Utils.Infinite_Time
+        : Math.max(0, TimeUnit.MILLISECONDS.toSeconds(expiresAtMs - creationTimeMs));
+  }
+
+  /**
    * Delete a directory recursively or delete a single file.
    * @param file the file or directory to delete.
    * @throws IOException if all files could not be deleted.

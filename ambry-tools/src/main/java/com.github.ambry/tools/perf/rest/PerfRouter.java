@@ -186,6 +186,38 @@ class PerfRouter implements Router {
     return futureResult;
   }
 
+  /**
+   * Does nothing. Simply indicates success immediately.
+   * @param blobId (ignored).
+   * @param serviceId (ignored).
+   * @param expiresAtMs (ignored).
+   * @return a {@link FutureResult} that will eventually contain the result of the operation.
+   */
+  @Override
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    return updateBlobTtl(blobId, serviceId, expiresAtMs, null);
+  }
+
+  /**
+   * Does nothing. Simply indicates success immediately.
+   * @param blobId (ignored).
+   * @param serviceId (ignored).
+   * @param expiresAtMs (ignored).
+   * @param callback the {@link Callback} to invoke on operation completion.
+   * @return a {@link FutureResult} that will eventually contain the result of the operation.
+   */
+  @Override
+  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback) {
+    logger.trace("Received updateBlobTtl call");
+    FutureResult<Void> futureResult = new FutureResult<Void>();
+    if (!routerOpen) {
+      completeOperation(futureResult, callback, null, ROUTER_CLOSED_EXCEPTION);
+    } else {
+      completeOperation(futureResult, callback, null, null);
+    }
+    return futureResult;
+  }
+
   @Override
   public void close() {
     routerOpen = false;

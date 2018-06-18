@@ -27,11 +27,11 @@ public class BlobProperties {
   private final String ownerId;
   private final String contentType;
   private final boolean isPrivate;
-  private final long timeToLiveInSeconds;
   private final long creationTimeInMs;
   private final short accountId;
   private final short containerId;
   private final boolean isEncrypted;
+  private long timeToLiveInSeconds;
 
   /**
    * @param blobSize The size of the blob in bytes
@@ -135,6 +135,13 @@ public class BlobProperties {
 
   public boolean isEncrypted() {
     return isEncrypted;
+  }
+
+  /**
+   * @param timeToLiveInSeconds the new value of timeToLiveInSeconds
+   */
+  public void setTimeToLiveInSeconds(long timeToLiveInSeconds) {
+    this.timeToLiveInSeconds = timeToLiveInSeconds;
   }
 
   @Override
