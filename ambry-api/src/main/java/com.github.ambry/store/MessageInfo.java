@@ -167,6 +167,17 @@ public class MessageInfo {
   }
 
   @Override
+  public boolean equals(Object thatObject) {
+    if (thatObject instanceof MessageInfo) {
+      MessageInfo that = (MessageInfo) thatObject;
+      return key.equals(that.key) && size == that.size && expirationTimeInMs == that.expirationTimeInMs
+          && isDeleted == that.isDeleted && isTtlUpdated == that.isTtlUpdated && crc == that.crc
+          && accountId == that.accountId && containerId == that.containerId && operationTimeMs == that.operationTimeMs;
+    }
+    return false;
+  }
+
+  @Override
   public String toString() {
     StringBuilder stringBuilder = new StringBuilder();
     stringBuilder.append("[MessageInfo:")
