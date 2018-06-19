@@ -47,6 +47,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
@@ -88,7 +89,7 @@ public class NettyPerfClient {
   private final String host;
   private final int port;
   private final String path;
-  private List<String> pathList;
+  private final List<String> pathList;
   private AtomicInteger counter = new AtomicInteger();
   private final int concurrency;
   private final long totalSize;
@@ -315,6 +316,8 @@ public class NettyPerfClient {
     this.path = path;
     if (pathFileName != null) {
       this.pathList = Files.readAllLines(Paths.get(pathFileName));
+    } else {
+      this.pathList = null;
     }
     this.concurrency = concurrency;
     if (chunkSize != null) {
@@ -443,8 +446,8 @@ public class NettyPerfClient {
         perfClientMetrics.timeToFirstResponseChunkInMs.update(responseReceiveStart);
         logger.trace("Response receive has started on channel {}. Took {} ms", ctx.channel(), responseReceiveStart);
         response = (HttpResponse) in;
-        if (response.status().code() != 200) {
-          logger.error("Got Response code {} ", response.status().code());
+        if (response.status() != HttpResponseStatus.OK) {
+          logger.error("Got Response code {} and header was {}", response.status().code(), response.headers());
         }
       }
       if (in instanceof HttpContent) {
@@ -535,9 +538,8 @@ public class NettyPerfClient {
         if (pathList == null) {
           request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
         } else {
-          counter.compareAndSet(pathList.size(), 0);
-          request =
-              new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, pathList.get(counter.getAndIncrement()));
+          request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
+              pathList.get(counter.getAndIncrement() % pathList.size()));
         }
       }
       for (Pair<String, String> headerNameValue : customHeaders) {
