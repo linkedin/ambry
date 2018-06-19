@@ -357,6 +357,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public boolean isEmpty() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void shutdown() throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
