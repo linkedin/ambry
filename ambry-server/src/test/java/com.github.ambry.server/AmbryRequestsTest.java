@@ -72,6 +72,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -98,6 +99,7 @@ import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -127,8 +129,11 @@ public class AmbryRequestsTest {
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
+    StoreKeyConverterFactory storeKeyConverterFactory =
+        new StoreKeyConverterFactoryImpl(mock(VerifiableProperties.class), mock(MetricRegistry.class));
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false, null);
+        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,
+        storeKeyConverterFactory);
   }
 
   /**
