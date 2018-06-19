@@ -93,6 +93,11 @@ public interface Store {
   long getSizeInBytes();
 
   /**
+   * @return true if the store contains no data
+   */
+  boolean isEmpty();
+
+  /**
    * Shutsdown the store
    */
   void shutdown() throws StoreException;

@@ -178,6 +178,7 @@ class CuratedLogIndexState {
     // not used but set anyway since this is a package private variable.
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     initIndex();
+    assertTrue("Expected empty index", index.isEmpty());
     if (initState) {
       setupTestState(isLogSegmented, segmentCapacity);
     }
@@ -759,6 +760,7 @@ class CuratedLogIndexState {
     assertEquals("Start Offset of index not as expected", expectedStartOffset, index.getStartOffset());
     assertEquals("End Offset of index not as expected", log.getEndOffset(), index.getCurrentEndOffset());
     assertEquals("Used capacity reported not as expected", expectedUsedCapacity, index.getLogUsedCapacity());
+    assertFalse("Expected nonempty index", index.isEmpty());
   }
 
   /**
@@ -778,6 +780,8 @@ class CuratedLogIndexState {
     Offset firstJournalEntryAddedNow =
         addPutEntries(1, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getValue().getOffset();
     assertEquals("Incorrect log segment count", expectedLogSegmentCount, index.getLogSegmentCount());
+    assertFalse("Expected nonempty index", index.isEmpty());
+
     // 2 more PUT
     addPutEntries(2, CuratedLogIndexState.PUT_RECORD_SIZE, Utils.Infinite_Time);
     // 2 PUT EXPIRED

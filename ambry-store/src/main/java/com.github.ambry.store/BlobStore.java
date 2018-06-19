@@ -529,6 +529,11 @@ class BlobStore implements Store {
     return index.getLogUsedCapacity();
   }
 
+  @Override
+  public boolean isEmpty() {
+    return index.isEmpty();
+  }
+
   /**
    * Fetch {@link CompactionDetails} based on the {@link CompactionPolicy} for this {@link BlobStore} containing
    * information about log segments to be compacted

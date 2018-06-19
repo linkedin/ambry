@@ -988,6 +988,11 @@ public class AmbryRequestsTest {
       }
 
       @Override
+      public boolean isEmpty() {
+        return false;
+      }
+
+      @Override
       public void shutdown() throws StoreException {
 
       }

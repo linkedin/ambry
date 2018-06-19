@@ -1278,12 +1278,20 @@ class PersistentIndex {
   }
 
   /**
-   * Gets the start {@link Offset} of the given instance of {@code indexSegments}.
+   * Gets the end {@link Offset} of the given instance of {@code indexSegments}.
    * @param indexSegments the map of index segment start {@link Offset} to {@link IndexSegment} instances
    */
   private Offset getCurrentEndOffset(ConcurrentSkipListMap<Offset, IndexSegment> indexSegments) {
+    // If no indexSegments exist, return start offset of first log segment
     return indexSegments.size() == 0 ? getStartOffset(indexSegments)
         : indexSegments.lastEntry().getValue().getEndOffset();
+  }
+
+  /**
+   * @return true if the index contains no segments, otherwise false.
+   */
+  boolean isEmpty() {
+    return validIndexSegments.isEmpty();
   }
 
   /**

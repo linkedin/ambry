@@ -983,6 +983,7 @@ public class BlobStoreTest {
     // being picked for delete.
     time.sleep(Time.MsPerSec);
     long expectedStoreSize;
+    assertTrue("Expected empty store", store.isEmpty());
     if (!isLogSegmented) {
       // log is filled about ~50%.
       expectedStoreSize = segmentCapacity / 2;
@@ -992,6 +993,7 @@ public class BlobStoreTest {
       // first log segment is filled to capacity.
       addCuratedData(segmentCapacity);
       assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
+      assertFalse("Expected nonempty store", store.isEmpty());
 
       // second log segment is filled but has some space at the end (free space has to be less than the lesser of the
       // standard delete and put record sizes so that the next write causes a roll over of log segments).
@@ -1049,6 +1051,8 @@ public class BlobStoreTest {
     // First Index Segment
     // 1 PUT
     idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
+    assertFalse("Expected nonempty store", store.isEmpty());
+
     // 2 more PUT
     idsInIndexSegment.addAll(put(2, PUT_RECORD_SIZE, Utils.Infinite_Time));
     // 2 PUT EXPIRED

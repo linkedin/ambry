@@ -1060,6 +1060,11 @@ public class ReplicationTest {
     }
 
     @Override
+    public boolean isEmpty() {
+      return log.blobs.isEmpty();
+    }
+
+    @Override
     public void shutdown() throws StoreException {
     }
   }
