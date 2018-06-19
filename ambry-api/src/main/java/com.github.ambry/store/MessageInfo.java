@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.Utils;
+import java.util.Objects;
 
 
 /**
@@ -167,14 +168,23 @@ public class MessageInfo {
   }
 
   @Override
-  public boolean equals(Object thatObject) {
-    if (thatObject instanceof MessageInfo) {
-      MessageInfo that = (MessageInfo) thatObject;
-      return key.equals(that.key) && size == that.size && expirationTimeInMs == that.expirationTimeInMs
-          && isDeleted == that.isDeleted && isTtlUpdated == that.isTtlUpdated && crc == that.crc
-          && accountId == that.accountId && containerId == that.containerId && operationTimeMs == that.operationTimeMs;
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
     }
-    return false;
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    MessageInfo that = (MessageInfo) o;
+    return size == that.size && expirationTimeInMs == that.expirationTimeInMs && isDeleted == that.isDeleted
+        && isTtlUpdated == that.isTtlUpdated && accountId == that.accountId && containerId == that.containerId
+        && operationTimeMs == that.operationTimeMs && Objects.equals(key, that.key) && Objects.equals(crc, that.crc);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(key, size, expirationTimeInMs, isDeleted, isTtlUpdated, crc, accountId, containerId,
+        operationTimeMs);
   }
 
   @Override
