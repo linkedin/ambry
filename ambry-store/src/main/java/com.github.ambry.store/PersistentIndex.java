@@ -1287,8 +1287,11 @@ class PersistentIndex {
         : indexSegments.lastEntry().getValue().getEndOffset();
   }
 
+  /**
+   * @return true if the index contains no segments, otherwise false.
+   */
   boolean isEmpty() {
-    return (validIndexSegments.isEmpty());
+    return validIndexSegments.isEmpty();
   }
 
   /**

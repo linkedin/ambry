@@ -1051,6 +1051,8 @@ public class BlobStoreTest {
     // First Index Segment
     // 1 PUT
     idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
+    assertFalse("Expected nonempty store", store.isEmpty());
+
     // 2 more PUT
     idsInIndexSegment.addAll(put(2, PUT_RECORD_SIZE, Utils.Infinite_Time));
     // 2 PUT EXPIRED

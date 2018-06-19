@@ -622,7 +622,7 @@ public class ReplicationManager {
                       && remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
                     logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
                         port, token);
-                    if (partitionInfo.getStore().isEmpty() == false) {
+                    if (!partitionInfo.getStore().isEmpty()) {
                       remoteReplicaInfo.initializeTokens(token);
                       remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesReadFromLocalStore);
                     } else {
