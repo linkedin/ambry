@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 
-public class MockDataNodeId extends DataNodeId {
+public class MockDataNodeId implements DataNodeId {
   private final Map<PortType, Port> ports;
   private final List<String> mountPaths;
   private final String hostname;

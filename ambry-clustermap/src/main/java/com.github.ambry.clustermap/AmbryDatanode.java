@@ -28,7 +28,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link DataNodeId} implementation to use within dynamic cluster managers.
  */
-class AmbryDataNode extends DataNodeId implements Resource {
+class AmbryDataNode implements DataNodeId {
   private final String hostName;
   private final Port plainTextPort;
   private final Port sslPort;

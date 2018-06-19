@@ -38,7 +38,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * DataNode is uniquely identified by its hostname and port. A DataNode is in a {@link Datacenter}. A DataNode has zero
  * or more {@link Disk}s.
  */
-class DataNode extends DataNodeId {
+class DataNode implements DataNodeId {
   private final Datacenter datacenter;
   private final String hostname;
   private final int portNum;

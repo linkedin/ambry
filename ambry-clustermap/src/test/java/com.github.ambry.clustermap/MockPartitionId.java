@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * Mock partition id for unit tests
  */
-public class MockPartitionId extends PartitionId {
+public class MockPartitionId implements PartitionId {
 
   final Long partition;
   public List<ReplicaId> replicaIds;

@@ -19,56 +19,56 @@ import com.github.ambry.network.Port;
 /**
  * A DataNodeId has many devices. A DataNodeId stores one or more {@link ReplicaId}s upon each device.
  */
-public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
+public interface DataNodeId extends Resource, Comparable<DataNodeId> {
 
   /**
    * Gets the hostname of this DataNodeId.
    *
    * @return fully qualified domain name of the DataNodeId.
    */
-  public abstract String getHostname();
+  String getHostname();
 
   /**
    * Gets the DataNodeId's connection port number.
    *
    * @return Port number upon which to establish a connection with the DataNodeId.
    */
-  public abstract int getPort();
+  int getPort();
 
   /**
    * Gets the DataNodeId's SSL connection port number.
    *
    * @return Port number upon which to establish an SSL encrypted connection with the DataNodeId.
    */
-  public abstract int getSSLPort();
+  int getSSLPort();
 
   /**
    * Returns true if SSL port exists for the DataNodeId.
    *
    * @return true if SSL port exists for the datanode, false otherwise.
    */
-  public abstract boolean hasSSLPort();
+  boolean hasSSLPort();
 
   /**
    * Returns the {@link Port} of this node to connect to.
    *
    * @return {@link Port} to which the caller can connect to.
    */
-  public abstract Port getPortToConnectTo();
+  Port getPortToConnectTo();
 
   /**
    * Gets the state of the DataNodeId.
    *
    * @return state of the DataNodeId.
    */
-  public abstract HardwareState getState();
+  HardwareState getState();
 
   /**
    * Gets the DataNodeId's datacenter
    *
    * @return name of the Datacenter
    */
-  public abstract String getDatacenterName();
+  String getDatacenterName();
 
   /**
    * Get the DataNodeId's server rack ID.  This is a unique identifier for a failure zone. If there is no rack ID for
@@ -76,5 +76,5 @@ public abstract class DataNodeId implements Resource, Comparable<DataNodeId> {
    *
    * @return a valid rack ID, or null if no rack ID is assigned
    */
-  public abstract String getRackId();
+  String getRackId();
 }

@@ -35,7 +35,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * A Partition is the unit of data management in Ambry. Each Partition is uniquely identifiable by an ID. Partitions
  * consist of one or more {@link Replica}s. Replicas ensure that a Partition is available and reliable.
  */
-class Partition extends PartitionId {
+class Partition implements PartitionId {
 
   private static final short Version_Field_Size_In_Bytes = 2;
   private static final short Current_Version = 1;
@@ -55,7 +55,7 @@ class Partition extends PartitionId {
     this.partitionClass = partitionClass;
     this.partitionState = partitionState;
     this.replicaCapacityInBytes = replicaCapacityInBytes;
-    this.replicas = new ArrayList<Replica>();
+    this.replicas = new ArrayList<>();
 
     validate();
   }
