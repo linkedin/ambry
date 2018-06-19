@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ThreadLocalRandom;
@@ -176,7 +177,7 @@ class PutOperation {
     this.notificationSystem = notificationSystem;
     this.passedInBlobProperties = blobProperties;
     this.userMetadata = userMetadata;
-    this.partitionClass = partitionClass;
+    this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
     this.channel = channel;
     this.futureResult = futureResult;
     this.callback = callback;
@@ -1127,7 +1128,7 @@ class PutOperation {
             RouterErrorCode.AmbryUnavailable);
       }
       PartitionId selected = partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
-      if (partitionClass != null && !partitionClass.equals(selected.getPartitionClass())) {
+      if (!partitionClass.equals(selected.getPartitionClass())) {
         throw new IllegalStateException(
             "Selected partition's class [" + selected.getPartitionClass() + "] is not as required: " + partitionClass);
       }
