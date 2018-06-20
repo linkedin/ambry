@@ -117,12 +117,12 @@ public class AmbryRequestsTest {
   private final MockReplicationManager replicationManager;
   private final AmbryRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
+  private final Set<StoreKey> validKeysInStore = new HashSet<>();
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
-  private final Set<StoreKey> convertedStoreKeys = new HashSet<>();
 
   public AmbryRequestsTest() throws IOException, ReplicationException, StoreException {
     clusterMap = new MockClusterMap();
-    storageManager = new MockStorageManager(convertedStoreKeys);
+    storageManager = new MockStorageManager(validKeysInStore);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
@@ -537,6 +537,49 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.exceptionToThrowOnShuttingDownBlobStore = null;
   }
+
+  /**
+   * A list of BlobIds should be converted as expected and works correctly with GetRequest.
+   * If all blobIds can be converted correctly, no error is expected.
+   * If any blobId can't be converted correctly, Blob_Not_Found is expected.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void listOfOriginalStoreKeysGetTest() throws Exception {
+    PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
+    List<BlobId> blobIds = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+      BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+      BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(),
+          partitionId, false);
+      conversionMap.put(originalBlobId, convertedBlobId);
+      validKeysInStore.add(convertedBlobId);
+      blobIds.add(originalBlobId);
+    }
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
+
+    // Check a invalid key mapped to null
+    BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+    blobIds.add(originalBlobId);
+    conversionMap.put(originalBlobId, null);
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.Blob_Not_Found);
+
+    // Check a valid key mapped to null
+    originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+    blobIds.add(originalBlobId);
+    conversionMap.put(originalBlobId, null);
+    validKeysInStore.add(originalBlobId);
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
+  }
+
   // helpers
 
   // general
@@ -627,6 +670,35 @@ public class AmbryRequestsTest {
   }
 
   /**
+   * Sends and verifies that get a list of original blobIds works correctly.
+   * @param blobIds List of blobIds for GetRequest.
+   * @param expectedErrorCode the {@link ServerErrorCode} expected in the response.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  private void sendAndVerifyGetOriginalStoreKeys(List<BlobId> blobIds, ServerErrorCode expectedErrorCode)
+      throws InterruptedException, IOException {
+    PartitionId partitionId = blobIds.get(0).getPartition();
+    int correlationId = blobIds.get(0).getContainerId();
+    String clientId = UtilsTest.getRandomString(10);
+
+    PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(partitionId, blobIds);
+    RequestOrResponse request =
+        new GetRequest(correlationId, clientId, MessageFormatFlags.All, Collections.singletonList(pRequestInfo),
+            GetOption.Include_All);
+    storageManager.resetStore();
+    Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    if (expectedErrorCode.equals(ServerErrorCode.No_Error)) {
+      assertEquals("Operation received at the store not as expected", RequestOrResponseType.GetRequest,
+          MockStorageManager.operationReceived);
+    }
+    GetResponse getResponse = (GetResponse) response;
+    for (PartitionResponseInfo info : getResponse.getPartitionResponseInfoList()) {
+      assertEquals("Error code does not match expected", expectedErrorCode, info.getErrorCode());
+    }
+  }
+
+  /**
    * Sends and verifies that an operation specific request works correctly.
    * @param requestType the type of the request to send.
    * @param ids the partitionIds to send requests for.
@@ -648,7 +720,7 @@ public class AmbryRequestsTest {
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), id,
           false);
       conversionMap.put(originalBlobId, convertedBlobId);
-      convertedStoreKeys.add(convertedBlobId);
+      validKeysInStore.add(convertedBlobId);
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:
@@ -1077,7 +1149,7 @@ public class AmbryRequestsTest {
      */
     PartitionId startedPartitionId = null;
 
-    final Set<StoreKey> convertedStoreKeys;
+    private final Set<StoreKey> convertedStoreKeys;
 
     MockStorageManager(Set<StoreKey> convertedStoreKeys) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
