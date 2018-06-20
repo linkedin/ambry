@@ -136,8 +136,18 @@ class SimpleOperationTracker implements OperationTracker {
     }
     totalReplicaCount = replicaPool.size();
     if (totalReplicaCount < successTarget) {
-      throw new IllegalArgumentException(
-          "Total Replica count " + totalReplicaCount + " is less than success target " + successTarget);
+      StringBuilder errMsg = new StringBuilder("Total Replica count ").append(totalReplicaCount)
+          .append(" is less than success target ")
+          .append(successTarget)
+          .append(". Partition is ")
+          .append(partitionId)
+          .append(" and partition class is ")
+          .append(partitionId.getPartitionClass())
+          .append(". Replicas selected are: ");
+      for (ReplicaId replicaId : replicaPool) {
+        errMsg.append(replicaId.getDataNodeId()).append(" ");
+      }
+      throw new IllegalArgumentException(errMsg.toString());
     }
     this.otIterator = new OpTrackerIterator();
   }
