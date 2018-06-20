@@ -270,6 +270,10 @@ public class StoreCopier implements Closeable {
             for (Transformer transformer : transformers) {
               message = transformer.transform(message);
             }
+            if (message == null) {
+              logger.trace("{} has no converted equivalent, treating as deleted / expired", messageInfo.getStoreKey());
+              continue;
+            }
             MessageFormatWriteSet writeSet =
                 new MessageFormatWriteSet(message.getStream(), Collections.singletonList(message.getMessageInfo()),
                     false);
