@@ -64,14 +64,17 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
@@ -92,6 +95,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -99,7 +103,6 @@ import java.util.Set;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 
 /**
@@ -114,10 +117,12 @@ public class AmbryRequestsTest {
   private final MockReplicationManager replicationManager;
   private final AmbryRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
+  private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+  private final Set<StoreKey> convertedStoreKeys = new HashSet<>();
 
   public AmbryRequestsTest() throws IOException, ReplicationException, StoreException {
     clusterMap = new MockClusterMap();
-    storageManager = new MockStorageManager();
+    storageManager = new MockStorageManager(convertedStoreKeys);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
@@ -129,8 +134,7 @@ public class AmbryRequestsTest {
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
-    StoreKeyConverterFactory storeKeyConverterFactory =
-        new StoreKeyConverterFactoryImpl(mock(VerifiableProperties.class), mock(MetricRegistry.class));
+    StoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory();
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,
         storeKeyConverterFactory);
@@ -637,22 +641,27 @@ public class AmbryRequestsTest {
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = UtilsTest.getRandomString(10);
-      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+      BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false);
+      BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), id,
+          false);
+      conversionMap.put(originalBlobId, convertedBlobId);
+      convertedStoreKeys.add(convertedBlobId);
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:
           BlobProperties properties =
-              new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
-          request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
+              new BlobProperties(0, "serviceId", originalBlobId.getAccountId(), originalBlobId.getAccountId(), false);
+          request = new PutRequest(correlationId, clientId, originalBlobId, properties, ByteBuffer.allocate(0),
               ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
           break;
         case DeleteRequest:
-          request = new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds());
+          request = new DeleteRequest(correlationId, clientId, originalBlobId, SystemTime.getInstance().milliseconds());
           break;
         case GetRequest:
-          PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(id, Collections.singletonList(blobId));
+          PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(id, Collections.singletonList(originalBlobId));
           request =
               new GetRequest(correlationId, clientId, MessageFormatFlags.All, Collections.singletonList(pRequestInfo),
                   GetOption.Include_All);
@@ -916,7 +925,7 @@ public class AmbryRequestsTest {
     /**
      * An empty {@link Store} implementation.
      */
-    private static Store store = new Store() {
+    private Store store = new Store() {
 
       @Override
       public void start() throws StoreException {
@@ -927,6 +936,11 @@ public class AmbryRequestsTest {
       public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
           throws StoreException {
         operationReceived = RequestOrResponseType.GetRequest;
+        for (StoreKey id : ids) {
+          if (!convertedStoreKeys.contains(id)) {
+            throw new StoreException("Not a converted Key.", StoreErrorCodes.ID_Not_Found);
+          }
+        }
         return new StoreInfo(new MessageReadSet() {
           @Override
           public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
@@ -964,6 +978,11 @@ public class AmbryRequestsTest {
       @Override
       public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
         operationReceived = RequestOrResponseType.DeleteRequest;
+        for (MessageInfo messageInfo : messageSetToDelete.getMessageSetInfo()) {
+          if (!convertedStoreKeys.contains(messageInfo.getStoreKey())) {
+            throw new StoreException("Not a converted Key.", StoreErrorCodes.ID_Not_Found);
+          }
+        }
       }
 
       @Override
@@ -1058,9 +1077,12 @@ public class AmbryRequestsTest {
      */
     PartitionId startedPartitionId = null;
 
-    MockStorageManager() throws StoreException {
+    final Set<StoreKey> convertedStoreKeys;
+
+    MockStorageManager(Set<StoreKey> convertedStoreKeys) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
           Collections.emptyList(), null, null, null, null, new MockTime());
+      this.convertedStoreKeys = convertedStoreKeys;
     }
 
     @Override
@@ -1229,6 +1251,30 @@ public class AmbryRequestsTest {
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
       }
+    }
+  }
+
+  /**
+   * A mock factory of {@link StoreKeyConverterFactory}.  Creates MockStoreKeyConverter.
+   */
+  private class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
+    @Override
+    public StoreKeyConverter getStoreKeyConverter() {
+      return new MockStoreKeyConverter();
+    }
+  }
+
+  /**
+   * A mock implementation of {@link StoreKeyConverter}.
+   */
+  class MockStoreKeyConverter implements StoreKeyConverter {
+    @Override
+    public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
+      Map<StoreKey, StoreKey> output = new HashMap<>();
+      if (input != null) {
+        input.forEach((storeKey) -> output.put(storeKey, conversionMap.get(storeKey)));
+      }
+      return output;
     }
   }
 }

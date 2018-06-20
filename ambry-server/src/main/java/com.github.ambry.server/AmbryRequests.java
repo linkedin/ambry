@@ -409,9 +409,9 @@ public class AmbryRequests implements RequestAPI {
             deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
+        MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
         Store storeToDelete = storageManager.getStore(deleteRequest.getBlobId().getPartition());
-        storeToDelete.delete(writeset);
+        storeToDelete.delete(writeSet);
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
@@ -1071,9 +1071,12 @@ public class AmbryRequests implements RequestAPI {
    * @return A list of converted storeKeys.
    */
   private List<StoreKey> getConvertedStoreKeys(List<? extends StoreKey> storeKeys) throws Exception {
-    Map<StoreKey, StoreKey> convertionMap = storeKeyConverterFactory.getStoreKeyConverter().convert(storeKeys);
+    Map<StoreKey, StoreKey> conversionMap = storeKeyConverterFactory.getStoreKeyConverter().convert(storeKeys);
     List<StoreKey> convertedStoreKeys = new ArrayList<>();
-    storeKeys.stream().forEach(storeKey -> convertedStoreKeys.add(convertionMap.get(storeKey)));
+    for (StoreKey key : storeKeys) {
+      StoreKey convertedKey = conversionMap.get(key);
+      convertedStoreKeys.add(convertedKey == null ? key : convertedKey);
+    }
     return convertedStoreKeys;
   }
 }
