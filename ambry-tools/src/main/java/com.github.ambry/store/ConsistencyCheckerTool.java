@@ -198,6 +198,15 @@ public class ConsistencyCheckerTool {
     return new Pair<>(success, resultsByReplica.getSecond());
   }
 
+  /**
+   * Will examine the index files in the File replicas for store keys
+   * and will then convert these store keys and return the
+   * conversion map
+   * @param replicas replicas that should contain index files that will be
+   *                 parsed
+   * @return conversion map of old store keys and new store keys
+   * @throws Exception
+   */
   public Map<StoreKey, StoreKey> convertBlobIds(File[] replicas) throws Exception {
     Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
         getIndexProcessingResults(replicas);
