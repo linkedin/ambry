@@ -447,7 +447,7 @@ public class NettyPerfClient {
         logger.trace("Response receive has started on channel {}. Took {} ms", ctx.channel(), responseReceiveStart);
         response = (HttpResponse) in;
         if (response.status() != HttpResponseStatus.OK) {
-          logger.error("Got Response code {} and header was {}", response.status().code(), response.headers());
+          logger.error("Got Response code {} and headers were {}", response.status().code(), response.headers());
         }
       }
       if (in instanceof HttpContent) {
