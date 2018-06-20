@@ -90,6 +90,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.sql.Blob;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -539,7 +540,7 @@ public class AmbryRequestsTest {
   }
 
   /**
-   * A list of BlobIds should be converted as expected and works correctly with GetRequest.
+   * Tests blobIds can be converted as expected and works correctly with GetRequest.
    * If all blobIds can be converted correctly, no error is expected.
    * If any blobId can't be converted correctly, Blob_Not_Found is expected.
    * @throws InterruptedException
@@ -562,22 +563,22 @@ public class AmbryRequestsTest {
     }
     sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
 
-    // Check a invalid key mapped to null
-    BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
-    blobIds.add(originalBlobId);
-    conversionMap.put(originalBlobId, null);
-    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.Blob_Not_Found);
-
     // Check a valid key mapped to null
-    originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+    BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
     blobIds.add(originalBlobId);
     conversionMap.put(originalBlobId, null);
     validKeysInStore.add(originalBlobId);
     sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
+
+    // Check a invalid key mapped to null
+    originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+    blobIds.add(originalBlobId);
+    conversionMap.put(originalBlobId, null);
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.Blob_Not_Found);
   }
 
   // helpers
@@ -670,7 +671,7 @@ public class AmbryRequestsTest {
   }
 
   /**
-   * Sends and verifies that get a list of original blobIds works correctly.
+   * Sends and verifies that GetRequest with a list of original blobIds works correctly.
    * @param blobIds List of blobIds for GetRequest.
    * @param expectedErrorCode the {@link ServerErrorCode} expected in the response.
    * @throws InterruptedException
@@ -1009,8 +1010,8 @@ public class AmbryRequestsTest {
           throws StoreException {
         operationReceived = RequestOrResponseType.GetRequest;
         for (StoreKey id : ids) {
-          if (!convertedStoreKeys.contains(id)) {
-            throw new StoreException("Not a converted Key.", StoreErrorCodes.ID_Not_Found);
+          if (!validKeysInStore.contains(id)) {
+            throw new StoreException("Not a valid key.", StoreErrorCodes.ID_Not_Found);
           }
         }
         return new StoreInfo(new MessageReadSet() {
@@ -1051,8 +1052,8 @@ public class AmbryRequestsTest {
       public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
         operationReceived = RequestOrResponseType.DeleteRequest;
         for (MessageInfo messageInfo : messageSetToDelete.getMessageSetInfo()) {
-          if (!convertedStoreKeys.contains(messageInfo.getStoreKey())) {
-            throw new StoreException("Not a converted Key.", StoreErrorCodes.ID_Not_Found);
+          if (!validKeysInStore.contains(messageInfo.getStoreKey())) {
+            throw new StoreException("Not a valid key.", StoreErrorCodes.ID_Not_Found);
           }
         }
       }
@@ -1149,12 +1150,12 @@ public class AmbryRequestsTest {
      */
     PartitionId startedPartitionId = null;
 
-    private final Set<StoreKey> convertedStoreKeys;
+    private final Set<StoreKey> validKeysInStore;
 
-    MockStorageManager(Set<StoreKey> convertedStoreKeys) throws StoreException {
+    MockStorageManager(Set<StoreKey> validKeysInStore) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
           Collections.emptyList(), null, null, null, null, new MockTime());
-      this.convertedStoreKeys = convertedStoreKeys;
+      this.validKeysInStore = validKeysInStore;
     }
 
     @Override
