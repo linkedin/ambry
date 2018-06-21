@@ -15,7 +15,16 @@ package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import org.apache.helix.ZNRecord;
+import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
+import org.apache.helix.manager.zk.ZkClient;
+import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
 /**
@@ -24,10 +33,12 @@ import java.io.IOException;
  */
 public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   private final ClusterMapConfig clusterMapConfig;
+  private final HelixPropertyStoreConfig helixPropertyStoreConfig;
   private final String instanceName;
   private final HelixFactory helixFactory;
   private final MetricRegistry metricRegistry;
   private HelixClusterManager helixClusterManager;
+  private HelixPropertyStore<ZNRecord> helixPropertyStore;
   private HelixParticipant helixParticipant;
 
   /**
@@ -36,13 +47,14 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
    * @param hardwareLayoutFilePath unused.
    * @param partitionLayoutFilePath unused.
    */
-  public HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
+  public HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, HelixPropertyStoreConfig helixPropertyStoreConfig, String hardwareLayoutFilePath,
       String partitionLayoutFilePath) {
-    this(clusterMapConfig, new MetricRegistry());
+    this(clusterMapConfig, helixPropertyStoreConfig, new MetricRegistry());
   }
 
-  HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, MetricRegistry metricRegistry) {
+  HelixClusterAgentsFactory(ClusterMapConfig clusterMapConfig, HelixPropertyStoreConfig helixPropertyStoreConfig, MetricRegistry metricRegistry) {
     this.clusterMapConfig = clusterMapConfig;
+    this.helixPropertyStoreConfig = helixPropertyStoreConfig;
     this.instanceName =
         ClusterMapUtils.getInstanceName(clusterMapConfig.clusterMapHostName, clusterMapConfig.clusterMapPort);
     helixFactory = new HelixFactory();
@@ -52,7 +64,13 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   @Override
   public HelixClusterManager getClusterMap() throws IOException {
     if (helixClusterManager == null) {
-      helixClusterManager = new HelixClusterManager(clusterMapConfig, instanceName, helixFactory, metricRegistry);
+      ZkClient zkClient =
+          new ZkClient(helixPropertyStoreConfig.zkClientConnectString, helixPropertyStoreConfig.zkClientSessionTimeoutMs,
+              helixPropertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+      List<String> subscribedPaths = Collections.singletonList(helixPropertyStoreConfig.rootPath + "/ClusterConfigs");
+      helixPropertyStore =
+          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), helixPropertyStoreConfig.rootPath, subscribedPaths);
+      helixClusterManager = new HelixClusterManager(clusterMapConfig, helixPropertyStore, instanceName, helixFactory, metricRegistry);
     }
     return helixClusterManager;
   }

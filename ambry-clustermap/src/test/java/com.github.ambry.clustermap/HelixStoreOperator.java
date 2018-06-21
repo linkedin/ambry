@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.commons;
+package com.github.ambry.clustermap;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.Collections;
@@ -169,7 +169,7 @@ public class HelixStoreOperator {
   /**
    * The type of store operations.
    */
-  enum StoreOperationType {
+  public enum StoreOperationType {
     CREATE, WRITE, DELETE
   }
 }

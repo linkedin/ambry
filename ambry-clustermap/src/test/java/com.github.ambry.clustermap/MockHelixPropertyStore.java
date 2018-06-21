@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.commons;
+package com.github.ambry.clustermap;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,7 +45,7 @@ public class MockHelixPropertyStore<T> implements HelixPropertyStore<T>, BaseDat
    * @param shouldRemoveRecordBeforeNotify A boolean indicator to specify if the record should be removed before
    *                                        notifying listeners.
    */
-  MockHelixPropertyStore(boolean shouldFailSetOperation, boolean shouldRemoveRecordBeforeNotify) {
+  public MockHelixPropertyStore(boolean shouldFailSetOperation, boolean shouldRemoveRecordBeforeNotify) {
     this.shouldFailSetOperation = shouldFailSetOperation;
     this.shouldRemoveRecordBeforeNotify = shouldRemoveRecordBeforeNotify;
   }

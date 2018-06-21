@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -31,11 +32,18 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.ZNRecord;
+import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
+import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.ResourceConfig;
+import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -103,6 +111,9 @@ class HelixBootstrapUpgradeUtil {
   private int resourcesDropped = 0;
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
+  private final Map<String, HelixPropertyStore<ZNRecord>> dataCenterToPropertyStore = new HashMap<>();
+  private static final String ZNRECORD_NAME = "PartitionOverride";
+  private static final String PROPERTYSTORE_PATH = "/PROPERTYSTORE/ClusterConfigs";
 
   /**
    * Takes in the path to the files that make up the static cluster map and adds or updates the cluster map information
@@ -138,6 +149,18 @@ class HelixBootstrapUpgradeUtil {
       clusterMapToHelixMapper.validateAndClose();
     }
     clusterMapToHelixMapper.logSummary();
+  }
+
+  static void uploadClusterConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory) throws Exception {
+
+    HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
+            maxPartitionsInOneResource, false, false, helixAdminFactory);
+    clusterMapToHelixMapper.createHelixPropertyStoreForAllDCs();
+    info("Uploading partition override to HelixPropertyStore based on static clustermap.");
+    clusterMapToHelixMapper.uploadPartitionOverride();
+    info("Upload cluster configs completed.");
   }
 
   /**
@@ -217,8 +240,9 @@ class HelixBootstrapUpgradeUtil {
     }
     String clusterNameInStaticClusterMap = staticClusterMap.partitionLayout.getClusterName();
     this.clusterName = clusterNamePrefix + clusterNameInStaticClusterMap;
-    info("Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
-        + "\" in Helix");
+    System.out.println(
+        "Associating static Ambry cluster \"" + clusterNameInStaticClusterMap + "\" with cluster\"" + clusterName
+            + "\" in Helix");
     for (Datacenter datacenter : staticClusterMap.hardwareLayout.getDatacenters()) {
       if (!dataCenterToZkAddress.keySet().contains(datacenter.getName())) {
         throw new IllegalArgumentException(
@@ -228,6 +252,50 @@ class HelixBootstrapUpgradeUtil {
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
       HelixAdmin admin = helixAdminFactory.getHelixAdmin(entry.getValue().getZkConnectStr());
       adminForDc.put(entry.getKey(), admin);
+    }
+  }
+
+  private void createHelixPropertyStoreForAllDCs() {
+    Properties storeProps = new Properties();
+    storeProps.setProperty("helix.property.store.root.path", "/" + this.clusterName);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
+    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      ZkClient zkClient = new ZkClient(entry.getValue().getZkConnectStr(), propertyStoreConfig.zkClientSessionTimeoutMs,
+          propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+      List<String> subscribedPaths = Collections.singletonList(propertyStoreConfig.rootPath);
+      HelixPropertyStore<ZNRecord> helixPropertyStore =
+          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath, subscribedPaths);
+      if (!helixPropertyStore.exists(PROPERTYSTORE_PATH, AccessOption.PERSISTENT)) {
+        ZNRecord znRecord = new ZNRecord(ZNRECORD_NAME);
+        helixPropertyStore.create(PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME, znRecord, AccessOption.PERSISTENT);
+        info("Creating a new znode: ", PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME);
+      }
+      dataCenterToPropertyStore.put(entry.getKey(), helixPropertyStore);
+    }
+  }
+
+  private void uploadPartitionOverride() {
+    Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
+    for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
+      String partitionName = partitionId.toPathString();
+      Map<String, String> partitionProperties = new HashMap<>();
+      partitionProperties.put("state", "RW");
+      partitionProperties.put("partitionClass", partitionId.getPartitionClass());
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.isSealed()) {
+          partitionProperties.put("state", "RO");
+          break;
+        }
+      }
+      partitionOverrideInfos.put(partitionName, partitionProperties);
+    }
+    info("Setting partition override for all datacenters.");
+    // set partitionOverride in PROPERTYSTORE for all datacenters
+    for (HelixPropertyStore<ZNRecord> helixPropertyStore : dataCenterToPropertyStore.values()) {
+      ZNRecord znRecord = new ZNRecord(ZNRECORD_NAME);
+      znRecord.setMapFields(partitionOverrideInfos);
+      String path = "/" + this.clusterName + PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME;
+      helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT);
     }
   }
 

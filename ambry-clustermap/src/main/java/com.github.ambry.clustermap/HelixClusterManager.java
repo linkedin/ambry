@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,13 +33,17 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceConfigChangeListener;
 import org.apache.helix.InstanceType;
 import org.apache.helix.LiveInstanceChangeListener;
 import org.apache.helix.NotificationContext;
+import org.apache.helix.ZNRecord;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
+import org.apache.helix.store.HelixPropertyListener;
+import org.apache.helix.store.HelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,6 +80,8 @@ class HelixClusterManager implements ClusterMap {
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
   private long currentXid;
+  private HelixPropertyStore<ZNRecord> helixPropertyStore;
+  private Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
 
   /**
    * Instantiate a HelixClusterManager.
@@ -83,15 +90,17 @@ class HelixClusterManager implements ClusterMap {
    * @throws IOException if there is an error in parsing the clusterMapConfig or in connecting with the associated
    *                     remote Zookeeper services.
    */
-  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
-      MetricRegistry metricRegistry) throws IOException {
+  HelixClusterManager(ClusterMapConfig clusterMapConfig, HelixPropertyStore<ZNRecord> helixPropertyStore,
+      String instanceName, HelixFactory helixFactory, MetricRegistry metricRegistry) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
     currentXid = clusterMapConfig.clustermapCurrentXid;
     this.metricRegistry = metricRegistry;
+    this.helixPropertyStore = helixPropertyStore;
     clusterName = clusterMapConfig.clusterMapClusterName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
+      initializeHelixPropertyStoreAndSubscribe();
       final Map<String, DcZkInfo> dataCenterToZkAddress =
           parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
       final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
@@ -112,7 +121,6 @@ class HelixClusterManager implements ClusterMap {
               DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
               dcToDcZkInfo.put(dcName, dcInfo);
               dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
-
               // The initial instance config change notification is required to populate the static cluster
               // information, and only after that is complete do we want the live instance change notification to
               // come in. We do not need to do anything extra to ensure this, however, since Helix provides the initial
@@ -157,6 +165,33 @@ class HelixClusterManager implements ClusterMap {
     localDatacenterId = dcToDcZkInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getDcId();
     partitionSelectionHelper =
         new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName);
+  }
+
+  private void initializeHelixPropertyStoreAndSubscribe() {
+    String topic = "PartitionOverride";
+    HelixPropertyListener helixListener = new HelixPropertyListener() {
+      @Override
+      public void onDataChange(String path) {
+        logger.info("Message is changed for topic {} at path {}", topic, path);
+      }
+
+      @Override
+      public void onDataCreate(String path) {
+        logger.info("Message is created for topic {} at path {}", topic, path);
+      }
+
+      @Override
+      public void onDataDelete(String path) {
+        logger.info("Message is deleted for topic {} at path {}", topic, path);
+      }
+    };
+    logger.info("Getting ZNRecord from Helix PropertyStore");
+    helixPropertyStore.subscribe("/ClusterConfigs/PartitionOverride", helixListener);
+    ZNRecord zNRecord = helixPropertyStore.get("/ClusterConfigs/PartitionOverride", null, AccessOption.PERSISTENT);
+    if (clusterMapConfig.clusterMapEnableOverride) {
+      partitionOverrideInfoMap = zNRecord.getMapFields();
+    }
+    logger.info("partitionOverrideInfoMap is initialized!");
   }
 
   /**
@@ -320,7 +355,7 @@ class HelixClusterManager implements ClusterMap {
             initializationException.compareAndSet(null, e);
           }
           instanceConfigInitialized.set(true);
-        } else {
+        } else if (!clusterMapConfig.clusterMapEnableOverride) {
           updateStateOfReplicas(configs);
         }
         sealedStateChangeCounter.incrementAndGet();
@@ -494,9 +529,23 @@ class HelixClusterManager implements ClusterMap {
             }
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             // Create replica associated with this node.
-            AmbryReplica replica =
-                new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                    replicaCapacity, sealedReplicas.contains(partitionName));
+            boolean replicaSealState;
+            if (clusterMapConfig.clusterMapEnableOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
+              replicaSealState = partitionOverrideInfoMap.get(partitionName).get("state").equals("RO");
+            } else {
+              replicaSealState = sealedReplicas.contains(partitionName);
+            }
+//            try {
+//              replicaSealState = clusterMapConfig.clusterMapEnableOverride ? partitionOverrideInfoMap.get(
+//                  "Partition[" + partitionName + "]").get("state").equals("RO")
+//                  : sealedReplicas.contains(partitionName);
+//            } catch (Exception e) {
+//              logger.error(
+//                  "Using dynamic sealed list to determine replica seal state because exception occurred when resolving the state of replica: "
+//                      + e);
+//              replicaSealState = sealedReplicas.contains(partitionName);
+//            }
+            AmbryReplica replica = new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName), replicaCapacity, replicaSealState);
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }

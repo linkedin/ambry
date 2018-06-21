@@ -15,6 +15,7 @@ package com.github.ambry.server;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.InvocationOptions;
 import com.github.ambry.utils.SystemTime;
@@ -38,8 +39,9 @@ public class AmbryMain {
       Properties properties = Utils.loadProps(options.serverPropsFilePath);
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+      HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
       ClusterAgentsFactory clusterAgentsFactory =
-          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
+          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, helixPropertyStoreConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       logger.info("Bootstrapping AmbryServer");
       ambryServer = new AmbryServer(verifiableProperties, clusterAgentsFactory, SystemTime.getInstance());

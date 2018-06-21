@@ -13,6 +13,8 @@
  */
 package com.github.ambry.commons;
 
+import com.github.ambry.clustermap.HelixStoreOperator;
+import com.github.ambry.clustermap.MockHelixPropertyStore;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -334,7 +336,7 @@ public class HelixNotifierTest {
    */
   @Test
   public void testFailToPublishMessage() throws Exception {
-    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(true, false));
+    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<ZNRecord>(true, false));
     helixNotifier.publish(refTopics.get(0), refMessages.get(0));
   }
 
@@ -346,7 +348,7 @@ public class HelixNotifierTest {
    */
   @Test
   public void testReadNullRecordWhenSendMessageToLocalListeners() throws Exception {
-    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<>(false, true));
+    helixNotifier = new HelixNotifier(new MockHelixPropertyStore<ZNRecord>(false, true));
     helixNotifier.publish(refTopics.get(0), refMessages.get(0));
     helixNotifier.subscribe(refTopics.get(0), listeners.get(0));
     latch0.set(new CountDownLatch(1));

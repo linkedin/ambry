@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreRecovery;
@@ -125,9 +126,10 @@ public class StoreCopier implements Closeable {
     CopierConfig config = new CopierConfig(properties);
     StoreConfig storeConfig = new StoreConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
+    HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(properties);
     ClusterAgentsFactory clusterAgentsFactory =
-        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
-            config.partitionLayoutFilePath);
+        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, helixPropertyStoreConfig,
+            config.hardwareLayoutFilePath, config.partitionLayoutFilePath);
     try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       File srcDir = new File(config.srcStoreDirPath);

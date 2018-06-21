@@ -121,6 +121,7 @@ project(':ambry-account') {
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-commons').sourceSets.test.output
+        testCompile project(':ambry-clustermap').sourceSets.test.output
     }
 }
 

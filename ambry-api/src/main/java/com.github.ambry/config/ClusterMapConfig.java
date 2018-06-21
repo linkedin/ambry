@@ -159,6 +159,13 @@ public class ClusterMapConfig {
   @Default("Long.MAX")
   public final Long clustermapCurrentXid;
 
+  /**
+   * Indicate if cluster manager enables override on dynamic sealed list.
+   */
+  @Config("clustermap.enable.override")
+  @Default("false")
+  public final boolean clusterMapEnableOverride; //clusterMapAdoptStaticSealedList;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -189,5 +196,6 @@ public class ClusterMapConfig {
     clusterMapDefaultPartitionClass =
         verifiableProperties.getString("clustermap.default.partition.class", MAX_REPLICAS_ALL_DATACENTERS);
     clustermapCurrentXid = verifiableProperties.getLong("clustermap.current.xid", Long.MAX_VALUE);
+    clusterMapEnableOverride = verifiableProperties.getBoolean("clustermap.enable.override", false);
   }
 }
