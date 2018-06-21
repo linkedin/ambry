@@ -98,7 +98,6 @@ public class HelixClusterManagerTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{false, false}, {false, true}, {true, false}});
-    //return Arrays.asList(new Object[][]{{false, true}});
   }
 
   /**

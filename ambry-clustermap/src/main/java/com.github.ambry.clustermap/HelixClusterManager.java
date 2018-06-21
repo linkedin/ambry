@@ -56,6 +56,8 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * @see <a href="http://helix.apache.org">http://helix.apache.org</a>
  */
 class HelixClusterManager implements ClusterMap {
+  private final String ZNODE_PATH = "/ClusterConfigs/PartitionOverride";
+  private final String TOPIC = "PartitionOverride";
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final String clusterName;
   private final MetricRegistry metricRegistry;
@@ -86,7 +88,10 @@ class HelixClusterManager implements ClusterMap {
   /**
    * Instantiate a HelixClusterManager.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this manager.
+   * @param helixPropertyStore the {@link HelixPropertyStore} used to store cluster configs.
    * @param instanceName the String representation of the instance associated with this manager.
+   * @param helixFactory the factory class to construct and get a reference to a {@link HelixManager}.
+   * @param metricRegistry the registry of metric instances associated with this manager.
    * @throws IOException if there is an error in parsing the clusterMapConfig or in connecting with the associated
    *                     remote Zookeeper services.
    */
@@ -167,27 +172,29 @@ class HelixClusterManager implements ClusterMap {
         new PartitionSelectionHelper(partitionMap.values(), clusterMapConfig.clusterMapDatacenterName);
   }
 
+  /**
+   * Initialize Helix Property Store and subscribe to listen to PartitionOverride zNode.
+   */
   private void initializeHelixPropertyStoreAndSubscribe() {
-    String topic = "PartitionOverride";
     HelixPropertyListener helixListener = new HelixPropertyListener() {
       @Override
       public void onDataChange(String path) {
-        logger.info("Message is changed for topic {} at path {}", topic, path);
+        logger.info("Message is changed for topic {} at path {}", TOPIC, path);
       }
 
       @Override
       public void onDataCreate(String path) {
-        logger.info("Message is created for topic {} at path {}", topic, path);
+        logger.info("Message is created for topic {} at path {}", TOPIC, path);
       }
 
       @Override
       public void onDataDelete(String path) {
-        logger.info("Message is deleted for topic {} at path {}", topic, path);
+        logger.info("Message is deleted for topic {} at path {}", TOPIC, path);
       }
     };
     logger.info("Getting ZNRecord from Helix PropertyStore");
-    helixPropertyStore.subscribe("/ClusterConfigs/PartitionOverride", helixListener);
-    ZNRecord zNRecord = helixPropertyStore.get("/ClusterConfigs/PartitionOverride", null, AccessOption.PERSISTENT);
+    helixPropertyStore.subscribe(ZNODE_PATH, helixListener);
+    ZNRecord zNRecord = helixPropertyStore.get(ZNODE_PATH, null, AccessOption.PERSISTENT);
     if (clusterMapConfig.clusterMapEnableOverride) {
       partitionOverrideInfoMap = zNRecord.getMapFields();
     }
@@ -366,6 +373,7 @@ class HelixClusterManager implements ClusterMap {
     /**
      * Populate the initial data from the admin connection. Create nodes, disks, partitions and replicas for the entire
      * cluster. An {@link InstanceConfig} will only be looked at if the xid in it is <= currentXid.
+     * @param instanceConfigs the list of {@link InstanceConfig}s containing the information about the sealed states of replicas.
      * @throws Exception if creation of {@link AmbryDataNode}s or {@link AmbryDisk}s throw an Exception.
      */
     private void initializeInstances(List<InstanceConfig> instanceConfigs) throws Exception {
@@ -477,7 +485,8 @@ class HelixClusterManager implements ClusterMap {
 
     /**
      * Initialize the disks and replicas on the given node. Create partitions if this is the first time a replica of
-     * that partition is being constructed.
+     * that partition is being constructed. If partition override is enabled, the seal state of replica is determined by
+     * partition info in HelixPropertyStore, if disabled, the seal state is determined by instanceConfig.
      * @param datanode the {@link AmbryDataNode} that is being initialized.
      * @param instanceConfig the {@link InstanceConfig} associated with this datanode.
      * @throws Exception if creation of {@link AmbryDisk} throws an Exception.
@@ -535,17 +544,9 @@ class HelixClusterManager implements ClusterMap {
             } else {
               replicaSealState = sealedReplicas.contains(partitionName);
             }
-//            try {
-//              replicaSealState = clusterMapConfig.clusterMapEnableOverride ? partitionOverrideInfoMap.get(
-//                  "Partition[" + partitionName + "]").get("state").equals("RO")
-//                  : sealedReplicas.contains(partitionName);
-//            } catch (Exception e) {
-//              logger.error(
-//                  "Using dynamic sealed list to determine replica seal state because exception occurred when resolving the state of replica: "
-//                      + e);
-//              replicaSealState = sealedReplicas.contains(partitionName);
-//            }
-            AmbryReplica replica = new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName), replicaCapacity, replicaSealState);
+            AmbryReplica replica =
+                new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
+                    replicaCapacity, replicaSealState);
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }

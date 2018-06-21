@@ -22,7 +22,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.I0Itec.zkclient.IDefaultNameSpace;
-import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.ZkServer;
 import org.junit.Assert;
 
@@ -255,10 +254,6 @@ public class TestUtils {
       // start zookeeper
       zkServer = new ZkServer(dataDir, logDir, defaultNameSpace, port);
       zkServer.start();
-    }
-
-    public ZkClient getZkClient(){
-      return zkServer.getZkClient();
     }
 
     public int getPort() {
