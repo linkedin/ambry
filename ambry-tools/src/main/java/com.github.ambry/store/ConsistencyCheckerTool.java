@@ -130,11 +130,7 @@ public class ConsistencyCheckerTool {
     }
   }
 
-  private final DumpIndexTool dumpIndexTool;
-  private final Set<StoreKey> filterSet;
-  private final Throttler throttler;
-  private final Time time;
-  private final StoreKeyConverter storeKeyConverter;
+  private final IndexProcessingHelper indexProcessingHelper;
 
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
 
@@ -169,12 +165,10 @@ public class ConsistencyCheckerTool {
   public ConsistencyCheckerTool(ClusterMap clusterMap, StoreKeyFactory storeKeyFactory, StoreConfig storeConfig,
       Set<StoreKey> filterSet, Throttler throttler, StoreToolsMetrics metrics, Time time,
       StoreKeyConverter storeKeyConverter) {
-    this.time = time;
-    this.filterSet = filterSet;
-    this.throttler = throttler;
     StoreMetrics storeMetrics = new StoreMetrics("ConsistencyCheckerTool", clusterMap.getMetricRegistry());
-    dumpIndexTool = new DumpIndexTool(storeKeyFactory, storeConfig, time, metrics, storeMetrics);
-    this.storeKeyConverter = storeKeyConverter;
+    indexProcessingHelper =
+        new IndexProcessingHelper(storeKeyFactory, storeConfig, filterSet, throttler, storeMetrics, metrics, time,
+            storeKeyConverter);
   }
 
   /**
@@ -188,7 +182,7 @@ public class ConsistencyCheckerTool {
   public Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> checkConsistency(File[] replicas)
       throws Exception {
     Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
-        getIndexProcessingResults(replicas);
+        indexProcessingHelper.getIndexProcessingResults(replicas);
     boolean success = resultsByReplica.getFirst();
     if (success) {
       Map<StoreKey, ReplicationStatus> blobIdToStatusMap =
@@ -196,71 +190,6 @@ public class ConsistencyCheckerTool {
       success = checkConsistency(blobIdToStatusMap, replicas.length).size() == 0;
     }
     return new Pair<>(success, resultsByReplica.getSecond());
-  }
-
-  /**
-   * Will examine the index files in the File replicas for store keys
-   * and will then convert these store keys and return the
-   * conversion map
-   * @param replicas replicas that should contain index files that will be
-   *                 parsed
-   * @return conversion map of old store keys and new store keys
-   * @throws Exception
-   */
-  public Map<StoreKey, StoreKey> convertBlobIds(File[] replicas) throws Exception {
-    Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
-        getIndexProcessingResults(replicas);
-    boolean success = resultsByReplica.getFirst();
-    if (success) {
-      return createConversionKeyMap(replicas, resultsByReplica.getSecond());
-    }
-    return null;
-  }
-
-  /**
-   * Processes the indexes of each of the replicas and returns the results.
-   * @param replicas the replicas to process indexes for.
-   * @return a {@link Pair} whose first indicates whether all results were sane and whose second contains the map of
-   * individual results by replica.
-   * @throws Exception if there is any error in processing the indexes.
-   */
-  private Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> getIndexProcessingResults(File[] replicas)
-      throws Exception {
-    long currentTimeMs = time.milliseconds();
-    Map<File, DumpIndexTool.IndexProcessingResults> results = new HashMap<>();
-    boolean sane = true;
-    for (File replica : replicas) {
-      logger.info("Processing segment files for replica {} ", replica);
-      DumpIndexTool.IndexProcessingResults result =
-          dumpIndexTool.processIndex(replica, filterSet, currentTimeMs, throttler);
-      sane = sane && result.isIndexSane();
-      results.put(replica, result);
-    }
-    return new Pair<>(sane, results);
-  }
-
-  /**
-   * Takes all the StoreKeys from the file replicas and runs them
-   * through the StoreKeyConverter in a batch operation
-   * @param replicas An Array of replica directories from which blobIds need to be collected
-   * @param results the results of processing the indexes of the given {@code replicas}.
-   * @return mapping of original keys to converted keys.  If there's no converted equivalent
-   * the value will be the same as the key.
-   * @throws Exception
-   */
-  private Map<StoreKey, StoreKey> createConversionKeyMap(File[] replicas,
-      Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
-    Set<StoreKey> storeKeys = new HashSet<>();
-    for (File replica : replicas) {
-      DumpIndexTool.IndexProcessingResults result = results.get(replica);
-      for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
-        storeKeys.add(entry.getKey());
-      }
-    }
-    logger.info("Converting " + storeKeys.size() + " store keys...");
-    Map<StoreKey, StoreKey> ans = storeKeyConverter.convert(storeKeys);
-    logger.info("Store keys converted!");
-    return ans;
   }
 
   /**
@@ -275,7 +204,7 @@ public class ConsistencyCheckerTool {
   private Map<StoreKey, ReplicationStatus> getBlobStatusByReplica(File[] replicas,
       Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
     Map<StoreKey, ReplicationStatus> keyReplicationStatusMap = new HashMap<>();
-    Map<StoreKey, StoreKey> convertMap = createConversionKeyMap(replicas, results);
+    Map<StoreKey, StoreKey> convertMap = indexProcessingHelper.createConversionKeyMap(replicas, results);
     for (File replica : replicas) {
       DumpIndexTool.IndexProcessingResults result = results.get(replica);
       for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
@@ -286,10 +215,7 @@ public class ConsistencyCheckerTool {
           newKey = key;
           isDeprecated = true;
         }
-        if (!keyReplicationStatusMap.containsKey(newKey)) {
-          keyReplicationStatusMap.put(newKey, new ReplicationStatus(replicas));
-        }
-        ReplicationStatus status = keyReplicationStatusMap.get(newKey);
+        ReplicationStatus status = keyReplicationStatusMap.computeIfAbsent(newKey, k -> new ReplicationStatus(replicas));
         DumpIndexTool.Info info = entry.getValue();
         status.setBelongsToRecentIndexSegment(info.isInRecentIndexSegment());
         if (!isDeprecated && info.getStates().contains(DumpIndexTool.BlobState.Valid)) {
