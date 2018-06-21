@@ -161,7 +161,8 @@ public class GetBlobInfoOperationTest {
     putContent = new byte[BLOB_SIZE];
     random.nextBytes(putContent);
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
-    String blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel).get();
+    String blobIdStr =
+        router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
     blobId = RouterUtils.getBlobIdFromString(blobIdStr, mockClusterMap);
     networkClient = networkClientFactory.getNetworkClient();
     router.close();

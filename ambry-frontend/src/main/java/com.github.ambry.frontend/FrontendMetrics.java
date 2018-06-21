@@ -204,8 +204,10 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);
     postSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityPostProcessRequest", metricRegistry);
-    postRouterPutBlobMetrics = new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postRouterPutBlob", metricRegistry);
-    postIdConversionMetrics = new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postIdConversion", metricRegistry);
+    postRouterPutBlobMetrics =
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postRouterPutBlob", metricRegistry);
+    postIdConversionMetrics =
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postIdConversion", metricRegistry);
     postSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessResponse", metricRegistry);
 

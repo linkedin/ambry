@@ -189,7 +189,7 @@ public class InMemoryRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      Callback<String> callback) {
+      PutBlobOptions options, Callback<String> callback) {
     FutureResult<String> futureResult = new FutureResult<>();
     handlePrechecks(futureResult, callback);
     PostData postData = new PostData(blobProperties, usermetadata, channel, futureResult, callback);

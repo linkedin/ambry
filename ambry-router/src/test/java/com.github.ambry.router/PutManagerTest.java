@@ -211,13 +211,15 @@ public class PutManagerTest {
     }
     instantiateNewRouterForPuts = false;
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(req.putContent));
-    Future future = router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new Callback<String>() {
-      @Override
-      public void onCompletion(String result, Exception exception) {
-        callbackCalled.countDown();
-        throw new RuntimeException("Throwing an exception in the user callback");
-      }
-    });
+    Future future =
+        router.putBlob(req.putBlobProperties, req.putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(),
+            new Callback<String>() {
+              @Override
+              public void onCompletion(String result, Exception exception) {
+                callbackCalled.countDown();
+                throw new RuntimeException("Throwing an exception in the user callback");
+              }
+            });
     submitPutsAndAssertSuccess(false);
     //future.get() for operation with bad callback should still succeed
     future.get();
@@ -524,7 +526,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, sendZeroSizedBuffers);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
+            putChannel, new PutBlobOptionsBuilder().build(), null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     pushWithDelay(src, putChannel, blobSize, future);
     future.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
@@ -544,7 +546,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
+            putChannel, new PutBlobOptionsBuilder().build(), null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
 
     //Make the channel act bad.
@@ -600,7 +602,7 @@ public class PutManagerTest {
     MockReadableStreamChannel putChannel = new MockReadableStreamChannel(blobSize, false);
     FutureResult<String> future =
         (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
-            putChannel, null);
+            putChannel, new PutBlobOptionsBuilder().build(), null);
     ByteBuffer src = ByteBuffer.wrap(requestAndResult.putContent);
     // There will be two chunks written to the underlying writable channel, and so two events will be fired.
     int writeSize = blobSize / 2;
@@ -815,7 +817,7 @@ public class PutManagerTest {
             ReadableStreamChannel putChannel =
                 new ByteBufferReadableStreamChannel(ByteBuffer.wrap(requestAndResult.putContent));
             requestAndResult.result = (FutureResult<String>) router.putBlob(requestAndResult.putBlobProperties,
-                requestAndResult.putUserMetadata, putChannel, null);
+                requestAndResult.putUserMetadata, putChannel, new PutBlobOptionsBuilder().build(), null);
             requestAndResult.result.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
           } catch (Exception e) {
             requestAndResult.result = new FutureResult<>();

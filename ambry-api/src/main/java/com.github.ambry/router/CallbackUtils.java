@@ -37,8 +37,8 @@ public class CallbackUtils {
    *                      {@code failureCallback} will be called.
    * @return the managed {@link Callback}.
    */
-  public static <T> Callback<T> chainCallback(AsyncOperationTracker asyncOperationTracker,
-      Callback<?> failureCallback, ThrowingConsumer<? super T> successAction) {
+  public static <T> Callback<T> chainCallback(AsyncOperationTracker asyncOperationTracker, Callback<?> failureCallback,
+      ThrowingConsumer<? super T> successAction) {
     asyncOperationTracker.markOperationStart();
     return (result, exception) -> {
       try {

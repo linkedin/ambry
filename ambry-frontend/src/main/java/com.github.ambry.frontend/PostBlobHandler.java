@@ -21,6 +21,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.CallbackUtils;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.AsyncOperationTracker;
@@ -162,7 +163,7 @@ class PostBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics,
           securityCheckResult -> router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
-              routerPutBlobCallback(blobInfo)));
+              new PutBlobOptionsBuilder().build(), routerPutBlobCallback(blobInfo)));
     }
 
     /**

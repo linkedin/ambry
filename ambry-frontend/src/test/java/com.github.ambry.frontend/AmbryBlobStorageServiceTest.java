@@ -53,6 +53,8 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.router.PutBlobOptions;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -608,7 +610,8 @@ public class AmbryBlobStorageServiceTest {
         new BlobProperties(0, "userMetadataTestOldStyleServiceID", Account.UNKNOWN_ACCOUNT_ID,
             Container.UNKNOWN_CONTAINER_ID, false);
     byte[] usermetadata = TestUtils.getRandomBytes(25);
-    String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content)).get();
+    String blobId = router.putBlob(blobProperties, usermetadata, new ByteBufferReadableStreamChannel(content),
+        new PutBlobOptionsBuilder().build()).get();
 
     RestUtils.SubResource[] subResources = {RestUtils.SubResource.UserMetadata, RestUtils.SubResource.BlobInfo};
     for (RestUtils.SubResource subResource : subResources) {
@@ -2470,7 +2473,7 @@ class FrontendTestRouter implements Router {
 
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      Callback<String> callback) {
+      PutBlobOptions options, Callback<String> callback) {
     return completeOperation(UtilsTest.getRandomString(10), callback, OpType.PutBlob);
   }
 

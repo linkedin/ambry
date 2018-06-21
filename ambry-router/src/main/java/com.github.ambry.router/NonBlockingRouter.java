@@ -177,12 +177,13 @@ class NonBlockingRouter implements Router {
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param userMetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @return A future that would contain the BlobId eventually.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-      Callback<String> callback) {
+      PutBlobOptions options, Callback<String> callback) {
     if (blobProperties == null || channel == null) {
       throw new IllegalArgumentException("blobProperties or channel must not be null");
     }
