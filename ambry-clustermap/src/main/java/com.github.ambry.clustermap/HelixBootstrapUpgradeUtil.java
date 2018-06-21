@@ -151,6 +151,19 @@ class HelixBootstrapUpgradeUtil {
     clusterMapToHelixMapper.logSummary();
   }
 
+  /**
+   * Takes in the path to the files that make up the static cluster map and uploads the cluster configs(such as partition
+   * override) to HelixPropertyStore in zookeeper.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param maxPartitionsInOneResource the maximum number of Ambry partitions to group under a single Helix resource.
+   * @param helixAdminFactory the {@link HelixAdminFactory} to use to instantiate {@link HelixAdmin}
+   * @throws IOException if there is an error reading a file.
+   * @throws JSONException if there is an error parsing the JSON content in any of the files.
+   */
   static void uploadClusterConfigs(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String clusterNamePrefix, int maxPartitionsInOneResource, HelixAdminFactory helixAdminFactory) throws Exception {
 
@@ -255,6 +268,10 @@ class HelixBootstrapUpgradeUtil {
     }
   }
 
+  /**
+   * Create HelixPropertyStore for all datacenters. Also it checks if the zNode exists, if not the method will create a
+   * new zNode for PartitionOverride.
+   */
   private void createHelixPropertyStoreForAllDCs() {
     Properties storeProps = new Properties();
     storeProps.setProperty("helix.property.store.root.path", "/" + this.clusterName);
@@ -268,19 +285,22 @@ class HelixBootstrapUpgradeUtil {
       if (!helixPropertyStore.exists(PROPERTYSTORE_PATH, AccessOption.PERSISTENT)) {
         ZNRecord znRecord = new ZNRecord(ZNRECORD_NAME);
         helixPropertyStore.create(PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME, znRecord, AccessOption.PERSISTENT);
-        info("Creating a new znode: ", PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME);
+        info("Creating a new zNode: ", PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME);
       }
       dataCenterToPropertyStore.put(entry.getKey(), helixPropertyStore);
     }
   }
 
+  /**
+   * Uploads the seal state of all partitions in the format of map.
+   * TODO: add partitionClass info of all partitions into map.
+   */
   private void uploadPartitionOverride() {
     Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
     for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
       String partitionName = partitionId.toPathString();
       Map<String, String> partitionProperties = new HashMap<>();
       partitionProperties.put("state", "RW");
-      partitionProperties.put("partitionClass", partitionId.getPartitionClass());
       for (ReplicaId replicaId : partitionId.getReplicaIds()) {
         if (replicaId.isSealed()) {
           partitionProperties.put("state", "RO");

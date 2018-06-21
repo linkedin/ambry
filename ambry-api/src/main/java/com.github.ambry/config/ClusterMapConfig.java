@@ -164,7 +164,7 @@ public class ClusterMapConfig {
    */
   @Config("clustermap.enable.override")
   @Default("false")
-  public final boolean clusterMapEnableOverride; //clusterMapAdoptStaticSealedList;
+  public final boolean clusterMapEnableOverride;
 
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =

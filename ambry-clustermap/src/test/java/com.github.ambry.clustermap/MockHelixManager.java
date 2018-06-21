@@ -24,7 +24,6 @@ import org.apache.helix.CurrentStateChangeListener;
 import org.apache.helix.ExternalViewChangeListener;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixDataAccessor;
-import org.apache.helix.HelixException;
 import org.apache.helix.HelixManager;
 import org.apache.helix.HelixManagerProperties;
 import org.apache.helix.IdealStateChangeListener;
@@ -42,7 +41,6 @@ import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
-import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 
 
@@ -288,12 +286,6 @@ class MockHelixManager implements HelixManager {
   @Override
   public ParticipantHealthReportCollector getHealthReportCollector() {
     throw new IllegalStateException("Not implemented");
-  }
-
-  private void checkConnected() {
-    if (!isConnected()) {
-      throw new HelixException("HelixManager is not connected. Call HelixManager#connect()");
-    }
   }
 }
 

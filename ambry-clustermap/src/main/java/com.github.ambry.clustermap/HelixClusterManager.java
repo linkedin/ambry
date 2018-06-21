@@ -126,6 +126,7 @@ class HelixClusterManager implements ClusterMap {
               DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
               dcToDcZkInfo.put(dcName, dcInfo);
               dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
+
               // The initial instance config change notification is required to populate the static cluster
               // information, and only after that is complete do we want the live instance change notification to
               // come in. We do not need to do anything extra to ensure this, however, since Helix provides the initial
@@ -173,7 +174,7 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Initialize Helix Property Store and subscribe to listen to PartitionOverride zNode.
+   * Initialize HelixPropertyStore and complete subscription to listen to PartitionOverride zNode.
    */
   private void initializeHelixPropertyStoreAndSubscribe() {
     HelixPropertyListener helixListener = new HelixPropertyListener() {

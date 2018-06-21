@@ -67,6 +67,8 @@ public class HelixClusterManagerTest {
   private final TestPartitionLayout testPartitionLayout;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final String clusterNamePrefixInHelix = "Ambry-";
+  private final String ZNODE_NAME = "PartitionOverride";
+  private final String ZNODE_PATH = "/ClusterConfigs/PartitionOverride";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
@@ -80,6 +82,7 @@ public class HelixClusterManagerTest {
   private static final long CURRENT_XID = 64;
 
   private final HelixPropertyStore<ZNRecord> helixPropertyStore;
+
   // for verifying getPartitions() and getWritablePartitions()
   private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
   private final PartitionRangeCheckParams defaultRw;
@@ -104,6 +107,8 @@ public class HelixClusterManagerTest {
    * Construct the static layout files and use that to instantiate a {@link MockHelixCluster}.
    * Instantiate a {@link MockHelixManagerFactory} for use by the cluster manager.
    * @param useComposite whether or not the test are to be done for the {@link CompositeClusterManager}
+   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnableOverride} is enabled. This config
+   *                        is only applicable for {@link HelixClusterManager}
    * @throws Exception
    */
   public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled) throws Exception {
@@ -161,10 +166,9 @@ public class HelixClusterManagerTest {
     for (int i = numOfReadWrite; i < totalPartitionNum; ++i) {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>()).put("state", "RO");
     }
-    ZNRecord znRecord = new ZNRecord("PartitionOverride");
+    ZNRecord znRecord = new ZNRecord(ZNODE_NAME);
     znRecord.setMapFields(partitionOverrideMap);
-    String path = String.format("/ClusterConfigs/%s", "PartitionOverride");
-    helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT);
+    helixPropertyStore.set(ZNODE_PATH, znRecord, AccessOption.PERSISTENT);
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
@@ -468,6 +472,11 @@ public class HelixClusterManagerTest {
     assertStateEquivalency();
   }
 
+  /**
+   * Test that ClusterManger will use seal state in PartitionOverride when {@link ClusterMapConfig#clusterMapEnableOverride}
+   * is enabled. This also tests that InstanceConfig changes won't affect any seal state of partition if clusterMapEnableOverride
+   * is enabled.
+   */
   @Test
   public void clusterMapOverrideEnabledTest() throws Exception {
     if (overrideEnabled) {
@@ -478,7 +487,7 @@ public class HelixClusterManagerTest {
           writableInOverrideMap.add(entry.getKey());
         }
       }
-      Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = testWritablePartitions();
+      Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
       Set<String> writableInClusterManager = writablePartitionsInTwoPlaces.getSecond();
       assertEquals("Mismatch in writable partitions during initialization", writableInOverrideMap,
           writableInClusterManager);
@@ -491,7 +500,7 @@ public class HelixClusterManagerTest {
       long countVal = instanceTriggerCounter.getCount();
       helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
       assertEquals("Mismatch in instanceTriggerCounter", countVal + 1, instanceTriggerCounter.getCount());
-      writableInClusterManager = testWritablePartitions().getSecond();
+      writableInClusterManager = getWritablePartitions().getSecond();
       assertEquals("Mismatch in writable partitions when instanceConfig changes", writableInOverrideMap,
           writableInClusterManager);
     }
@@ -787,10 +796,10 @@ public class HelixClusterManagerTest {
   }
 
   /**
-   * Tests that the writable partitions returned by the {@link HelixClusterManager} is the same as the writable
-   * partitions in the cluster.
+   * Get the writable partitions returned by the {@link HelixClusterManager} as well as those in helix cluster.
+   * @return two writable partition sets from helix cluster and {@link HelixClusterManager}.
    */
-  private Pair<Set<String>, Set<String>> testWritablePartitions() {
+  private Pair<Set<String>, Set<String>> getWritablePartitions() {
     Set<String> writableInClusterManager = new HashSet<>();
     for (PartitionId partition : clusterManager.getWritablePartitionIds(null)) {
       String partitionStr =
@@ -897,7 +906,7 @@ public class HelixClusterManagerTest {
     }
     assertEquals(downInstancesInCluster, downInstancesInClusterManager);
     assertEquals(upInstancesInCluster, upInstancesInClusterManager);
-    Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = testWritablePartitions();
+    Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
     assertEquals(writablePartitionsInTwoPlaces.getFirst(), writablePartitionsInTwoPlaces.getSecond());
     testAllPartitions();
   }

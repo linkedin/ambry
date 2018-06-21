@@ -232,6 +232,12 @@ public class HelixBootstrapUpgradeToolTest {
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
+  /**
+   * Write the layout files out from the constructed in-memory hardware and partition layouts; use the upload cluster config
+   * tool to upload the partition seal states onto Zookeeper; verify that the writable partitions are consistent between the two.
+   * @throws IOException if a file read error is encountered.
+   * @throws JSONException if a JSON parse error is encountered.
+   */
   private void uploadClusterConfigs() throws Exception {
     List<PartitionId> writablePartitions = testPartitionLayout.getPartitionLayout().getWritablePartitions(null);
     Set<String> writableInPartitionLayout = new HashSet<>();

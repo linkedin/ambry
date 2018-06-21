@@ -44,6 +44,7 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
   /**
    * Construct an object of this factory.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this factory.
+   * @param helixPropertyStoreConfig the {@link HelixPropertyStoreConfig} associated with this factory.
    * @param hardwareLayoutFilePath unused.
    * @param partitionLayoutFilePath unused.
    */
@@ -67,7 +68,7 @@ public class HelixClusterAgentsFactory implements ClusterAgentsFactory {
       ZkClient zkClient =
           new ZkClient(helixPropertyStoreConfig.zkClientConnectString, helixPropertyStoreConfig.zkClientSessionTimeoutMs,
               helixPropertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-      List<String> subscribedPaths = Collections.singletonList(helixPropertyStoreConfig.rootPath + "/ClusterConfigs");
+      List<String> subscribedPaths = Collections.singletonList(helixPropertyStoreConfig.rootPath);
       helixPropertyStore =
           new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), helixPropertyStoreConfig.rootPath, subscribedPaths);
       helixClusterManager = new HelixClusterManager(clusterMapConfig, helixPropertyStore, instanceName, helixFactory, metricRegistry);
