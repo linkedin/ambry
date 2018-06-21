@@ -65,21 +65,10 @@ public interface Router extends Closeable {
    * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
    * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
    *                    permanent
-   * @return A future that would contain information about whether the update succeeded or not, eventually.
-   */
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs);
-
-  /**
-   * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
-   * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs its TTL updated.
-   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
-   *                    permanent
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback);
+  Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback);
 
   /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this
@@ -127,5 +116,18 @@ public interface Router extends Closeable {
    */
   default Future<Void> deleteBlob(String blobId, String serviceId) {
     return deleteBlob(blobId, serviceId, null);
+  }
+
+  /**
+   * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob that needs its TTL updated.
+   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
+   * @return A future that would contain information about whether the update succeeded or not, eventually.
+   */
+  default Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    return updateBlobTtl(blobId, serviceId, expiresAtMs, null);
   }
 }
