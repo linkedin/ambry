@@ -134,7 +134,7 @@ public class AmbryRequestsTest {
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
-    storeKeyConverterFactory = new MockStoreKeyConverterFactory();
+    storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,

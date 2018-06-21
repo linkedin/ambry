@@ -13,6 +13,8 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.VerifiableProperties;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,19 +24,37 @@ import java.util.Map;
  * A mock factory of {@link StoreKeyConverterFactory}.  Creates MockStoreKeyConverter.
  */
 public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
-  private StoreKeyConverter storeKeyConverter = new MockStoreKeyConverter();
+  private final StoreKeyConverter storeKeyConverter = new MockStoreKeyConverter();
   private Map<StoreKey, StoreKey> conversionMap;
   private Exception exception;
+
+  public MockStoreKeyConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  }
 
   @Override
   public StoreKeyConverter getStoreKeyConverter() {
     return storeKeyConverter;
   }
 
+  /**
+   * Set conversionMap for reference.
+   * @param conversionMap used by {@link MockStoreKeyConverter}.
+   */
   public void setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
     this.conversionMap = conversionMap;
   }
 
+  /**
+   * Get the conversionMap used by {@link MockStoreKeyConverter}
+   */
+  public Map<StoreKey, StoreKey> getConversionMap() {
+    return conversionMap;
+  }
+
+  /**
+   * Set Exception for {@link MockStoreKeyConverter#convert(Collection)}
+   * @param e is the exception to be thrown.
+   */
   public void setException(Exception e) {
     this.exception = e;
   }
