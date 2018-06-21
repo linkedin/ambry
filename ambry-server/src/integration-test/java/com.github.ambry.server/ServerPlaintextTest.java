@@ -93,7 +93,7 @@ public class ServerPlaintextTest {
   }
 
   @Test
-  public void endToEndReplicationWithMultiNodeMultiPartitionTest() {
+  public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = Utils.splitString("DC1,DC2,DC3", ",");
     List<DataNodeId> dataNodes = plaintextCluster.getOneDataNodeFromEachDatacenter(dataCenterList);

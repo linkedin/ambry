@@ -127,7 +127,7 @@ public class ServerSSLTest {
   }
 
   @Test
-  public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest() {
+  public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<String>(Arrays.asList("DC1", "DC2", "DC3"));
     List<DataNodeId> dataNodes = sslCluster.getOneDataNodeFromEachDatacenter(dataCenterList);

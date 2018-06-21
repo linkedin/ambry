@@ -29,6 +29,7 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
@@ -270,7 +271,7 @@ public class ReplicationManager {
   private final List<String> sslEnabledDatacenters;
   private final Map<String, List<ReplicaThread>> replicaThreadPools;
   private final Map<String, Integer> numberOfReplicaThreads;
-  private final StoreKeyConverterFactory storeKeyConverterFactory;
+  private final StoreKeyConverter storeKeyConverter;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -279,7 +280,8 @@ public class ReplicationManager {
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
-      MetricRegistry metricRegistry, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
+      MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
 
     try {
       this.replicationConfig = replicationConfig;
@@ -301,7 +303,8 @@ public class ReplicationManager {
       this.dataNodeRemoteReplicaInfosPerDC = new HashMap<>();
       this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
       this.numberOfReplicaThreads = new HashMap<>();
-      this.storeKeyConverterFactory = storeKeyConverterFactory;
+      this.storeKeyConverter =
+          storeKeyConverterFactory != null ? storeKeyConverterFactory.getStoreKeyConverter() : null;
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -569,8 +572,8 @@ public class ReplicationManager {
         ReplicaThread replicaThread =
             new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
                 dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
-                replicationConfig.replicationValidateMessageStream, metricRegistry, replicatingOverSsl, datacenter,
-                responseHandler);
+                replicationConfig.replicationTransformMessageStream, storeKeyConverter, metricRegistry,
+                replicatingOverSsl, datacenter, responseHandler);
         if (replicaThreadPools.containsKey(datacenter)) {
           replicaThreadPools.get(datacenter).add(replicaThread);
         } else {

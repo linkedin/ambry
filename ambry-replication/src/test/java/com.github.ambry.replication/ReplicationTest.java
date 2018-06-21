@@ -60,6 +60,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.store.Write;
@@ -78,6 +79,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -126,6 +128,7 @@ public class ReplicationTest {
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    StoreKeyConverter storeKeyConverter = new NoOpConverter();
 
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
     CountDownLatch readyToPause = new CountDownLatch(1);
@@ -153,8 +156,8 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap));
+            storeKeyFactory, true, storeKeyConverter, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
     Thread thread = Utils.newThread(replicaThread, false);
     thread.start();
 
@@ -222,6 +225,7 @@ public class ReplicationTest {
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    StoreKeyConverter storeKeyConverter = new NoOpConverter();
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
     replicasToReplicate.put(remoteHost.dataNodeId, localHost.getRemoteReplicaInfos(remoteHost, null));
     Map<DataNodeId, Host> hosts = new HashMap<>();
@@ -232,8 +236,8 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap));
+            storeKeyFactory, true, storeKeyConverter, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
 
     Map<PartitionId, Integer> progressTracker = new HashMap<>();
     PartitionId idToLeaveOut = clusterMap.getAllPartitionIds(null).get(0);
@@ -377,6 +381,7 @@ public class ReplicationTest {
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    StoreKeyConverter storeKeyConverter = new NoOpConverter();
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
     replicasToReplicate.put(remoteHost.dataNodeId, localHost.getRemoteReplicaInfos(remoteHost, null));
     Map<DataNodeId, Host> hosts = new HashMap<>();
@@ -387,8 +392,8 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap));
+            storeKeyFactory, true, storeKeyConverter, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
 
     Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
@@ -615,8 +620,8 @@ public class ReplicationTest {
     ByteBuffer buffer = getDeleteMessage(id, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs);
     for (Host host : hosts) {
       host.addMessage(partitionId,
-          new MessageInfo(id, buffer.remaining(), true, false, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs),
-          buffer.duplicate());
+          new MessageInfo(id, buffer.remaining(), true, false, putMsg.getAccountId(), putMsg.getContainerId(),
+              deletionTimeMs), buffer.duplicate());
     }
   }
 
@@ -994,7 +999,8 @@ public class ReplicationTest {
         } catch (IOException e) {
           throw new IllegalStateException(e);
         }
-        messageInfos.add(new MessageInfo(deleteInfo.getStoreKey(), deleteInfo.getSize(), true, false, messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
+        messageInfos.add(new MessageInfo(deleteInfo.getStoreKey(), deleteInfo.getSize(), true, false,
+            messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
             messageInfoFound.getContainerId(), System.currentTimeMillis()));
       }
     }
@@ -1253,6 +1259,21 @@ public class ReplicationTest {
 
     @Override
     public void destroyConnection(ConnectedChannel connectedChannel) {
+    }
+  }
+
+  /**
+   * No-op StoreKeyConverter. StoreKeys get paired with themselves
+   */
+  class NoOpConverter implements StoreKeyConverter {
+
+    @Override
+    public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
+      Map<StoreKey, StoreKey> output = new HashMap<>();
+      if (input != null) {
+        input.forEach((storeKey) -> output.put(storeKey, storeKey));
+      }
+      return output;
     }
   }
 }

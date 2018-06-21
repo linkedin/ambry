@@ -22,6 +22,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -746,6 +747,18 @@ public class Utils {
       offset += sizeRead;
     }
     return data;
+  }
+
+  /**
+   * Read the given number of bytes from the given {@link InputStream} into the given {@link OutputStream}
+   * @param inStream the {@link InputStream} from which to read.
+   * @param outStream the {@link OutputStream} to which to write.
+   * @param size the number of bytes to be transferred
+   * @throws IOException if there is an exception reading or writing to the given streams.
+   */
+  public static void transferBytes(InputStream inStream, OutputStream outStream, int size) throws IOException {
+    byte[] readBytes = readBytesFromStream(inStream, size);
+    outStream.write(readBytes);
   }
 
   /**
