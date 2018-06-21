@@ -14,6 +14,7 @@
 package com.github.ambry.notification;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.store.MessageInfo;
 import java.io.Closeable;
 
 
@@ -64,4 +65,16 @@ public interface NotificationSystem extends Closeable {
    * @param sourceType The source that deleted the blob replica
    */
   public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
+
+  /**
+   * Notifies the underlying system when a updated state of a blob is replicated to a node
+   * @param sourceHost The source host from where the notification is being invoked
+   * @param port The port of the source host from where the notification is being invoked.
+   * @param blobId The id of the blob whose updated state has been replicated
+   * @param sourceType The source that updated the blob replica
+   * @param updateType the type of update
+   * @param info the {@link MessageInfo} associated with the update
+   */
+  public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
+      UpdateType updateType, MessageInfo info);
 }

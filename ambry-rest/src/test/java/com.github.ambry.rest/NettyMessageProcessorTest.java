@@ -21,7 +21,9 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.notification.UpdateType;
 import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -457,6 +459,12 @@ public class NettyMessageProcessorTest {
 
     @Override
     public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
+        UpdateType updateType, MessageInfo info) {
       throw new IllegalStateException("Not implemented");
     }
 

@@ -25,6 +25,8 @@ import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.notification.UpdateType;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -34,6 +36,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -196,67 +199,163 @@ class ServerShutdown implements Runnable {
   }
 }
 
+/**
+ * Tracks the arrival of events and allows waiting on all events of a particular type to arrive
+ */
 class Tracker {
   private final int numberOfReplicas;
-  private CountDownLatch totalReplicasCreated;
-  private CountDownLatch totalReplicasDeleted;
+  private final Helper creationHelper;
+  private final Helper deletionHelper;
+  private final ConcurrentMap<UpdateType, Helper> updateHelpers = new ConcurrentHashMap<>();
 
-  private ConcurrentHashMap<String, Boolean> creationSrcHosts = new ConcurrentHashMap<>();
-  private ConcurrentHashMap<String, Boolean> deletionSrcHosts = new ConcurrentHashMap<>();
+  /**
+   * Helper class that encapsulates the information needed to track a type of event
+   */
+  private class Helper {
+    private final ConcurrentHashMap<String, Boolean> hosts = new ConcurrentHashMap<>();
+    private final AtomicInteger notificationsReceived = new AtomicInteger(0);
+    private CountDownLatch latch = new CountDownLatch(numberOfReplicas);
 
-  private AtomicInteger creationNotificationsReceived = new AtomicInteger(0);
-  private AtomicInteger deletionNotificationsReceived = new AtomicInteger(0);
+    /**
+     * Tracks the event that arrived on {@code host}:{@code port}.
+     * @param host the host that received the event
+     * @param port the port of the host that describes the instance along with {@code host}.
+     */
+    void track(String host, int port) {
+      notificationsReceived.incrementAndGet();
+      if (hosts.putIfAbsent(getKey(host, port), true) == null) {
+        latch.countDown();
+      }
+    }
 
+    /**
+     * Waits until the all replicas receive the event.
+     * @param duration the duration to wait for all the events to arrive
+     * @param timeUnit the time unit of {@code duration}
+     * @return {@code true} if events were received in all replicas within the {@code duration} specified.
+     * @throws InterruptedException
+     */
+    boolean await(long duration, TimeUnit timeUnit) throws InterruptedException {
+      return latch.await(duration, timeUnit);
+    }
+
+    /**
+     * Nullifies the notification received (if any) on the given {@code host}:{@code port}.
+     * @param host the host that to decrement on
+     * @param port the port of the host that describes the instance along with {@code host}.
+     */
+    void decrementCount(String host, int port) {
+      if (hosts.remove(getKey(host, port)) != null) {
+        long finalCount = latch.getCount() + 1;
+        if (finalCount > numberOfReplicas) {
+          throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
+        }
+        latch = new CountDownLatch((int) finalCount);
+      }
+    }
+
+    /**
+     * @param host the host that received the event
+     * @param port the port of the host that describes the instance along with {@code host}.
+     * @return the unique key created for this host:port
+     */
+    private String getKey(String host, int port) {
+      return host + ":" + port;
+    }
+  }
+
+  /**
+   * @param expectedNumberOfReplicas the total number of replicas that will fire events
+   */
   Tracker(int expectedNumberOfReplicas) {
     numberOfReplicas = expectedNumberOfReplicas;
-    totalReplicasCreated = new CountDownLatch(expectedNumberOfReplicas);
-    totalReplicasDeleted = new CountDownLatch(expectedNumberOfReplicas);
+    creationHelper = new Helper();
+    deletionHelper = new Helper();
   }
 
-  void trackCreation(String srcHost, int srcPort) {
-    creationNotificationsReceived.incrementAndGet();
-    if (creationSrcHosts.putIfAbsent(getKey(srcHost, srcPort), true) == null) {
-      totalReplicasCreated.countDown();
-    }
+  /**
+   * Tracks the creation event that arrived on {@code host}:{@code port}.
+   * @param host the host that received the create
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
+  void trackCreation(String host, int port) {
+    creationHelper.track(host, port);
   }
 
-  void trackDeletion(String srcHost, int srcPort) {
-    deletionNotificationsReceived.incrementAndGet();
-    if (deletionSrcHosts.putIfAbsent(getKey(srcHost, srcPort), true) == null) {
-      totalReplicasDeleted.countDown();
-    }
+  /**
+   * Tracks the deletion event that arrived on {@code host}:{@code port}.
+   * @param host the host that received the delete
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
+  void trackDeletion(String host, int port) {
+    deletionHelper.track(host, port);
   }
 
+  /**
+   * Tracks the update event of type {@code updateType} that arrived on {@code host}:{@code port}.
+   * @param host the host that received the update
+   * @param port the port of the host that describes the instance along with {@code host}.
+   * @param updateType the {@link UpdateType} received
+   */
+  void trackUpdate(String host, int port, UpdateType updateType) {
+    updateHelpers.computeIfAbsent(updateType, type -> new Helper()).track(host, port);
+  }
+
+  /**
+   * Waits for blob creations on all replicas
+   * @return {@code true} if creations were received in all replicas within the {@code duration} specified.
+   * @throws InterruptedException
+   */
   boolean awaitBlobCreations() throws InterruptedException {
-    return totalReplicasCreated.await(10, TimeUnit.SECONDS);
+    return creationHelper.await(10, TimeUnit.SECONDS);
   }
 
+  /**
+   * Waits for blob deletions on all replicas
+   * @return {@code true} if deletions were received in all replicas within the {@code duration} specified.
+   * @throws InterruptedException
+   */
   boolean awaitBlobDeletions() throws InterruptedException {
-    return totalReplicasDeleted.await(10, TimeUnit.SECONDS);
+    return deletionHelper.await(10, TimeUnit.SECONDS);
   }
 
+  /**
+   * Waits for blob updates of type {@code updateType} on all replicas
+   * @param updateType the type of update to wait for
+   * @return {@code true} if updates of type {@code updateType} were received in all replicas within the
+   * {@code duration} specified.
+   * @throws InterruptedException
+   */
+  boolean awaitBlobUpdates(UpdateType updateType) throws InterruptedException {
+    return updateHelpers.computeIfAbsent(updateType, type -> new Helper()).await(10, TimeUnit.SECONDS);
+  }
+
+  /**
+   * Nullifies the creation notification on {@code host}:{@code port}.
+   * @param host the host that to decrement on
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
   void decrementCreated(String host, int port) {
-    if (creationSrcHosts.remove(getKey(host, port)) != null) {
-      totalReplicasCreated = decrementCount(totalReplicasCreated);
-    }
+    creationHelper.decrementCount(host, port);
   }
 
+  /**
+   * Nullifies the delete notification on {@code host}:{@code port}.
+   * @param host the host that to decrement on
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
   void decrementDeleted(String host, int port) {
-    if (deletionSrcHosts.remove(getKey(host, port)) != null) {
-      totalReplicasDeleted = decrementCount(totalReplicasDeleted);
-    }
+    deletionHelper.decrementCount(host, port);
   }
 
-  private CountDownLatch decrementCount(CountDownLatch latch) {
-    long finalCount = latch.getCount() + 1;
-    if (finalCount > numberOfReplicas) {
-      throw new IllegalArgumentException("Cannot add more replicas than the max possible replicas");
-    }
-    return new CountDownLatch((int) finalCount);
-  }
-
-  private String getKey(String srcHost, int srcPort) {
-    return srcHost + ":" + srcPort;
+  /**
+   * Nullifies the update notification for {@code updateType} on {@code host}:{@code port}.
+   * @param host the host that to decrement on
+   * @param port the port of the host that describes the instance along with {@code host}.
+   * @param updateType the {@link UpdateType} to nullify the notification for
+   */
+  void decrementUpdated(String host, int port, UpdateType updateType) {
+    updateHelpers.computeIfAbsent(updateType, type -> new Helper()).decrementCount(host, port);
   }
 }
 
@@ -266,7 +365,7 @@ class Tracker {
  */
 class MockNotificationSystem implements NotificationSystem {
 
-  private ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
+  private final ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
   private final ClusterMap clusterMap;
 
   public MockNotificationSystem(ClusterMap clusterMap) {
@@ -291,21 +390,20 @@ class MockNotificationSystem implements NotificationSystem {
   @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
-    int numberOfReplicas;
-    try {
-      BlobId blobIdObj = new BlobId(blobId, clusterMap);
-      PartitionId partitionId = blobIdObj.getPartition();
-      numberOfReplicas = partitionId.getReplicaIds().size();
-    } catch (Exception e) {
-      throw new IllegalArgumentException("Invalid blob ID: " + blobId, e);
-    }
-    objectTracker.computeIfAbsent(blobId, k -> new Tracker(numberOfReplicas)).trackCreation(sourceHost, port);
+    objectTracker.computeIfAbsent(blobId, k -> new Tracker(getNumReplicas(blobId))).trackCreation(sourceHost, port);
   }
 
   @Override
   public synchronized void onBlobReplicaDeleted(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
-    objectTracker.get(blobId).trackDeletion(sourceHost, port);
+    objectTracker.computeIfAbsent(blobId, k -> new Tracker(getNumReplicas(blobId))).trackDeletion(sourceHost, port);
+  }
+
+  @Override
+  public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
+      UpdateType updateType, MessageInfo info) {
+    objectTracker.computeIfAbsent(blobId, k -> new Tracker(getNumReplicas(blobId)))
+        .trackUpdate(sourceHost, port, updateType);
   }
 
   @Override
@@ -313,10 +411,13 @@ class MockNotificationSystem implements NotificationSystem {
     // ignore
   }
 
+  /**
+   * Waits for blob creations on all replicas for {@code blobId}
+   * @param blobId the ID of the blob
+   */
   void awaitBlobCreations(String blobId) {
     try {
-      Tracker tracker = objectTracker.get(blobId);
-      if (!tracker.awaitBlobCreations()) {
+      if (!objectTracker.get(blobId).awaitBlobCreations()) {
         Assert.fail("Failed awaiting for " + blobId + " creations");
       }
     } catch (InterruptedException e) {
@@ -324,10 +425,13 @@ class MockNotificationSystem implements NotificationSystem {
     }
   }
 
+  /**
+   * Waits for blob deletions on all replicas for {@code blobId}
+   * @param blobId the ID of the blob
+   */
   void awaitBlobDeletions(String blobId) {
     try {
-      Tracker tracker = objectTracker.get(blobId);
-      if (!tracker.awaitBlobDeletions()) {
+      if (!objectTracker.get(blobId).awaitBlobDeletions()) {
         Assert.fail("Failed awaiting for " + blobId + " deletions");
       }
     } catch (InterruptedException e) {
@@ -335,13 +439,63 @@ class MockNotificationSystem implements NotificationSystem {
     }
   }
 
-  synchronized void decrementCreatedReplica(String blobId, String host, int port) {
-    Tracker tracker = objectTracker.get(blobId);
-    tracker.decrementCreated(host, port);
+  /**
+   * Waits for blob updates of type {@code updateType} on all replicas for {@code blobId}
+   * @param blobId the ID of the blob
+   * @param updateType the {@link UpdateType} to wait for
+   */
+  void awaitBlobUpdates(String blobId, UpdateType updateType) {
+    try {
+      if (!objectTracker.get(blobId).awaitBlobUpdates(updateType)) {
+        Assert.fail("Failed awaiting for " + blobId + " updates of type " + updateType);
+      }
+    } catch (InterruptedException e) {
+      // ignore
+    }
   }
 
+  /**
+   * Nullifies the creation notification for {@code blobId} on {@code host}:{@code port}.
+   * @param blobId the blob ID whose creation notification needs to be nullified
+   * @param host the host that to decrement on
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
+  synchronized void decrementCreatedReplica(String blobId, String host, int port) {
+    objectTracker.get(blobId).decrementCreated(host, port);
+  }
+
+  /**
+   * Nullifies the deletion notification for {@code blobId} on {@code host}:{@code port}.
+   * @param blobId the blob ID whose deletion notification needs to be nullified
+   * @param host the host that to decrement on
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
   synchronized void decrementDeletedReplica(String blobId, String host, int port) {
-    Tracker tracker = objectTracker.get(blobId);
-    tracker.decrementDeleted(host, port);
+    objectTracker.get(blobId).decrementDeleted(host, port);
+  }
+
+  /**
+   * Nullifies the update notification of type {@code updateType} for {@code blobId} on {@code host}:{@code port}.
+   * @param blobId the blob ID whose update notification needs to be nullified
+   * @param host the host that to decrement on
+   * @param port the port of the host that describes the instance along with {@code host}.
+   * @param updateType the {@link UpdateType} to nullify the notification for
+   */
+  synchronized void decrementUpdatedReplica(String blobId, String host, int port, UpdateType updateType) {
+    objectTracker.get(blobId).decrementDeleted(host, port);
+  }
+
+  /**
+   * @param blobId the blob ID received
+   * @return the number of replicas of {@code blobId}
+   */
+  private int getNumReplicas(String blobId) {
+    try {
+      BlobId blobIdObj = new BlobId(blobId, clusterMap);
+      PartitionId partitionId = blobIdObj.getPartition();
+      return partitionId.getReplicaIds().size();
+    } catch (Exception e) {
+      throw new IllegalArgumentException("Invalid blob ID: " + blobId, e);
+    }
   }
 }
