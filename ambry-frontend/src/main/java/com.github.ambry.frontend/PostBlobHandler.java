@@ -68,12 +68,7 @@ class PostBlobHandler {
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    // Metrics initialization. Can potentially be updated after parsing blob properties.
-    restRequest.getMetricsTracker()
-        .injectMetrics(frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
-    // Start the callback chain by performing request security pre-processing.
-    securityService.preProcessRequest(restRequest,
-        securityPreProcessRequestCallback(restRequest, restResponseChannel, callback));
+    new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
@@ -104,112 +99,113 @@ class PostBlobHandler {
   }
 
   /**
-   * After {@link SecurityService#preProcessRequest} finishes, parse the blob info headers in the request and call
-   * {@link SecurityService#processRequest} to perform additional request time security checks.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
-   * @param finalCallback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   * @return a {@link Callback} to be used with {@link SecurityService#preProcessRequest}.
+   * Represents the chain of actions to take. Keeps request context that is relevant to all callback stages.
    */
-  private Callback<Void> securityPreProcessRequestCallback(RestRequest restRequest,
-      RestResponseChannel restResponseChannel, Callback<ReadableStreamChannel> finalCallback) {
-    AsyncOperationTracker asyncOperationTracker =
-        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityPreProcessRequestMetrics);
-    ThrowingConsumer<Void> successAction = securityCheckResult -> {
-      BlobInfo blobInfo = parseBlobInfoFromRequest(restRequest);
-      securityService.processRequest(restRequest,
-          securityProcessRequestCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    };
-    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
-  }
+  private class CallbackChain {
+    private final RestRequest restRequest;
+    private final RestResponseChannel restResponseChannel;
+    private final Callback<ReadableStreamChannel> finalCallback;
 
-  /**
-   * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
-   * request time security checks that rely on the request being fully parsed and any additional arguments set.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
-   * @param blobInfo the {@link BlobInfo} to carry to future stages.
-   * @param finalCallback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
-   */
-  private Callback<Void> securityProcessRequestCallback(RestRequest restRequest,
-      RestResponseChannel restResponseChannel, BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    AsyncOperationTracker asyncOperationTracker =
-        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityProcessRequestMetrics);
-    ThrowingConsumer<Void> successAction = securityCheckResult -> securityService.postProcessRequest(restRequest,
-        securityPostProcessRequestCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
-  }
+    /**
+     * @param restRequest the {@link RestRequest}.
+     * @param restResponseChannel the {@link RestResponseChannel}.
+     * @param finalCallback the {@link Callback} to call on completion.
+     */
+    private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
+        Callback<ReadableStreamChannel> finalCallback) {
+      this.restRequest = restRequest;
+      this.restResponseChannel = restResponseChannel;
+      this.finalCallback = finalCallback;
+    }
 
-  /**
-   * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#putBlob} to persist the blob in the
-   * storage layer.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
-   * @param blobInfo the {@link BlobInfo} to make the router call with.
-   * @param finalCallback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
-   */
-  private Callback<Void> securityPostProcessRequestCallback(RestRequest restRequest,
-      RestResponseChannel restResponseChannel, BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    AsyncOperationTracker asyncOperationTracker =
-        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityPostProcessRequestMetrics);
-    ThrowingConsumer<Void> successAction =
-        securityCheckResult -> router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
-            routerPutBlobCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
-  }
+    /**
+     * Start the chain by calling {@link SecurityService#preProcessRequest}.
+     */
+    private void start() {
+      // Metrics initialization. Can potentially be updated after parsing blob properties.
+      restRequest.getMetricsTracker()
+          .injectMetrics(frontendMetrics.postRequestMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
+      // Start the callback chain by performing request security pre-processing.
+      securityService.preProcessRequest(restRequest, securityPreProcessRequestCallback());
+    }
 
-  /**
-   * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
-   * that will be returned in the "Location" header.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
-   * @param blobInfo the {@link BlobInfo} to make the router call with.
-   * @param finalCallback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   * @return a {@link Callback} to be used with {@link Router#putBlob}.
-   */
-  private Callback<String> routerPutBlobCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    AsyncOperationTracker asyncOperationTracker =
-        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postRouterPutBlobMetrics);
-    ThrowingConsumer<String> successAction = blobId -> idConverter.convert(restRequest, blobId,
-        idConverterCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
-  }
+    /**
+     * After {@link SecurityService#preProcessRequest} finishes, parse the blob info headers in the request and call
+     * {@link SecurityService#processRequest} to perform additional request time security checks.
+     * @return a {@link Callback} to be used with {@link SecurityService#preProcessRequest}.
+     */
+    private Callback<Void> securityPreProcessRequestCallback() {
+      return buildCallback(frontendMetrics.postSecurityPreProcessRequestMetrics, securityCheckResult -> {
+        BlobInfo blobInfo = parseBlobInfoFromRequest(restRequest);
+        securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
+      });
+    }
 
-  /**
-   * After {@link IdConverter#convert} finishes, set the "Location" header and call
-   * {@link SecurityService#processResponse}.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
-   * @param blobInfo the {@link BlobInfo} to use for security checks.
-   * @param finalCallback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
-   */
-  private Callback<String> idConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    AsyncOperationTracker asyncOperationTracker =
-        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postIdConversionMetrics);
-    ThrowingConsumer<String> successAction = convertedBlobId -> {
-      restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-      securityService.processResponse(restRequest, restResponseChannel, blobInfo,
-          securityProcessResponseCallback(restRequest, finalCallback));
-    };
-    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
-  }
+    /**
+     * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @param blobInfo the {@link BlobInfo} to carry to future stages.
+     * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
+     */
+    private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.postSecurityProcessRequestMetrics,
+          securityCheckResult -> securityService.postProcessRequest(restRequest,
+              securityPostProcessRequestCallback(blobInfo)));
+    }
 
-  /**
-   * After {@link SecurityService#processResponse}, call the provided callback.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param finalCallback the {@link Callback} to invoke when the response is ready (or if there is an exception).
-   * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
-   */
-  private Callback<Void> securityProcessResponseCallback(RestRequest restRequest,
-      Callback<ReadableStreamChannel> finalCallback) {
-    AsyncOperationTracker asyncOperationTracker =
-        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityProcessResponseMetrics);
-    ThrowingConsumer<Void> successAction = securityCheckResult -> finalCallback.onCompletion(null, null);
-    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
+    /**
+     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#putBlob} to persist the blob in the
+     * storage layer.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
+     */
+    private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics,
+          securityCheckResult -> router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
+              routerPutBlobCallback(blobInfo)));
+    }
+
+    /**
+     * After {@link Router#putBlob} finishes, call {@link IdConverter#convert} to convert the returned ID into a format
+     * that will be returned in the "Location" header.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with {@link Router#putBlob}.
+     */
+    private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.postRouterPutBlobMetrics,
+          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)));
+    }
+
+    /**
+     * After {@link IdConverter#convert} finishes, set the "Location" header and call
+     * {@link SecurityService#processResponse}.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
+     */
+    private Callback<String> idConverterCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
+      });
+    }
+
+    /**
+     * After {@link SecurityService#processResponse}, call {@code finalCallback}.
+     * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
+     */
+    private Callback<Void> securityProcessResponseCallback() {
+      return buildCallback(frontendMetrics.postSecurityProcessResponseMetrics,
+          securityCheckResult -> finalCallback.onCompletion(null, null));
+    }
+
+    /**
+     * @param metrics the {@link AsyncOperationTracker.Metrics} instance to update.
+     * @param successAction the action to take if the callback was called successfully.
+     * @return the {@link Callback} returned by {@link CallbackUtils#chainCallback}.
+     */
+    private <T> Callback<T> buildCallback(AsyncOperationTracker.Metrics metrics, ThrowingConsumer<T> successAction) {
+      AsyncOperationTracker tracker = new AsyncOperationTracker(restRequest.getUri(), LOGGER, metrics);
+      return CallbackUtils.chainCallback(tracker, finalCallback, successAction);
+    }
   }
 }

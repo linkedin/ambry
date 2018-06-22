@@ -210,7 +210,7 @@ class AmbryBlobStorageService implements BlobStorageService {
           (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
     } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
+      submitResponse(restRequest, restResponseChannel, null, e);
     } finally {
       frontendMetrics.postPreProcessingTimeInMs.update(preProcessingTime);
     }

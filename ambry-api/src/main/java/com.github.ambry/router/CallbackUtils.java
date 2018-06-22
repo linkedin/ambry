@@ -25,10 +25,11 @@ import com.github.ambry.utils.ThrowingConsumer;
 public class CallbackUtils {
   /**
    * Create a {@link Callback} that handles common tasks like updating metrics via a {@link AsyncOperationTracker} and
-   * handling errors that may occur in the callback body.
+   * handling errors that may occur in the callback body. It is meant to be a part of multi-step callback chain and
+   * handle intermediate failures in a consistent way.
    * @param <T> the result type that the callback accepts.
-   * @param asyncOperationTracker the {@link AsyncOperationTracker} to use to update metrics for an async call. The operation is
-   *                        marked as started right before the callback is constructed.
+   * @param asyncOperationTracker the {@link AsyncOperationTracker} to use to update metrics for an async call. The
+   *                              operation is marked as started right before the callback is constructed.
    * @param failureCallback the callback to call if this callback was called with an exception or if the
    *                        {@code successAction} call throws an exception.
    * @param successAction the action to take when the callback is called successfully. The result of the callback is
@@ -36,8 +37,8 @@ public class CallbackUtils {
    *                      {@code failureCallback} will be called.
    * @return the managed {@link Callback}.
    */
-  public static <T> Callback<T> managedCallback(AsyncOperationTracker asyncOperationTracker, Callback<?> failureCallback,
-      ThrowingConsumer<? super T> successAction) {
+  public static <T> Callback<T> chainCallback(AsyncOperationTracker asyncOperationTracker,
+      Callback<?> failureCallback, ThrowingConsumer<? super T> successAction) {
     asyncOperationTracker.markOperationStart();
     return (result, exception) -> {
       try {
