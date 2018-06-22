@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.apache.helix.AccessOption;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.ConfigChangeListener;
@@ -42,12 +43,18 @@ import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+
+import static org.mockito.Mockito.*;
 
 
 /**
  * A mock implementation of the {@link HelixManager} to use in tests.
  */
 class MockHelixManager implements HelixManager {
+  private final String ZNODE_PATH = "/ClusterConfigs/PartitionOverride";
   private final String clusterName;
   private final String instanceName;
   private final InstanceType instanceType;
@@ -57,6 +64,9 @@ class MockHelixManager implements HelixManager {
   private InstanceConfigChangeListener instanceConfigChangeListener;
   private final MockHelixAdmin mockAdmin;
   private final Exception beBadException;
+  private ZNRecord record;
+  @Mock
+  private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
 
   /**
    * Instantiate a MockHelixManager.
@@ -64,16 +74,21 @@ class MockHelixManager implements HelixManager {
    * @param instanceType the {@link InstanceType} of the requester.
    * @param zkAddr the address identifying the zk service to which this request is to be made.
    * @param helixCluster the {@link MockHelixCluster} associated with this manager.
+   * @param znRecord the {@link ZNRecord} associated with HelixPropertyStore in this manager.
    * @param beBadException the {@link Exception} that this manager will throw on listener registrations.
    */
   MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, MockHelixCluster helixCluster,
-      Exception beBadException) {
+      ZNRecord znRecord, Exception beBadException) {
     this.instanceName = instanceName;
     this.instanceType = instanceType;
     mockAdmin = helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr);
     mockAdmin.addHelixManager(this);
     clusterName = helixCluster.getClusterName();
+    record = znRecord;
     this.beBadException = beBadException;
+
+    MockitoAnnotations.initMocks(this);
+    Mockito.when(helixPropertyStore.get(eq(ZNODE_PATH), eq(null), eq(AccessOption.PERSISTENT))).thenReturn(record);
   }
 
   @Override
@@ -230,7 +245,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public ZkHelixPropertyStore<ZNRecord> getHelixPropertyStore() {
-    throw new IllegalStateException("Not implemented");
+    return helixPropertyStore;
   }
 
   @Override

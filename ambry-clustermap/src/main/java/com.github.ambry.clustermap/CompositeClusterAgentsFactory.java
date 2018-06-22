@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.io.IOException;
 import org.json.JSONException;
 import org.slf4j.Logger;
@@ -40,12 +39,12 @@ public class CompositeClusterAgentsFactory implements ClusterAgentsFactory {
    * @throws JSONException if there is an exception parsing the layout files.
    * @throws IOException if there is an IO error accessing or reading the layout files.
    */
-  public CompositeClusterAgentsFactory(ClusterMapConfig clusterMapConfig, HelixPropertyStoreConfig helixPropertyStoreConfig, String hardwareLayoutFilePath,
+  public CompositeClusterAgentsFactory(ClusterMapConfig clusterMapConfig, String hardwareLayoutFilePath,
       String partitionLayoutFilePath) throws JSONException, IOException {
     staticClusterAgentsFactory =
         new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutFilePath, partitionLayoutFilePath);
     helixClusterAgentsFactory =
-        new HelixClusterAgentsFactory(clusterMapConfig, helixPropertyStoreConfig, staticClusterAgentsFactory.getMetricRegistry());
+        new HelixClusterAgentsFactory(clusterMapConfig, staticClusterAgentsFactory.getMetricRegistry());
   }
 
   /**
@@ -55,11 +54,11 @@ public class CompositeClusterAgentsFactory implements ClusterAgentsFactory {
    * @throws JSONException if there is an exception parsing the layout files.
    * @throws IOException if there is an IO error accessing or reading the layout files.
    */
-  CompositeClusterAgentsFactory(ClusterMapConfig clusterMapConfig, HelixPropertyStoreConfig helixPropertyStoreConfig, PartitionLayout partitionLayout)
+  CompositeClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout)
       throws JSONException, IOException {
     staticClusterAgentsFactory = new StaticClusterAgentsFactory(clusterMapConfig, partitionLayout);
     helixClusterAgentsFactory =
-        new HelixClusterAgentsFactory(clusterMapConfig, helixPropertyStoreConfig, staticClusterAgentsFactory.getMetricRegistry());
+        new HelixClusterAgentsFactory(clusterMapConfig, staticClusterAgentsFactory.getMetricRegistry());
   }
 
   /**

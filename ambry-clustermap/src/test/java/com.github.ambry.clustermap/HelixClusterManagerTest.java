@@ -38,18 +38,17 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
-import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.ZNRecord;
-import org.apache.helix.store.HelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.MockitoAnnotations;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -81,7 +80,6 @@ public class HelixClusterManagerTest {
   private final String hardwareLayoutPath;
   private static final long CURRENT_XID = 64;
 
-  private final HelixPropertyStore<ZNRecord> helixPropertyStore;
 
   // for verifying getPartitions() and getWritablePartitions()
   private static final String SPECIAL_PARTITION_CLASS = "specialPartitionClass";
@@ -114,7 +112,7 @@ public class HelixClusterManagerTest {
   public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled) throws Exception {
     this.useComposite = useComposite;
     this.overrideEnabled = overrideEnabled;
-    helixPropertyStore = new MockHelixPropertyStore<>();
+    MockitoAnnotations.initMocks(this);
     String localDc = dcs[0];
     Random random = new Random();
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
@@ -168,7 +166,7 @@ public class HelixClusterManagerTest {
     }
     ZNRecord znRecord = new ZNRecord(ZNODE_NAME);
     znRecord.setMapFields(partitionOverrideMap);
-    helixPropertyStore.set(ZNODE_PATH, znRecord, AccessOption.PERSISTENT);
+
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
@@ -187,17 +185,16 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     props.setProperty("clustermap.enable.override", this.overrideEnabled ? "true" : "false");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecord, null);
     if (useComposite) {
       StaticClusterAgentsFactory staticClusterAgentsFactory =
           new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath);
       metricRegistry = staticClusterAgentsFactory.getMetricRegistry();
       clusterManager = new CompositeClusterManager(staticClusterAgentsFactory.getClusterMap(),
-          new HelixClusterManager(clusterMapConfig, helixPropertyStore, hostname, helixManagerFactory, metricRegistry));
+          new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, metricRegistry));
     } else {
       metricRegistry = new MetricRegistry();
-      clusterManager =
-          new HelixClusterManager(clusterMapConfig, helixPropertyStore, hostname, helixManagerFactory, metricRegistry);
+      clusterManager = new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, metricRegistry);
     }
   }
 
@@ -236,8 +233,8 @@ public class HelixClusterManagerTest {
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, helixPropertyStore, hostname,
-          new MockHelixManagerFactory(helixCluster, null), metricRegistry);
+      new HelixClusterManager(invalidClusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
+          metricRegistry);
       fail("Instantiation should have failed with invalid zk addresses");
     } catch (IOException e) {
       assertEquals(1L,
@@ -246,8 +243,8 @@ public class HelixClusterManagerTest {
 
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(clusterMapConfig, helixPropertyStore, hostname,
-          new MockHelixManagerFactory(helixCluster, new Exception("beBad")), metricRegistry);
+      new HelixClusterManager(clusterMapConfig, hostname,
+          new MockHelixManagerFactory(helixCluster, null, new Exception("beBad")), metricRegistry);
       fail("Instantiation should fail with a HelixManager factory that throws exception on listener registrations");
     } catch (Exception e) {
       assertEquals(1L,
@@ -573,14 +570,14 @@ public class HelixClusterManagerTest {
     clusterManager.close();
 
     // Initialization path:
-    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null);
+    MockHelixManagerFactory helixManagerFactory = new MockHelixManagerFactory(helixCluster, null, null);
     List<InstanceConfig> instanceConfigs = helixCluster.getAllInstanceConfigs();
     int instanceCount = instanceConfigs.size();
     InstanceConfig aheadInstanceConfig =
         instanceConfigs.get(com.github.ambry.utils.TestUtils.RANDOM.nextInt(instanceConfigs.size()));
     aheadInstanceConfig.getRecord().setSimpleField(XID_STR, Long.toString(CURRENT_XID + 1));
     HelixClusterManager clusterManager =
-        new HelixClusterManager(clusterMapConfig, helixPropertyStore, hostname, helixManagerFactory, new MetricRegistry());
+        new HelixClusterManager(clusterMapConfig, hostname, helixManagerFactory, new MetricRegistry());
     assertEquals(instanceCount - 1, clusterManager.getDataNodeIds().size());
     for (AmbryDataNode dataNode : clusterManager.getDataNodeIds()) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
@@ -917,15 +914,18 @@ public class HelixClusterManagerTest {
   private static class MockHelixManagerFactory extends HelixFactory {
     private final MockHelixCluster helixCluster;
     private final Exception beBadException;
+    private final ZNRecord znRecord;
 
     /**
      * Construct this factory
      * @param helixCluster the {@link MockHelixCluster} that this factory's manager will be associated with.
+     * @param znRecord the {@link ZNRecord} that will be used to set HelixPropertyStore by this factory's manager.
      * @param beBadException the {@link Exception} that the Helix Manager constructed by this factory will throw.
      */
-    MockHelixManagerFactory(MockHelixCluster helixCluster, Exception beBadException) {
+    MockHelixManagerFactory(MockHelixCluster helixCluster, ZNRecord znRecord, Exception beBadException) {
       this.helixCluster = helixCluster;
       this.beBadException = beBadException;
+      this.znRecord = znRecord;
     }
 
     /**
@@ -938,7 +938,7 @@ public class HelixClusterManagerTest {
      */
     HelixManager getZKHelixManager(String clusterName, String instanceName, InstanceType instanceType, String zkAddr) {
       if (helixCluster.getZkAddrs().contains(zkAddr)) {
-        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, beBadException);
+        return new MockHelixManager(instanceName, instanceType, zkAddr, helixCluster, znRecord, beBadException);
       } else {
         throw new IllegalArgumentException("Invalid ZkAddr");
       }

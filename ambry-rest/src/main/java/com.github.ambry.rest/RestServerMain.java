@@ -18,7 +18,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -46,9 +45,8 @@ public class RestServerMain {
       Properties properties = Utils.loadProps(options.serverPropsFilePath);
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
-      HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
       ClusterAgentsFactory clusterAgentsFactory =
-          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, helixPropertyStoreConfig,
+          Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
               options.hardwareLayoutFilePath, options.partitionLayoutFilePath);
       clusterMap = clusterAgentsFactory.getClusterMap();
       SSLFactory sslFactory = getSSLFactoryIfRequired(verifiableProperties);

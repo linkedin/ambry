@@ -43,7 +43,7 @@ import org.apache.helix.ZNRecord;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.store.HelixPropertyListener;
-import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,32 +82,33 @@ class HelixClusterManager implements ClusterMap {
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private final PartitionSelectionHelper partitionSelectionHelper;
   private long currentXid;
-  private HelixPropertyStore<ZNRecord> helixPropertyStore;
+  private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
   private Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
 
   /**
    * Instantiate a HelixClusterManager.
    * @param clusterMapConfig the {@link ClusterMapConfig} associated with this manager.
-   * @param helixPropertyStore the {@link HelixPropertyStore} used to store cluster configs.
    * @param instanceName the String representation of the instance associated with this manager.
    * @param helixFactory the factory class to construct and get a reference to a {@link HelixManager}.
    * @param metricRegistry the registry of metric instances associated with this manager.
    * @throws IOException if there is an error in parsing the clusterMapConfig or in connecting with the associated
    *                     remote Zookeeper services.
    */
-  HelixClusterManager(ClusterMapConfig clusterMapConfig, HelixPropertyStore<ZNRecord> helixPropertyStore,
-      String instanceName, HelixFactory helixFactory, MetricRegistry metricRegistry) throws IOException {
+  HelixClusterManager(ClusterMapConfig clusterMapConfig, String instanceName, HelixFactory helixFactory,
+      MetricRegistry metricRegistry) throws IOException {
     this.clusterMapConfig = clusterMapConfig;
     currentXid = clusterMapConfig.clustermapCurrentXid;
     this.metricRegistry = metricRegistry;
-    this.helixPropertyStore = helixPropertyStore;
     clusterName = clusterMapConfig.clusterMapClusterName;
     helixClusterManagerCallback = new HelixClusterManagerCallback();
     helixClusterManagerMetrics = new HelixClusterManagerMetrics(metricRegistry, helixClusterManagerCallback);
     try {
-      initializeHelixPropertyStoreAndSubscribe();
       final Map<String, DcZkInfo> dataCenterToZkAddress =
           parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings);
+      // Make sure the HelixManager of local datacenter gets connected first and partitionOverrideInfoMap use PropertyStore
+      // in local DC for initialization.
+      HelixManager localManager =
+          initializeHelixManagerAndPropertyStoreInLocalDC(dataCenterToZkAddress, instanceName, helixFactory);
       final CountDownLatch initializationAttemptComplete = new CountDownLatch(dataCenterToZkAddress.size());
       for (Map.Entry<String, DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
         String dcName = entry.getKey();
@@ -118,11 +119,16 @@ class HelixClusterManager implements ClusterMap {
           @Override
           public void run() {
             try {
-              HelixManager manager =
-                  helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
-              logger.info("Connecting to Helix manager at {}", zkConnectStr);
-              manager.connect();
-              logger.info("Established connection to Helix manager at {}", zkConnectStr);
+              HelixManager manager;
+              if (!dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+                manager =
+                    helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+                logger.info("Connecting to Helix manager at {}", zkConnectStr);
+                manager.connect();
+                logger.info("Established connection to Helix manager at {}", zkConnectStr);
+              } else {
+                manager = localManager;
+              }
               DcInfo dcInfo = new DcInfo(dcName, entry.getValue(), manager, clusterChangeHandler);
               dcToDcZkInfo.put(dcName, dcInfo);
               dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcName);
@@ -174,9 +180,27 @@ class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Initialize HelixPropertyStore and complete subscription to listen to PartitionOverride zNode.
+   * Initialize HelixManager in local datacenter and complete subscription of HelixPropertyStore to listen for
+   * PartitionOverride zNode.
+   * @param dataCenterToZkAddress the map mapping each datacenter to its corresponding ZkAddress.
+   * @param instanceName the String representation of the instance associated with this manager.
+   * @param helixFactory the factory class to construct and get a reference to a {@link HelixManager}.
+   * @return the HelixManager of local datacenter
    */
-  private void initializeHelixPropertyStoreAndSubscribe() {
+  private HelixManager initializeHelixManagerAndPropertyStoreInLocalDC(Map<String, DcZkInfo> dataCenterToZkAddress,
+      String instanceName, HelixFactory helixFactory) {
+    DcZkInfo dcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
+    String zkConnectStr = dcZkInfo.getZkConnectStr();
+    HelixManager manager = null;
+    try {
+      manager = helixFactory.getZKHelixManager(clusterName, instanceName, InstanceType.SPECTATOR, zkConnectStr);
+      helixPropertyStore = manager.getHelixPropertyStore();
+      logger.info("Connecting to Helix manager in local datacenter at {}", zkConnectStr);
+      manager.connect();
+      logger.info("Established connection to Helix manager in local datacenter at {}", zkConnectStr);
+    } catch (Exception e) {
+      initializationException.compareAndSet(null, e);
+    }
     HelixPropertyListener helixListener = new HelixPropertyListener() {
       @Override
       public void onDataChange(String path) {
@@ -200,6 +224,7 @@ class HelixClusterManager implements ClusterMap {
       partitionOverrideInfoMap = zNRecord.getMapFields();
     }
     logger.info("partitionOverrideInfoMap is initialized!");
+    return manager;
   }
 
   /**
