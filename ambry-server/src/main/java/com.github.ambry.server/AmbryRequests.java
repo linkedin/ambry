@@ -415,8 +415,8 @@ public class AmbryRequests implements RequestAPI {
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
-              deleteRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
+              BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
