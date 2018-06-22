@@ -18,6 +18,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.utils.AsyncOperationTracker;
 
 
 /**
@@ -55,13 +56,13 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getUserMetadataRequestMetricsGroup;
   public final RestRequestMetricsGroup headRequestMetricsGroup;
 
-  // AsyncOperationMetrics
-  public final AsyncOperationMetrics postSecurityPreProcessRequestMetrics;
-  public final AsyncOperationMetrics postSecurityProcessRequestMetrics;
-  public final AsyncOperationMetrics postSecurityPostProcessRequestMetrics;
-  public final AsyncOperationMetrics postRouterPutBlobMetrics;
-  public final AsyncOperationMetrics postIdConversionMetrics;
-  public final AsyncOperationMetrics postSecurityProcessResponseMetrics;
+  // AsyncOperationTracker.Metrics instances
+  public final AsyncOperationTracker.Metrics postSecurityPreProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postRouterPutBlobMetrics;
+  public final AsyncOperationTracker.Metrics postIdConversionMetrics;
+  public final AsyncOperationTracker.Metrics postSecurityProcessResponseMetrics;
 
   // Rates
   // AmbrySecurityService
@@ -196,19 +197,17 @@ public class FrontendMetrics {
     getUserMetadataRequestMetricsGroup = new RestRequestMetricsGroup("Get", USER_METADATA);
     headRequestMetricsGroup = new RestRequestMetricsGroup("Head", BLOB);
 
-    // AsyncOperationMetrics
+    // AsyncOperationTracker.Metrics instances
     postSecurityPreProcessRequestMetrics =
-        new AsyncOperationMetrics(PostBlobHandler.class, "postSecurityPreProcessRequest");
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityPreProcessRequest", metricRegistry);
     postSecurityProcessRequestMetrics =
-        new AsyncOperationMetrics(PostBlobHandler.class, "postSecurityProcessRequest");
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);
     postSecurityPostProcessRequestMetrics =
-        new AsyncOperationMetrics(PostBlobHandler.class, "postSecurityPostProcessRequest");
-    postRouterPutBlobMetrics =
-        new AsyncOperationMetrics(PostBlobHandler.class, "postRouterPutBlob");
-    postIdConversionMetrics =
-        new AsyncOperationMetrics(PostBlobHandler.class, "postIdConversion");
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityPostProcessRequest", metricRegistry);
+    postRouterPutBlobMetrics = new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postRouterPutBlob", metricRegistry);
+    postIdConversionMetrics = new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postIdConversion", metricRegistry);
     postSecurityProcessResponseMetrics =
-        new AsyncOperationMetrics(PostBlobHandler.class, "postSecurityProcessResponse");
+        new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessResponse", metricRegistry);
 
     // Rates
     // AmbrySecurityService
@@ -419,21 +418,6 @@ public class FrontendMetrics {
         toReturn = blobMetrics;
       }
       return toReturn;
-    }
-  }
-
-  class AsyncOperationMetrics {
-    final String operationType;
-    final Histogram operationTimeInMs;
-    final Histogram callbackProcessingTimeInMs;
-    final Counter callbackProcessingError;
-
-    AsyncOperationMetrics(Class ownerClass, String operationType) {
-      this.operationType = operationType;
-      this.operationTimeInMs = metricRegistry.histogram(MetricRegistry.name(ownerClass, operationType + "TimeInMs"));
-      this.callbackProcessingTimeInMs =
-          metricRegistry.histogram(MetricRegistry.name(ownerClass, operationType + "CallbackProcessingTimeInMs"));
-      this.callbackProcessingError = metricRegistry.counter(MetricRegistry.name(ownerClass, "CallbackProcessingError"));
     }
   }
 }

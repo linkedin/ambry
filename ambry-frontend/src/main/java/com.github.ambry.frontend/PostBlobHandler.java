@@ -20,8 +20,10 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
+import com.github.ambry.router.CallbackUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.ThrowingConsumer;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -111,14 +113,14 @@ class PostBlobHandler {
    */
   private Callback<Void> securityPreProcessRequestCallback(RestRequest restRequest,
       RestResponseChannel restResponseChannel, Callback<ReadableStreamChannel> finalCallback) {
-    CallbackTracker callbackTracker =
-        new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityPreProcessRequestMetrics);
+    AsyncOperationTracker asyncOperationTracker =
+        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityPreProcessRequestMetrics);
     ThrowingConsumer<Void> successAction = securityCheckResult -> {
       BlobInfo blobInfo = parseBlobInfoFromRequest(restRequest);
       securityService.processRequest(restRequest,
           securityProcessRequestCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
     };
-    return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
+    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
   }
 
   /**
@@ -132,11 +134,11 @@ class PostBlobHandler {
    */
   private Callback<Void> securityProcessRequestCallback(RestRequest restRequest,
       RestResponseChannel restResponseChannel, BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    CallbackTracker callbackTracker =
-        new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityProcessRequestMetrics);
+    AsyncOperationTracker asyncOperationTracker =
+        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityProcessRequestMetrics);
     ThrowingConsumer<Void> successAction = securityCheckResult -> securityService.postProcessRequest(restRequest,
         securityPostProcessRequestCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
+    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
   }
 
   /**
@@ -150,12 +152,12 @@ class PostBlobHandler {
    */
   private Callback<Void> securityPostProcessRequestCallback(RestRequest restRequest,
       RestResponseChannel restResponseChannel, BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    CallbackTracker callbackTracker =
-        new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityPostProcessRequestMetrics);
+    AsyncOperationTracker asyncOperationTracker =
+        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityPostProcessRequestMetrics);
     ThrowingConsumer<Void> successAction =
         securityCheckResult -> router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
             routerPutBlobCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
+    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
   }
 
   /**
@@ -169,11 +171,11 @@ class PostBlobHandler {
    */
   private Callback<String> routerPutBlobCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    CallbackTracker callbackTracker =
-        new CallbackTracker(restRequest, LOGGER, frontendMetrics.postRouterPutBlobMetrics);
+    AsyncOperationTracker asyncOperationTracker =
+        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postRouterPutBlobMetrics);
     ThrowingConsumer<String> successAction = blobId -> idConverter.convert(restRequest, blobId,
         idConverterCallback(restRequest, restResponseChannel, blobInfo, finalCallback));
-    return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
+    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
   }
 
   /**
@@ -187,13 +189,14 @@ class PostBlobHandler {
    */
   private Callback<String> idConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo, Callback<ReadableStreamChannel> finalCallback) {
-    CallbackTracker callbackTracker = new CallbackTracker(restRequest, LOGGER, frontendMetrics.postIdConversionMetrics);
+    AsyncOperationTracker asyncOperationTracker =
+        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postIdConversionMetrics);
     ThrowingConsumer<String> successAction = convertedBlobId -> {
       restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
       securityService.processResponse(restRequest, restResponseChannel, blobInfo,
           securityProcessResponseCallback(restRequest, finalCallback));
     };
-    return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
+    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
   }
 
   /**
@@ -204,9 +207,9 @@ class PostBlobHandler {
    */
   private Callback<Void> securityProcessResponseCallback(RestRequest restRequest,
       Callback<ReadableStreamChannel> finalCallback) {
-    CallbackTracker callbackTracker =
-        new CallbackTracker(restRequest, LOGGER, frontendMetrics.postSecurityProcessResponseMetrics);
+    AsyncOperationTracker asyncOperationTracker =
+        new AsyncOperationTracker(restRequest.getUri(), LOGGER, frontendMetrics.postSecurityProcessResponseMetrics);
     ThrowingConsumer<Void> successAction = securityCheckResult -> finalCallback.onCompletion(null, null);
-    return FrontendUtils.managedCallback(callbackTracker, finalCallback, successAction);
+    return CallbackUtils.managedCallback(asyncOperationTracker, finalCallback, successAction);
   }
 }

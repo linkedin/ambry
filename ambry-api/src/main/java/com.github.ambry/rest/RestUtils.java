@@ -661,9 +661,9 @@ public class RestUtils {
       throws RestServiceException {
     boolean booleanValue;
     String stringValue = getHeader(args, header, required);
-    if (stringValue == null || stringValue.toLowerCase().equals("false")) {
+    if (stringValue == null || "false".equalsIgnoreCase(stringValue)) {
       booleanValue = false;
-    } else if (stringValue.toLowerCase().equals("true")) {
+    } else if ("true".equalsIgnoreCase(stringValue)) {
       booleanValue = true;
     } else {
       throw new RestServiceException(

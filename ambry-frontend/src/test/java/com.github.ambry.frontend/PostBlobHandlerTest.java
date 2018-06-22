@@ -15,11 +15,6 @@
 
 package com.github.ambry.frontend;
 
-import org.junit.Test;
-
-import static org.junit.Assert.*;
-
-
 /**
  * Tests for {@link PostBlobHandler}. PostBlob functionality was recently extracted into this handler class from
  * {@link AmbryBlobStorageService}, so the test cases are still in {@link AmbryBlobStorageServiceTest}.
