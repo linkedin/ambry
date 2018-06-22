@@ -130,7 +130,8 @@ public class ConsistencyCheckerTool {
     }
   }
 
-  private final IndexProcessingHelper indexProcessingHelper;
+  private final DumpIndexTool dumpIndexTool;
+  private final Set<StoreKey> filterSet;
 
   private static final Logger logger = LoggerFactory.getLogger(ConsistencyCheckerTool.class);
 
@@ -162,12 +163,18 @@ public class ConsistencyCheckerTool {
     }
   }
 
+  public ConsistencyCheckerTool(DumpIndexTool dumpIndexTool, Set<StoreKey> filterSet) {
+    this.filterSet = filterSet;
+    this.dumpIndexTool = dumpIndexTool;
+  }
+
   public ConsistencyCheckerTool(ClusterMap clusterMap, StoreKeyFactory storeKeyFactory, StoreConfig storeConfig,
       Set<StoreKey> filterSet, Throttler throttler, StoreToolsMetrics metrics, Time time,
       StoreKeyConverter storeKeyConverter) {
     StoreMetrics storeMetrics = new StoreMetrics("ConsistencyCheckerTool", clusterMap.getMetricRegistry());
-    indexProcessingHelper =
-        new IndexProcessingHelper(storeKeyFactory, storeConfig, filterSet, throttler, storeMetrics, metrics, time,
+    this.filterSet = filterSet;
+    dumpIndexTool =
+        new DumpIndexTool(storeKeyFactory, storeConfig, time, metrics, storeMetrics, throttler,
             storeKeyConverter);
   }
 
@@ -182,7 +189,7 @@ public class ConsistencyCheckerTool {
   public Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> checkConsistency(File[] replicas)
       throws Exception {
     Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> resultsByReplica =
-        indexProcessingHelper.getIndexProcessingResults(replicas);
+        dumpIndexTool.getIndexProcessingResults(replicas, filterSet);
     boolean success = resultsByReplica.getFirst();
     if (success) {
       Map<StoreKey, ReplicationStatus> blobIdToStatusMap =
@@ -204,7 +211,7 @@ public class ConsistencyCheckerTool {
   private Map<StoreKey, ReplicationStatus> getBlobStatusByReplica(File[] replicas,
       Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
     Map<StoreKey, ReplicationStatus> keyReplicationStatusMap = new HashMap<>();
-    Map<StoreKey, StoreKey> convertMap = indexProcessingHelper.createConversionKeyMap(replicas, results);
+    Map<StoreKey, StoreKey> convertMap = dumpIndexTool.createConversionKeyMap(replicas, results);
     for (File replica : replicas) {
       DumpIndexTool.IndexProcessingResults result = results.get(replica);
       for (Map.Entry<StoreKey, DumpIndexTool.Info> entry : result.getKeyToState().entrySet()) {
