@@ -31,7 +31,7 @@ public interface NotificationSystem extends Closeable {
    * @param blobProperties The blob properties for the blob
    * @param notificationBlobType The {@link NotificationBlobType} of this blob.
    */
-  public void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType);
+  void onBlobCreated(String blobId, BlobProperties blobProperties, NotificationBlobType notificationBlobType);
 
   /**
    * Notifies the underlying system when the ttl of an existing blob is updated
@@ -39,14 +39,14 @@ public interface NotificationSystem extends Closeable {
    * @param serviceId The service ID of the service that updated the tll of the blob. This can be null if unknown
    * @param expiresAtMs the new expiry time (in ms) of the blob
    */
-  public void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs);
+  void onBlobTtlUpdated(String blobId, String serviceId, long expiresAtMs);
 
   /**
    * Notifies the underlying system when an existing blob is deleted
    * @param blobId The id of the blob that was deleted
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
    */
-  public void onBlobDeleted(String blobId, String serviceId);
+  void onBlobDeleted(String blobId, String serviceId);
 
   /**
    * Notifies the underlying system when a blob is replicated to a node
@@ -55,7 +55,7 @@ public interface NotificationSystem extends Closeable {
    * @param blobId The id of the blob that has been replicated
    * @param sourceType The source that created the blob replica
    */
-  public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
+  void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
 
   /**
    * Notifies the underlying system when a deleted state of a blob is replicated to a node
@@ -64,7 +64,7 @@ public interface NotificationSystem extends Closeable {
    * @param blobId The id of the blob whose deleted state has been replicated
    * @param sourceType The source that deleted the blob replica
    */
-  public void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
+  void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
 
   /**
    * Notifies the underlying system when a updated state of a blob is replicated to a node
@@ -75,6 +75,6 @@ public interface NotificationSystem extends Closeable {
    * @param updateType the type of update
    * @param info the {@link MessageInfo} associated with the update
    */
-  public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
+  void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
       UpdateType updateType, MessageInfo info);
 }

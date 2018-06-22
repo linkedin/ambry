@@ -202,7 +202,7 @@ class ServerShutdown implements Runnable {
 /**
  * Tracks the arrival of events and allows waiting on all events of a particular type to arrive
  */
-class Tracker {
+class EventTracker {
   private final int numberOfReplicas;
   private final Helper creationHelper;
   private final Helper deletionHelper;
@@ -241,6 +241,8 @@ class Tracker {
 
     /**
      * Nullifies the notification received (if any) on the given {@code host}:{@code port}.
+     * This method is NOT thread safe and should not be used concurrently with other methods in this class like
+     * await() and track().
      * @param host the host that to decrement on
      * @param port the port of the host that describes the instance along with {@code host}.
      */
@@ -267,7 +269,7 @@ class Tracker {
   /**
    * @param expectedNumberOfReplicas the total number of replicas that will fire events
    */
-  Tracker(int expectedNumberOfReplicas) {
+  EventTracker(int expectedNumberOfReplicas) {
     numberOfReplicas = expectedNumberOfReplicas;
     creationHelper = new Helper();
     deletionHelper = new Helper();
@@ -332,6 +334,8 @@ class Tracker {
 
   /**
    * Nullifies the creation notification on {@code host}:{@code port}.
+   * This method is NOT thread safe and should not be used concurrently with other methods in this class like
+   * await() and track().
    * @param host the host that to decrement on
    * @param port the port of the host that describes the instance along with {@code host}.
    */
@@ -341,6 +345,8 @@ class Tracker {
 
   /**
    * Nullifies the delete notification on {@code host}:{@code port}.
+   * This method is NOT thread safe and should not be used concurrently with other methods in this class like
+   * await() and track().
    * @param host the host that to decrement on
    * @param port the port of the host that describes the instance along with {@code host}.
    */
@@ -350,6 +356,8 @@ class Tracker {
 
   /**
    * Nullifies the update notification for {@code updateType} on {@code host}:{@code port}.
+   * This method is NOT thread safe and should not be used concurrently with other methods in this class like
+   * await() and track().
    * @param host the host that to decrement on
    * @param port the port of the host that describes the instance along with {@code host}.
    * @param updateType the {@link UpdateType} to nullify the notification for
@@ -365,7 +373,7 @@ class Tracker {
  */
 class MockNotificationSystem implements NotificationSystem {
 
-  private final ConcurrentHashMap<String, Tracker> objectTracker = new ConcurrentHashMap<String, Tracker>();
+  private final ConcurrentHashMap<String, EventTracker> objectTracker = new ConcurrentHashMap<String, EventTracker>();
   private final ClusterMap clusterMap;
 
   public MockNotificationSystem(ClusterMap clusterMap) {
@@ -390,24 +398,26 @@ class MockNotificationSystem implements NotificationSystem {
   @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
-    objectTracker.computeIfAbsent(blobId, k -> new Tracker(getNumReplicas(blobId))).trackCreation(sourceHost, port);
+    objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
+        .trackCreation(sourceHost, port);
   }
 
   @Override
   public synchronized void onBlobReplicaDeleted(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
-    objectTracker.computeIfAbsent(blobId, k -> new Tracker(getNumReplicas(blobId))).trackDeletion(sourceHost, port);
+    objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
+        .trackDeletion(sourceHost, port);
   }
 
   @Override
-  public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
-      UpdateType updateType, MessageInfo info) {
-    objectTracker.computeIfAbsent(blobId, k -> new Tracker(getNumReplicas(blobId)))
+  public synchronized void onBlobReplicaUpdated(String sourceHost, int port, String blobId,
+      BlobReplicaSourceType sourceType, UpdateType updateType, MessageInfo info) {
+    objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
         .trackUpdate(sourceHost, port, updateType);
   }
 
   @Override
-  public void close() throws IOException {
+  public void close() {
     // ignore
   }
 
@@ -456,6 +466,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   /**
    * Nullifies the creation notification for {@code blobId} on {@code host}:{@code port}.
+   * This method should not be used concurrently with the await functions
    * @param blobId the blob ID whose creation notification needs to be nullified
    * @param host the host that to decrement on
    * @param port the port of the host that describes the instance along with {@code host}.
@@ -466,6 +477,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   /**
    * Nullifies the deletion notification for {@code blobId} on {@code host}:{@code port}.
+   * This method should not be used concurrently with the await functions
    * @param blobId the blob ID whose deletion notification needs to be nullified
    * @param host the host that to decrement on
    * @param port the port of the host that describes the instance along with {@code host}.
@@ -476,6 +488,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   /**
    * Nullifies the update notification of type {@code updateType} for {@code blobId} on {@code host}:{@code port}.
+   * This method should not be used concurrently with the await functions
    * @param blobId the blob ID whose update notification needs to be nullified
    * @param host the host that to decrement on
    * @param port the port of the host that describes the instance along with {@code host}.
