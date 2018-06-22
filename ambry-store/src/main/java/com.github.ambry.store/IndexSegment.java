@@ -173,9 +173,12 @@ class IndexSegment {
       lastModifiedTimeSec = new AtomicLong(0);
       if (shouldMap) {
         map(false);
+        bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+        if (!bloomFile.exists()) {
+          generateBloomFilterAndPersist();
+        }
         // Load the bloom filter for this index
         // We need to load the bloom filter only for mapped indexes
-        bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
         CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
         DataInputStream stream = new DataInputStream(crcBloom);
         bloomFilter = FilterFactory.deserialize(stream);
@@ -376,6 +379,31 @@ class IndexSegment {
       rwLock.readLock().unlock();
     }
     return toReturn != null ? Collections.unmodifiableNavigableSet(toReturn) : null;
+  }
+
+  /**
+   * Generate bloom filter by walking through all index entries in this segment and persist it.
+   * @throws IOException
+   */
+  private void generateBloomFilterAndPersist() throws IOException {
+    List<IndexEntry> entries = new ArrayList<>();
+    getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), true);
+    for (IndexEntry entry : entries) {
+      bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
+    }
+    persistBloomFilter();
+  }
+
+  /**
+   * Persist the bloom filter.
+   * @throws IOException
+   */
+  private void persistBloomFilter() throws IOException {
+    CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
+    DataOutputStream stream = new DataOutputStream(crcStream);
+    FilterFactory.serialize(bloomFilter, stream);
+    long crcValue = crcStream.getValue();
+    stream.writeLong(crcValue);
   }
 
   /**
@@ -730,11 +758,7 @@ class IndexSegment {
     // we should be fine reading bloom filter here without synchronization as the index is read only
     // we only persist the bloom filter once during its entire lifetime
     if (persistBloom) {
-      CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
-      DataOutputStream stream = new DataOutputStream(crcStream);
-      FilterFactory.serialize(bloomFilter, stream);
-      long crcValue = crcStream.getValue();
-      stream.writeLong(crcValue);
+      persistBloomFilter();
     }
   }
 
