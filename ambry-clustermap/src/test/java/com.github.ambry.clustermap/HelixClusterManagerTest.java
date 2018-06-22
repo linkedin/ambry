@@ -67,7 +67,6 @@ public class HelixClusterManagerTest {
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final String clusterNamePrefixInHelix = "Ambry-";
   private final String ZNODE_NAME = "PartitionOverride";
-  private final String ZNODE_PATH = "/ClusterConfigs/PartitionOverride";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
   private final String hostname;
@@ -250,6 +249,35 @@ public class HelixClusterManagerTest {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
       assertEquals("beBad", e.getCause().getMessage());
+    }
+  }
+
+  /**
+   * Test HelixClusterManager initialize with null ZNRecord. In such case, HelixClusterManager will initialize replica
+   * state based on instanceConfigs.
+   * @throws Exception
+   */
+  @Test
+  public void emptyPartitionOverrideTest() throws Exception {
+    if (overrideEnabled) {
+      metricRegistry = new MetricRegistry();
+      // create a MockHelixManagerFactory
+      ClusterMap clusterManagerWithEmptyRecord =
+          new HelixClusterManager(clusterMapConfig, hostname, new MockHelixManagerFactory(helixCluster, null, null),
+              metricRegistry);
+
+      Set<String> writableInClusterManager = new HashSet<>();
+      for (PartitionId partition : clusterManagerWithEmptyRecord.getWritablePartitionIds(null)) {
+        String partitionStr =
+            useComposite ? ((Partition) partition).toPathString() : ((AmbryPartition) partition).toPathString();
+        writableInClusterManager.add(partitionStr);
+      }
+      Set<String> writableInCluster = helixCluster.getWritablePartitions();
+      if (writableInCluster.isEmpty()) {
+        writableInCluster = helixCluster.getAllWritablePartitions();
+      }
+      assertEquals("Mismatch in writable partitions during initialization", writableInCluster,
+          writableInClusterManager);
     }
   }
 

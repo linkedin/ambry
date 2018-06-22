@@ -217,13 +217,17 @@ class HelixClusterManager implements ClusterMap {
         logger.info("Message is deleted for topic {} at path {}", TOPIC, path);
       }
     };
-    logger.info("Getting ZNRecord from Helix PropertyStore");
+    logger.info("Getting ZNRecord from HelixPropertyStore");
     helixPropertyStore.subscribe(ZNODE_PATH, helixListener);
     ZNRecord zNRecord = helixPropertyStore.get(ZNODE_PATH, null, AccessOption.PERSISTENT);
     if (clusterMapConfig.clusterMapEnableOverride) {
+      if(zNRecord != null){
       partitionOverrideInfoMap = zNRecord.getMapFields();
+      logger.info("partitionOverrideInfoMap is initialized!");
+      }else{
+        logger.warn("ZNRecord from HelixPropertyStore is NULL, the partitionOverrideInfoMap is empty.");
+      }
     }
-    logger.info("partitionOverrideInfoMap is initialized!");
     return manager;
   }
 
