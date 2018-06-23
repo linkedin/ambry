@@ -175,8 +175,6 @@ class IndexSegment {
         map(false);
         bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
         if (!bloomFile.exists()) {
-          bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
-              config.storeIndexBloomMaxFalsePositiveProbability);
           generateBloomFileAndPersist();
         }
         // Load the bloom filter for this index
@@ -390,6 +388,7 @@ class IndexSegment {
   private void generateBloomFileAndPersist() throws IOException {
     List<IndexEntry> entries = new ArrayList<>();
     getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), true);
+    bloomFilter = FilterFactory.getFilter(entries.size(), config.storeIndexBloomMaxFalsePositiveProbability);
     for (IndexEntry entry : entries) {
       bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
     }

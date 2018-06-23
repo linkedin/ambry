@@ -51,7 +51,6 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class IndexSegmentTest {
-  private static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
   private static final int CUSTOM_ID_SIZE = 10;
   private static final int KEY_SIZE = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE)).sizeInBytes();
   private static final int SMALLER_KEY_SIZE = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE / 2)).sizeInBytes();
@@ -772,9 +771,10 @@ public class IndexSegmentTest {
     assertNull("Journal should not have any entries", journal.getFirstOffset());
 
     // delete the bloom file
-    File BloomFile = new File(file.getParent(),
-        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + BLOOM_FILE_NAME_SUFFIX);
-    BloomFile.delete();
+    File bloomFile = new File(file.getParent(),
+        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + IndexSegment.BLOOM_FILE_NAME_SUFFIX);
+    assertTrue("File could not be deleted", bloomFile.delete());
+    assertFalse("Bloom file should not exist", bloomFile.exists());
 
     // read from file (mapped) again and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
