@@ -150,6 +150,8 @@ public class TtlUpdateManagerTest {
     for (String blobId : blobIds) {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
       executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true);
+      // ok to do it again
+      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true);
     }
   }
 
@@ -160,6 +162,8 @@ public class TtlUpdateManagerTest {
   @Test
   public void batchedThroughTtlManagerTest() throws Exception {
     assertTtl(router, blobIds, TTL_SECS);
+    executeOpAndVerify(blobIds, null, false, false, false, true);
+    // ok to do it again
     executeOpAndVerify(blobIds, null, false, false, false, true);
   }
 
@@ -187,8 +191,9 @@ public class TtlUpdateManagerTest {
     errorCodeMap.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     errorCodeMap.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     errorCodeMap.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
     for (ServerErrorCode errorCode : ServerErrorCode.values()) {
-      if (errorCode == ServerErrorCode.No_Error) {
+      if (errorCode == ServerErrorCode.No_Error || errorCode == ServerErrorCode.Blob_Already_Updated) {
         continue;
       }
       ArrayList<ServerErrorCode> serverErrorCodes =
@@ -247,7 +252,8 @@ public class TtlUpdateManagerTest {
   public void fixedCountSuccessfulResponseTest() throws Exception {
     for (int i = 0; i <= DEFAULT_SUCCESS_TARGET; i++) {
       boolean shouldSucceed = i == DEFAULT_SUCCESS_TARGET;
-      doFixedCountSuccessfulResponseTest(i, shouldSucceed);
+      doFixedCountSuccessfulResponseTest(i, shouldSucceed, ServerErrorCode.No_Error);
+      doFixedCountSuccessfulResponseTest(i, shouldSucceed, ServerErrorCode.Blob_Already_Updated);
     }
   }
 
@@ -409,10 +415,11 @@ public class TtlUpdateManagerTest {
    * Does the fixed count successful response test by setting the appropriate number of successful responses
    * @param successfulResponsesCount the number of successful responses
    * @param shouldSucceed {@code true} if the operation must succeed
+   * @param errorCodeToReturn the {@link ServerErrorCode} to configure the servers to return
    * @throws Exception
    */
-  private void doFixedCountSuccessfulResponseTest(int successfulResponsesCount, boolean shouldSucceed)
-      throws Exception {
+  private void doFixedCountSuccessfulResponseTest(int successfulResponsesCount, boolean shouldSucceed,
+      ServerErrorCode errorCodeToReturn) throws Exception {
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
       if (mockServer.getDataCenter().equals(LOCAL_DC)) {
@@ -425,7 +432,7 @@ public class TtlUpdateManagerTest {
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
     for (int i = 0; i < successfulResponsesCount; i++) {
-      serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+      serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
     }
     executeOpAndVerify(blobIds, shouldSucceed ? null : RouterErrorCode.BlobDoesNotExist, false, true, true, false);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);

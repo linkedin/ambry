@@ -35,7 +35,9 @@ public class ErrorMapping {
     tempMap.put(StoreErrorCodes.ID_Not_Found, ServerErrorCode.Blob_Not_Found);
     tempMap.put(StoreErrorCodes.TTL_Expired, ServerErrorCode.Blob_Expired);
     tempMap.put(StoreErrorCodes.Already_Exist, ServerErrorCode.Blob_Already_Exists);
-    tempMap.put(StoreErrorCodes.Authorization_Failure, ServerErrorCode.Blob_Not_Found);
+    tempMap.put(StoreErrorCodes.Authorization_Failure, ServerErrorCode.Blob_Authorization_Failure);
+    tempMap.put(StoreErrorCodes.Already_Updated, ServerErrorCode.Blob_Already_Updated);
+    tempMap.put(StoreErrorCodes.Update_Not_Allowed, ServerErrorCode.Blob_Update_Not_Allowed);
     storeErrorMapping = Collections.unmodifiableMap(tempMap);
   }
 

@@ -34,6 +34,8 @@ public enum ServerErrorCode {
   Temporarily_Disabled,
   Bad_Request,
   Retry_After_Backoff,
-  Ttl_Already_Updated,
-  Ttl_Update_Rejected
+  Blob_Already_Updated,
+  Blob_Update_Not_Allowed,
+  Replica_Unavailable,
+  Blob_Authorization_Failure
 }

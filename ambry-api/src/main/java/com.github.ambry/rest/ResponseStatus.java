@@ -65,6 +65,11 @@ public enum ResponseStatus {
   NotFound,
 
   /**
+   * 405 Method Not Allowed - Method in request is not allowed on the resource
+   */
+  MethodNotAllowed,
+
+  /**
    * 407 - Proxy authentication required
    */
   ProxyAuthenticationRequired,
@@ -132,6 +137,8 @@ public enum ResponseStatus {
         return Forbidden;
       case Unauthorized:
         return Unauthorized;
+      case NotAllowed:
+        return MethodNotAllowed;
       case ResourceScanInProgress:
         return ProxyAuthenticationRequired;
       case RangeNotSatisfiable:
