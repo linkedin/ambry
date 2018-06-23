@@ -1234,10 +1234,8 @@ class PersistentIndex {
     ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator(messageEntries.size());
     while (messageEntriesIterator.hasPrevious()) {
       MessageInfo messageInfo = messageEntriesIterator.previous();
-      if (setToFindDuplicate.contains(messageInfo.getStoreKey())) {
+      if (!setToFindDuplicate.add(messageInfo.getStoreKey())) {
         messageEntriesIterator.remove();
-      } else {
-        setToFindDuplicate.add(messageInfo.getStoreKey());
       }
     }
   }

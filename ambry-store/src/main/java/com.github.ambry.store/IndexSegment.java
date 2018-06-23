@@ -997,10 +997,8 @@ class IndexSegment {
     ListIterator<IndexEntry> iterator = entries.listIterator(entries.size());
     while (iterator.hasPrevious()) {
       IndexEntry entry = iterator.previous();
-      if (setToFindDuplicate.contains(entry.getKey())) {
+      if (!setToFindDuplicate.add(entry.getKey())) {
         iterator.remove();
-      } else {
-        setToFindDuplicate.add(entry.getKey());
       }
     }
   }

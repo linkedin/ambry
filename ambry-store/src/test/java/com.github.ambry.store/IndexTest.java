@@ -132,12 +132,12 @@ public class IndexTest {
    */
   @Test
   public void findKeyWithFileSpanTest() throws StoreException {
-    // using only liveKeys to simplify the test - behavior does not differ based on the type of entry.
-    for (MockId id : state.liveKeys) {
+    for (MockId id : state.allKeys.keySet()) {
       doFindKeyWithFileSpanTest(id,
           EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
-      if (state.ttlUpdatedKeys.contains(id)) {
-        doFindKeyWithFileSpanTest(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+      doFindKeyWithFileSpanTest(id, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+      for (PersistentIndex.IndexEntryType type : PersistentIndex.IndexEntryType.values()) {
+        doFindKeyWithFileSpanTest(id, EnumSet.of(type));
       }
     }
   }
@@ -1369,6 +1369,11 @@ public class IndexTest {
   private void doFindKeyWithFileSpanTest(MockId id, EnumSet<PersistentIndex.IndexEntryType> types)
       throws StoreException {
     IndexValue expectedValue = state.getExpectedValue(id, types, null);
+    verifyValue(id, state.index.findKey(id, null, types), null, types);
+    if (expectedValue == null) {
+      // there is no filespan testing required if the given type of entry does not exist
+      return;
+    }
     FileSpan fileSpanForMessage = state.log.getFileSpanForMessage(expectedValue.getOffset(), expectedValue.getSize());
 
     // FileSpan that is exactly that of the message
@@ -1403,8 +1408,8 @@ public class IndexTest {
       // FileSpan lower than the entry (does not include entry)
       fileSpan = new FileSpan(state.index.getStartOffset(), lowerSegmentStartOffset);
       IndexValue valueFromIndex = state.index.findKey(id, fileSpan, types);
-      if (expectedValue.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-        assertTrue("The TTL update entry should not be returned",
+      if (expectedValue.getFlags() != IndexValue.FLAGS_DEFAULT_VALUE) {
+        assertTrue("The update/delete entry should not be returned",
             valueFromIndex == null || !valueFromIndex.getOffset().equals(expectedValue.getOffset()));
       } else {
         assertNull("There should have been no value returned", valueFromIndex);
