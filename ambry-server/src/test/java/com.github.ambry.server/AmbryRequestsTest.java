@@ -64,10 +64,13 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
@@ -91,6 +94,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -112,10 +116,13 @@ public class AmbryRequestsTest {
   private final MockReplicationManager replicationManager;
   private final AmbryRequests ambryRequests;
   private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
+  private final Set<StoreKey> validKeysInStore = new HashSet<>();
+  private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
+  private final MockStoreKeyConverterFactory storeKeyConverterFactory;
 
   public AmbryRequestsTest() throws IOException, ReplicationException, StoreException {
     clusterMap = new MockClusterMap();
-    storageManager = new MockStorageManager();
+    storageManager = new MockStorageManager(validKeysInStore);
     Properties properties = new Properties();
     properties.setProperty("clustermap.cluster.name", "test");
     properties.setProperty("clustermap.datacenter.name", "DC1");
@@ -127,8 +134,11 @@ public class AmbryRequestsTest {
     dataNodeId = clusterMap.getDataNodeIds().get(0);
     replicationManager =
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
+    storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(conversionMap);
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false, null);
+        clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,
+        storeKeyConverterFactory);
   }
 
   /**
@@ -528,6 +538,53 @@ public class AmbryRequestsTest {
     assertTrue("Response not of type AdminResponse", response instanceof AdminResponse);
     storageManager.exceptionToThrowOnShuttingDownBlobStore = null;
   }
+
+  /**
+   * Tests blobIds can be converted as expected and works correctly with GetRequest.
+   * If all blobIds can be converted correctly, no error is expected.
+   * If any blobId can't be converted correctly, Blob_Not_Found is expected.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  @Test
+  public void listOfOriginalStoreKeysGetTest() throws Exception {
+    PartitionId partitionId = clusterMap.getAllPartitionIds(null).get(0);
+    List<BlobId> blobIds = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+      BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+      BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(),
+          partitionId, false);
+      conversionMap.put(originalBlobId, convertedBlobId);
+      validKeysInStore.add(convertedBlobId);
+      blobIds.add(originalBlobId);
+    }
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
+
+    // Check a valid key mapped to null
+    BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+    blobIds.add(originalBlobId);
+    conversionMap.put(originalBlobId, null);
+    validKeysInStore.add(originalBlobId);
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.No_Error);
+
+    // Check a invalid key mapped to null
+    originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false);
+    blobIds.add(originalBlobId);
+    conversionMap.put(originalBlobId, null);
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.Blob_Not_Found);
+
+    // Check exception
+    storeKeyConverterFactory.setException(new Exception("StoreKeyConverter Mock Exception"));
+    sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.Unknown_Error);
+  }
+
   // helpers
 
   // general
@@ -618,6 +675,37 @@ public class AmbryRequestsTest {
   }
 
   /**
+   * Sends and verifies that GetRequest with a list of original blobIds works correctly.
+   * @param blobIds List of blobIds for GetRequest.
+   * @param expectedErrorCode the {@link ServerErrorCode} expected in the response.
+   * @throws InterruptedException
+   * @throws IOException
+   */
+  private void sendAndVerifyGetOriginalStoreKeys(List<BlobId> blobIds, ServerErrorCode expectedErrorCode)
+      throws InterruptedException, IOException {
+    PartitionId partitionId = blobIds.get(0).getPartition();
+    int correlationId = blobIds.get(0).getContainerId();
+    String clientId = UtilsTest.getRandomString(10);
+
+    PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(partitionId, blobIds);
+    RequestOrResponse request =
+        new GetRequest(correlationId, clientId, MessageFormatFlags.All, Collections.singletonList(pRequestInfo),
+            GetOption.Include_All);
+    storageManager.resetStore();
+    if (!expectedErrorCode.equals(ServerErrorCode.Unknown_Error)) {
+      // known error will be filled to each PartitionResponseInfo and set ServerErrorCode.No_Error in response.
+      Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+      assertEquals("Operation received at the store not as expected", RequestOrResponseType.GetRequest,
+          MockStorageManager.operationReceived);
+      for (PartitionResponseInfo info : ((GetResponse) response).getPartitionResponseInfoList()) {
+        assertEquals("Error code does not match expected", expectedErrorCode, info.getErrorCode());
+      }
+    } else {
+      sendRequestGetResponse(request, ServerErrorCode.Unknown_Error);
+    }
+  }
+
+  /**
    * Sends and verifies that an operation specific request works correctly.
    * @param requestType the type of the request to send.
    * @param ids the partitionIds to send requests for.
@@ -632,22 +720,27 @@ public class AmbryRequestsTest {
     for (PartitionId id : ids) {
       int correlationId = TestUtils.RANDOM.nextInt();
       String clientId = UtilsTest.getRandomString(10);
-      BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+      BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
           Utils.getRandomShort(TestUtils.RANDOM), id, false);
+      BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
+          ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), id,
+          false);
+      conversionMap.put(originalBlobId, convertedBlobId);
+      validKeysInStore.add(convertedBlobId);
       RequestOrResponse request;
       switch (requestType) {
         case PutRequest:
           BlobProperties properties =
-              new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
-          request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
+              new BlobProperties(0, "serviceId", originalBlobId.getAccountId(), originalBlobId.getAccountId(), false);
+          request = new PutRequest(correlationId, clientId, originalBlobId, properties, ByteBuffer.allocate(0),
               ByteBuffer.allocate(0), 0, BlobType.DataBlob, null);
           break;
         case DeleteRequest:
-          request = new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds());
+          request = new DeleteRequest(correlationId, clientId, originalBlobId, SystemTime.getInstance().milliseconds());
           break;
         case GetRequest:
-          PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(id, Collections.singletonList(blobId));
+          PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(id, Collections.singletonList(originalBlobId));
           request =
               new GetRequest(correlationId, clientId, MessageFormatFlags.All, Collections.singletonList(pRequestInfo),
                   GetOption.Include_All);
@@ -911,7 +1004,7 @@ public class AmbryRequestsTest {
     /**
      * An empty {@link Store} implementation.
      */
-    private static Store store = new Store() {
+    private Store store = new Store() {
 
       @Override
       public void start() throws StoreException {
@@ -922,6 +1015,11 @@ public class AmbryRequestsTest {
       public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> storeGetOptions)
           throws StoreException {
         operationReceived = RequestOrResponseType.GetRequest;
+        for (StoreKey id : ids) {
+          if (!validKeysInStore.contains(id)) {
+            throw new StoreException("Not a valid key.", StoreErrorCodes.ID_Not_Found);
+          }
+        }
         return new StoreInfo(new MessageReadSet() {
           @Override
           public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
@@ -959,6 +1057,11 @@ public class AmbryRequestsTest {
       @Override
       public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
         operationReceived = RequestOrResponseType.DeleteRequest;
+        for (MessageInfo messageInfo : messageSetToDelete.getMessageSetInfo()) {
+          if (!validKeysInStore.contains(messageInfo.getStoreKey())) {
+            throw new StoreException("Not a valid key.", StoreErrorCodes.ID_Not_Found);
+          }
+        }
       }
 
       @Override
@@ -1058,9 +1161,12 @@ public class AmbryRequestsTest {
      */
     PartitionId startedPartitionId = null;
 
-    MockStorageManager() throws StoreException {
+    private final Set<StoreKey> validKeysInStore;
+
+    MockStorageManager(Set<StoreKey> validKeysInStore) throws StoreException {
       super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
           Collections.emptyList(), null, null, null, null, new MockTime());
+      this.validKeysInStore = validKeysInStore;
     }
 
     @Override

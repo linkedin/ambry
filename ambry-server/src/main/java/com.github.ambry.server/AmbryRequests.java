@@ -70,6 +70,7 @@ import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -82,6 +83,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -307,7 +309,7 @@ public class AmbryRequests implements RequestAPI {
               storeGetOptions =
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
-            StoreInfo info = storeToGet.get(partitionRequestInfo.getBlobIds(), storeGetOptions);
+            StoreInfo info = storeToGet.get(getConvertedStoreKeys(partitionRequestInfo.getBlobIds()), storeGetOptions);
             MessageFormatSend blobsToSend =
                 new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
                     storeKeyFactory, enableDataPrefetch);
@@ -393,6 +395,7 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     DeleteResponse response = null;
     try {
+      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(deleteRequest.getBlobId())).get(0);
       ServerErrorCode error =
           validateRequest(deleteRequest.getBlobId().getPartition(), RequestOrResponseType.DeleteRequest, false);
       if (error != ServerErrorCode.No_Error) {
@@ -400,20 +403,20 @@ public class AmbryRequests implements RequestAPI {
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
         MessageFormatInputStream stream =
-            new DeleteMessageFormatInputStream(deleteRequest.getBlobId(), deleteRequest.getAccountId(),
+            new DeleteMessageFormatInputStream(convertedStoreKey, deleteRequest.getAccountId(),
                 deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
-        MessageInfo info = new MessageInfo(deleteRequest.getBlobId(), stream.getSize(), deleteRequest.getAccountId(),
+        MessageInfo info = new MessageInfo(convertedStoreKey, stream.getSize(), deleteRequest.getAccountId(),
             deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
-        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
+        MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
         Store storeToDelete = storageManager.getStore(deleteRequest.getBlobId().getPartition());
-        storeToDelete.delete(writeset);
+        storeToDelete.delete(writeSet);
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
-              deleteRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
+              BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
@@ -1060,5 +1063,20 @@ public class AmbryRequests implements RequestAPI {
       }
     }
     return isAcceptable;
+  }
+
+  /**
+   * Convert StoreKeys based on {@link StoreKeyConverterFactory}
+   * @param storeKeys A list of original storeKeys.
+   * @return A list of converted storeKeys.
+   */
+  private List<StoreKey> getConvertedStoreKeys(List<? extends StoreKey> storeKeys) throws Exception {
+    Map<StoreKey, StoreKey> conversionMap = storeKeyConverterFactory.getStoreKeyConverter().convert(storeKeys);
+    List<StoreKey> convertedStoreKeys = new ArrayList<>();
+    for (StoreKey key : storeKeys) {
+      StoreKey convertedKey = conversionMap.get(key);
+      convertedStoreKeys.add(convertedKey == null ? key : convertedKey);
+    }
+    return convertedStoreKeys;
   }
 }
