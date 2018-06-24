@@ -779,6 +779,7 @@ public class IndexSegmentTest {
     // read from file (mapped) again and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     fromDisk = createIndexSegmentFromFile(file, true, journal);
+    assertTrue("Bloom file does not exist", bloomFile.exists());
     verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
         endOffset, lastModifiedTimeInMs, resetKey);
     // journal should not contain any entries
