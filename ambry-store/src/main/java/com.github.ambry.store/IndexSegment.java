@@ -175,23 +175,24 @@ class IndexSegment {
         map(false);
         bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
         if (!bloomFile.exists()) {
-          generateBloomFileAndPersist();
+          generateBloomFilterAndPersist();
+        } else {
+          // Load the bloom filter for this index
+          // We need to load the bloom filter only for mapped indexes
+          CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
+          DataInputStream stream = new DataInputStream(crcBloom);
+          bloomFilter = FilterFactory.deserialize(stream);
+          long crcValue = crcBloom.getValue();
+          if (crcValue != stream.readLong()) {
+            // TODO metrics
+            // we don't recover the filter. we just by pass the filter. Crc corrections will be done
+            // by the scrubber
+            bloomFilter = null;
+            logger.error("IndexSegment : {} error validating crc for bloom filter for {}", indexFile.getAbsolutePath(),
+                bloomFile.getAbsolutePath());
+          }
+          stream.close();
         }
-        // Load the bloom filter for this index
-        // We need to load the bloom filter only for mapped indexes
-        CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
-        DataInputStream stream = new DataInputStream(crcBloom);
-        bloomFilter = FilterFactory.deserialize(stream);
-        long crcValue = crcBloom.getValue();
-        if (crcValue != stream.readLong()) {
-          // TODO metrics
-          // we don't recover the filter. we just by pass the filter. Crc corrections will be done
-          // by the scrubber
-          bloomFilter = null;
-          logger.error("IndexSegment : {} error validating crc for bloom filter for {}", indexFile.getAbsolutePath(),
-              bloomFile.getAbsolutePath());
-        }
-        stream.close();
       } else {
         index = new ConcurrentSkipListMap<>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
@@ -382,29 +383,30 @@ class IndexSegment {
   }
 
   /**
-   * Generate bloom file by walking through all index entries in this segment and persist it.
+   * Generate bloom filter by walking through all index entries in this segment and persist it.
    * @throws IOException
    */
-  private void generateBloomFileAndPersist() throws IOException {
+  private void generateBloomFilterAndPersist() throws IOException {
     List<IndexEntry> entries = new ArrayList<>();
     getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), true);
     bloomFilter = FilterFactory.getFilter(entries.size(), config.storeIndexBloomMaxFalsePositiveProbability);
     for (IndexEntry entry : entries) {
       bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
     }
-    persistBloomFile();
+    persistBloomFilter();
   }
 
   /**
-   * Persist the bloom file.
+   * Persist the bloom filter.
    * @throws IOException
    */
-  private void persistBloomFile() throws IOException {
+  private void persistBloomFilter() throws IOException {
     CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
     DataOutputStream stream = new DataOutputStream(crcStream);
     FilterFactory.serialize(bloomFilter, stream);
     long crcValue = crcStream.getValue();
     stream.writeLong(crcValue);
+    stream.close();
   }
 
   /**
@@ -759,7 +761,7 @@ class IndexSegment {
     // we should be fine reading bloom filter here without synchronization as the index is read only
     // we only persist the bloom filter once during its entire lifetime
     if (persistBloom) {
-      persistBloomFile();
+      persistBloomFilter();
     }
   }
 
