@@ -756,10 +756,8 @@ public class IndexSegmentTest {
     // read from file (unmapped) and verify that everything is ok
     Journal journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     IndexSegment fromDisk = createIndexSegmentFromFile(file, false, journal);
-    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, false, endOffset,
-        lastModifiedTimeInMs, resetKey);
-    verifyFind(referenceIndex, fromDisk);
-    verifyGetEntriesSince(referenceIndex, fromDisk);
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, false,
+        endOffset, lastModifiedTimeInMs, resetKey);
     // journal should contain all the entries
     verifyJournal(referenceIndex, journal);
     fromDisk.map(true);
@@ -767,12 +765,49 @@ public class IndexSegmentTest {
     // read from file (mapped) and verify that everything is ok
     journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
     fromDisk = createIndexSegmentFromFile(file, true, journal);
-    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, true, endOffset,
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
+        endOffset, lastModifiedTimeInMs, resetKey);
+    // journal should not contain any entries
+    assertNull("Journal should not have any entries", journal.getFirstOffset());
+
+    // delete the bloom file
+    File bloomFile = new File(file.getParent(),
+        IndexSegment.generateIndexSegmentFilenamePrefix(startOffset) + IndexSegment.BLOOM_FILE_NAME_SUFFIX);
+    assertTrue("File could not be deleted", bloomFile.delete());
+    assertFalse("Bloom file should not exist", bloomFile.exists());
+
+    // read from file (mapped) again and verify that everything is ok
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(file, true, journal);
+    assertTrue("Bloom file does not exist", bloomFile.exists());
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, numItems, expectedSizeWritten, true,
+        endOffset, lastModifiedTimeInMs, resetKey);
+    // journal should not contain any entries
+    assertNull("Journal should not have any entries", journal.getFirstOffset());
+  }
+
+  /**
+   * Verify all for an {@link IndexSegment} created from the given {@code file} in terms of both sanity and find operations.
+   * @param referenceIndex the index entries to be used as reference.
+   * @param fromDisk the {@link IndexSegment} created from file.
+   * @param startOffset the expected start {@link Offset} of the {@link IndexSegment}
+   * @param numItems the expected number of items the {@code indexSegment}
+   * @param expectedSizeWritten the expected number of bytes written to the {@code indexSegment}
+   * @param isMapped the expected mapped state of the {@code indexSegment}
+   * @param endOffset the expected end offset of the {@code indexSegment}
+   * @param lastModifiedTimeInMs the last modified time of the index segment in ms
+   * @param resetKey the resetKey of the index segment
+   * @throws IOException
+   * @throws StoreException
+   */
+  private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
+      IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean isMapped,
+      long endOffset, long lastModifiedTimeInMs, Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey)
+      throws StoreException, IOException {
+    verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, isMapped, endOffset,
         lastModifiedTimeInMs, resetKey);
     verifyFind(referenceIndex, fromDisk);
     verifyGetEntriesSince(referenceIndex, fromDisk);
-    // journal should not contain any entries
-    assertNull("Journal should not have any entries", journal.getFirstOffset());
   }
 
   /**
