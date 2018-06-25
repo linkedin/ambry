@@ -17,6 +17,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobId.BlobDataType;
+import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
@@ -361,6 +363,7 @@ class PutOperation {
             // channel has data, and there is a chunk that can be filled.
             maybeStopTrackingWaitForChunkTime();
             bytesFilledSoFar += chunkToFill.fillFrom(channelReadBuffer);
+
             if (chunkToFill.isReady() && !chunkToFill.chunkBlobProperties.isEncrypted()) {
               routerCallback.onPollReady();
             }
@@ -880,14 +883,33 @@ class PutOperation {
      */
     private void prepareForSending() {
       try {
+        // Determine data type to set
+        BlobDataType blobDataType = null;
+        if (isMetadataChunk()) {
+          blobDataType = BlobDataType.COMPOSITE;
+        } else if (this.chunkIndex == 0) {
+          if (chunkFillingCompletedSuccessfully) {
+            // Note: this variable can be true even if additional chunks are filled!
+            //blobDataType = BlobDataType.SIMPLE;
+            blobDataType = BlobDataType.DATACHUNK;
+          } else {
+            // TODO: need more data to distinguish between Simple and Data Chunk
+            blobDataType = BlobDataType.DATACHUNK;
+          }
+        } else {
+          blobDataType = BlobDataType.DATACHUNK;
+        }
+
         // if this is part of a retry, make sure no previously attempted partitions are retried.
         if (partitionId != null) {
           attemptedPartitionIds.add(partitionId);
         }
         partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-        chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+
+        chunkBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), passedInBlobProperties.getAccountId(),
-            passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted());
+            passedInBlobProperties.getContainerId(), partitionId, passedInBlobProperties.isEncrypted(), blobDataType);
+
         chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
@@ -1420,11 +1442,11 @@ class PutOperation {
      * The Chunk is being built. It may have some data but is not yet ready to be sent.
      */
     Building, /**
-     * The Chunk is ready to be sent out.
+     * The Chunk is being encrypted.
      */
     Encrypting, /**
-     * The Chunk is being encrypted
-     * */
+     * The Chunk is ready to be sent out.
+     */
     Ready, /**
      * The Chunk is complete.
      */

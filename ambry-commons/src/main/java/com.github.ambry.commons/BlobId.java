@@ -18,6 +18,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Pair;
@@ -100,6 +101,24 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * +--------------+-------------+---------------+
  *
  * </pre>
+ *
+ * <br>
+ * Version 5, which is the same as Version 4 but with additional info in the flag byte.  Flag bits 4 and 5
+ * are used to specify the Blob Data Type, which can be Simple, Composite, or DataChunk.
+ * <br>
+ * <pre>
+ * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
+ * | version | flag  | datacenterId | accountId | containerId | partitionId | uuidSize | uuid     |
+ * | (short) | (byte)| (byte)       | (short)   | (short)     | (n bytes)   | (int)    | (n bytes)|
+ * +---------+----------------------+-----------+-------------+-------------+----------+----------+
+ *
+ * Flag format: 1 Byte
+ * +--------------+---------------+-------------+---------------+
+ * |  1 to 3 bits | 4 and 5th bit |    6th bit  | 7 and 8th bit |
+ * |  un-assigned | BlobDataType  | IsEncrypted |  BlobIdType   |
+ * +--------------+---------------+-------------+---------------|
+
+ * </pre>
  */
 
 public class BlobId extends StoreKey {
@@ -107,6 +126,7 @@ public class BlobId extends StoreKey {
   public static final short BLOB_ID_V2 = 2;
   public static final short BLOB_ID_V3 = 3;
   public static final short BLOB_ID_V4 = 4;
+  public static final short BLOB_ID_V5 = 5;
   private static final short VERSION_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final short UUID_SIZE_FIELD_LENGTH_IN_BYTES = Integer.BYTES;
   private static final short FLAG_FIELD_LENGTH_IN_BYTES = Byte.BYTES;
@@ -115,6 +135,8 @@ public class BlobId extends StoreKey {
   private static final short CONTAINER_ID_FIELD_LENGTH_IN_BYTES = Short.BYTES;
   private static final int BLOB_ID_TYPE_MASK = 0x3;
   private static final int IS_ENCRYPTED_MASK = 0x4;
+  private static final int BLOB_DATA_TYPE_MASK = 0x18;
+  private static final int BLOB_DATA_TYPE_SHIFT = 3;
 
   private final short version;
   private final BlobIdType type;
@@ -124,6 +146,7 @@ public class BlobId extends StoreKey {
   private final PartitionId partitionId;
   private final String uuid;
   private final boolean isEncrypted;
+  private BlobDataType blobDataType;
 
   /**
    * Constructs a new BlobId by taking arguments for the required fields.
@@ -141,7 +164,29 @@ public class BlobId extends StoreKey {
    */
   public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
       PartitionId partitionId, boolean isEncrypted) {
-    this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, UUID.randomUUID().toString());
+    this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, null,
+        UUID.randomUUID().toString());
+  }
+
+  /**
+   * Constructs a new BlobId by taking arguments for the required fields.
+   * Not all the fields in the constructor may be used in constructing it. The current active version determines what
+   * fields will be used.
+   * @param version the version in which this blob should be created.
+   * @param type The {@link BlobIdType} of the blob to be created. Only relevant for V3 and above.
+   * @param datacenterId The id of the datacenter to be embedded into the blob. Only relevant for V2 and above.
+   * @param accountId The id of the {@link Account} to be embedded into the blob. Only relevant for V2 and above.
+   * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
+   * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
+   * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise.
+   *                                Valid for {@link BlobId#BLOB_ID_V4} and above.
+   * @param blobDataType The blob data type.
+   *
+   */
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
+      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType) {
+    this(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, blobDataType,
+        UUID.randomUUID().toString());
   }
 
   /**
@@ -155,10 +200,11 @@ public class BlobId extends StoreKey {
    * @param containerId The id of the {@link Container} to be embedded into the blob. Only relevant for V2 and above.
    * @param partitionId The partition where this blob is to be stored. Cannot be {@code null}.
    * @param isEncrypted {@code true} if blob that this blobId represents is encrypted. {@code false} otherwise
+   * @param blobDataType The blob data type.
    * @param uuid The uuid that is to be used to construct this id.
    */
   private BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
-      PartitionId partitionId, boolean isEncrypted, String uuid) {
+      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType, String uuid) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -191,6 +237,14 @@ public class BlobId extends StoreKey {
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
         break;
+      case BLOB_ID_V5:
+        this.type = type;
+        this.datacenterId = datacenterId;
+        this.accountId = accountId;
+        this.containerId = containerId;
+        this.isEncrypted = isEncrypted;
+        this.blobDataType = blobDataType;
+        break;
       default:
         throw new IllegalArgumentException("blobId version=" + version + " not supported");
     }
@@ -217,6 +271,7 @@ public class BlobId extends StoreKey {
     accountId = preamble.accountId;
     containerId = preamble.containerId;
     isEncrypted = preamble.isEncrypted;
+    blobDataType = preamble.blobDataType;
     partitionId = clusterMap.getPartitionIdFromStream(stream);
     if (partitionId == null) {
       throw new IllegalArgumentException("Partition ID cannot be null");
@@ -263,6 +318,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V2:
       case BLOB_ID_V3:
       case BLOB_ID_V4:
+      case BLOB_ID_V5:
         return (short) (FLAG_FIELD_LENGTH_IN_BYTES + DATACENTER_ID_FIELD_LENGTH_IN_BYTES
             + ACCOUNT_ID_FIELD_LENGTH_IN_BYTES + CONTAINER_ID_FIELD_LENGTH_IN_BYTES + sizeForBlobIdV1);
       default:
@@ -327,7 +383,7 @@ public class BlobId extends StoreKey {
   /**
    * Gets the BlobId type of this blobId. If this information was not available when the blobId was formed, it
    * will return {@link BlobIdType#NATIVE}.
-   * @return The flag of the blobId.
+   * @return The BlobIdType of the blobId.
    */
   public BlobIdType getType() {
     return type;
@@ -338,6 +394,13 @@ public class BlobId extends StoreKey {
    */
   private boolean isEncrypted() {
     return isEncrypted;
+  }
+
+  /**
+   * @return the {@link BlobDataType} for the blob.
+   */
+  public BlobDataType getBlobDataType() {
+    return blobDataType;
   }
 
   /**
@@ -377,6 +440,17 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V4:
         flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
+        idBuf.put(flag);
+        idBuf.put(datacenterId);
+        idBuf.putShort(accountId);
+        idBuf.putShort(containerId);
+        break;
+      case BLOB_ID_V5:
+        flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
+        flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
+        if (blobDataType != null) {
+          flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
+        }
         idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
@@ -475,6 +549,7 @@ public class BlobId extends StoreKey {
           break;
         case BLOB_ID_V3:
         case BLOB_ID_V4:
+        case BLOB_ID_V5:
           result = uuid.compareTo(other.uuid);
           break;
         default:
@@ -505,7 +580,7 @@ public class BlobId extends StoreKey {
    * @return all valid versions of BlobId.
    */
   public static Short[] getAllValidVersions() {
-    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4};
+    return new Short[]{BLOB_ID_V1, BLOB_ID_V2, BLOB_ID_V3, BLOB_ID_V4, BLOB_ID_V5};
   }
 
   /**
@@ -530,7 +605,7 @@ public class BlobId extends StoreKey {
       throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
     }
     return new BlobId(targetVersion, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
-        inputId.partitionId, inputId.isEncrypted, inputId.uuid);
+        inputId.partitionId, inputId.isEncrypted, null, inputId.uuid);
   }
 
   /**
@@ -572,6 +647,18 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * Returns the blob data type of a given Blob id.
+   * @param idStr the blobId in string form.
+   * @return the {@Link BlobDataType} indicating the data type of the blob.
+   * @throws IOException if the input is not a valid Blob id.
+   */
+  public static BlobDataType getBlobDataType(String idStr) throws IOException {
+    BlobIdPreamble blobIdPreamble =
+        new BlobIdPreamble(new DataInputStream(new ByteBufferInputStream(ByteBuffer.wrap(Base64.decodeBase64(idStr)))));
+    return blobIdPreamble.blobDataType;
+  }
+
+  /**
    * Indicates the context in which a {@link BlobId} gets created.
    */
   public enum BlobIdType {
@@ -588,6 +675,26 @@ public class BlobId extends StoreKey {
   }
 
   /**
+   * Indicates the type of blob this is.
+   */
+  public enum BlobDataType {
+    /**
+     * Indicates a fully contained blob.
+     */
+    SIMPLE,
+
+    /**
+     * Indicates a composite (metadata) blob.
+     */
+    COMPOSITE,
+
+    /**
+     * Indicates a data chunk within a composite blob.
+     */
+    DATACHUNK
+  }
+
+  /**
    * A class that can hold all the information embedded in a BlobId up to and not including the {@link PartitionId}
    * The preamble can be parsed off a blob id string without a {@link ClusterMap}.
    */
@@ -598,6 +705,7 @@ public class BlobId extends StoreKey {
     final short accountId;
     final short containerId;
     final boolean isEncrypted;
+    BlobDataType blobDataType;
 
     /**
      * Construct a BlobIdPreamble object by reading all the fields from a BlobId up to and not including the
@@ -608,6 +716,7 @@ public class BlobId extends StoreKey {
     BlobIdPreamble(DataInputStream stream) throws IOException {
       version = stream.readShort();
       byte blobIdFlag;
+      blobDataType = null;
       switch (version) {
         case BLOB_ID_V1:
           type = BlobIdType.NATIVE;
@@ -636,6 +745,16 @@ public class BlobId extends StoreKey {
           blobIdFlag = stream.readByte();
           type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
           isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
+          datacenterId = stream.readByte();
+          accountId = stream.readShort();
+          containerId = stream.readShort();
+          break;
+        case BLOB_ID_V5:
+          blobIdFlag = stream.readByte();
+          type = BlobIdType.values()[blobIdFlag & BLOB_ID_TYPE_MASK];
+          isEncrypted = (blobIdFlag & IS_ENCRYPTED_MASK) != 0;
+          int dataTypeOrdinal = (blobIdFlag & BLOB_DATA_TYPE_MASK) >> BLOB_DATA_TYPE_SHIFT;
+          blobDataType = dataTypeOrdinal < BlobDataType.values().length ? BlobDataType.values()[dataTypeOrdinal] : null;
           datacenterId = stream.readByte();
           accountId = stream.readShort();
           containerId = stream.readShort();
