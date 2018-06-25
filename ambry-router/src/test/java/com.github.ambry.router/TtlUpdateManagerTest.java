@@ -37,6 +37,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -216,32 +217,20 @@ public class TtlUpdateManagerTest {
    */
   @Test
   public void routerErrorCodeResolutionTest() throws Exception {
-    ArrayList<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
-    // fill in the array with all the error codes that need resolution and knock them off one by one
-    // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
-    serverErrorCodes.set(0, ServerErrorCode.Blob_Deleted);
-    serverErrorCodes.set(1, ServerErrorCode.Blob_Deleted);
-    serverErrorCodes.set(2, ServerErrorCode.Blob_Expired);
-    serverErrorCodes.set(3, ServerErrorCode.Blob_Expired);
-    serverErrorCodes.set(4, ServerErrorCode.Disk_Unavailable);
-    serverErrorCodes.set(5, ServerErrorCode.Disk_Unavailable);
-    serverErrorCodes.set(6, ServerErrorCode.IO_Error);
-    serverErrorCodes.set(7, ServerErrorCode.IO_Error);
-    RouterErrorCode[] expected =
-        {RouterErrorCode.BlobDeleted, RouterErrorCode.BlobExpired, RouterErrorCode.AmbryUnavailable, RouterErrorCode.UnexpectedInternalError, RouterErrorCode.BlobDoesNotExist};
-    for (int i = 0; i < expected.length; i++) {
-      List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
-      Collections.shuffle(shuffled);
-      setServerErrorCodes(shuffled, serverLayout);
-      executeOpAndVerify(blobIds, expected[i], false, true, true, false);
-      if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
-      }
-    }
-    serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
-    assertTtl(router, blobIds, TTL_SECS);
+    LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest = new LinkedHashMap<>();
+
+    // test 4 codes
+    codesToSetAndTest.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
+    codesToSetAndTest.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    codesToSetAndTest.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
+    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    doRouterErrorCodeResolutionTest(codesToSetAndTest);
+
+    // test the 1 left over code
+    codesToSetAndTest.clear();
+    codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    codesToSetAndTest.put(ServerErrorCode.IO_Error, RouterErrorCode.UnexpectedInternalError);
+    doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
 
   /**
@@ -298,6 +287,9 @@ public class TtlUpdateManagerTest {
       // expected. Nothing to do.
     }
   }
+
+  // helpers
+  // general
 
   /**
    * Executes a ttl update operations and verifies results
@@ -411,6 +403,8 @@ public class TtlUpdateManagerTest {
     return properties;
   }
 
+  // fixedCountSuccessfulResponseTest() helpers
+
   /**
    * Does the fixed count successful response test by setting the appropriate number of successful responses
    * @param successfulResponsesCount the number of successful responses
@@ -436,6 +430,46 @@ public class TtlUpdateManagerTest {
     }
     executeOpAndVerify(blobIds, shouldSucceed ? null : RouterErrorCode.BlobDoesNotExist, false, true, true, false);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
+  }
+
+  // routerErrorCodeResolutionTest() helpers
+
+  /**
+   * Runs the router code resolution test based on the input
+   * @param codesToSetAndTest a {@link LinkedHashMap} that defines the ordering of the router error codes and also
+   *                          provides the server error codes that must be set and their equivalent router error codes.
+   * @throws Exception
+   */
+  private void doRouterErrorCodeResolutionTest(LinkedHashMap<ServerErrorCode, RouterErrorCode> codesToSetAndTest)
+      throws Exception {
+    if (codesToSetAndTest.size() * 2 > serverCount) {
+      throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
+    }
+    List<ServerErrorCode> serverErrorCodes =
+        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+    List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
+    // fill in the array with all the error codes that need resolution and knock them off one by one
+    // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
+    int serverIdx = 0;
+    for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : codesToSetAndTest.entrySet()) {
+      serverErrorCodes.set(serverIdx, entry.getKey());
+      serverErrorCodes.set(serverIdx + 1, entry.getKey());
+      expected.add(entry.getValue());
+      serverIdx += 2;
+    }
+    expected.add(RouterErrorCode.BlobDoesNotExist);
+    for (int i = 0; i < expected.size(); i++) {
+      List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
+      Collections.shuffle(shuffled);
+      setServerErrorCodes(shuffled, serverLayout);
+      executeOpAndVerify(blobIds, expected.get(i), false, true, true, false);
+      if (i * 2 + 1 < serverErrorCodes.size()) {
+        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
+      }
+    }
+    serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
+    assertTtl(router, blobIds, TTL_SECS);
   }
 }
 
