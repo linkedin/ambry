@@ -174,8 +174,7 @@ public class ConsistencyCheckerTool {
     StoreMetrics storeMetrics = new StoreMetrics("ConsistencyCheckerTool", clusterMap.getMetricRegistry());
     this.filterSet = filterSet;
     dumpIndexTool =
-        new DumpIndexTool(storeKeyFactory, storeConfig, time, metrics, storeMetrics, throttler,
-            storeKeyConverter);
+        new DumpIndexTool(storeKeyFactory, storeConfig, time, metrics, storeMetrics, throttler, storeKeyConverter);
   }
 
   /**
@@ -204,7 +203,7 @@ public class ConsistencyCheckerTool {
    * @param replicas An Array of replica directories from which blob status' need to be collected
    * @param results the results of processing the indexes of the given {@code replicas}.
    * @return a {@link Map} of BlobId to {@link ReplicationStatus}.  If key has a conversion
-   * equivalent (vis a vis the storeKeyConverter), the map key will be of that converted equivalent.
+   * equivalent, the map key will be of that converted equivalent.
    * If storeKeyConverter returns null, count the key as deleted / expired
    * @throws Exception
    */
@@ -222,7 +221,8 @@ public class ConsistencyCheckerTool {
           newKey = key;
           isDeprecated = true;
         }
-        ReplicationStatus status = keyReplicationStatusMap.computeIfAbsent(newKey, k -> new ReplicationStatus(replicas));
+        ReplicationStatus status =
+            keyReplicationStatusMap.computeIfAbsent(newKey, k -> new ReplicationStatus(replicas));
         DumpIndexTool.Info info = entry.getValue();
         status.setBelongsToRecentIndexSegment(info.isInRecentIndexSegment());
         if (!isDeprecated && info.getStates().contains(DumpIndexTool.BlobState.Valid)) {

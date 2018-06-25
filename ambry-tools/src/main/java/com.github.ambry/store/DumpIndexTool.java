@@ -314,8 +314,12 @@ public class DumpIndexTool {
       ServerConfig serverConfig = new ServerConfig(verifiableProperties);
       Time time = SystemTime.getInstance();
       Throttler throttler = new Throttler(config.indexEntriesToProcessPerSec, 1000, true, time);
-      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, verifiableProperties, clusterMap.getMetricRegistry());
-      DumpIndexTool dumpIndexTool = new DumpIndexTool(blobIdFactory, storeConfig, time, metrics, storeMetrics, throttler, storeKeyConverterFactory.getStoreKeyConverter());
+      StoreKeyConverterFactory storeKeyConverterFactory =
+          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, verifiableProperties,
+              clusterMap.getMetricRegistry());
+      DumpIndexTool dumpIndexTool =
+          new DumpIndexTool(blobIdFactory, storeConfig, time, metrics, storeMetrics, throttler,
+              storeKeyConverterFactory.getStoreKeyConverter());
       Set<StoreKey> filterKeySet = new HashSet<>();
       for (String key : config.filterSet) {
         filterKeySet.add(new BlobId(key, clusterMap));
@@ -365,7 +369,8 @@ public class DumpIndexTool {
     }
   }
 
-  public IndexProcessingResults processIndex(File replicaDir, Set<StoreKey> filterSet, long currentTimeMs) throws InterruptedException, IOException, StoreException {
+  public IndexProcessingResults processIndex(File replicaDir, Set<StoreKey> filterSet, long currentTimeMs)
+      throws InterruptedException, IOException, StoreException {
     verifyPath(replicaDir, true);
     final Timer.Context context = metrics.dumpReplicaIndexesTimeMs.time();
     try {
@@ -479,7 +484,7 @@ public class DumpIndexTool {
    * the value will be the same as the key.
    * @throws Exception
    */
-  Map<StoreKey, StoreKey> createConversionKeyMap(File[] replicas,
+  public Map<StoreKey, StoreKey> createConversionKeyMap(File[] replicas,
       Map<File, DumpIndexTool.IndexProcessingResults> results) throws Exception {
     Set<StoreKey> storeKeys = new HashSet<>();
     for (File replica : replicas) {
@@ -501,15 +506,14 @@ public class DumpIndexTool {
    * individual results by replica.
    * @throws Exception if there is any error in processing the indexes.
    */
-  Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> getIndexProcessingResults(File[] replicas, Set<StoreKey> filterSet)
-      throws Exception {
+  Pair<Boolean, Map<File, DumpIndexTool.IndexProcessingResults>> getIndexProcessingResults(File[] replicas,
+      Set<StoreKey> filterSet) throws Exception {
     long currentTimeMs = time.milliseconds();
     Map<File, DumpIndexTool.IndexProcessingResults> results = new HashMap<>();
     boolean sane = true;
     for (File replica : replicas) {
       logger.info("Processing segment files for replica {} ", replica);
-      DumpIndexTool.IndexProcessingResults result =
-          processIndex(replica, filterSet, currentTimeMs);
+      DumpIndexTool.IndexProcessingResults result = processIndex(replica, filterSet, currentTimeMs);
       sane = sane && result.isIndexSane();
       results.put(replica, result);
     }
@@ -530,6 +534,4 @@ public class DumpIndexTool {
       throw new IllegalArgumentException(file + " should be a directory");
     }
   }
-
-
 }
