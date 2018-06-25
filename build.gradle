@@ -93,6 +93,7 @@ subprojects {
 
 project(':ambry-utils') {
     dependencies {
+        compile "com.codahale.metrics:metrics-core:$metricsVersion"
         compile "commons-codec:commons-codec:$commonsVersion"
         compile "org.json:json:$jsonVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"

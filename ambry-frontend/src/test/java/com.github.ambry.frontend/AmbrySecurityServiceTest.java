@@ -36,6 +36,7 @@ import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -342,7 +343,7 @@ public class AmbrySecurityServiceTest {
    */
   private void testExceptionCasesProcessRequest(RestRequest restRequest, RestServiceErrorCode expectedErrorCode,
       boolean testAllRequestProcessing) throws Exception {
-    TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
+    ThrowingConsumer<ExecutionException> errorAction = e -> {
       Assert.assertTrue("Exception should have been an instance of RestServiceException",
           e.getCause() instanceof RestServiceException);
       RestServiceException re = (RestServiceException) e.getCause();
@@ -555,7 +556,7 @@ public class AmbrySecurityServiceTest {
    */
   private void testExceptionCasesProcessResponse(RestMethod restMethod, RestResponseChannel restResponseChannel,
       BlobInfo blobInfo, RestServiceErrorCode expectedErrorCode) throws Exception {
-    TestUtils.ThrowingConsumer<ExecutionException> errorAction = e -> {
+    ThrowingConsumer<ExecutionException> errorAction = e -> {
       Assert.assertTrue("Exception should have been an instance of RestServiceException",
           e.getCause() instanceof RestServiceException);
       RestServiceException re = (RestServiceException) e.getCause();

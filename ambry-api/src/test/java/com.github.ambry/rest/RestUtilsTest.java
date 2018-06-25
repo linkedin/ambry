@@ -241,7 +241,7 @@ public class RestUtilsTest {
    */
   @Test
   public void getUserMetadataTest() throws Exception {
-    byte[] usermetadata = RestUtils.buildUsermetadata(new HashMap<>());
+    byte[] usermetadata = RestUtils.buildUserMetadata(new HashMap<>());
     assertArrayEquals("Unexpected user metadata", new byte[0], usermetadata);
   }
 
@@ -276,7 +276,7 @@ public class RestUtilsTest {
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.MultipartPost.USER_METADATA_PART, ByteBuffer.wrap(original));
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] rcvd = RestUtils.buildUsermetadata(restRequest.getArgs());
+    byte[] rcvd = RestUtils.buildUserMetadata(restRequest.getArgs());
     assertArrayEquals("Received user metadata does not match with original", original, rcvd);
   }
 
@@ -312,7 +312,7 @@ public class RestUtilsTest {
     setUserMetadataHeaders(headers, userMetadata);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest.getArgs());
+    byte[] userMetadataByteArray = RestUtils.buildUserMetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
 
     assertEquals("Size of map unexpected ", keysToCheck.size(), userMetadataMap.size());
@@ -338,7 +338,7 @@ public class RestUtilsTest {
     setUserMetadataHeaders(headers, userMetadata);
 
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] userMetadataByteArray = RestUtils.buildUsermetadata(restRequest.getArgs());
+    byte[] userMetadataByteArray = RestUtils.buildUserMetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadataByteArray);
     assertNull("UserMetadata should have been null ", userMetadataMap);
   }
@@ -877,7 +877,7 @@ public class RestUtilsTest {
   private void verifyUserMetadataConstructionSuccess(JSONObject headers, Map<String, String> inputUserMetadata)
       throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers);
-    byte[] userMetadata = RestUtils.buildUsermetadata(restRequest.getArgs());
+    byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
     Map<String, String> userMetadataMap = RestUtils.buildUserMetadata(userMetadata);
     assertEquals("Total number of entries doesnt match ", inputUserMetadata.size(), userMetadataMap.size());
     for (String key : inputUserMetadata.keySet()) {

@@ -25,16 +25,6 @@ import java.util.concurrent.Future;
  * The router interface for Ambry that helps to interact with Ambry server.
  */
 public interface Router extends Closeable {
-  /**
-   * Requests for blob (info, data, or both) asynchronously with user-set {@link GetBlobOptions} and returns a future
-   * that will eventually contain a {@link GetBlobResult} that can contain either the {@link BlobInfo}, the
-   * {@link ReadableStreamChannel} containing the blob data, or both.
-   * @param blobId The ID of the blob for which blob data is requested.
-   * @param options The options associated with the request.
-   * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
-   *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
-   */
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options);
 
   /**
    * Requests for the blob (info, data, or both) asynchronously and invokes the {@link Callback} when the request
@@ -45,18 +35,7 @@ public interface Router extends Closeable {
    * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
    *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
    */
-  public Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback);
-
-  /**
-   * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
-   * the new blob on a successful response.
-   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
-   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
-   * @param usermetadata Optional user metadata about the blob. This can be null.
-   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
-   * @return A future that would contain the BlobId eventually.
-   */
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel);
+  Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options, Callback<GetBlobResult> callback);
 
   /**
    * Requests for a new blob to be put asynchronously and invokes the {@link Callback} when the request completes.
@@ -67,17 +46,8 @@ public interface Router extends Closeable {
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @return A future that would contain the BlobId eventually.
    */
-  public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+  Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
       Callback<String> callback);
-
-  /**
-   * Requests for a blob to be deleted asynchronously and returns a future that will eventually contain information
-   * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs to be deleted.
-   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
-   * @return A future that would contain information about whether the deletion succeeded or not, eventually.
-   */
-  public Future<Void> deleteBlob(String blobId, String serviceId);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -86,18 +56,7 @@ public interface Router extends Closeable {
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the deletion succeeded or not, eventually.
    */
-  public Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback);
-
-  /**
-   * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
-   * about whether the request succeeded or not.
-   * @param blobId The ID of the blob that needs its TTL updated.
-   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
-   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
-   *                    permanent
-   * @return A future that would contain information about whether the update succeeded or not, eventually.
-   */
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs);
+  Future<Void> deleteBlob(String blobId, String serviceId, Callback<Void> callback);
 
   /**
    * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
@@ -109,7 +68,7 @@ public interface Router extends Closeable {
    * @param callback The {@link Callback} which will be invoked on the completion of a request.
    * @return A future that would contain information about whether the update succeeded or not, eventually.
    */
-  public Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback);
+  Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs, Callback<Void> callback);
 
   /**
    * Closes the router and releases any resources held by the router. If the router is already closed, then this
@@ -120,5 +79,55 @@ public interface Router extends Closeable {
    * if any.
    * @throws IOException if an I/O error occurs.
    */
-  public void close() throws IOException;
+  void close() throws IOException;
+
+  /**
+   * Requests for blob (info, data, or both) asynchronously with user-set {@link GetBlobOptions} and returns a future
+   * that will eventually contain a {@link GetBlobResult} that can contain either the {@link BlobInfo}, the
+   * {@link ReadableStreamChannel} containing the blob data, or both.
+   * @param blobId The ID of the blob for which blob data is requested.
+   * @param options The options associated with the request.
+   * @return A future that would eventually contain a {@link GetBlobResult} that can contain either
+   *         the {@link BlobInfo}, the {@link ReadableStreamChannel} containing the blob data, or both.
+   */
+  default Future<GetBlobResult> getBlob(String blobId, GetBlobOptions options) {
+    return getBlob(blobId, options, null);
+  }
+
+  /**
+   * Requests for a new blob to be put asynchronously and returns a future that will eventually contain the BlobId of
+   * the new blob on a successful response.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
+   * @param usermetadata Optional user metadata about the blob. This can be null.
+   * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @return A future that would contain the BlobId eventually.
+   */
+  default Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
+    return putBlob(blobProperties, usermetadata, channel, null);
+  }
+
+  /**
+   * Requests for a blob to be deleted asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob that needs to be deleted.
+   * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
+   * @return A future that would contain information about whether the deletion succeeded or not, eventually.
+   */
+  default Future<Void> deleteBlob(String blobId, String serviceId) {
+    return deleteBlob(blobId, serviceId, null);
+  }
+
+  /**
+   * Requests that a blob's TTL be updated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob that needs its TTL updated.
+   * @param serviceId The service ID of the service updating the blob. This can be null if unknown.
+   * @param expiresAtMs The new expiry time (in ms) of the blob. Using {@link Utils#Infinite_Time} makes the blob
+   *                    permanent
+   * @return A future that would contain information about whether the update succeeded or not, eventually.
+   */
+  default Future<Void> updateBlobTtl(String blobId, String serviceId, long expiresAtMs) {
+    return updateBlobTtl(blobId, serviceId, expiresAtMs, null);
+  }
 }
