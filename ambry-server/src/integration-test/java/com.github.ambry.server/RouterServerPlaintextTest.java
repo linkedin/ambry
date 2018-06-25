@@ -112,7 +112,8 @@ public class RouterServerPlaintextTest {
     if (plaintextCluster != null) {
       plaintextCluster.cleanup();
     }
-    System.out.println("RouterServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
+    System.out.println(
+        "RouterServerPlaintextTest::cluster.cleanup() took " + (System.currentTimeMillis() - start) + " ms.");
   }
 
   @Before

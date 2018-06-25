@@ -494,6 +494,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.preconditionFailedErrorCount.inc();
         status = HttpResponseStatus.PRECONDITION_FAILED;
         break;
+      case MethodNotAllowed:
+        nettyMetrics.methodNotAllowedErrorCount.inc();
+        status = HttpResponseStatus.METHOD_NOT_ALLOWED;
+        break;
       default:
         nettyMetrics.unknownResponseStatusCount.inc();
         status = HttpResponseStatus.INTERNAL_SERVER_ERROR;

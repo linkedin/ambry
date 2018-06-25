@@ -33,5 +33,9 @@ public enum ServerErrorCode {
   Unknown_Error,
   Temporarily_Disabled,
   Bad_Request,
-  Retry_After_Backoff
+  Retry_After_Backoff,
+  Blob_Already_Updated,
+  Blob_Update_Not_Allowed,
+  Replica_Unavailable,
+  Blob_Authorization_Failure
 }

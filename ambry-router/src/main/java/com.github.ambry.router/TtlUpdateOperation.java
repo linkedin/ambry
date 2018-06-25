@@ -240,7 +240,13 @@ class TtlUpdateOperation {
   private void processServerError(ReplicaId replica, ServerErrorCode serverErrorCode, int correlationId) {
     switch (serverErrorCode) {
       case No_Error:
+      case Blob_Already_Updated:
         operationTracker.onResponse(replica, true);
+        if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+          LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
+              replica.getDataNodeId().getDatacenterName());
+          routerMetrics.crossColoSuccessCount.inc();
+        }
         break;
       case Blob_Deleted:
         updateOperationState(replica, RouterErrorCode.BlobDeleted);
@@ -253,6 +259,9 @@ class TtlUpdateOperation {
         break;
       case Disk_Unavailable:
         updateOperationState(replica, RouterErrorCode.AmbryUnavailable);
+        break;
+      case Blob_Update_Not_Allowed:
+        updateOperationState(replica, RouterErrorCode.BlobUpdateNotAllowed);
         break;
       default:
         updateOperationState(replica, RouterErrorCode.UnexpectedInternalError);
@@ -315,14 +324,16 @@ class TtlUpdateOperation {
         return 0;
       case BlobExpired:
         return 1;
-      case AmbryUnavailable:
+      case BlobUpdateNotAllowed:
         return 2;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 3;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 4;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 5;
+      case BlobDoesNotExist:
+        return 6;
       default:
         return Integer.MIN_VALUE;
     }

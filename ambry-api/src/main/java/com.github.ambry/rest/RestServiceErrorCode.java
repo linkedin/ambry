@@ -158,7 +158,12 @@ public enum RestServiceErrorCode {
   /**
    * The conditions given in the request header fields evaluated to false.
    */
-  PreconditionFailed;
+  PreconditionFailed,
+
+  /**
+   * Action not allowed
+   */
+  NotAllowed;
 
   /**
    * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.
@@ -177,6 +182,8 @@ public enum RestServiceErrorCode {
         return Deleted;
       case BlobDoesNotExist:
         return NotFound;
+      case BlobUpdateNotAllowed:
+        return NotAllowed;
       case RangeNotSatisfiable:
         return RangeNotSatisfiable;
       case OperationTimedOut:

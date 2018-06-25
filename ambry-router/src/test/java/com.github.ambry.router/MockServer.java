@@ -435,14 +435,18 @@ class MockServer {
   private ServerErrorCode updateBlobMap(TtlUpdateRequest ttlUpdateRequest) {
     ServerErrorCode errorCode = ServerErrorCode.No_Error;
     StoredBlob blob = blobs.get(ttlUpdateRequest.getBlobId().getID());
-    if (blob != null && !blob.isDeleted() && !blob.hasExpired()) {
+    if (blob != null && !blob.isDeleted() && !blob.hasExpired() && !blob.isTtlUpdated()) {
       blob.updateExpiry(ttlUpdateRequest.getExpiresAtMs());
     } else if (blob == null) {
       errorCode = ServerErrorCode.Blob_Not_Found;
     } else if (blob.isDeleted()) {
       errorCode = ServerErrorCode.Blob_Deleted;
-    } else {
+    } else if (blob.hasExpired()) {
       errorCode = ServerErrorCode.Blob_Expired;
+    } else if (blob.isTtlUpdated()) {
+      errorCode = ServerErrorCode.Blob_Already_Updated;
+    } else {
+      throw new IllegalStateException("Could not recognize blob state");
     }
     return errorCode;
   }
