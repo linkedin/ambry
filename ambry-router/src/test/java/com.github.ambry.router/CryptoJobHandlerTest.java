@@ -542,7 +542,7 @@ public class CryptoJobHandlerTest {
     BlobId.BlobIdType type = TestUtils.RANDOM.nextBoolean() ? BlobId.BlobIdType.NATIVE : BlobId.BlobIdType.CRAFTED;
     return new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), type, dc, getRandomShort(TestUtils.RANDOM),
         getRandomShort(TestUtils.RANDOM),
-        referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false);
+        referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, null);
   }
 
   /**

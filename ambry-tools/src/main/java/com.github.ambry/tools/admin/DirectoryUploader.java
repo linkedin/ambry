@@ -161,7 +161,7 @@ public class DirectoryUploader {
         try {
           int replicaCount = 0;
           BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, datacenterId, props.getAccountId(),
-              props.getContainerId(), partitionId, false);
+              props.getContainerId(), partitionId, false, null);
           List<ReplicaId> successList = new ArrayList<>();
           List<ReplicaId> failureList = new ArrayList<>();
           for (ReplicaId replicaId : blobId.getPartition().getReplicaIds()) {

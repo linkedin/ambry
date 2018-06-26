@@ -327,7 +327,7 @@ public class ReplicationTest {
       // add an expired message to the remote host only
       StoreKey id =
           new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-              containerId, partitionId, toEncrypt);
+              containerId, partitionId, toEncrypt, null);
       Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
       remoteHost.addMessage(partitionId,
           new MessageInfo(id, putMsgInfo.getFirst().remaining(), 1, accountId, containerId,
@@ -342,7 +342,7 @@ public class ReplicationTest {
       toEncrypt = TestUtils.RANDOM.nextBoolean();
       // add a corrupt message to the remote host only
       id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId, toEncrypt);
+          containerId, partitionId, toEncrypt, null);
       putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
       byte[] data = putMsgInfo.getFirst().array();
       // flip every bit in the array
@@ -590,7 +590,7 @@ public class ReplicationTest {
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       boolean toEncrypt = i % 2 == 0;
       BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId, toEncrypt);
+          containerId, partitionId, toEncrypt, null);
       ids.add(id);
       Pair<ByteBuffer, MessageInfo> putMsgInfo = getPutMessage(id, accountId, containerId, toEncrypt);
       for (Host host : hosts) {

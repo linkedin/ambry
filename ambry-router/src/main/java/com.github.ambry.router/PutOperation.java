@@ -887,7 +887,7 @@ class PutOperation {
         BlobDataType blobDataType = null;
         if (isMetadataChunk()) {
           blobDataType = BlobDataType.METADATA;
-        } else if (this.chunkIndex == 0) {
+        } else if (chunkIndex == 0) {
           // TODO: need more data to distinguish between Simple and Data Chunk
           blobDataType = BlobDataType.DATACHUNK;
         } else {
