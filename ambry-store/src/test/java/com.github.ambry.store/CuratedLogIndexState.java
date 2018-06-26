@@ -177,6 +177,8 @@ class CuratedLogIndexState {
     properties.put("store.enable.hard.delete", Boolean.toString(hardDeleteEnabled));
     // not used but set anyway since this is a package private variable.
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
+    // switch off time movement for the hard delete thread. Otherwise blobs expire too quickly
+    time.suspend(Collections.singleton(HardDeleter.getThreadName(tempDirStr)));
     initIndex();
     assertTrue("Expected empty index", index.isEmpty());
     if (initState) {
@@ -531,15 +533,19 @@ class CuratedLogIndexState {
   }
 
   /**
-   * Returns all ids that have records in the provided {@code segment}.
+   * Returns all ids that have PUT records in the provided {@code segment}.
    * @param segment the {@link LogSegment} to get the ids of all records for.
-   * @return all ids that have records in the provided {@code segment}.
+   * @return all ids that have PUT records in the provided {@code segment}.
    */
-  Set<MockId> getIdsInLogSegment(LogSegment segment) {
+  Set<MockId> getIdsWithPutsInLogSegment(LogSegment segment) {
     Set<MockId> idsInSegment = new HashSet<>();
     Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
     while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
-      idsInSegment.addAll(referenceIndex.get(indexSegmentStartOffset).keySet());
+      referenceIndex.get(indexSegmentStartOffset).forEach((key, values) -> values.forEach(value -> {
+        if (value.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE) {
+          idsInSegment.add(key);
+        }
+      }));
       indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
     }
     return idsInSegment;
@@ -642,11 +648,15 @@ class CuratedLogIndexState {
    * @param segment the {@link LogSegment} whose valid size is required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
+   *                                cleaned up. All other use cases should use {@code null}.
    * @return the expected size of the valid data at {@code deleteReferenceTimeMs} in {@code segment}.
    */
-  long getValidDataSizeForLogSegment(LogSegment segment, long deleteReferenceTimeMs, long expiryReferenceTimeMs) {
+  long getValidDataSizeForLogSegment(LogSegment segment, long deleteReferenceTimeMs, long expiryReferenceTimeMs,
+      FileSpan fileSpanUnderCompaction) {
     List<IndexEntry> validEntries =
-        getValidIndexEntriesForLogSegment(segment, deleteReferenceTimeMs, expiryReferenceTimeMs);
+        getValidIndexEntriesForLogSegment(segment, deleteReferenceTimeMs, expiryReferenceTimeMs,
+            fileSpanUnderCompaction);
     long size = 0;
     for (IndexEntry indexEntry : validEntries) {
       size += indexEntry.getValue().getSize();
@@ -659,15 +669,18 @@ class CuratedLogIndexState {
    * @param segment the {@link LogSegment} from which valid index entries are required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
+   *                                cleaned up. All other use cases should use {@code null}.
    * @return all the valid index entries in the {@code segment}.
    */
   List<IndexEntry> getValidIndexEntriesForLogSegment(LogSegment segment, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs) {
+      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction) {
     List<IndexEntry> validEntries = new ArrayList<>();
     Offset indexSegmentStartOffset = new Offset(segment.getName(), segment.getStartOffset());
     while (indexSegmentStartOffset != null && indexSegmentStartOffset.getName().equals(segment.getName())) {
       validEntries.addAll(
-          getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, deleteReferenceTimeMs, expiryReferenceTimeMs));
+          getValidIndexEntriesForIndexSegment(indexSegmentStartOffset, deleteReferenceTimeMs, expiryReferenceTimeMs,
+              fileSpanUnderCompaction));
       indexSegmentStartOffset = referenceIndex.higherKey(indexSegmentStartOffset);
     }
     return validEntries;
@@ -727,9 +740,8 @@ class CuratedLogIndexState {
    * 2. The ordering of PUT and DELETE entries is correct.
    * 3. There are no offsets in the log not accounted for in the index.
    * @throws IOException
-   * @throws StoreException
    */
-  void verifyRealIndexSanity() throws IOException, StoreException {
+  void verifyRealIndexSanity() throws IOException {
     IndexSegment prevIndexSegment = null;
     for (IndexSegment indexSegment : index.getIndexSegments().values()) {
       Offset indexSegmentStartOffset = indexSegment.getStartOffset();
@@ -1239,39 +1251,75 @@ class CuratedLogIndexState {
    *                                required.
    * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
    * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
+   *                                cleaned up. All other use cases should use {@code null}.
    * @return all the valid index entries valid in the index segment with start offset {@code indexSegmentStartOffset}.
    */
   List<IndexEntry> getValidIndexEntriesForIndexSegment(Offset indexSegmentStartOffset, long deleteReferenceTimeMs,
-      long expiryReferenceTimeMs) {
+      long expiryReferenceTimeMs, FileSpan fileSpanUnderCompaction) {
     List<IndexEntry> validEntries = new ArrayList<>();
     if (referenceIndex.containsKey(indexSegmentStartOffset)) {
       for (Map.Entry<MockId, TreeSet<IndexValue>> indexSegmentEntry : referenceIndex.get(indexSegmentStartOffset)
           .entrySet()) {
         MockId key = indexSegmentEntry.getKey();
-        IndexValue value = indexSegmentEntry.getValue().last();
-        if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+        NavigableSet<IndexValue> values = indexSegmentEntry.getValue();
+        if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
           // delete record is always valid
-          validEntries.add(new IndexEntry(key, value));
-          if (value.getOriginalMessageOffset() != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET
-              && value.getOriginalMessageOffset() != value.getOffset().getOffset()
-              && value.getOriginalMessageOffset() >= indexSegmentStartOffset.getOffset() && !isDeletedAt(key,
-              deleteReferenceTimeMs) && !isExpiredAt(key, expiryReferenceTimeMs)) {
-            // delete is irrelevant but it's in the same index segment as the put and the put is still valid
-            validEntries.add(new IndexEntry(key, getExpectedValue(key, true)));
+          if (isDeletedAt(key, deleteReferenceTimeMs) || isExpiredAt(key, expiryReferenceTimeMs)) {
+            validEntries.add(new IndexEntry(key, values.last()));
+            IndexValue secondVal = values.lower(values.last());
+            if (secondVal != null && secondVal.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && isTtlUpdateEntryValid(
+                key, deleteReferenceTimeMs, expiryReferenceTimeMs, fileSpanUnderCompaction)) {
+              // ttl update entry associated is valid
+              validEntries.add(new IndexEntry(key, secondVal));
+            }
+          } else {
+            // the associated PUT is not expired or it is not considered "deleted" because of the ref time
+            // all entries in this segment have to be added
+            values.forEach(value -> validEntries.add(new IndexEntry(key, value)));
           }
-        } else if (!isExpiredAt(key, expiryReferenceTimeMs)) {
-          // unexpired
-          if (!deletedKeys.contains(key)) {
-            // non expired, non deleted PUT
-            validEntries.add(new IndexEntry(key, value));
-          } else if (!isDeletedAt(key, deleteReferenceTimeMs)) {
-            // delete does not count
-            validEntries.add(new IndexEntry(key, value));
-          }
+        } else if (values.size() == 1 && values.last().isFlagSet(IndexValue.Flags.Ttl_Update_Index)
+            && isTtlUpdateEntryValid(key, deleteReferenceTimeMs, expiryReferenceTimeMs, fileSpanUnderCompaction)) {
+          // this index segment contains ONLY the TTL update entry
+          validEntries.add(new IndexEntry(key, values.last()));
+        } else if (!isExpiredAt(key, expiryReferenceTimeMs) && (!deletedKeys.contains(key) || !isDeletedAt(key,
+            deleteReferenceTimeMs))) {
+          // add all the entries in this index segment
+          values.forEach(value -> validEntries.add(new IndexEntry(key, value)));
         }
       }
     }
     return validEntries;
+  }
+
+  /**
+   * Determines whether a TTL update entry is valid
+   * @param key the {@link MockId} being examined
+   * @param deleteReferenceTimeMs the reference time in ms until which deletes are relevant.
+   * @param expiryReferenceTimeMs the reference time in ms until which expirations are relevant.
+   * @param fileSpanUnderCompaction only useful for compaction tests to help determine whether update records will be
+   *                                cleaned up. All other use cases should use {@code null}.
+   * @return {@code true} if the TTL update entry is valid
+   */
+  private boolean isTtlUpdateEntryValid(MockId key, long deleteReferenceTimeMs, long expiryReferenceTimeMs,
+      FileSpan fileSpanUnderCompaction) {
+    // valid if the original put is valid
+    boolean valid = !isExpiredAt(key, expiryReferenceTimeMs) && (!deletedKeys.contains(key) || !isDeletedAt(key,
+        deleteReferenceTimeMs));
+    if (!valid) {
+      // valid if the original put is not already cleaned up or is not going to be cleaned up in this cycle of
+      // compaction
+      IndexValue putValue;
+      try {
+        putValue = index.findKey(key, null, EnumSet.of((PersistentIndex.IndexEntryType.PUT)));
+      } catch (StoreException e) {
+        throw new IllegalStateException(e);
+      }
+      // valid if putValue exists in the index and is not under compaction
+      valid = putValue != null && (fileSpanUnderCompaction == null || !fileSpanUnderCompaction.inSpan(
+          putValue.getOffset()));
+    }
+    return valid;
   }
 
   /**

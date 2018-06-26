@@ -170,8 +170,8 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails when a compaction is already
-   * in progress.
+   * Tests to make sure that {@link BlobStoreCompactor#compact(CompactionDetails, ByteBuffer)} fails when a compaction
+   * is already in progress.
    * @throws Exception
    */
   @Test
@@ -196,8 +196,8 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Tests the case where {@link BlobStoreCompactor#resumeCompaction(ByteBuffer)} is called without any compaction being in
-   * progress.
+   * Tests the case where {@link BlobStoreCompactor#resumeCompaction(ByteBuffer)} is called without any compaction being
+   * in progress.
    * @throws Exception
    */
   @Test
@@ -305,7 +305,7 @@ public class BlobStoreCompactorTest {
     List<Long> expiryTimesMs = Arrays.asList(state.time.milliseconds() / 2, expiryTimeMs, expiryTimeMs * 2);
     writeDataToMeetRequiredSegmentCount(requiredCount, expiryTimesMs);
     List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
-    Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
+    Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
 
     for (long setTimeMs : expiryTimesMs) {
       if (state.time.milliseconds() < setTimeMs + Time.MsPerSec) {
@@ -368,7 +368,7 @@ public class BlobStoreCompactorTest {
     Pair<Long, List<String>> deleteTimeAndSegmentsUnderCompaction = setupStateWithDeletedBlobsAtSpecificTime();
     List<String> segmentsUnderCompaction = deleteTimeAndSegmentsUnderCompaction.getSecond();
     // delete all the blobs in the segments under compaction
-    Set<MockId> ids = getIdsInSegments(segmentsUnderCompaction);
+    Set<MockId> ids = getIdsWithPutInSegments(segmentsUnderCompaction);
     for (MockId id : ids) {
       if (state.liveKeys.contains(id)) {
         state.addDeleteEntry(id);
@@ -446,7 +446,7 @@ public class BlobStoreCompactorTest {
     long deleteReferenceTimeMs = state.time.milliseconds();
     state.advanceTime(Time.MsPerSec);
     int deleteCount = 10;
-    Set<MockId> idsInSegments = getIdsInSegments(expiryTimeAndSegmentsUnderCompaction.getSecond());
+    Set<MockId> idsInSegments = getIdsWithPutInSegments(expiryTimeAndSegmentsUnderCompaction.getSecond());
     List<MockId> idsToExamine = new ArrayList<>();
     for (MockId id : idsInSegments) {
       if (state.liveKeys.contains(id)) {
@@ -734,6 +734,9 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void allEntryTypesTest() throws Exception {
+    // NOTE: There is no need to add tests for cases here that are already covered by CuratedLogIndexState. This test
+    // repeats a lot of that state (CuratedLogIndexState had some gaps before). Special cases for TTL updates covered
+    // in a different test
     List<IndexEntry> otherPuts = new ArrayList<>();
 
     // types of records
@@ -937,6 +940,37 @@ public class BlobStoreCompactorTest {
     assertEquals("Segment size not as expected", lastRecSize + CuratedLogIndexState.DELETE_RECORD_SIZE, size);
   }
 
+  /**
+   * Tests cases specific to TTL updates
+   * @throws Exception
+   */
+  @Test
+  public void ttlUpdateSpecificTest() throws Exception {
+    // compact everything
+    // using expire time as the ref time
+    long expiryTimeMs = createStateForTtlUpdateSpecificTest();
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, expiryTimeMs, true);
+
+    // using delete time as the ref time
+    createStateForTtlUpdateSpecificTest();
+    state.advanceTime(TimeUnit.SECONDS.toMillis(1));
+    segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+
+    // compact everything except the first log segment (all the TTL updates and deletes will be retained - no change)
+    // using expire time as the ref time
+    expiryTimeMs = createStateForTtlUpdateSpecificTest();
+    segmentsUnderCompaction = getLogSegments(1, 1);
+    compactAndVerify(segmentsUnderCompaction, expiryTimeMs, false);
+
+    // using delete time as the ref time
+    createStateForTtlUpdateSpecificTest();
+    state.advanceTime(TimeUnit.SECONDS.toMillis(1));
+    segmentsUnderCompaction = getLogSegments(1, 1);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false);
+  }
+
   // helpers
 
   // general
@@ -960,7 +994,7 @@ public class BlobStoreCompactorTest {
    */
   private void refreshState(boolean hardDeleteEnabled, boolean initState) throws Exception {
     destroyStateAndCleanDir();
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, false);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, true);
   }
 
   /**
@@ -1004,14 +1038,14 @@ public class BlobStoreCompactorTest {
   }
 
   /**
-   * Gets all the ids in {@code logSegmentNames}.
+   * Gets all the ids that have PUTs in {@code logSegmentNames}.
    * @param logSegmentNames the names of log segments whose IDs are required.
-   * @return all the ids in {@code logSegmentNames}.
+   * @return all the ids that have PUTs in {@code logSegmentNames}.
    */
-  private Set<MockId> getIdsInSegments(List<String> logSegmentNames) {
+  private Set<MockId> getIdsWithPutInSegments(List<String> logSegmentNames) {
     Set<MockId> idsInCompactedLogSegments = new HashSet<>();
     for (String segmentName : logSegmentNames) {
-      idsInCompactedLogSegments.addAll(state.getIdsInLogSegment(state.log.getSegment(segmentName)));
+      idsInCompactedLogSegments.addAll(state.getIdsWithPutsInLogSegment(state.log.getSegment(segmentName)));
     }
     return idsInCompactedLogSegments;
   }
@@ -1026,7 +1060,7 @@ public class BlobStoreCompactorTest {
     long size = 0;
     for (String segment : logSegments) {
       size += state.getValidDataSizeForLogSegment(state.log.getSegment(segment), deleteReferenceTimeMs,
-          state.time.milliseconds());
+          state.time.milliseconds(), getFileSpanForLogSegments(logSegments));
     }
     return size;
   }
@@ -1037,12 +1071,11 @@ public class BlobStoreCompactorTest {
    * @param countRequired the number of log segments required.
    * @param expiryTimes the expiry times desired. A fraction of the blobs written will contain those expiry times in
    *                    round robin order
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   private void writeDataToMeetRequiredSegmentCount(long countRequired, List<Long> expiryTimes)
-      throws InterruptedException, IOException, StoreException {
+      throws IOException, StoreException {
     long capacityLimit = countRequired * state.log.getSegmentCapacity();
     int blobsPut = 0;
     int expiredBlobsCount = 0;
@@ -1063,12 +1096,11 @@ public class BlobStoreCompactorTest {
    * @param logSegmentsToReduceFrom the names of the log segments to reduce the data from.
    * @param ceilingSize the maximum allowed valid size in these log segments.
    * @return the time (in ms) at which all the deletes are valid.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   private long reduceValidDataSizeInLogSegments(List<String> logSegmentsToReduceFrom, long ceilingSize)
-      throws InterruptedException, IOException, StoreException {
+      throws IOException, StoreException {
     List<String> logSegments = new ArrayList<>(logSegmentsToReduceFrom);
     long validDataSize = getValidDataSize(logSegmentsToReduceFrom, state.time.milliseconds());
     while (validDataSize > ceilingSize) {
@@ -1106,7 +1138,7 @@ public class BlobStoreCompactorTest {
     long expectedValidDataSize = getValidDataSize(segmentsUnderCompaction, deleteReferenceTimeMs);
     List<String> unaffectedSegments = getUnaffectedSegments(segmentsUnderCompaction);
     List<LogEntry> validLogEntriesInOrder = getValidLogEntriesInOrder(segmentsUnderCompaction, deleteReferenceTimeMs);
-    Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
+    Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
 
     compactor = getCompactor(state.log, DISK_IO_SCHEDULER);
     compactor.initialize(state.index);
@@ -1165,7 +1197,7 @@ public class BlobStoreCompactorTest {
     long expectedValidDataSize = getValidDataSize(segmentsUnderCompaction, deleteReferenceTimeMs);
     List<String> unaffectedSegments = getUnaffectedSegments(segmentsUnderCompaction);
     List<LogEntry> validLogEntriesInOrder = getValidLogEntriesInOrder(segmentsUnderCompaction, deleteReferenceTimeMs);
-    Set<MockId> idsInCompactedLogSegments = getIdsInSegments(segmentsUnderCompaction);
+    Set<MockId> idsInCompactedLogSegments = getIdsWithPutInSegments(segmentsUnderCompaction);
 
     compactor = getCompactor(log, diskIOScheduler);
     compactor.initialize(index);
@@ -1276,16 +1308,14 @@ public class BlobStoreCompactorTest {
    *                                        compaction.
    * @param validLogEntriesInOrder the log entries for valid data before compaction in order. The new segments should
    *                               have all of these entries and in the same order.
-   * @param idsInCompactedLogSegments the ids in the segments that were compacted.
+   * @param idsInCompactedLogSegments the ids that had PUT records in the segments that were compacted.
    * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   private void verifyCompaction(List<String> segmentsCompacted, List<String> unaffectedSegments,
       long targetSegmentsExpectedValidSize, List<LogEntry> validLogEntriesInOrder,
-      Set<MockId> idsInCompactedLogSegments, long deleteReferenceTimeMs)
-      throws InterruptedException, IOException, StoreException {
+      Set<MockId> idsInCompactedLogSegments, long deleteReferenceTimeMs) throws IOException, StoreException {
     verifyStorePostCompaction(segmentsCompacted, unaffectedSegments, targetSegmentsExpectedValidSize,
         validLogEntriesInOrder);
     verifyDataPostCompaction(idsInCompactedLogSegments, deleteReferenceTimeMs);
@@ -1380,20 +1410,45 @@ public class BlobStoreCompactorTest {
    * 3. Checks that GET of data of expired keys returns expired if not compacted and not found if compacted. Also
    * verifies that when GET is used with {@link StoreGetOptions#Store_Include_Expired}, data is returned if it was not
    * compacted and not returned if compacted.
-   * @param idsInCompactedLogSegments the ids in the compacted segments.
+   * @param idsInCompactedLogSegments the ids that had PUT records in the segments that were compacted.
    * @param deleteReferenceTimeMs the reference time in ms to use to decide whether deletes are valid.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   private void verifyDataPostCompaction(Set<MockId> idsInCompactedLogSegments, long deleteReferenceTimeMs)
-      throws InterruptedException, IOException, StoreException {
+      throws IOException, StoreException {
     for (MockId id : state.allKeys.keySet()) {
       if (state.liveKeys.contains(id)) {
         BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
         checkRecord(id, options);
         options.close();
         checkIndexValue(id);
+      } else if (state.expiredKeys.contains(id)) {
+        boolean shouldBeCompacted =
+            idsInCompactedLogSegments.contains(id) && state.isExpiredAt(id, state.time.milliseconds());
+        try {
+          state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
+          fail("Should not be able to GET " + id);
+        } catch (StoreException e) {
+          StoreErrorCodes expectedErrorCode = state.deletedKeys.contains(id) ? StoreErrorCodes.ID_Deleted
+              : shouldBeCompacted ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.TTL_Expired;
+          assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
+        }
+        try {
+          BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.allOf(StoreGetOptions.class));
+          if (shouldBeCompacted) {
+            fail("Should not be able to GET " + id);
+          } else {
+            checkRecord(id, options);
+            options.close();
+            checkIndexValue(id);
+          }
+        } catch (StoreException e) {
+          assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
+          StoreErrorCodes expectedErrorCode =
+              state.deletedKeys.contains(id) ? StoreErrorCodes.ID_Deleted : StoreErrorCodes.ID_Not_Found;
+          assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
+        }
       } else if (state.deletedKeys.contains(id)) {
         boolean shouldBeAbsent =
             state.getExpectedValue(id, true) == null || (idsInCompactedLogSegments.contains(id) && state.isDeletedAt(id,
@@ -1419,31 +1474,6 @@ public class BlobStoreCompactorTest {
           assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.ID_Deleted,
               e.getErrorCode());
         }
-      } else if (state.expiredKeys.contains(id)) {
-        boolean shouldBeCompacted =
-            idsInCompactedLogSegments.contains(id) && state.isExpiredAt(id, state.time.milliseconds());
-        try {
-          state.index.getBlobReadInfo(id, EnumSet.noneOf(StoreGetOptions.class));
-          fail("Should not be able to GET " + id);
-        } catch (StoreException e) {
-          StoreErrorCodes expectedErrorCode =
-              shouldBeCompacted ? StoreErrorCodes.ID_Not_Found : StoreErrorCodes.TTL_Expired;
-          assertEquals(id + " failed with error code " + e.getErrorCode(), expectedErrorCode, e.getErrorCode());
-        }
-        try {
-          BlobReadOptions options = state.index.getBlobReadInfo(id, EnumSet.allOf(StoreGetOptions.class));
-          if (shouldBeCompacted) {
-            fail("Should not be able to GET " + id);
-          } else {
-            checkRecord(id, options);
-            options.close();
-            checkIndexValue(id);
-          }
-        } catch (StoreException e) {
-          assertTrue("Blob for " + id + " should have been retrieved", shouldBeCompacted);
-          assertEquals(id + " failed with error code " + e.getErrorCode(), StoreErrorCodes.ID_Not_Found,
-              e.getErrorCode());
-        }
       }
     }
   }
@@ -1460,10 +1490,22 @@ public class BlobStoreCompactorTest {
     for (String logSegment : logSegmentsUnderConsideration) {
       List<IndexEntry> validIndexEntries =
           state.getValidIndexEntriesForLogSegment(state.log.getSegment(logSegment), deleteReferenceTimeMs,
-              state.time.milliseconds());
+              state.time.milliseconds(), getFileSpanForLogSegments(logSegmentsUnderConsideration));
       addToLogEntriesInOrder(validIndexEntries, validLogEntriesInOrder);
     }
     return validLogEntriesInOrder;
+  }
+
+  /**
+   * @param logSegments the log names of the log segments that should be under the returned {@link FileSpan}
+   * @return a {@link FileSpan} that covers the given {@code logSegments}
+   */
+  private FileSpan getFileSpanForLogSegments(List<String> logSegments) {
+    LogSegment first = state.log.getSegment(logSegments.get(0));
+    LogSegment last = state.log.getSegment(logSegments.get(logSegments.size() - 1));
+    Offset start = new Offset(first.getName(), first.getStartOffset());
+    Offset end = new Offset(last.getName(), last.getEndOffset());
+    return new FileSpan(start, end);
   }
 
   /**
@@ -1475,9 +1517,6 @@ public class BlobStoreCompactorTest {
    */
   private List<LogEntry> getLogEntriesInOrder(List<String> logSegmentsUnderConsideration)
       throws IOException, StoreException {
-    // NOTE: This function fails on a corner case where the PUT and DELETE entry for a blob ended up in the same index
-    // segment after compaction (the DELETE wasn't eligible to be "counted"). The tests that exercise this path will
-    // need to find alternate ways of checking.
     List<LogEntry> logEntriesInOrder = new ArrayList<>();
     NavigableMap<Offset, IndexSegment> indexSegments = state.index.getIndexSegments();
     for (String logSegmentName : logSegmentsUnderConsideration) {
@@ -1489,8 +1528,8 @@ public class BlobStoreCompactorTest {
         indexSegment.getEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), infos, new AtomicLong(0));
         List<IndexEntry> indexEntries = new ArrayList<>();
         for (MessageInfo info : infos) {
-          IndexValue value = indexSegment.find(info.getStoreKey()).last();
-          indexEntries.add(new IndexEntry(info.getStoreKey(), value));
+          indexSegment.find(info.getStoreKey())
+              .forEach(value -> indexEntries.add(new IndexEntry(info.getStoreKey(), value)));
         }
         addToLogEntriesInOrder(indexEntries, logEntriesInOrder);
         indexSegmentStartOffset = indexSegments.higherKey(indexSegmentStartOffset);
@@ -1532,7 +1571,7 @@ public class BlobStoreCompactorTest {
     assertEquals("Unexpected size in BlobReadOptions", value.getSize(), options.getMessageInfo().getSize());
     assertEquals("Unexpected expiresAtMs in BlobReadOptions", value.getExpiresAtMs(),
         options.getMessageInfo().getExpirationTimeInMs());
-    if (state.index.hardDeleter.enabled.get() && !state.deletedKeys.contains(id)) {
+    if (!state.index.hardDeleter.enabled.get() || !state.deletedKeys.contains(id)) {
       ByteBuffer readBuf = ByteBuffer.allocate((int) value.getSize());
       ByteBufferOutputStream stream = new ByteBufferOutputStream(readBuf);
       WritableByteChannel channel = Channels.newChannel(stream);
@@ -1655,9 +1694,8 @@ public class BlobStoreCompactorTest {
    * Calculates a safe time for invalidation (i.e. records should expire at a time later than the last PUT record).
    * @param numSegmentsToWritePutRecordsTo the number of log segments that will be filled with PUT records.
    * @return a safe time for invalidation (i.e. records should expire at a time later than the last PUT record).
-   * @throws Exception
    */
-  private long getInvalidationTime(long numSegmentsToWritePutRecordsTo) throws Exception {
+  private long getInvalidationTime(long numSegmentsToWritePutRecordsTo) {
     // set some invalidation time that is far enough into the future that it cannot be affected by segment rollovers
     long possiblePutRecords =
         numSegmentsToWritePutRecordsTo * state.log.getSegmentCapacity() / CuratedLogIndexState.PUT_RECORD_SIZE + 1;
@@ -1919,6 +1957,49 @@ public class BlobStoreCompactorTest {
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
   }
 
+  // ttlUpdateSpecificTest() helpers
+
+  /**
+   * Creates state required for some TTL update specific tests
+   * @return the time at which the PUT records that don't have TTL update records expire.
+   * @throws Exception
+   */
+  private long createStateForTtlUpdateSpecificTest() throws Exception {
+    // this test sets up state such that one log semgent contains a bunch of puts with TTL, the same log segment has
+    // ttl updates for all but two PUTs. The second log segment has TTL updates for another quarter of the puts
+    // and also has deletes for all of the puts (which may spill over to another segment).
+    refreshState(false, false);
+    // this code is trying to determine how many put records there should be (close is good enough)
+    // numPuts * PUT_RECORD_SIZE + numPuts/4 * TTL_UPDATE_RECORD_SIZE + HEADER_SIZE < SEGMENT_CAPACITY
+    // we have to solve for numPuts
+    // numPuts < (SEGMENT_CAPACITY - HEADER_SIZE) / (PUT_RECORD_SIZE + TTL_UPDATE_RECORD_SIZE/4)
+    // the -1 in the below statement is make numPuts < the output of the RHS
+    int numPuts = (int) Math.floorDiv(state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE,
+        CuratedLogIndexState.PUT_RECORD_SIZE + (CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE) / 4) - 1;
+    // this ensures that the crash test cases cause the crash in the middle of an index segment
+    state.properties.setProperty("store.index.max.number.of.inmem.elements", Integer.toString(numPuts));
+    // reload for new props to take effect
+    state.reloadIndex(true, false);
+
+    // insert numPuts PUT records with immediate expiry
+    long expiryTimeMs = getInvalidationTime(1);
+    List<IndexEntry> entries = state.addPutEntries(numPuts, CuratedLogIndexState.PUT_RECORD_SIZE, expiryTimeMs);
+    // insert ttl updates for all but two of the PUTs
+    for (int i = 0; i < entries.size() - 2; i++) {
+      state.makePermanent((MockId) entries.get(i).getKey(), false);
+    }
+    // advance time and delete all the data (some of the data will get deleted at deleteTimeMs + delta).
+    state.advanceTime(expiryTimeMs + 1 - state.time.milliseconds());
+    for (IndexEntry entry : entries) {
+      state.addDeleteEntry((MockId) entry.getKey());
+    }
+    // add put entries so that the log segment rolls over
+    writeDataToMeetRequiredSegmentCount(state.index.getLogSegmentCount() + 1, null);
+    // reload index to make sure journal is on only the latest log segment
+    state.reloadIndex(true, false);
+    return expiryTimeMs;
+  }
+
   // support class helpers
 
   /**
@@ -2024,6 +2105,13 @@ public class BlobStoreCompactorTest {
         throws IOException {
       super(tempDirStr, state.log.getCapacityInBytes(), state.log.getSegmentCapacity(),
           StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, new StoreMetrics(new MetricRegistry()));
+      // set end offsets correctly
+      LogSegment original = state.log.getFirstSegment();
+      while (original != null) {
+        LogSegment dup = getSegment(original.getName());
+        dup.setEndOffset(original.getEndOffset());
+        original = state.log.getNextSegment(original);
+      }
       if (addSegmentCallCountToInterruptAt <= 0 || dropSegmentCallCountToInterruptAt <= 0) {
         throw new IllegalArgumentException("Arguments cannot be <= 0");
       }
