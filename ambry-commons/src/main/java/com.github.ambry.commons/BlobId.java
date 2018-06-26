@@ -104,7 +104,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  *
  * <br>
  * Version 5, which is the same as Version 4 but with additional info in the flag byte.  Flag bits 4 and 5
- * are used to specify the Blob Data Type, which can be Simple, Composite, or DataChunk.
+ * are used to specify the Blob Data Type, which can be Simple, Metadata, or DataChunk.
  * <br>
  * <pre>
  * +---------+-------+--------------+-----------+-------------+-------------+----------+----------+
