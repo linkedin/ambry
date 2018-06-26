@@ -26,6 +26,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -59,6 +61,7 @@ public class IndexSegmentTest {
   private static final StoreConfig STORE_CONFIG = new StoreConfig(new VerifiableProperties(new Properties()));
   private static final MockTime time = new MockTime();
   private static final long DELETE_FILE_SPAN_SIZE = 10;
+  private static final long TTL_UPDATE_FILE_SPAN_SIZE = 7;
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
   static {
@@ -138,18 +141,25 @@ public class IndexSegmentTest {
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 0), Utils.Infinite_Time, time.milliseconds(),
             accountId, containerId, version);
-    IndexValue value2 =
-        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), Utils.Infinite_Time, time.milliseconds(),
-            accountId, containerId, version);
+    IndexValue value2 = IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1000), time.milliseconds() + 1,
+        time.milliseconds(), accountId, containerId, version);
     IndexValue value3 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
             accountId, containerId, version);
     time.sleep(TimeUnit.SECONDS.toMillis(1));
-    // generate a DELETE
-    IndexValue delValue2 =
-        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), value2.getExpiresAtMs(), time.milliseconds(),
+    // generate a TTL Update
+    IndexValue ttlUpValue2 =
+        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), Utils.Infinite_Time, time.milliseconds(),
             value2.getAccountId(), value2.getContainerId(), version);
-    delValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    ttlUpValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    ttlUpValue2.setNewSize(50);
+    ttlUpValue2.setFlag(IndexValue.Flags.Ttl_Update_Index);
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
+    // generate a DELETE
+    IndexValue delValue2 = IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), ttlUpValue2.getFlags(),
+        value2.getExpiresAtMs(), value2.getOffset().getOffset(), time.milliseconds(), value2.getAccountId(),
+        value2.getContainerId(), version);
+    delValue2.setNewOffset(new Offset(logSegmentName, 3050));
     delValue2.setNewSize(100);
     delValue2.setFlag(IndexValue.Flags.Delete_Index);
     IndexSegment indexSegment = generateIndexSegment(startOffset);
@@ -157,7 +167,8 @@ public class IndexSegmentTest {
     indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
     indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
     indexSegment.addEntry(new IndexEntry(id1, value3), new Offset(logSegmentName, 3000));
-    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3100));
+    indexSegment.addEntry(new IndexEntry(id2, ttlUpValue2), new Offset(logSegmentName, 3050));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3150));
 
     // provide end offsets such that nothing is written
     checkNonCreationOfIndexSegmentFile(indexSegment, new Offset(prevLogSegmentName, 0));
@@ -174,23 +185,39 @@ public class IndexSegmentTest {
         Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
         IndexSegment fromDisk =
             new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
+        assertEquals("End offset not as expected", new Offset(logSegmentName, safeEndPoint), fromDisk.getEndOffset());
         assertEquals("Number of items incorrect", shouldBeFound.size(), fromDisk.getNumberOfItems());
         for (MockId id : shouldBeFound) {
-          verifyValues(fromDisk, id, 1, false);
+          verifyValues(fromDisk, id, 1, EnumSet.noneOf(IndexValue.Flags.class));
         }
         for (MockId id : shouldNotBeFound) {
           assertNull("Values for key should not have been found", fromDisk.find(id));
         }
       }
     }
-    // now persist the delete too
-    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3100));
+    // now persist the ttl update only
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3050));
     Journal journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
     IndexSegment fromDisk =
         new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
     assertEquals("Number of items incorrect", 4, fromDisk.getNumberOfItems());
     for (MockId id : new MockId[]{id1, id2, id3}) {
-      verifyValues(fromDisk, id, id.equals(id2) ? 2 : 1, id.equals(id2));
+      int valueCount = id.equals(id2) ? 2 : 1;
+      EnumSet<IndexValue.Flags> flags =
+          id.equals(id2) ? EnumSet.of(IndexValue.Flags.Ttl_Update_Index) : EnumSet.noneOf(IndexValue.Flags.class);
+      verifyValues(fromDisk, id, valueCount, flags);
+    }
+    // now persist the delete too
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3150));
+    journal = new Journal(tempDir.getAbsolutePath(), 3, 3);
+    fromDisk = new IndexSegment(indexSegment.getFile(), false, STORE_KEY_FACTORY, STORE_CONFIG, metrics, journal, time);
+    assertEquals("Number of items incorrect", 5, fromDisk.getNumberOfItems());
+    for (MockId id : new MockId[]{id1, id2, id3}) {
+      int valueCount = id.equals(id2) ? 3 : 1;
+      EnumSet<IndexValue.Flags> flags =
+          id.equals(id2) ? EnumSet.of(IndexValue.Flags.Delete_Index, IndexValue.Flags.Ttl_Update_Index)
+              : EnumSet.noneOf(IndexValue.Flags.class);
+      verifyValues(fromDisk, id, valueCount, flags);
     }
   }
 
@@ -219,11 +246,19 @@ public class IndexSegmentTest {
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 2000), Utils.Infinite_Time, time.milliseconds(),
             accountId, containerId, version);
     time.sleep(TimeUnit.SECONDS.toMillis(1));
-    // generate a DELETE
-    IndexValue delValue2 =
-        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), value2.getExpiresAtMs(), time.milliseconds(),
+    // generate a TTL Update
+    IndexValue ttlUpValue2 =
+        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), Utils.Infinite_Time, time.milliseconds(),
             value2.getAccountId(), value2.getContainerId(), version);
-    delValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    ttlUpValue2.setNewOffset(new Offset(logSegmentName, 3000));
+    ttlUpValue2.setNewSize(50);
+    ttlUpValue2.setFlag(IndexValue.Flags.Ttl_Update_Index);
+    time.sleep(TimeUnit.SECONDS.toMillis(1));
+    // generate a DELETE
+    IndexValue delValue2 = IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), ttlUpValue2.getFlags(),
+        value2.getExpiresAtMs(), value2.getOffset().getOffset(), time.milliseconds(), value2.getAccountId(),
+        value2.getContainerId(), version);
+    delValue2.setNewOffset(new Offset(logSegmentName, 3050));
     delValue2.setNewSize(100);
     delValue2.setFlag(IndexValue.Flags.Delete_Index);
     IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0));
@@ -231,9 +266,10 @@ public class IndexSegmentTest {
     indexSegment.addEntry(new IndexEntry(id3, value1), new Offset(logSegmentName, 1000));
     indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 2000));
     indexSegment.addEntry(new IndexEntry(id1, value3), new Offset(logSegmentName, 3000));
-    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3100));
+    indexSegment.addEntry(new IndexEntry(id2, ttlUpValue2), new Offset(logSegmentName, 3050));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 3150));
 
-    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3100));
+    indexSegment.writeIndexSegmentToFile(new Offset(logSegmentName, 3150));
     indexSegment.map(true);
     List<IndexEntry> entries = new ArrayList<>();
     for (boolean map : new boolean[]{false, true}) {
@@ -253,44 +289,50 @@ public class IndexSegmentTest {
       assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
       assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
       entries.clear();
-      // getIndexEntriesSince with maxSize > 1000 and <= 2100 should return three entries
-      for (int maxSize : new int[]{1001, 2100}) {
+      // getIndexEntriesSince with maxSize > 1000 and <= 2150 should return four entries
+      for (int maxSize : new int[]{1001, 2050, 2150}) {
         condition = new FindEntriesCondition(maxSize);
         assertTrue("getIndexEntriesSince() should return entries",
             fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
-        assertEquals("There should be three entries returned", 3, entries.size());
+        assertEquals("There should be four entries returned", 4, entries.size());
         assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
         assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
         assertEquals("Key in entry is incorrect", id2, entries.get(1).getKey());
         assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(1).getValue().getBytes());
         assertEquals("Key in entry is incorrect", id2, entries.get(2).getKey());
-        assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
+        assertEquals("Value in entry is incorrect", ttlUpValue2.getBytes(), entries.get(2).getValue().getBytes());
+        assertEquals("Key in entry is incorrect", id2, entries.get(3).getKey());
+        assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(3).getValue().getBytes());
         entries.clear();
       }
-      // getIndexEntriesSince with maxSize > 2100 should return four entries
-      condition = new FindEntriesCondition(2101);
+      // getIndexEntriesSince with maxSize > 2150 should return five entries
+      condition = new FindEntriesCondition(2151);
       assertTrue("getIndexEntriesSince() should return entries",
           fromDisk.getIndexEntriesSince(null, condition, entries, new AtomicLong(0), false));
-      assertEquals("There should be four entries returned", 4, entries.size());
+      assertEquals("There should be five entries returned", 5, entries.size());
       assertEquals("Key in entry is incorrect", id1, entries.get(0).getKey());
       assertEquals("Value in entry is incorrect", value3.getBytes(), entries.get(0).getValue().getBytes());
       assertEquals("Key in entry is incorrect", id2, entries.get(1).getKey());
       assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(1).getValue().getBytes());
       assertEquals("Key in entry is incorrect", id2, entries.get(2).getKey());
-      assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
-      assertEquals("Key in entry is incorrect", id3, entries.get(3).getKey());
-      assertEquals("Value in entry is incorrect", value1.getBytes(), entries.get(3).getValue().getBytes());
+      assertEquals("Value in entry is incorrect", ttlUpValue2.getBytes(), entries.get(2).getValue().getBytes());
+      assertEquals("Key in entry is incorrect", id2, entries.get(3).getKey());
+      assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(3).getValue().getBytes());
+      assertEquals("Key in entry is incorrect", id3, entries.get(4).getKey());
+      assertEquals("Value in entry is incorrect", value1.getBytes(), entries.get(4).getValue().getBytes());
       entries.clear();
-      // getIndexEntriesSince with maxSize > 0 and <= 1100 should return two entries
-      for (int maxSize : new int[]{1, 1100}) {
+      // getIndexEntriesSince with maxSize > 0 and <= 1150 starting from id2 should return two entries
+      for (int maxSize : new int[]{1, 1050, 1150}) {
         condition = new FindEntriesCondition(maxSize);
         assertTrue("getIndexEntriesSince() should return entries",
             fromDisk.getIndexEntriesSince(id1, condition, entries, new AtomicLong(0), false));
-        assertEquals("There should be two entries returned", 2, entries.size());
+        assertEquals("There should be three entries returned", 3, entries.size());
         assertEquals("Key in entry is incorrect", id2, entries.get(0).getKey());
         assertEquals("Value in entry is incorrect", value2.getBytes(), entries.get(0).getValue().getBytes());
         assertEquals("Key in entry is incorrect", id2, entries.get(1).getKey());
-        assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(1).getValue().getBytes());
+        assertEquals("Value in entry is incorrect", ttlUpValue2.getBytes(), entries.get(1).getValue().getBytes());
+        assertEquals("Key in entry is incorrect", id2, entries.get(2).getKey());
+        assertEquals("Value in entry is incorrect", delValue2.getBytes(), entries.get(2).getValue().getBytes());
         entries.clear();
       }
     }
@@ -359,7 +401,23 @@ public class IndexSegmentTest {
       verifyFind(referenceIndex, indexSegment);
       verifyGetEntriesSince(referenceIndex, indexSegment);
 
-      int extraIdsToDelete = 10;
+      int extraIdsToTtlUpdate = 5;
+      Set<MockId> idsToTtlUpdate = getIdsToTtlUpdate(referenceIndex, extraIdsToTtlUpdate);
+      addTtlUpdateEntries(idsToTtlUpdate, indexSegment, referenceIndex);
+      endOffset += idsToTtlUpdate.size() * TTL_UPDATE_FILE_SPAN_SIZE;
+      numItems += idsToTtlUpdate.size();
+      for (MockId id : idsToTtlUpdate) {
+        expectedSizeWritten += valueSize + id.sizeInBytes();
+      }
+      verifyIndexSegmentDetails(indexSegment, startOffset, numItems, expectedSizeWritten, false, endOffset,
+          time.milliseconds(), resetKey);
+      verifyFind(referenceIndex, indexSegment);
+      verifyGetEntriesSince(referenceIndex, indexSegment);
+      indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+      verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
+          time.milliseconds(), resetKey);
+
+      int extraIdsToDelete = 5;
       Set<MockId> idsToDelete = getIdsToDelete(referenceIndex, extraIdsToDelete);
       addDeleteEntries(idsToDelete, indexSegment, referenceIndex);
       endOffset += idsToDelete.size() * DELETE_FILE_SPAN_SIZE;
@@ -367,6 +425,41 @@ public class IndexSegmentTest {
       for (MockId id : idsToDelete) {
         expectedSizeWritten += valueSize + id.sizeInBytes();
       }
+      verifyIndexSegmentDetails(indexSegment, startOffset, numItems, expectedSizeWritten, false, endOffset,
+          time.milliseconds(), resetKey);
+      verifyFind(referenceIndex, indexSegment);
+      verifyGetEntriesSince(referenceIndex, indexSegment);
+      indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+      verifyReadFromFile(referenceIndex, indexSegment.getFile(), startOffset, numItems, expectedSizeWritten, endOffset,
+          time.milliseconds(), resetKey);
+
+      // all combinations
+      offsets = new ArrayList<>();
+      for (int i = 0; i < 3; i++) {
+        offsets.add(endOffset);
+        endOffset += Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+        numItems++;
+        expectedSizeWritten += valueSize + KEY_SIZE;
+      }
+      List<IndexEntry> puts =
+          addPutEntries(offsets, endOffset - offsets.get(offsets.size() - 1), indexSegment, referenceIndex, false,
+              false);
+      // the second entry has only a TTL update
+      addTtlUpdateEntries(Collections.singleton((MockId) puts.get(1).getKey()), indexSegment, referenceIndex);
+      // the third entry has a TTL update and a delete
+      addTtlUpdateEntries(Collections.singleton((MockId) puts.get(2).getKey()), indexSegment, referenceIndex);
+      addDeleteEntries(Collections.singleton((MockId) puts.get(2).getKey()), indexSegment, referenceIndex);
+      // an ID that is only TTL updated
+      addTtlUpdateEntries(Collections.singleton(generateIds(referenceIndex, 1).get(0)), indexSegment, referenceIndex);
+      // an ID that is TTL updated and deleted
+      MockId idToTtlUpdateAndDelete = generateIds(referenceIndex, 1).get(0);
+      addTtlUpdateEntries(Collections.singleton(idToTtlUpdateAndDelete), indexSegment, referenceIndex);
+      addDeleteEntries(Collections.singleton(idToTtlUpdateAndDelete), indexSegment, referenceIndex);
+      // an ID that is only deleted
+      addDeleteEntries(Collections.singleton(generateIds(referenceIndex, 1).get(0)), indexSegment, referenceIndex);
+      endOffset += 4 * TTL_UPDATE_FILE_SPAN_SIZE + 3 * DELETE_FILE_SPAN_SIZE;
+      numItems += 7;
+      expectedSizeWritten += 7 * (KEY_SIZE + valueSize);
       verifyIndexSegmentDetails(indexSegment, startOffset, numItems, expectedSizeWritten, false, endOffset,
           time.milliseconds(), resetKey);
       verifyFind(referenceIndex, indexSegment);
@@ -451,10 +544,9 @@ public class IndexSegmentTest {
       } while (referenceIndex.containsKey(id));
       long offset = offsets.get(i);
       long size = i == offsets.size() - 1 ? lastEntrySize : offsets.get(i + 1) - offset;
-      IndexValue value =
-          IndexValueTest.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset), Utils.Infinite_Time,
-              time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM),
-              version);
+      IndexValue value = IndexValueTest.getIndexValue(size, new Offset(segment.getLogSegmentName(), offset),
+          time.milliseconds() + TimeUnit.HOURS.toMillis(1), time.milliseconds(), Utils.getRandomShort(TestUtils.RANDOM),
+          Utils.getRandomShort(TestUtils.RANDOM), version);
       IndexEntry entry = new IndexEntry(id, value);
       segment.addEntry(entry, new Offset(segment.getLogSegmentName(), offset + size));
       addedEntries.add(entry);
@@ -530,7 +622,7 @@ public class IndexSegmentTest {
       assertNull("There should be no more values in the segment", valueFromSegment);
     }
     // try to find a key that does not exist.
-    MockId id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
+    MockId id = generateIds(referenceIndex, 1).get(0);
     assertNull("Should have failed to find non existent key", segment.find(id));
   }
 
@@ -649,7 +741,12 @@ public class IndexSegmentTest {
         while (nextExpectedId != null) {
           NavigableSet<IndexValue> values = referenceIndex.get(nextExpectedId);
           if (oneEntryPerKey) {
-            expectedEntries.add(new IndexEntry(nextExpectedId, values.last()));
+            IndexValue value = values.last();
+            if (values.size() > 1 && !value.isFlagSet(IndexValue.Flags.Delete_Index) && value.isFlagSet(
+                IndexValue.Flags.Ttl_Update_Index)) {
+              value = values.first();
+            }
+            expectedEntries.add(new IndexEntry(nextExpectedId, value));
           } else {
             for (IndexValue value : values) {
               expectedEntries.add(new IndexEntry(nextExpectedId, value));
@@ -675,6 +772,31 @@ public class IndexSegmentTest {
   }
 
   /**
+   * Gets some IDs for ttl update. Picks the first half of ids from {@code referenceIndex} and also randomly generates
+   * {@code outOfSegmentIdCount} ids.
+   * @param referenceIndex the index entries to pick for ttl update from.
+   * @param outOfSegmentIdCount the number of ids to be generated that are not in {@code referenceIndex}.
+   * @return a {@link Set} of IDs to create ttl update entries for.
+   */
+  private Set<MockId> getIdsToTtlUpdate(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
+      int outOfSegmentIdCount) {
+    Set<MockId> idsToTtlUpdate = new HashSet<>();
+    // return the first half of ids in the map
+    int needed = referenceIndex.size() / 2;
+    int current = 0;
+    for (MockId id : referenceIndex.keySet()) {
+      if (current >= needed) {
+        break;
+      }
+      idsToTtlUpdate.add(id);
+      current++;
+    }
+    // generate some ids for ttl update
+    idsToTtlUpdate.addAll(generateIds(referenceIndex, outOfSegmentIdCount));
+    return idsToTtlUpdate;
+  }
+
+  /**
    * Gets some IDs for deleting. Picks alternate IDs from {@code referenceIndex} and randomly generates
    * {@code outOfSegmentIdCount} ids.
    * @param referenceIndex the index entries to pick for delete from.
@@ -693,14 +815,62 @@ public class IndexSegmentTest {
       include = !include;
     }
     // generate some ids for delete
-    for (int i = 0; i < outOfSegmentIdCount; i++) {
+    idsToDelete.addAll(generateIds(referenceIndex, outOfSegmentIdCount));
+    return idsToDelete;
+  }
+
+  /**
+   * Generates {@code count} unique ids that arent in {@code referenceIndex}.
+   * @param referenceIndex the current reference index
+   * @param count the number of unique ids to generate
+   * @return a set with {@code count} unique ids
+   */
+  private List<MockId> generateIds(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex, int count) {
+    List<MockId> generatedIds = new ArrayList<>();
+    for (int i = 0; i < count; i++) {
       MockId id;
       do {
         id = new MockId(UtilsTest.getRandomString(CUSTOM_ID_SIZE));
-      } while (referenceIndex.containsKey(id) || idsToDelete.contains(id));
-      idsToDelete.add(id);
+      } while (referenceIndex.containsKey(id) || generatedIds.contains(id));
+      generatedIds.add(id);
     }
-    return idsToDelete;
+    return generatedIds;
+  }
+
+  /**
+   * Adds ttl update entries to {@code segment}.
+   * @param idsToTtlUpdate the {@link Set} of IDs to create ttl update entries for.
+   * @param segment the {@link IndexSegment} to add the entries to.
+   * @param referenceIndex the {@link NavigableMap} to add all the entries to. This represents the source of truth for
+   *                       all checks.
+   * @throws StoreException
+   */
+  private void addTtlUpdateEntries(Set<MockId> idsToTtlUpdate, IndexSegment segment,
+      NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex) throws StoreException {
+    for (MockId id : idsToTtlUpdate) {
+      Offset offset = segment.getEndOffset();
+      NavigableSet<IndexValue> values = segment.find(id);
+      IndexValue value;
+      if (values == null) {
+        // create an index value with a random log segment name
+        value = IndexValueTest.getIndexValue(1, new Offset(UtilsTest.getRandomString(1), 0), Utils.Infinite_Time,
+            time.milliseconds(), id.getAccountId(), id.getContainerId(), version);
+      } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        throw new IllegalArgumentException(id + " is deleted");
+      } else if (values.last().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        throw new IllegalArgumentException("TTL of " + id + " is already updated");
+      } else {
+        value = values.last();
+      }
+      IndexValue newValue = IndexValueTest.getIndexValue(value, version);
+      newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
+      newValue.setExpiresAtMs(Utils.Infinite_Time);
+      newValue.setNewOffset(offset);
+      newValue.setNewSize(TTL_UPDATE_FILE_SPAN_SIZE);
+      segment.addEntry(new IndexEntry(id, newValue),
+          new Offset(offset.getName(), offset.getOffset() + TTL_UPDATE_FILE_SPAN_SIZE));
+      referenceIndex.computeIfAbsent(id, k -> new TreeSet<>()).add(newValue);
+    }
   }
 
   /**
@@ -725,7 +895,12 @@ public class IndexSegmentTest {
       } else if (values.last().isFlagSet(IndexValue.Flags.Delete_Index)) {
         throw new IllegalArgumentException(id + " is already deleted");
       } else {
-        value = values.last();
+        value = values.first();
+        // update the expiration time if required
+        if (values.size() > 1 && value.getExpiresAtMs() != values.last().getExpiresAtMs()) {
+          value.setFlag(IndexValue.Flags.Ttl_Update_Index);
+          value.setExpiresAtMs(values.last().getExpiresAtMs());
+        }
       }
       IndexValue newValue = IndexValueTest.getIndexValue(value, version);
       newValue.setFlag(IndexValue.Flags.Delete_Index);
@@ -850,15 +1025,18 @@ public class IndexSegmentTest {
    * @param segment the {@link IndexSegment} to check
    * @param id the {@link MockId} to find values for
    * @param valueCount the number of values expected to be returned
-   * @param isDeleted the expected state of the latest value
+   * @param flags the expected flags for the latest value
    * @throws StoreException
    */
-  private void verifyValues(IndexSegment segment, MockId id, int valueCount, boolean isDeleted) throws StoreException {
+  private void verifyValues(IndexSegment segment, MockId id, int valueCount, EnumSet<IndexValue.Flags> flags)
+      throws StoreException {
     NavigableSet<IndexValue> values = segment.find(id);
     assertNotNull("Values should have been found for " + id, values);
     assertEquals("Unexpected number of values for " + id, valueCount, values.size());
-    assertEquals("Delete flag not as expected for " + id, isDeleted,
-        values.last().isFlagSet(IndexValue.Flags.Delete_Index));
+    for (IndexValue.Flags flagToCheck : IndexValue.Flags.values()) {
+      assertEquals("Flag " + flagToCheck + " status not as expected", flags.contains(flagToCheck),
+          values.last().isFlagSet(flagToCheck));
+    }
   }
 }
 

@@ -265,9 +265,10 @@ public class StoreMessageReadSetTest {
         short accountId = Utils.getRandomShort(TestUtils.RANDOM);
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         boolean deleted = TestUtils.RANDOM.nextBoolean();
+        boolean ttlUpdated = TestUtils.RANDOM.nextBoolean();
         // basic test
         MessageInfo info =
-            new MessageInfo(id, size, deleted, false, expiresAtMs, crc, accountId, containerId, operationTimeMs);
+            new MessageInfo(id, size, deleted, ttlUpdated, expiresAtMs, crc, accountId, containerId, operationTimeMs);
         BlobReadOptions options = new BlobReadOptions(log, new Offset(firstSegment.getName(), offset), info);
         assertEquals("Ref count of log segment should have increased", 1, firstSegment.refCount());
         verifyGetters(options, firstSegment, offset, true, info);
@@ -343,6 +344,8 @@ public class StoreMessageReadSetTest {
       assertEquals("AccountId not as expected", msgInfo.getAccountId(), messageInfo.getAccountId());
       assertEquals("ContainerId not as expected", msgInfo.getContainerId(), messageInfo.getContainerId());
       assertEquals("OperationTimeMs not as expected", msgInfo.getOperationTimeMs(), messageInfo.getOperationTimeMs());
+      assertEquals("Deleted not as expected", msgInfo.isDeleted(), messageInfo.isDeleted());
+      assertEquals("TtlUpdated not as expected", msgInfo.isTtlUpdated(), messageInfo.isTtlUpdated());
     } else {
       assertEquals("AccountId not as expected", Account.UNKNOWN_ACCOUNT_ID, messageInfo.getAccountId());
       assertEquals("ContainerId not as expected", Container.UNKNOWN_CONTAINER_ID, messageInfo.getContainerId());

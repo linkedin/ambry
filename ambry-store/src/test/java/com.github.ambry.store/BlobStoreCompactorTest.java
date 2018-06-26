@@ -535,7 +535,7 @@ public class BlobStoreCompactorTest {
     // rollover. IS 1.3 starts
     // 8. Delete entry for an id that is in another log segment
     // won't be cleaned up.
-    MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment());
+    MockId idFromAnotherSegment = state.getIdToDeleteFromLogSegment(state.log.getFirstSegment(), false);
     state.addDeleteEntry(idFromAnotherSegment);
 
     // 9. Delete entry for a Put entry that doesn't exist. However, if it existed, it wouldn't have been eligible for
@@ -961,7 +961,7 @@ public class BlobStoreCompactorTest {
    */
   private void refreshState(boolean hardDeleteEnabled, boolean initState) throws Exception {
     destroyStateAndCleanDir();
-    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState);
+    state = new CuratedLogIndexState(true, tempDir, hardDeleteEnabled, initState, false);
   }
 
   /**
@@ -1076,7 +1076,7 @@ public class BlobStoreCompactorTest {
       assertTrue("There are no more segments to delete data from", logSegments.size() > 0);
       int selectedIdx = TestUtils.RANDOM.nextInt(logSegments.size());
       String segmentToDeleteFrom = logSegments.get(selectedIdx);
-      MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getSegment(segmentToDeleteFrom));
+      MockId idToDelete = state.getIdToDeleteFromLogSegment(state.log.getSegment(segmentToDeleteFrom), false);
       if (idToDelete == null) {
         logSegments.remove(selectedIdx);
       } else {
@@ -1509,9 +1509,12 @@ public class BlobStoreCompactorTest {
     Collections.sort(indexEntries, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
     for (IndexEntry entry : indexEntries) {
       MockId id = (MockId) entry.getKey();
-      PersistentIndex.IndexEntryType entryType =
-          entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) ? PersistentIndex.IndexEntryType.DELETE
-              : PersistentIndex.IndexEntryType.PUT;
+      PersistentIndex.IndexEntryType entryType = PersistentIndex.IndexEntryType.PUT;
+      if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+        entryType = PersistentIndex.IndexEntryType.DELETE;
+      } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+        entryType = PersistentIndex.IndexEntryType.TTL_UPDATE;
+      }
       logEntriesInOrder.add(new LogEntry(id, entryType, entry.getValue().getSize()));
     }
   }

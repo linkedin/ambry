@@ -14,6 +14,7 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MockId;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;

@@ -869,7 +869,8 @@ class BlobStoreStats implements StoreStats, Closeable {
                 Offset previousIndexSegmentOffset = index.getIndexSegments().size() > 1 ? index.getIndexSegments()
                     .lowerKey(indexSegment.getStartOffset()) : index.getStartOffset();
                 FileSpan searchSpan = new FileSpan(index.getStartOffset(), previousIndexSegmentOffset);
-                originalPut = index.findKey(entry.getKey(), searchSpan);
+                originalPut = index.findKey(entry.getKey(), searchSpan,
+                    EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE));
               }
               if (originalPut == null) {
                 newScanResults.updateLogSegmentBaseBucket(indexValue.getOffset().getName(), indexValue.getSize());

@@ -494,9 +494,13 @@ class IndexSegment {
         bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
       }
       if (resetKey == null) {
-        resetKey = new Pair<>(entry.getKey(),
-            entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) ? PersistentIndex.IndexEntryType.DELETE
-                : PersistentIndex.IndexEntryType.PUT);
+        PersistentIndex.IndexEntryType type = PersistentIndex.IndexEntryType.PUT;
+        if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
+          type = PersistentIndex.IndexEntryType.DELETE;
+        } else if (entry.getValue().isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+          type = PersistentIndex.IndexEntryType.TTL_UPDATE;
+        }
+        resetKey = new Pair<>(entry.getKey(), type);
       }
       numberOfItems.incrementAndGet();
       sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity());
@@ -896,8 +900,9 @@ class IndexSegment {
     for (IndexEntry indexEntry : indexEntries) {
       IndexValue value = indexEntry.getValue();
       MessageInfo info =
-          new MessageInfo(indexEntry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index), false,
-              value.getExpiresAtMs(), value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs());
+          new MessageInfo(indexEntry.getKey(), value.getSize(), value.isFlagSet(IndexValue.Flags.Delete_Index),
+              value.isFlagSet(IndexValue.Flags.Ttl_Update_Index), value.getExpiresAtMs(), value.getAccountId(),
+              value.getContainerId(), value.getOperationTimeInMs());
       entries.add(info);
     }
     return areNewEntriesAdded;
@@ -983,14 +988,17 @@ class IndexSegment {
    * @param entries the entries to eliminate duplicates from.
    */
   private void eliminateDuplicates(List<IndexEntry> entries) {
-    Set<StoreKey> setToFindDuplicate = new HashSet<StoreKey>();
+    Set<StoreKey> setToFindDuplicate = new HashSet<>();
+    // first choose PUTs over update entries (omitting DELETEs)
+    entries.removeIf(
+        entry -> !entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index) && !setToFindDuplicate.add(entry.getKey()));
+    // then choose DELETEs over all other entries
+    setToFindDuplicate.clear();
     ListIterator<IndexEntry> iterator = entries.listIterator(entries.size());
     while (iterator.hasPrevious()) {
       IndexEntry entry = iterator.previous();
-      if (setToFindDuplicate.contains(entry.getKey())) {
+      if (!setToFindDuplicate.add(entry.getKey())) {
         iterator.remove();
-      } else {
-        setToFindDuplicate.add(entry.getKey());
       }
     }
   }
