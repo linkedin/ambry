@@ -32,6 +32,7 @@ public class StoreMetrics {
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
+  public final Timer ttlUpdateResponse;
   public final Timer findEntriesSinceResponse;
   public final Timer findMissingKeysResponse;
   public final Timer isKeyDeletedResponse;
@@ -67,6 +68,7 @@ public class StoreMetrics {
   public final Counter identicalPutAttemptCount;
   public final Counter getAuthorizationFailureCount;
   public final Counter deleteAuthorizationFailureCount;
+  public final Counter ttlUpdateAuthorizationFailureCount;
   public final Counter keyInFindEntriesAbsent;
 
   // Compaction related metrics
@@ -100,6 +102,7 @@ public class StoreMetrics {
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
+    ttlUpdateResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreTtlUpdateResponse"));
     findEntriesSinceResponse =
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindEntriesSinceResponse"));
     findMissingKeysResponse =
@@ -150,6 +153,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "GetAuthorizationFailureCount"));
     deleteAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "DeleteAuthorizationFailureCount"));
+    ttlUpdateAuthorizationFailureCount =
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "T tlUpdateAuthorizationFailureCount"));
     keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));

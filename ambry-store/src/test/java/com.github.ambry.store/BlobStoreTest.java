@@ -75,12 +75,16 @@ public class BlobStoreTest {
   }
 
   // setupTestState() is coupled to these numbers. Changing them *will* cause setting test state or tests to fail.
-  private static final long LOG_CAPACITY = 10000;
-  private static final long SEGMENT_CAPACITY = 2000;
+  private static final long LOG_CAPACITY = 30000;
+  private static final long SEGMENT_CAPACITY = 3000;
   private static final int MAX_IN_MEM_ELEMENTS = 5;
   // deliberately do not divide the capacities perfectly.
   private static final int PUT_RECORD_SIZE = 53;
   private static final int DELETE_RECORD_SIZE = 29;
+  private static final int TTL_UPDATE_RECORD_SIZE = 37;
+
+  private static final byte[] DELETE_BUF = TestUtils.getRandomBytes(DELETE_RECORD_SIZE);
+  private static final byte[] TTL_UPDATE_BUF = TestUtils.getRandomBytes(TTL_UPDATE_RECORD_SIZE);
 
   private final Random random = new Random();
 
@@ -121,12 +125,12 @@ public class BlobStoreTest {
 
     @Override
     public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-        List<byte[]> recoveryInfoList) throws IOException {
+        List<byte[]> recoveryInfoList) {
       throw new UnsupportedOperationException();
     }
 
     @Override
-    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) throws IOException {
+    public MessageInfo getMessageInfo(Read read, long offset, StoreKeyFactory factory) {
       return messageInfo;
     }
 
@@ -150,7 +154,7 @@ public class BlobStoreTest {
     }
   }
 
-  // a static instance to return for Deleter::call().
+  // a static instance to return for Deleter::call() and TtlUpdater::call().
   private static final CallableResult EMPTY_RESULT = new CallableResult(null, null);
 
   /**
@@ -207,6 +211,27 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Updates the ttl of a blob.
+   */
+  private class TtlUpdater implements Callable<CallableResult> {
+
+    final MockId id;
+
+    /**
+     * @param id the {@link MockId} to delete.
+     */
+    TtlUpdater(MockId id) {
+      this.id = id;
+    }
+
+    @Override
+    public CallableResult call() throws Exception {
+      updateTtl(id);
+      return EMPTY_RESULT;
+    }
+  }
+
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // A map of all the keys. The key is the MockId and the value is a Pair that contains the metadata and data of the
@@ -220,6 +245,8 @@ public class BlobStoreTest {
   private final Set<MockId> expiredKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
   // Set of all keys that are not deleted/expired
   private final Set<MockId> liveKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
+  // Set of all keys that have had their TTLs updated
+  private final Set<MockId> ttlUpdatedKeys = Collections.newSetFromMap(new ConcurrentHashMap<MockId, Boolean>());
 
   // Indicates whether the log is segmented
   private final boolean isLogSegmented;
@@ -232,9 +259,11 @@ public class BlobStoreTest {
   private final String storeId = UtilsTest.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
   private final DiskSpaceAllocator diskSpaceAllocator = StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR;
-  private final ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
-  private final ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
   private final Properties properties = new Properties();
+  private final long expiresAtMs;
+  // TODO: make these final once again once compactor is ready and the hack to clear state is removed
+  private ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+  private ScheduledExecutorService storeStatsScheduler = Utils.newScheduler(1, false);
 
   // The BlobStore instance
   private BlobStore store;
@@ -262,23 +291,32 @@ public class BlobStoreTest {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("storeDir-" + UtilsTest.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
-    setupTestState();
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    long bufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
+    expiresAtMs = time.milliseconds() + bufferTimeMs + TimeUnit.HOURS.toMillis(1);
+    setupTestState(true);
   }
 
   /**
    * Releases all resources and deletes the temporary directory.
-   * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
   @After
-  public void cleanup() throws InterruptedException, IOException, StoreException {
+  public void cleanup() throws IOException, StoreException {
+    Utils.shutDownExecutorService(scheduler, 5, TimeUnit.SECONDS);
+    Utils.shutDownExecutorService(storeStatsScheduler, 5, TimeUnit.SECONDS);
     if (store.isStarted()) {
       store.shutdown();
     }
-    scheduler.shutdown();
-    assertTrue(scheduler.awaitTermination(1, TimeUnit.SECONDS));
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
+    generatedKeys.clear();
+    allKeys.clear();
+    idsByLogSegment.clear();
+    deletedKeys.clear();
+    expiredKeys.clear();
+    liveKeys.clear();
+    ttlUpdatedKeys.clear();
   }
 
   /**
@@ -288,6 +326,15 @@ public class BlobStoreTest {
   @Test
   public void testClusterManagerReplicaStatusDelegateUse() throws StoreException, IOException, InterruptedException {
     //Setup threshold test properties, replicaId, mock replica status delegate
+    // TODO: while the compactor is upgraded to understand TTL updates, this hack ensures that this test (which uses
+    // TODO: compaction for segmented logs) never encounters TTL updates
+    if (isLogSegmented) {
+      cleanup();
+      scheduler = Utils.newScheduler(1, false);
+      storeStatsScheduler = Utils.newScheduler(1, false);
+      setupTestState(false);
+    }
+    //Setup threshold test properties, replicaId, mock write status delegate
     StoreConfig defaultConfig = changeThreshold(65, 5, true);
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
@@ -295,7 +342,7 @@ public class BlobStoreTest {
     when(replicaStatusDelegate.seal(any())).thenReturn(true);
 
     //Restart store
-    restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+    reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
 
     //Check that after start, because ReplicaId defaults to non-sealed, delegate is not called
     verifyZeroInteractions(replicaStatusDelegate);
@@ -305,23 +352,23 @@ public class BlobStoreTest {
     verifyNoMoreInteractions(replicaStatusDelegate);
 
     //Verify that after putting in enough data, the store goes to read only
-    List<MockId> addedIds = put(4, 900, Utils.Infinite_Time);
+    List<MockId> addedIds = put(4, 2000, Utils.Infinite_Time);
     verify(replicaStatusDelegate, times(1)).seal(replicaId);
 
     //Assumes ClusterParticipant sets replicaId status to true
     replicaId.setSealedState(true);
 
     //Change config threshold but with delegate disabled, verify that nothing happens
-    restartStore(changeThreshold(99, 1, false), replicaId, replicaStatusDelegate);
+    reloadStore(changeThreshold(99, 1, false), replicaId, replicaStatusDelegate);
     verifyNoMoreInteractions(replicaStatusDelegate);
 
     //Change config threshold to higher, see that it gets changed to unsealed on reset
-    restartStore(changeThreshold(99, 1, true), replicaId, replicaStatusDelegate);
+    reloadStore(changeThreshold(99, 1, true), replicaId, replicaStatusDelegate);
     verify(replicaStatusDelegate, times(1)).unseal(replicaId);
     replicaId.setSealedState(false);
 
     //Reset thresholds, verify that it changed back
-    restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+    reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
     verify(replicaStatusDelegate, times(2)).seal(replicaId);
     replicaId.setSealedState(true);
 
@@ -334,7 +381,7 @@ public class BlobStoreTest {
 
       //Need to restart blob otherwise compaction will ignore segments in journal (which are all segments right now).
       //By restarting, only last segment will be in journal
-      restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+      reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
       verifyNoMoreInteractions(replicaStatusDelegate);
 
       //Advance time by 8 days, call compaction to compact segments with deleted data, then verify
@@ -346,7 +393,7 @@ public class BlobStoreTest {
 
       //Test if replicaId is erroneously true that it updates the status upon startup
       replicaId.setSealedState(true);
-      restartStore(defaultConfig, replicaId, replicaStatusDelegate);
+      reloadStore(defaultConfig, replicaId, replicaStatusDelegate);
       verify(replicaStatusDelegate, times(3)).unseal(replicaId);
     }
     store.shutdown();
@@ -411,8 +458,8 @@ public class BlobStoreTest {
   }
 
   /**
-   * Does a basic test by getting all the blobs that were put (and deleted) during the test setup. This implicitly tests
-   * all three of PUT, GET and DELETE.
+   * Does a basic test by getting all the blobs that were put (updated and deleted) during the test setup. This
+   * implicitly tests all of PUT, GET, TTL UPDATE and DELETE.
    * </p>
    * Also tests GET with different combinations of {@link StoreGetOptions}.
    * @throws InterruptedException
@@ -427,7 +474,7 @@ public class BlobStoreTest {
     liveKeys.remove(addedId);
     expiredKeys.add(addedId);
 
-    // GET of all the keys implicitly tests the PUT and DELETE.
+    // GET of all the keys implicitly tests the PUT, UPDATE and DELETE.
     // live keys
     StoreInfo storeInfo = store.get(new ArrayList<>(liveKeys), EnumSet.noneOf(StoreGetOptions.class));
     checkStoreInfo(storeInfo, liveKeys);
@@ -519,6 +566,23 @@ public class BlobStoreTest {
   }
 
   /**
+   * Tests the case where there are many concurrent ttl updates.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentTtlUpdateTest() throws Exception {
+    int extraBlobCount = 2000 / PUT_RECORD_SIZE + 1;
+    List<MockId> ids = put(extraBlobCount, PUT_RECORD_SIZE, expiresAtMs);
+    List<TtlUpdater> ttlUpdaters = new ArrayList<>();
+    for (MockId id : ids) {
+      ttlUpdaters.add(new TtlUpdater(id));
+    }
+    ExecutorService executorService = Executors.newFixedThreadPool(ttlUpdaters.size());
+    List<Future<CallableResult>> futures = executorService.invokeAll(ttlUpdaters);
+    verifyTtlUpdateFutures(ttlUpdaters, futures);
+  }
+
+  /**
    * Tests the case where there are concurrent PUTs, GETs and DELETEs.
    * @throws Exception
    */
@@ -535,22 +599,33 @@ public class BlobStoreTest {
       getters.add(new Getter(id, EnumSet.allOf(StoreGetOptions.class)));
     }
 
-    int deleteBlobCount = 1500 / PUT_RECORD_SIZE;
+    int deleteBlobCount = 1000 / PUT_RECORD_SIZE;
     List<MockId> idsToDelete = put(deleteBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
     List<Deleter> deleters = new ArrayList<>(deleteBlobCount);
     for (MockId id : idsToDelete) {
       deleters.add(new Deleter(id));
     }
 
+    int updateTtlBlobCount = 1000 / PUT_RECORD_SIZE;
+    List<MockId> idsToUpdateTtl = put(updateTtlBlobCount, PUT_RECORD_SIZE, expiresAtMs);
+    List<TtlUpdater> ttlUpdaters = new ArrayList<>(updateTtlBlobCount);
+    for (MockId id : idsToUpdateTtl) {
+      ttlUpdaters.add(new TtlUpdater(id));
+    }
+
     List<Callable<CallableResult>> callables = new ArrayList<Callable<CallableResult>>(putters);
     callables.addAll(getters);
     callables.addAll(deleters);
+    callables.addAll(ttlUpdaters);
 
     ExecutorService executorService = Executors.newFixedThreadPool(callables.size());
     List<Future<CallableResult>> futures = executorService.invokeAll(callables);
     verifyPutFutures(putters, futures.subList(0, putters.size()));
     verifyGetFutures(getters, futures.subList(putters.size(), putters.size() + getters.size()));
-    verifyDeleteFutures(deleters, futures.subList(putters.size() + getters.size(), callables.size()));
+    verifyDeleteFutures(deleters,
+        futures.subList(putters.size() + getters.size(), putters.size() + getters.size() + deleters.size()));
+    verifyTtlUpdateFutures(ttlUpdaters,
+        futures.subList(putters.size() + getters.size() + deleters.size(), callables.size()));
   }
 
   /**
@@ -637,6 +712,48 @@ public class BlobStoreTest {
     for (int i = 0; i < accountIds.length; i++) {
       verifyGetFailure(new MockId(mockId.getID(), accountIds[i], containerIds[i]),
           StoreErrorCodes.Authorization_Failure);
+    }
+  }
+
+  /**
+   * Tests different possible error cases for TTL update
+   * @throws Exception
+   */
+  @Test
+  public void ttlUpdateErrorCasesTest() throws Exception {
+    // ID that does not exist
+    verifyTtlUpdateFailure(getUniqueId(), StoreErrorCodes.ID_Not_Found);
+    // ID that has expired
+    for (MockId expired : expiredKeys) {
+      verifyTtlUpdateFailure(expired, StoreErrorCodes.Update_Not_Allowed);
+    }
+    // ID that has not expired but is within the "no updates" period
+    inNoTtlUpdatePeriodTest();
+    // ID that is already updated
+    for (MockId ttlUpdated : ttlUpdatedKeys) {
+      if (!deletedKeys.contains(ttlUpdated)) {
+        verifyTtlUpdateFailure(ttlUpdated, StoreErrorCodes.Already_Updated);
+      }
+    }
+    // ID that is already deleted
+    for (MockId deleted : deletedKeys) {
+      verifyTtlUpdateFailure(deleted, StoreErrorCodes.ID_Deleted);
+    }
+    // authorization failure
+    ttlUpdateAuthorizationFailureTest();
+  }
+
+  /**
+   * Test TTL UPDATE with valid accountId and containerId.
+   */
+  @Test
+  public void ttlUpdateAuthorizationSuccessTest() throws Exception {
+    short[] accountIds = {-1, Utils.getRandomShort(TestUtils.RANDOM), -1};
+    short[] containerIds = {-1, -1, Utils.getRandomShort(TestUtils.RANDOM)};
+    for (int i = 0; i < accountIds.length; i++) {
+      MockId id = put(1, PUT_RECORD_SIZE, expiresAtMs, accountIds[i], containerIds[i]).get(0);
+      updateTtl(new MockId(id.getID(), id.getAccountId(), id.getContainerId()));
+      verifyTtlUpdate(id);
     }
   }
 
@@ -805,7 +922,7 @@ public class BlobStoreTest {
     doDiskSpaceRequirementsTest(segmentsAllocated, 1);
     assertTrue("Could not delete temp file", tempFile.delete());
 
-    addCuratedData(SEGMENT_CAPACITY);
+    addCuratedData(SEGMENT_CAPACITY, true);
     segmentsAllocated += 1;
     doDiskSpaceRequirementsTest(segmentsAllocated, 0);
 
@@ -813,7 +930,7 @@ public class BlobStoreTest {
         tempDir).deleteOnExit();
     File.createTempFile("sample-swap", LogSegmentNameHelper.SUFFIX + BlobStoreCompactor.TEMP_LOG_SEGMENT_NAME_SUFFIX,
         tempDir).deleteOnExit();
-    addCuratedData(SEGMENT_CAPACITY);
+    addCuratedData(SEGMENT_CAPACITY, true);
     segmentsAllocated += 1;
     doDiskSpaceRequirementsTest(segmentsAllocated, 2);
   }
@@ -906,9 +1023,27 @@ public class BlobStoreTest {
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
             time.milliseconds());
-    ByteBuffer buffer = ByteBuffer.allocate(DELETE_RECORD_SIZE);
+    ByteBuffer buffer = ByteBuffer.wrap(DELETE_BUF);
     store.delete(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
     deletedKeys.add(idToDelete);
+    liveKeys.remove(idToDelete);
+    return info;
+  }
+
+  /**
+   * Updates the TTL of a blob
+   * @param idToUpdate the {@link MockId} of the blob to update.
+   * @return the {@link MessageInfo} associated with the update.
+   * @throws StoreException
+   */
+  private MessageInfo updateTtl(MockId idToUpdate) throws StoreException {
+    MessageInfo putMsgInfo = allKeys.get(idToUpdate).getFirst();
+    MessageInfo info =
+        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, putMsgInfo.getAccountId(),
+            putMsgInfo.getContainerId(), time.milliseconds());
+    ByteBuffer buffer = ByteBuffer.wrap(TTL_UPDATE_BUF);
+    store.updateTtl(new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(buffer)));
+    ttlUpdatedKeys.add(idToUpdate);
     return info;
   }
 
@@ -932,11 +1067,10 @@ public class BlobStoreTest {
       assertEquals("AccountId mismatch", expectedInfo.getAccountId(), messageInfo.getAccountId());
       assertEquals("ContainerId mismatch", expectedInfo.getContainerId(), messageInfo.getContainerId());
       assertEquals("OperationTime mismatch", expectedInfo.getOperationTimeMs(), messageInfo.getOperationTimeMs());
-      assertEquals("Unexpected expiresAtMs in MessageInfo",
-          (expectedInfo.getExpirationTimeInMs() != Utils.Infinite_Time ?
-              (expectedInfo.getExpirationTimeInMs() / Time.MsPerSec) * Time.MsPerSec : Utils.Infinite_Time),
-          messageInfo.getExpirationTimeInMs());
-
+      assertEquals("isTTLUpdated not as expected", ttlUpdatedKeys.contains(id), messageInfo.isTtlUpdated());
+      long expiresAtMs = ttlUpdatedKeys.contains(id) ? Utils.Infinite_Time : expectedInfo.getExpirationTimeInMs();
+      expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMs);
+      assertEquals("Unexpected expiresAtMs in MessageInfo", expiresAtMs, messageInfo.getExpirationTimeInMs());
       assertEquals("Unexpected key in readSet", id, readSet.getKeyAt(i));
       assertEquals("Unexpected size in ReadSet", expectedInfo.getSize(), readSet.sizeInBytes(i));
       ByteBuffer readBuf = ByteBuffer.allocate((int) expectedInfo.getSize());
@@ -969,10 +1103,12 @@ public class BlobStoreTest {
   /**
    * Sets up some state in order to make sure all cases are represented and the tests don't need to do any setup
    * individually. For understanding the created store, please read the source code which is annotated with comments.
+   * @param addTtlUpdates if {@code true}, adds ttl update entries (temporary until all components can handle TTL
+   *                      updates)
    * @throws InterruptedException
    * @throws StoreException
    */
-  private void setupTestState() throws InterruptedException, StoreException {
+  private void setupTestState(boolean addTtlUpdates) throws InterruptedException, StoreException {
     long segmentCapacity = isLogSegmented ? SEGMENT_CAPACITY : LOG_CAPACITY;
     properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
@@ -987,11 +1123,11 @@ public class BlobStoreTest {
     if (!isLogSegmented) {
       // log is filled about ~50%.
       expectedStoreSize = segmentCapacity / 2;
-      addCuratedData(expectedStoreSize);
+      addCuratedData(expectedStoreSize, addTtlUpdates);
     } else {
       expectedStoreSize = segmentCapacity;
       // first log segment is filled to capacity.
-      addCuratedData(segmentCapacity);
+      addCuratedData(segmentCapacity, addTtlUpdates);
       assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
       assertFalse("Expected nonempty store", store.isEmpty());
 
@@ -999,30 +1135,76 @@ public class BlobStoreTest {
       // standard delete and put record sizes so that the next write causes a roll over of log segments).
       long sizeToWrite = segmentCapacity - (DELETE_RECORD_SIZE - 1);
       expectedStoreSize += sizeToWrite;
-      addCuratedData(sizeToWrite);
+      addCuratedData(sizeToWrite, addTtlUpdates);
       assertEquals("Store size not as expected", expectedStoreSize, store.getSizeInBytes());
 
       // third log segment is partially filled and is left as the "active" segment
       sizeToWrite = segmentCapacity / 3;
       // First Index Segment
       // 1 PUT entry
+      int puts = 0;
+      int deletes = 0;
+      int ttlUpdates = 0;
       MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
-      idsByLogSegment.add(new HashSet<MockId>());
+      idsByLogSegment.add(new HashSet<>());
       idsByLogSegment.get(2).add(addedId);
-      // 1 DELETE for a key in the first log segment
-      MockId idToDelete = getIdToDelete(idsByLogSegment.get(0));
+      puts++;
+      // DELETE for a key in the first log segment
+      MockId idToDelete = getIdToDelete(idsByLogSegment.get(0), false);
       delete(idToDelete);
+      deletes++;
       idsByLogSegment.get(2).add(idToDelete);
-      // 1 DELETE for a key in the second log segment
-      idToDelete = getIdToDelete(idsByLogSegment.get(1));
+      // DELETE for a key in the second segment
+      idToDelete = getIdToDelete(idsByLogSegment.get(1), false);
       delete(idToDelete);
+      deletes++;
       idsByLogSegment.get(2).add(idToDelete);
-      // 1 DELETE for the PUT in the same log segment
+      // 1 DELETE for the PUT in the same segment
       deletedKeys.add(addedId);
       liveKeys.remove(addedId);
       delete(addedId);
+      deletes++;
+
+      if (addTtlUpdates) {
+        // 1 TTL update for a key in first log segment
+        MockId idToUpdate = getIdToTtlUpdate(idsByLogSegment.get(0));
+        updateTtl(idToUpdate);
+        ttlUpdates++;
+
+        // Second Index Segment
+        // 1 TTL update for a key in the second log segment
+        idToUpdate = getIdToTtlUpdate(idsByLogSegment.get(1));
+        updateTtl(idToUpdate);
+        ttlUpdates++;
+        // 1 TTL update for a key in first log segment
+        idToUpdate = getIdToTtlUpdate(idsByLogSegment.get(0));
+        updateTtl(idToUpdate);
+        ttlUpdates++;
+        // 1 DELETE for the key above
+        delete(idToUpdate);
+        deletes++;
+        // 1 TTL update for a key in second log segment
+        idToUpdate = getIdToTtlUpdate(idsByLogSegment.get(1));
+        updateTtl(idToUpdate);
+        ttlUpdates++;
+        // 1 DELETE for the key above
+        delete(idToUpdate);
+        deletes++;
+
+        // Third Index Segment
+        // 1 DELETE for a key that's already ttl updated in the first log segment
+        idToDelete = getIdToDelete(idsByLogSegment.get(0), true);
+        delete(idToDelete);
+        deletes++;
+        // 1 DELETE for a key that's already ttl updated in the first second segment
+        idToDelete = getIdToDelete(idsByLogSegment.get(1), true);
+        delete(idToDelete);
+        deletes++;
+      }
+
       // 1 PUT entry that spans the rest of the data in the segment (upto a third of the segment size)
-      long size = sizeToWrite - (LogSegment.HEADER_SIZE + PUT_RECORD_SIZE + 3 * DELETE_RECORD_SIZE);
+      long size = sizeToWrite - (LogSegment.HEADER_SIZE + puts * PUT_RECORD_SIZE + deletes * DELETE_RECORD_SIZE
+          + ttlUpdates * TTL_UPDATE_RECORD_SIZE);
       addedId = put(1, size, Utils.Infinite_Time).get(0);
       idsByLogSegment.get(2).add(addedId);
       // the store counts the wasted space at the end of the second segment as "used capacity".
@@ -1039,13 +1221,16 @@ public class BlobStoreTest {
    * Adds some curated data into the store in order to ensure a good mix for testing. For understanding the created
    * store, please read the source code which is annotated with comments.
    * @param sizeToWrite the size to add for.
+   * @param addTtlUpdates if {@code true}, adds ttl update entries (temporary until all components can handle TTL
+   *                      updates)
    * @throws StoreException
    */
-  private void addCuratedData(long sizeToWrite) throws StoreException {
+  private void addCuratedData(long sizeToWrite, boolean addTtlUpdates) throws StoreException {
     Set<MockId> idsInLogSegment = new HashSet<>();
     idsByLogSegment.add(idsInLogSegment);
     List<Set<MockId>> idsGroupedByIndexSegment = new ArrayList<>();
     int deletedKeyCount = 0;
+    int ttlUpdatedKeyCount = 0;
 
     Set<MockId> idsInIndexSegment = new HashSet<>();
     // First Index Segment
@@ -1062,13 +1247,13 @@ public class BlobStoreTest {
 
     idsInIndexSegment = new HashSet<>();
     // Second Index Segment
-    // 4 PUT
-    idsInIndexSegment.addAll(put(4, PUT_RECORD_SIZE, Utils.Infinite_Time));
+    // 3 PUT
+    idsInIndexSegment.addAll(put(3, PUT_RECORD_SIZE, Utils.Infinite_Time));
     // 1 DELETE for a PUT in the same index segment
-    delete(getIdToDelete(idsInIndexSegment));
+    delete(getIdToDelete(idsInIndexSegment, false));
     deletedKeyCount++;
     // 1 DELETE for a PUT in the first index segment
-    delete(getIdToDelete(idsGroupedByIndexSegment.get(0)));
+    delete(getIdToDelete(idsGroupedByIndexSegment.get(0), false));
     deletedKeyCount++;
     idsGroupedByIndexSegment.add(idsInIndexSegment);
     idsInLogSegment.addAll(idsInIndexSegment);
@@ -1079,15 +1264,13 @@ public class BlobStoreTest {
       // 3 PUT
       idsInIndexSegment.addAll(put(3, PUT_RECORD_SIZE, Utils.Infinite_Time));
       // 1 PUT for an expired blob
-      MockId expiredId = put(1, PUT_RECORD_SIZE, 0).get(0);
-      idsInIndexSegment.add(expiredId);
+      MockId id = put(1, PUT_RECORD_SIZE, 0).get(0);
+      idsInIndexSegment.add(id);
       // 1 DELETE for the expired PUT
-      delete(expiredId);
-      deletedKeys.add(expiredId);
-      expiredKeys.remove(expiredId);
+      delete(id);
       deletedKeyCount++;
-      // 1 PUT
-      idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
+      deletedKeys.add(id);
+      expiredKeys.remove(id);
       idsGroupedByIndexSegment.add(idsInIndexSegment);
       idsInLogSegment.addAll(idsInIndexSegment);
     }
@@ -1097,18 +1280,107 @@ public class BlobStoreTest {
     // 1 PUT entry
     idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, Utils.Infinite_Time));
     // 1 DELETE for a PUT in each of the third and fourth segments
-    delete(getIdToDelete(idsGroupedByIndexSegment.get(2)));
+    delete(getIdToDelete(idsGroupedByIndexSegment.get(2), false));
     deletedKeyCount++;
-    delete(getIdToDelete(idsGroupedByIndexSegment.get(3)));
+    delete(getIdToDelete(idsGroupedByIndexSegment.get(3), false));
     deletedKeyCount++;
     // 1 DELETE for the PUT in the same segment
-    delete(getIdToDelete(idsInIndexSegment));
+    delete(getIdToDelete(idsInIndexSegment, false));
     deletedKeyCount++;
-    // 1 PUT entry that spans the rest of the data in the segment
+
+    if (addTtlUpdates) {
+      // 1 PUT entry with a non zero expiry time
+      idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, expiresAtMs));
+      idsGroupedByIndexSegment.add(idsInIndexSegment);
+      idsInLogSegment.addAll(idsInIndexSegment);
+
+      List<MockId> idsToDelete = new ArrayList<>();
+
+      idsInIndexSegment = new HashSet<>();
+      // sixth index segment
+      // 3 PUT with non zero expire time
+      idsInIndexSegment.addAll(put(3, PUT_RECORD_SIZE, expiresAtMs));
+      // 2 TTL updates for PUTs in the same segment
+      MockId idToUpdate = getIdToTtlUpdate(idsInIndexSegment);
+      updateTtl(idToUpdate);
+      ttlUpdatedKeyCount++;
+      idsToDelete.add(idToUpdate);
+      updateTtl(getIdToTtlUpdate(idsInIndexSegment));
+      ttlUpdatedKeyCount++;
+      idsGroupedByIndexSegment.add(idsInIndexSegment);
+      idsInLogSegment.addAll(idsInIndexSegment);
+
+      idsInIndexSegment = new HashSet<>();
+      // seventh index segment
+      // 1 TTL update for a PUT in the previous segment
+      idToUpdate = getIdToTtlUpdate(idsGroupedByIndexSegment.get(5));
+      updateTtl(idToUpdate);
+      ttlUpdatedKeyCount++;
+      idsToDelete.add(idToUpdate);
+      // 4 more PUTs with non zero expire time
+      idsInIndexSegment.addAll(put(4, PUT_RECORD_SIZE, expiresAtMs));
+      idsGroupedByIndexSegment.add(idsInIndexSegment);
+      idsInLogSegment.addAll(idsInIndexSegment);
+
+      idsInIndexSegment = new HashSet<>();
+      // eighth index segment
+      // 1 PUT, TTL update, DELETE in the same segment
+      idToUpdate = put(1, PUT_RECORD_SIZE, expiresAtMs).get(0);
+      idsInIndexSegment.add(idToUpdate);
+      updateTtl(idToUpdate);
+      ttlUpdatedKeyCount++;
+      delete(idToUpdate);
+      deletedKeyCount++;
+      // 1 TTL update for a PUT in the prev segment
+      updateTtl(getIdToTtlUpdate(idsGroupedByIndexSegment.get(6)));
+      ttlUpdatedKeyCount++;
+      // 1 more PUT with non zero expire time
+      idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, expiresAtMs));
+      idsGroupedByIndexSegment.add(idsInIndexSegment);
+      idsInLogSegment.addAll(idsInIndexSegment);
+
+      idsInIndexSegment = new HashSet<>();
+      // ninth index segment
+      // 1 TTL update for a PUT in prev segment
+      idToUpdate = getIdToTtlUpdate(idsGroupedByIndexSegment.get(6));
+      updateTtl(idToUpdate);
+      ttlUpdatedKeyCount++;
+      idsToDelete.add(idToUpdate);
+      // 3 DELETES from idsToDelete
+      assertEquals("Number of IDs to delete has changed", 3, idsToDelete.size());
+      for (MockId id : idsToDelete) {
+        delete(id);
+        deletedKeyCount++;
+      }
+      // 1 more PUT with non zero expire time
+      idsInIndexSegment.addAll(put(1, PUT_RECORD_SIZE, expiresAtMs));
+      idsGroupedByIndexSegment.add(idsInIndexSegment);
+      idsInLogSegment.addAll(idsInIndexSegment);
+
+      idsInIndexSegment = new HashSet<>();
+      // tenth index segment
+      // 3 PUT with finite TTLs
+      idsInIndexSegment.addAll(put(3, PUT_RECORD_SIZE, expiresAtMs));
+      // 2 PUT with infinite TTLs
+      idsInIndexSegment.addAll(put(2, PUT_RECORD_SIZE, Utils.Infinite_Time));
+      idsGroupedByIndexSegment.add(idsInIndexSegment);
+      idsInLogSegment.addAll(idsInIndexSegment);
+
+      idsInIndexSegment = new HashSet<>();
+      // twelfth index segment (setting up for cross log segment)
+      // 3 PUTs
+      idsInIndexSegment.addAll(put(3, PUT_RECORD_SIZE, expiresAtMs));
+      // 1 TTL update for a key in this segment
+      updateTtl(getIdToTtlUpdate(idsInIndexSegment));
+      ttlUpdatedKeyCount++;
+    }
+
     idsInLogSegment.addAll(idsInIndexSegment);
 
+    // 1 PUT entry that spans the rest of the data in the segment
     long sizeWritten = isLogSegmented ? LogSegment.HEADER_SIZE : 0;
-    sizeWritten += idsInLogSegment.size() * PUT_RECORD_SIZE + deletedKeyCount * DELETE_RECORD_SIZE;
+    sizeWritten += idsInLogSegment.size() * PUT_RECORD_SIZE + deletedKeyCount * DELETE_RECORD_SIZE
+        + ttlUpdatedKeyCount * TTL_UPDATE_RECORD_SIZE;
     MockId id = put(1, sizeToWrite - sizeWritten, Utils.Infinite_Time).get(0);
     idsInIndexSegment.add(id);
     idsGroupedByIndexSegment.add(idsInIndexSegment);
@@ -1118,12 +1390,14 @@ public class BlobStoreTest {
   /**
    * Gets an id to delete from {@code ids} by picking the first live key encountered.
    * @param ids the {@link MockId}s to choose from
+   * @param ttlUpdated {@code true} if the ID returned has to have undergone a TTL update. {@code false} if the ID
+   *                               returned should NOT have gone through a TTL update
    * @return an id to delete from {@code ids}
    */
-  private MockId getIdToDelete(Set<MockId> ids) {
+  private MockId getIdToDelete(Set<MockId> ids, boolean ttlUpdated) {
     MockId deleteCandidate = null;
     for (MockId id : ids) {
-      if (liveKeys.contains(id)) {
+      if (liveKeys.contains(id) && ttlUpdated == ttlUpdatedKeys.contains(id)) {
         deleteCandidate = id;
         break;
       }
@@ -1137,15 +1411,49 @@ public class BlobStoreTest {
   }
 
   /**
-   * Shuts down and restarts the store. All further tests will implcitly test persistence.
+   * Gets an id to update TTL for from {@code ids} by picking the first live key that has a non-infinte TTL encountered.
+   * @param ids the {@link MockId}s to choose from
+   * @return an id to update from {@code ids}
+   */
+  private MockId getIdToTtlUpdate(Set<MockId> ids) {
+    MockId updateCandidate = null;
+    for (MockId id : ids) {
+      if (liveKeys.contains(id) && !ttlUpdatedKeys.contains(id)
+          && allKeys.get(id).getFirst().getExpirationTimeInMs() != Utils.Infinite_Time) {
+        updateCandidate = id;
+        break;
+      }
+    }
+    if (updateCandidate == null) {
+      throw new IllegalStateException("Could not find a key to update in set: " + ids);
+    }
+    ttlUpdatedKeys.add(updateCandidate);
+    return updateCandidate;
+  }
+
+  /**
+   * Shuts down and restarts the store. All further tests will implicitly test persistence.
    * @throws StoreException
    */
   private void reloadStore() throws StoreException {
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    reloadStore(config, getMockReplicaId(tempDirStr), null);
+  }
+
+  /**
+   * Shuts down and restarts the store. All further tests will implicitly test persistence.
+   * @param config the {@link StoreConfig} to use
+   * @param replicaId the {@link ReplicaId} for which the store is being created
+   * @param delegate the {@link ReplicaStatusDelegate} to use
+   * @throws StoreException
+   */
+  private void reloadStore(StoreConfig config, ReplicaId replicaId, ReplicaStatusDelegate delegate)
+      throws StoreException {
     if (store.isStarted()) {
       store.shutdown();
     }
     assertFalse("Store should be shutdown", store.isStarted());
-    store = createBlobStore(getMockReplicaId(tempDirStr));
+    store = createBlobStore(replicaId, config, delegate);
     assertFalse("Store should not be started", store.isStarted());
     store.start();
     assertTrue("Store should be started", store.isStarted());
@@ -1244,6 +1552,37 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Verifies that the updates are successful. Also ensures that a GET for the {@link MockId} returns data that confirms
+   * that the TTL is infinite
+   * @param ttlUpdaters list of {@link TtlUpdater} instances.
+   * @param futures list of {@link Future}s returned from submitting the {@code ttlUpdaters} to an
+   * {@link ExecutorService}
+   * @throws Exception
+   */
+  private void verifyTtlUpdateFutures(List<TtlUpdater> ttlUpdaters, List<Future<CallableResult>> futures)
+      throws Exception {
+    for (int i = 0; i < ttlUpdaters.size(); i++) {
+      MockId id = ttlUpdaters.get(i).id;
+      Future<CallableResult> future = futures.get(i);
+      future.get(1, TimeUnit.SECONDS);
+      verifyTtlUpdate(id);
+    }
+  }
+
+  /**
+   * Verifies that {@code id} has been TTL updated
+   * @param id
+   * @throws Exception
+   */
+  private void verifyTtlUpdate(MockId id) throws Exception {
+    StoreInfo storeInfo = store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
+    assertEquals("ID not as expected", id, storeInfo.getMessageReadSetInfo().get(0).getStoreKey());
+    assertEquals("Expiration time is not infinite", Utils.Infinite_Time,
+        storeInfo.getMessageReadSetInfo().get(0).getExpirationTimeInMs());
+    checkStoreInfo(storeInfo, Collections.singleton(id));
+  }
+
   // putErrorCasesTest() helpers
 
   /**
@@ -1274,12 +1613,33 @@ public class BlobStoreTest {
   private void verifyDeleteFailure(MockId idToDelete, StoreErrorCodes expectedErrorCode) {
     MessageInfo info =
         new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
-            System.currentTimeMillis());
-    MessageWriteSet writeSet =
-        new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
+            time.milliseconds());
+    MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
+        Collections.singletonList(ByteBuffer.wrap(DELETE_BUF)));
     try {
       store.delete(writeSet);
       fail("Store DELETE should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
+    }
+  }
+
+  // updateTtlErrorCasesTest() helpers
+
+  /**
+   * Verifies that TTL update fails.
+   * @param idToUpdate the {@link MockId} to update the TTL for.
+   * @param expectedErrorCode the expected {@link StoreErrorCodes} for the failure.
+   */
+  private void verifyTtlUpdateFailure(MockId idToUpdate, StoreErrorCodes expectedErrorCode) {
+    MessageInfo info =
+        new MessageInfo(idToUpdate, TTL_UPDATE_RECORD_SIZE, false, true, Utils.Infinite_Time, idToUpdate.getAccountId(),
+            idToUpdate.getContainerId(), time.milliseconds());
+    MessageWriteSet writeSet = new MockMessageWriteSet(Collections.singletonList(info),
+        Collections.singletonList(ByteBuffer.wrap(TTL_UPDATE_BUF)));
+    try {
+      store.updateTtl(writeSet);
+      fail("Store TTL UPDATE should have failed");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", expectedErrorCode, e.getErrorCode());
     }
@@ -1308,6 +1668,13 @@ public class BlobStoreTest {
 
     try {
       blobStore.delete(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
+      fail("Operation should have failed because store is inactive");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
+    }
+
+    try {
+      blobStore.updateTtl(new MockMessageWriteSet(Collections.EMPTY_LIST, Collections.EMPTY_LIST));
       fail("Operation should have failed because store is inactive");
     } catch (StoreException e) {
       assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Store_Not_Started, e.getErrorCode());
@@ -1412,10 +1779,35 @@ public class BlobStoreTest {
     return new StoreConfig(new VerifiableProperties(properties));
   }
 
-  private void restartStore(StoreConfig config, ReplicaId replicaId, ReplicaStatusDelegate delegate)
-      throws StoreException {
-    store.shutdown();
-    store = createBlobStore(replicaId, config, delegate);
-    store.start();
+  // ttlUpdateErrorCasesTest() helpers
+
+  /**
+   * Tests the case where the TTL update arrives when the the blob has not expired but cannot be TTL updated
+   * @throws Exception
+   */
+  private void inNoTtlUpdatePeriodTest() throws Exception {
+    long bufferTimeSecs = new StoreConfig(new VerifiableProperties(properties)).storeTtlUpdateBufferTimeSeconds;
+    long cutOffTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(bufferTimeSecs);
+    MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1).get(0);
+    verifyTtlUpdateFailure(id, StoreErrorCodes.Update_Not_Allowed);
+    // something that is AT cutoff time succeeds
+    id = put(1, PUT_RECORD_SIZE, cutOffTimeMs).get(0);
+    updateTtl(id);
+    verifyTtlUpdate(id);
+  }
+
+  /**
+   * Test TTL update with invalid accountId/containerId. Failure is expected.
+   * @throws StoreException
+   */
+  private void ttlUpdateAuthorizationFailureTest() throws StoreException {
+    MockId id = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
+    short[] accountIds = {-1, (short) (id.getAccountId() - 1), -1, id.getAccountId(), (short) (id.getAccountId() + 1)};
+    short[] containerIds =
+        {-1, -1, (short) (id.getContainerId() - 1), (short) (id.getContainerId() + 1), id.getContainerId()};
+    for (int i = 0; i < accountIds.length; i++) {
+      verifyTtlUpdateFailure(new MockId(id.getID(), accountIds[i], containerIds[i]),
+          StoreErrorCodes.Authorization_Failure);
+    }
   }
 }

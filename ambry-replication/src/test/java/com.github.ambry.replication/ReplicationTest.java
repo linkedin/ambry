@@ -1015,6 +1015,11 @@ public class ReplicationTest {
     }
 
     @Override
+    public void updateTtl(MessageWriteSet messageSetToUpdate) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
       // unused function
       MockFindToken mockToken = (MockFindToken) token;

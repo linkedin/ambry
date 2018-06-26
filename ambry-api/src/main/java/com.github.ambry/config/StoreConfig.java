@@ -230,6 +230,15 @@ public class StoreConfig {
   public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
       "store.read.write.enable.size.threshold.percentage.delta";
 
+  /**
+   * Specifies the smallest number of seconds away that a blob's expiry time has to be for a TTL update operation on
+   * the blob to succeed.
+   */
+  @Config(storeTtlUpdateBufferTimeSecondsName)
+  @Default("60 * 60 * 24")
+  public final int storeTtlUpdateBufferTimeSeconds;
+  public static final String storeTtlUpdateBufferTimeSecondsName = "store.ttl.update.buffer.time.seconds";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -279,6 +288,8 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
+    storeTtlUpdateBufferTimeSeconds =
+        verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
   }
 }
 
