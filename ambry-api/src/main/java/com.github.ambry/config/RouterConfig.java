@@ -242,7 +242,7 @@ public class RouterConfig {
     routerLatencyToleranceQuantile =
         verifiableProperties.getDoubleInRange("router.latency.tolerance.quantile", 0.9, 0.0, 1.0);
     routerBlobidCurrentVersion =
-        verifiableProperties.getShortFromAllowedValues("router.blobid.current.version", (short) 5,
+        verifiableProperties.getShortFromAllowedValues("router.blobid.current.version", (short) 4,
             new Short[]{1, 2, 3, 4, 5});
     routerKeyManagementServiceFactory = verifiableProperties.getString("router.key.management.service.factory",
         "com.github.ambry.router.SingleKeyManagementServiceFactory");

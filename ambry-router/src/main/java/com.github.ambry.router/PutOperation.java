@@ -886,16 +886,10 @@ class PutOperation {
         // Determine data type to set
         BlobDataType blobDataType = null;
         if (isMetadataChunk()) {
-          blobDataType = BlobDataType.COMPOSITE;
+          blobDataType = BlobDataType.METADATA;
         } else if (this.chunkIndex == 0) {
-          if (chunkFillingCompletedSuccessfully) {
-            // Note: this variable can be true even if additional chunks are filled!
-            //blobDataType = BlobDataType.SIMPLE;
-            blobDataType = BlobDataType.DATACHUNK;
-          } else {
-            // TODO: need more data to distinguish between Simple and Data Chunk
-            blobDataType = BlobDataType.DATACHUNK;
-          }
+          // TODO: need more data to distinguish between Simple and Data Chunk
+          blobDataType = BlobDataType.DATACHUNK;
         } else {
           blobDataType = BlobDataType.DATACHUNK;
         }

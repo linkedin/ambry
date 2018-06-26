@@ -686,7 +686,7 @@ public class BlobId extends StoreKey {
     /**
      * Indicates a composite (metadata) blob.
      */
-    COMPOSITE,
+    METADATA,
 
     /**
      * Indicates a data chunk within a composite blob.

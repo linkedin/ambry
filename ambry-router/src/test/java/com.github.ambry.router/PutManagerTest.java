@@ -878,7 +878,7 @@ public class PutManagerTest {
 
     if (request.getBlobType() == BlobType.MetadataBlob) {
       notificationBlobType = NotificationBlobType.Composite;
-      assertEquals("Expected composite", BlobDataType.COMPOSITE, origBlobId.getBlobDataType());
+      assertEquals("Expected metadata", BlobDataType.METADATA, origBlobId.getBlobDataType());
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
