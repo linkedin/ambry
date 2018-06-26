@@ -679,8 +679,7 @@ class PersistentIndex {
     } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
     } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
-      throw new StoreException("TTL of " + id + " already updated in index" + dataDir,
-          StoreErrorCodes.TTL_Already_Updated);
+      throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.Already_Updated);
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue =

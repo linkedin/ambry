@@ -654,7 +654,7 @@ public class IndexTest {
     info =
         new MessageInfo(updatedId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, updatedId.getAccountId(),
             updatedId.getContainerId(), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.TTL_Already_Updated);
+    doRecoveryFailureTest(info, StoreErrorCodes.Already_Updated);
     // recovery info contains a Ttl Update for a key that is already deleted
     MockId deletedId = state.deletedKeys.iterator().next();
     info =
