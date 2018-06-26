@@ -28,7 +28,7 @@ public interface StoreKeyConverter {
   /**
    * Returns a mapping for every {@link StoreKey} in {@code input}. If a {@link StoreKey}
    * is already in the format desired or no mapping exists, returns the same {@link StoreKey}
-   * as the mapping.
+   * as the mapping.  Returns null if {@link StoreKey} is deprecated or invalid.
    * @param input the {@link StoreKey}s that need to be converted.
    * @return a mapping for each {@link StoreKey} in the new format.
    * @throws Exception that may be thrown when performing the conversion operation
