@@ -165,7 +165,7 @@ public class RouterConfig {
    * The version to use for new BlobIds.
    */
   @Config("router.blobid.current.version")
-  @Default("5")
+  @Default("4")
   public final short routerBlobidCurrentVersion;
 
   /**
