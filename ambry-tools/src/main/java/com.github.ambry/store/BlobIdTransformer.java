@@ -41,13 +41,10 @@ public class BlobIdTransformer implements StoreCopier.Transformer {
 
   private final StoreKeyConverter storeKeyConverter;
   private final StoreKeyFactory storeKeyFactory;
-  private final Map<StoreKey, StoreKey> cacheMap;
 
-  public BlobIdTransformer(StoreKeyConverter storeKeyConverter, StoreKeyFactory storeKeyFactory,
-      Map<StoreKey, StoreKey> cacheMap) {
-    this.storeKeyConverter = Objects.requireNonNull(storeKeyConverter, "storeKeyConverter must not be null");
+  public BlobIdTransformer(StoreKeyConverter storeKeyConverter, StoreKeyFactory storeKeyFactory) {
     this.storeKeyFactory = Objects.requireNonNull(storeKeyFactory, "storeKeyFactory must not be null");
-    this.cacheMap = cacheMap;
+    this.storeKeyConverter = Objects.requireNonNull(storeKeyConverter, "storeKeyConverter must not be null");
   }
 
   /**
@@ -65,13 +62,9 @@ public class BlobIdTransformer implements StoreCopier.Transformer {
     Objects.requireNonNull(message.getStream(), "message's inputStream must not be null");
     StoreKey oldStoreKey = message.getMessageInfo().getStoreKey();
     StoreKey newStoreKey;
-    if (cacheMap == null) {
-      List<StoreKey> list = Collections.singletonList(oldStoreKey);
-      Map<StoreKey, StoreKey> storeKeyToStoreKey = storeKeyConverter.convert(list);
-      newStoreKey = storeKeyToStoreKey.get(oldStoreKey);
-    } else {
-      newStoreKey = cacheMap.get(oldStoreKey);
-    }
+    List<StoreKey> list = Collections.singletonList(oldStoreKey);
+    Map<StoreKey, StoreKey> storeKeyToStoreKey = storeKeyConverter.convert(list);
+    newStoreKey = storeKeyToStoreKey.get(oldStoreKey);
     if (newStoreKey == null) {
       return null;
     }

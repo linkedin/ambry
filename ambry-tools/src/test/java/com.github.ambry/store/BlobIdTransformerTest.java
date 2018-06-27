@@ -23,17 +23,19 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatBlobV1InputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 
-
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Test;
@@ -52,18 +54,28 @@ public class BlobIdTransformerTest {
 
   private final BlobIdTransformer transformer;
 
-  private final List<BlobIdStringPair> blobIdStringPairList;
+  private final List<Pair> pairList;
 
-  private final MockStoreKeyConverter mockStoreKeyConverter;
+  private final MockStoreKeyConverterFactory factory;
 
   private static final int BLOB_STREAM_SIZE = 128;
   private static final int BLOB_ENCRYPTION_KEY_SIZE = 32;
   private static final int USER_META_DATA_SIZE = 64;
-  public static final BlobIdStringPair BLOB_ID_PAIR_VERSION_1_CONVERTED = new BlobIdStringPair("AAEAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ", "AAMB_wE5AAIAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ");
-  public static final BlobIdStringPair BLOB_ID_PAIR_VERSION_2_CONVERTED = new BlobIdStringPair("AAIAAQB8AAIAAQAAAAAAAAAbAAAAJDRiYTE0YzFkLTFjNmUtNDYyNC04ZDcyLTU3ZDQzZjgzOWM4OQ", "AAMBAQB8AAIAAQAAAAAAAAAbAAAAJDRiYTE0YzFkLTFjNmUtNDYyNC04ZDcyLTU3ZDQzZjgzOWM4OQ");
-  public static final BlobIdStringPair BLOB_ID_PAIR_VERSION_3_CONVERTED = new BlobIdStringPair("AAMAAgCgAAMAAQAAAAAAAACEAAAAJDYwMmQ0ZGQxLTQ5NDUtNDg0YS05MmQwLTI5YjVkM2ZlOWM4OQ", "AAMBAgCgAAIAAQAAAAAAAACEAAAAJDYwMmQ0ZGQxLTQ5NDUtNDg0YS05MmQwLTI5YjVkM2ZlOWM4OQ");
-  public static final String VERSION_1_UNCONVERTED = "AAEAAQAAAAAAAABZAAAAJGYwMjRiYzIyLTA4NDMtNGNjMC1iMzNiLTUyOGZmZTA4NWM4OQ";
-  public static final String VERSION_3_UNCONVERTED = "AAMAAAAAAAAAAAAAAAAAAAAAAAAAJDUyYTk2OWIyLTA3YWMtNDBhMC05ZmY2LTUxY2ZkZjY4NWM4OQ";
+  public static final Pair<String, String> BLOB_ID_PAIR_VERSION_1_CONVERTED =
+      new Pair<>("AAEAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ",
+          "AAMB_wE5AAIAAQAAAAAAAAAhAAAAJDkwNTUwOTJhLTc3ZTAtNDI4NC1iY2IxLTc2MDZlYTAzNWM4OQ");
+  public static final Pair<String, String> BLOB_ID_PAIR_VERSION_2_CONVERTED =
+      new Pair<>("AAIAAQB8AAIAAQAAAAAAAAAbAAAAJDRiYTE0YzFkLTFjNmUtNDYyNC04ZDcyLTU3ZDQzZjgzOWM4OQ",
+          "AAMBAQB8AAIAAQAAAAAAAAAbAAAAJDRiYTE0YzFkLTFjNmUtNDYyNC04ZDcyLTU3ZDQzZjgzOWM4OQ");
+  public static final Pair<String, String> BLOB_ID_PAIR_VERSION_3_CONVERTED =
+      new Pair<>("AAMAAgCgAAMAAQAAAAAAAACEAAAAJDYwMmQ0ZGQxLTQ5NDUtNDg0YS05MmQwLTI5YjVkM2ZlOWM4OQ",
+          "AAMBAgCgAAIAAQAAAAAAAACEAAAAJDYwMmQ0ZGQxLTQ5NDUtNDg0YS05MmQwLTI5YjVkM2ZlOWM4OQ");
+  public static final Pair<String, String> BLOB_ID_PAIR_VERSION_3_NULL =
+      new Pair<>("AAMAAAAAAAAAAAAAAAAAAAAAAAAAJDNlM2U1YzY0LTgxMWItNDVlZi04N2QzLTgyZmZmOWRmNTIxOA", null);
+  public static final String VERSION_1_UNCONVERTED =
+      "AAEAAQAAAAAAAABZAAAAJGYwMjRiYzIyLTA4NDMtNGNjMC1iMzNiLTUyOGZmZTA4NWM4OQ";
+  public static final String VERSION_3_UNCONVERTED =
+      "AAMAAAAAAAAAAAAAAAAAAAAAAAAAJDUyYTk2OWIyLTA3YWMtNDBhMC05ZmY2LTUxY2ZkZjY4NWM4OQ";
 
   private static final Class[] VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS =
       new Class[]{PutMessageFormatInputStream.class, PutMessageFormatBlobV1InputStream.class};
@@ -73,11 +85,14 @@ public class BlobIdTransformerTest {
    * @throws IOException
    */
   public BlobIdTransformerTest() throws IOException {
-    BlobIdStringPair[] blobIdStringPairs = new BlobIdStringPair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED};
-    mockStoreKeyConverter = createAndSetupMockStoreKeyConverter(blobIdStringPairs);
-    transformer = new BlobIdTransformer(mockStoreKeyConverter, blobIdFactory, null);
-    blobIdStringPairList = new ArrayList<>(Arrays.asList(blobIdStringPairs));
-    blobIdStringPairList.add(new BlobIdStringPair(VERSION_3_UNCONVERTED, null));
+    Pair<String, String>[] pairs =
+        new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED, BLOB_ID_PAIR_VERSION_3_NULL};
+    factory = new MockStoreKeyConverterFactory(null, null);
+    factory.setReturnInputIfAbsent(true);
+    StoreKeyConverter storeKeyConverter = createAndSetupMockStoreKeyConverter(factory, pairs);
+    transformer = new BlobIdTransformer(storeKeyConverter, blobIdFactory);
+    pairList = new ArrayList<>(Arrays.asList(pairs));
+    pairList.add(new Pair<>(VERSION_3_UNCONVERTED, VERSION_3_UNCONVERTED));
   }
 
   /**
@@ -86,9 +101,9 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testBasicOperation() throws Exception {
-    for (BlobIdStringPair blobIdStringPair : blobIdStringPairList) {
+    for (Pair pair : pairList) {
       for (Class clazz : VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS) {
-        InputAndExpected inputAndExpected = new InputAndExpected(blobIdStringPair, clazz);
+        InputAndExpected inputAndExpected = new InputAndExpected(pair, clazz);
         StoreCopier.Message output = transformer.transform(inputAndExpected.getInput());
         verifyOutput(output, inputAndExpected.getExpected());
       }
@@ -101,7 +116,7 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testNonPutTransform() throws Exception {
-    InputAndExpected inputAndExpected = new InputAndExpected(blobIdStringPairList.get(0), DeleteMessageFormatInputStream.class);
+    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), DeleteMessageFormatInputStream.class);
     try {
       transformer.transform(inputAndExpected.getInput());
       fail("Did not throw IllegalArgumentException");
@@ -116,7 +131,7 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testGarbageInputStream() throws Exception {
-    InputAndExpected inputAndExpected = new InputAndExpected(blobIdStringPairList.get(0), null);
+    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), null);
     try {
       transformer.transform(inputAndExpected.getInput());
       fail("Did not throw MessageFormatException");
@@ -132,21 +147,21 @@ public class BlobIdTransformerTest {
   @Test
   public void testBrokenStoreKeyConverter() throws Exception {
     InputAndExpected inputAndExpected =
-        new InputAndExpected(blobIdStringPairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
+        new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
     StoreCopier.Message output = transformer.transform(inputAndExpected.getInput());
     verifyOutput(output, inputAndExpected.getExpected());
 
-    mockStoreKeyConverter.setThrowException(true);
-    inputAndExpected = new InputAndExpected(blobIdStringPairList.get(1), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
+    factory.setException(new BlobIdTransformerTestException());
+    inputAndExpected = new InputAndExpected(pairList.get(1), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
     try {
       transformer.transform(inputAndExpected.getInput());
       fail("Did not throw MockStoreKeyConverterException");
-    } catch (MockStoreKeyConverter.MockStoreKeyConverterException e) {
+    } catch (BlobIdTransformerTestException e) {
       //exception expected
     }
 
-    mockStoreKeyConverter.setThrowException(false);
-    inputAndExpected = new InputAndExpected(blobIdStringPairList.get(2), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
+    factory.setException(null);
+    inputAndExpected = new InputAndExpected(pairList.get(2), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
     output = transformer.transform(inputAndExpected.getInput());
     verifyOutput(output, inputAndExpected.getExpected());
   }
@@ -157,7 +172,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testNullStoreKeyConverter() throws IOException {
     try {
-      new BlobIdTransformer(null, blobIdFactory, null);
+      new BlobIdTransformer(null, blobIdFactory);
       fail("Did not throw NullPointerException");
     } catch (NullPointerException e) {
       //expected
@@ -170,7 +185,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testNullStoreKeyFactory() throws IOException {
     try {
-      new BlobIdTransformer(mockStoreKeyConverter, null, null);
+      new BlobIdTransformer(factory.getStoreKeyConverter(), null);
       fail("Did not throw NullPointerException");
     } catch (NullPointerException e) {
       //expected
@@ -197,8 +212,7 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testNullComponentsTransformInput() throws Exception {
-    MessageInfo messageInfo =
-        new MessageInfo(createBlobId(VERSION_1_UNCONVERTED), 123, (short) 123, (short) 123, 0L);
+    MessageInfo messageInfo = new MessageInfo(createBlobId(VERSION_1_UNCONVERTED), 123, (short) 123, (short) 123, 0L);
     InputStream inputStream = null;
     //null inputStream
     StoreCopier.Message message = new StoreCopier.Message(messageInfo, inputStream);
@@ -219,19 +233,20 @@ public class BlobIdTransformerTest {
   }
 
   private BlobId createBlobId(String hexBlobId) throws IOException {
+    if (hexBlobId == null) {
+      return null;
+    }
     return new BlobId(hexBlobId, clusterMap);
   }
 
-  private void putRowInStoreKeyConverter(MockStoreKeyConverter storeKeyConverter, BlobIdStringPair blobIdStringPair) throws IOException {
-    storeKeyConverter.put(createBlobId(blobIdStringPair.getUnconverted()), createBlobId(blobIdStringPair.getConverted()));
-  }
-
-  private MockStoreKeyConverter createAndSetupMockStoreKeyConverter(BlobIdStringPair[] blobIdStringPairs) throws IOException {
-    MockStoreKeyConverter storeKeyConverter = new MockStoreKeyConverter();
-    for (BlobIdStringPair blobIdStringPair : blobIdStringPairs) {
-      putRowInStoreKeyConverter(storeKeyConverter, blobIdStringPair);
+  private StoreKeyConverter createAndSetupMockStoreKeyConverter(MockStoreKeyConverterFactory factory,
+      Pair<String, String>[] pairs) throws IOException {
+    Map<StoreKey, StoreKey> map = new HashMap<>();
+    for (Pair<String, String> pair : pairs) {
+      map.put(createBlobId(pair.getFirst()), createBlobId(pair.getSecond()));
     }
-    return storeKeyConverter;
+    factory.setConversionMap(map);
+    return factory.getStoreKeyConverter();
   }
 
   private String notEqualPrint(int loc, byte[] actual, byte[] expect) {
@@ -248,34 +263,14 @@ public class BlobIdTransformerTest {
     return sb.toString();
   }
 
-  private void assertInputStreamEqual(InputStream actual, InputStream expect) throws IOException {
-    byte[] actualBuf = inputStreamToByteArray(actual);
-    byte[] expectBuf = inputStreamToByteArray(expect);
-    assertTrue("Lengths are not equal, actual: " + actualBuf.length + ", expect: " + expectBuf.length,
-        actualBuf.length == expectBuf.length);
-    for (int i = 0; i < actualBuf.length; i++) {
-      assertEquals(notEqualPrint(i, actualBuf, expectBuf), expectBuf[i], actualBuf[i]);
-    }
-  }
-
-  private byte[] inputStreamToByteArray(InputStream is) throws IOException {
-    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-    int nRead;
-    byte[] data = new byte[16384];
-
-    //should be '!= -1' instead of '> 0', but MessageFormatInputStream
-    //currently doesn't return -1 with the read(byte[], int, int) method
-    while ((nRead = is.read(data, 0, data.length)) > 0) {
-      buffer.write(data, 0, nRead);
-    }
-    buffer.flush();
-    return buffer.toByteArray();
-  }
-
   private void verifyOutput(StoreCopier.Message output, StoreCopier.Message expected) throws IOException {
-    assertTrue("MessageInfos not equal, Output: " + output.getMessageInfo() + " Expected: " + expected.getMessageInfo(),
-        output.getMessageInfo().equals(expected.getMessageInfo()));
-    assertInputStreamEqual(output.getStream(), expected.getStream());
+    if (expected == null) {
+      assertNull("output should be null", output);
+    } else {
+      assertEquals("MessageInfos not equal", expected.getMessageInfo(), output.getMessageInfo());
+      TestUtils.assertInputStreamEqual(output.getStream(), expected.getStream(),
+          (int) expected.getMessageInfo().getSize(), true);
+    }
   }
 
   /**
@@ -289,15 +284,15 @@ public class BlobIdTransformerTest {
     private final long randomStaticSeed = new Random().nextLong();
     private Random buildRandom = new Random(randomStaticSeed);
 
-    public InputAndExpected(BlobIdStringPair blobIdStringPair, Class clazz) throws IOException, MessageFormatException {
+    public InputAndExpected(Pair<String, String> pair, Class clazz) throws IOException, MessageFormatException {
       boolean hasEncryption = clazz == PutMessageFormatInputStream.class ? true : false;
-      input = buildMessage(blobIdStringPair.getUnconverted(), clazz, hasEncryption);
-      if (blobIdStringPair.getConverted() == null) {
+      input = buildMessage(pair.getFirst(), clazz, hasEncryption);
+      if (pair.getSecond() == null) {
         //can't just assign 'input' since StoreCopier.Message has an
         //InputStream that is modified when read
-        expected = buildMessage(blobIdStringPair.getUnconverted(), PutMessageFormatInputStream.class, hasEncryption);
+        expected = null;//buildMessage(pair.getFirst(), PutMessageFormatInputStream.class, hasEncryption);
       } else {
-        expected = buildMessage(blobIdStringPair.getConverted(), PutMessageFormatInputStream.class, hasEncryption);
+        expected = buildMessage(pair.getSecond(), PutMessageFormatInputStream.class, hasEncryption);
       }
     }
 
@@ -367,22 +362,6 @@ public class BlobIdTransformerTest {
     }
   }
 
-  public static class BlobIdStringPair {
-    private final String unconverted;
-    private final String converted;
-
-    public BlobIdStringPair(String unconverted, String converted) {
-      this.unconverted = unconverted;
-      this.converted = converted;
-    }
-
-    public String getUnconverted() {
-      return this.unconverted;
-    }
-
-    public String getConverted() {
-      return this.converted;
-    }
-
+  private class BlobIdTransformerTestException extends Exception {
   }
 }

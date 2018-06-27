@@ -26,6 +26,10 @@ import java.nio.ByteBuffer;
 import java.util.List;
 
 
+/**
+ * Mock clusterMap used when one wants the inputStream input for getPartitionIdFromStream
+ * to be read and have constructed a MockPartitionId from the input
+ */
 public class MockReadingClusterMap implements ClusterMap {
   private boolean throwException = false;
 
@@ -45,7 +49,7 @@ public class MockReadingClusterMap implements ClusterMap {
       ByteBuffer bb = ByteBuffer.wrap(bytes);
       bb.getShort();
       long num = bb.getLong();
-      return new MockPartitionId(num, (String)null);
+      return new MockPartitionId(num, (String) null);
     }
   }
 

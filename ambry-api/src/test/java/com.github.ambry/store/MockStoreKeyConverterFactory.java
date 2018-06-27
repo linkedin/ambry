@@ -27,6 +27,7 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   private final StoreKeyConverter storeKeyConverter = new MockStoreKeyConverter();
   private Map<StoreKey, StoreKey> conversionMap;
   private Exception exception;
+  private boolean returnKeyIfAbsent;
 
   public MockStoreKeyConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
   }
@@ -59,6 +60,10 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     this.exception = e;
   }
 
+  public void setReturnInputIfAbsent(boolean bool) {
+    returnKeyIfAbsent = bool;
+  }
+
   /**
    * A mock implementation of {@link StoreKeyConverter}.
    */
@@ -70,7 +75,13 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
       }
       Map<StoreKey, StoreKey> output = new HashMap<>();
       if (input != null) {
-        input.forEach((storeKey) -> output.put(storeKey, conversionMap.get(storeKey)));
+        input.forEach((storeKey) -> {
+          if (returnKeyIfAbsent && !conversionMap.containsKey(storeKey)) {
+            output.put(storeKey, storeKey);
+          } else {
+            output.put(storeKey, conversionMap.get(storeKey));
+          }
+        });
       }
       return output;
     }
