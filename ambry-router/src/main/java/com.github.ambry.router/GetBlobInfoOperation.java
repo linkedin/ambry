@@ -298,7 +298,8 @@ class GetBlobInfoOperation extends GetOperation {
                 getRequestInfo.replicaId.getDataNodeId(), getError, getResponse.getCorrelationId());
           }
           processServerError(getError);
-          if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired) {
+          if (getError == ServerErrorCode.Blob_Deleted || getError == ServerErrorCode.Blob_Expired
+              || getError == ServerErrorCode.Blob_Authorization_Failure) {
             // this is a successful response and one that completes the operation regardless of whether the
             // success target has been reached or not.
             operationCompleted = true;
@@ -382,6 +383,11 @@ class GetBlobInfoOperation extends GetOperation {
    */
   private void processServerError(ServerErrorCode errorCode) {
     switch (errorCode) {
+      case Blob_Authorization_Failure:
+        logger.trace("Requested blob authorization failed");
+        setOperationException(
+            new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobAuthorizationFailure));
+        break;
       case Blob_Deleted:
         logger.trace("Requested blob was deleted");
         setOperationException(new RouterException("Server returned: " + errorCode, RouterErrorCode.BlobDeleted));

@@ -77,6 +77,7 @@ class RouterUtils {
         case BadInputChannel:
         case BlobDeleted:
         case BlobExpired:
+        case BlobAuthorizationFailure:
         case BlobDoesNotExist:
         case RangeNotSatisfiable:
         case ChannelClosed:

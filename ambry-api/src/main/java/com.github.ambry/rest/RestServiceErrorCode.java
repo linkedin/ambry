@@ -180,6 +180,8 @@ public enum RestServiceErrorCode {
       case BlobDeleted:
       case BlobExpired:
         return Deleted;
+      case BlobAuthorizationFailure:
+        return AccessDenied;
       case BlobDoesNotExist:
         return NotFound;
       case BlobUpdateNotAllowed:

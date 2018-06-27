@@ -214,20 +214,22 @@ abstract class GetOperation {
    */
   private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
-      case BlobDeleted:
+      case BlobAuthorizationFailure:
         return 1;
-      case BlobExpired:
+      case BlobDeleted:
         return 2;
-      case RangeNotSatisfiable:
+      case BlobExpired:
         return 3;
-      case AmbryUnavailable:
+      case RangeNotSatisfiable:
         return 4;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 5;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 6;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 7;
+      case BlobDoesNotExist:
+        return 8;
       default:
         return Integer.MIN_VALUE;
     }

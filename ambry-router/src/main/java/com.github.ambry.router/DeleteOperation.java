@@ -199,6 +199,9 @@ class DeleteOperation {
         } else {
           // The status of operation tracker will be updated within the processServerError method.
           processServerError(replica, deleteResponse.getError(), deleteResponse.getCorrelationId());
+          if (deleteResponse.getError() == ServerErrorCode.Blob_Authorization_Failure) {
+            operationCompleted = true;
+          }
         }
       }
     }
@@ -257,6 +260,9 @@ class DeleteOperation {
           routerMetrics.crossColoSuccessCount.inc();
         }
         break;
+      case Blob_Authorization_Failure:
+        updateOperationState(replica, RouterErrorCode.BlobAuthorizationFailure);
+        break;
       case Blob_Expired:
         updateOperationState(replica, RouterErrorCode.BlobExpired);
         break;
@@ -308,7 +314,8 @@ class DeleteOperation {
    * Completes the {@code DeleteOperation} if it is done.
    */
   private void checkAndMaybeComplete() {
-    if (operationTracker.isDone()) {
+    // operationCompleted is true if Blob_Authorization_Failure was received.
+    if (operationTracker.isDone() || operationCompleted == true) {
       if (!operationTracker.hasSucceeded()) {
         setOperationException(
             new RouterException("The DeleteOperation could not be completed.", resolvedRouterErrorCode));
@@ -326,16 +333,18 @@ class DeleteOperation {
    */
   private Integer getPrecedenceLevel(RouterErrorCode routerErrorCode) {
     switch (routerErrorCode) {
-      case BlobExpired:
+      case BlobAuthorizationFailure:
         return 1;
-      case AmbryUnavailable:
+      case BlobExpired:
         return 2;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 3;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 4;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 5;
+      case BlobDoesNotExist:
+        return 6;
       default:
         return Integer.MIN_VALUE;
     }

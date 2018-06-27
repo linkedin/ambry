@@ -198,6 +198,42 @@ public class DeleteManagerTest {
   }
 
   /**
+   * Test the case when one server store responds with {@code Blob_Authorization_Failure}, and other servers
+   * respond with {@code Blob_Not_Found}. The delete operation should be able to resolve the
+   * router error code as {@code Blob_Authorization_Failure}. The order of received responses is the same as
+   * defined in {@code serverErrorCodes}.
+   */
+  @Test
+  public void testBlobAuthorizationFailure() throws Exception {
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
+    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
+    testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
+        deleteErrorCodeChecker);
+  }
+
+  /**
+   * Test the case where servers return different {@link ServerErrorCode}, and the {@link DeleteOperation}
+   * is able to resolve and conclude the correct {@link RouterErrorCode}. The delete operation should be able
+   * to resolve the router error code as {@code Blob_Authorization_Failure}. The order of received responses
+   * is the same as defined in {@code serverErrorCodes}.
+   */
+  @Test
+  public void testBlobAuthorizationFailureOverrideAll() throws Exception {
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+
+    Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
+    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[2] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
+    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
+    testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
+        deleteErrorCodeChecker);
+  }
+
+  /**
    * Test if the {@link RouterErrorCode} is as expected for different {@link ServerErrorCode}.
    */
   @Test
@@ -206,6 +242,7 @@ public class DeleteManagerTest {
     map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
     map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
+    map.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
       if (serverErrorCode != ServerErrorCode.No_Error && serverErrorCode != ServerErrorCode.Blob_Deleted
           && !map.containsKey(serverErrorCode)) {
@@ -228,7 +265,7 @@ public class DeleteManagerTest {
   public void testBlobNotFoundWithLastResponseNotBlobNotFound() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[3] = ServerErrorCode.IO_Error;
+    serverErrorCodes[8] = ServerErrorCode.IO_Error;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
         deleteErrorCodeChecker);
   }

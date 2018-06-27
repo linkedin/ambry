@@ -151,11 +151,22 @@ class RouterTestHelpers {
     if (serverErrorCodesInOrder.length > replicas.size()) {
       throw new IllegalArgumentException("More server error codes provided than replicas in partition");
     }
-    int i = 0;
-    for (ReplicaId replica : partition.getReplicaIds()) {
-      DataNodeId node = replica.getDataNodeId();
+    // Do serverErrorCodes assignment based on Operation Tracker logic so that server error can return in the order of
+    // serverErrorCodesInOrder.
+    int numOfNodesEachDatacenter = 3;
+    List<ServerErrorCode> serverErrorInLocalDC =
+        Arrays.asList(serverErrorCodesInOrder).subList(0, numOfNodesEachDatacenter);
+    List<ServerErrorCode> serverErrorInOtherDCs =
+        Arrays.asList(serverErrorCodesInOrder).subList(numOfNodesEachDatacenter, serverErrorCodesInOrder.length);
+    Collections.reverse(serverErrorInLocalDC);
+    Collections.reverse(serverErrorInOtherDCs);
+    List<ServerErrorCode> serverErrorCodesInOperationTrackerOrder = new ArrayList<>(serverErrorInLocalDC);
+    serverErrorCodesInOperationTrackerOrder.addAll(serverErrorInOtherDCs);
+
+    for (int i = 0; i < partition.getReplicaIds().size(); i++) {
+      DataNodeId node = partition.getReplicaIds().get(i).getDataNodeId();
       MockServer mockServer = serverLayout.getMockServer(node.getHostname(), node.getPort());
-      mockServer.setServerErrorForAllRequests(serverErrorCodesInOrder[i++]);
+      mockServer.setServerErrorForAllRequests(serverErrorCodesInOperationTrackerOrder.get(i));
     }
   }
 

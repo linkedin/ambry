@@ -404,22 +404,52 @@ public class GetBlobOperationTest {
   }
 
   /**
-   * Test the case with Blob_Not_Found errors from most servers, and Blob_Deleted at just one server. The latter
-   * should be the exception received for the operation.
+   * Test the case with Blob_Not_Found errors from most servers, and Blob_Deleted, Blob_Expired or
+   * Blob_Authorization_Failure at just one server. The latter should be the exception received for the operation.
    * @throws Exception
    */
   @Test
-  public void testErrorPrecedenceWithBlobDeletedAndExpiredCase() throws Exception {
+  public void testErrorPrecedenceWithSpecialCase() throws Exception {
     doPut();
     Map<ServerErrorCode, RouterErrorCode> serverErrorToRouterError = new HashMap<>();
     serverErrorToRouterError.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
     serverErrorToRouterError.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
+    serverErrorToRouterError.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (Map.Entry<ServerErrorCode, RouterErrorCode> entry : serverErrorToRouterError.entrySet()) {
       Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
       errorCounts.put(ServerErrorCode.Blob_Not_Found, replicasCount - 1);
       errorCounts.put(entry.getKey(), 1);
       testWithErrorCodes(errorCounts, mockServerLayout, entry.getValue(), getErrorCodeChecker);
     }
+  }
+
+  /**
+   * Test the case where servers return different {@link ServerErrorCode} or success, and the {@link GetBlobOperation}
+   * is able to resolve and conclude the correct {@link RouterErrorCode}. The get operation should be able
+   * to resolve the router error code as {@code Blob_Authorization_Failure}.
+   * @throws Exception
+   */
+  @Test
+  public void testAuthorizationFailureOverrideAll() throws Exception {
+    doPut();
+    ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
+    serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
+    serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
+    serverErrorCodes[2] = ServerErrorCode.IO_Error;
+    serverErrorCodes[3] = ServerErrorCode.Partition_Unknown;
+    serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
+    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
+    serverErrorCodes[6] = ServerErrorCode.Unknown_Error;
+    serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
+    serverErrorCodes[8] = ServerErrorCode.Blob_Authorization_Failure;
+    Map<ServerErrorCode, Integer> errorCounts = new HashMap<>();
+    for (int i = 0; i < 9; i++) {
+      if (!errorCounts.containsKey(serverErrorCodes[i])) {
+        errorCounts.put(serverErrorCodes[i], 0);
+      }
+      errorCounts.put(serverErrorCodes[i], errorCounts.get(serverErrorCodes[i]) + 1);
+    }
+    testWithErrorCodes(errorCounts, mockServerLayout, RouterErrorCode.BlobAuthorizationFailure, getErrorCodeChecker);
   }
 
   /**
@@ -513,6 +543,7 @@ public class GetBlobOperationTest {
     serverErrors.remove(ServerErrorCode.Blob_Deleted);
     serverErrors.remove(ServerErrorCode.Blob_Expired);
     serverErrors.remove(ServerErrorCode.No_Error);
+    serverErrors.remove(ServerErrorCode.Blob_Authorization_Failure);
     boolean goodServerMarked = false;
     for (MockServer mockServer : mockServers) {
       if (!goodServerMarked && mockServer.getDataCenter().equals(dcWherePutHappened)) {
