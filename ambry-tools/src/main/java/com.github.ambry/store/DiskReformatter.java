@@ -73,7 +73,7 @@ public class DiskReformatter {
   private static final Logger logger = LoggerFactory.getLogger(DiskReformatter.class);
 
   private final DataNodeId dataNodeId;
-  private final List<StoreCopier.Transformer> transformers;
+  private final List<Transformer> transformers;
   private final long fetchSizeInBytes;
   private final StoreConfig storeConfig;
   private final StoreKeyFactory storeKeyFactory;
@@ -163,7 +163,8 @@ public class DiskReformatter {
         Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
             config.partitionLayoutFilePath);
     try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
-      StoreKeyConverterFactory storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
+      StoreKeyConverterFactory storeKeyConverterFactory =
+          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
       DataNodeId dataNodeId = clusterMap.getDataNodeId(config.datanodeHostname, config.datanodePort);
       if (dataNodeId == null) {
@@ -201,15 +202,16 @@ public class DiskReformatter {
 
   /**
    * @param dataNodeId the {@link DataNodeId} on which {@code diskMountPath} exists.
-   * @param transformers the list of the {@link StoreCopier.Transformer} to use (in order).
+   * @param transformers the list of the {@link Transformer} to use (in order).
    * @param fetchSizeInBytes the size of each fetch from the source store during copy
    * @param storeConfig the config for the stores
    * @param storeKeyFactory the {@link StoreKeyFactory} to use.
    * @param clusterMap the {@link ClusterMap} to use get details of replicas and partitions.
    * @param time the {@link Time} instance to use.
    */
-  public DiskReformatter(DataNodeId dataNodeId, List<StoreCopier.Transformer> transformers, long fetchSizeInBytes,
-      StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time, StoreKeyConverter storeKeyConverter) {
+  public DiskReformatter(DataNodeId dataNodeId, List<Transformer> transformers, long fetchSizeInBytes,
+      StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Time time,
+      StoreKeyConverter storeKeyConverter) {
     this.dataNodeId = dataNodeId;
     this.transformers = transformers;
     this.fetchSizeInBytes = fetchSizeInBytes;

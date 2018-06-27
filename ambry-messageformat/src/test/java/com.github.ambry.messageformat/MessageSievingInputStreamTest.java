@@ -752,7 +752,7 @@ public class MessageSievingInputStreamTest {
         BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey1))
             + BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey3)) : 0;
 
-    Assert.assertTrue(sievedStream.hasInvalidMessages());
+    Assert.assertTrue(sievedStream.hasDeprecatedMessages());
     Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
         sievedStream.getSize());
 

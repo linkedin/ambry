@@ -16,10 +16,13 @@ package com.github.ambry.messageformat;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.TransformationOutput;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -27,6 +30,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +50,9 @@ public class MessageSievingInputStream extends InputStream {
   private final Logger logger;
   private ByteBuffer byteBuffer;
   private boolean hasInvalidMessages;
+  private boolean hasDeprecatedMessages;
   private List<MessageInfo> sievedMessageInfoList;
+  private final List<Transformer> transformers = new ArrayList<>();
 
   //metrics
   public final Histogram messageFormatValidationTime;
@@ -80,6 +86,7 @@ public class MessageSievingInputStream extends InputStream {
         MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingConvertedMessagesCount"));
     sievedStreamSize = 0;
     hasInvalidMessages = false;
+    hasDeprecatedMessages = false;
     sievedMessageInfoList = new ArrayList<>();
 
     // check for empty list
@@ -102,39 +109,24 @@ public class MessageSievingInputStream extends InputStream {
       } catch (Exception e) {
         throw new IOException("StoreKey conversion encountered an exception", e);
       }
+      transformers.add(new ValidatingKeyConvertingTransformer(storeKeyFactory, true, convertedMap));
+    } else {
+      transformers.add(new ValidatingKeyConvertingTransformer(storeKeyFactory, false, null));
     }
 
     int bytesRead = 0;
-    ByteArrayOutputStream sievedStream = new ByteArrayOutputStream(totalMessageListSize);
+    ByteArrayOutputStream sievedOutputStream = new ByteArrayOutputStream(totalMessageListSize);
     long startTime = SystemTime.getInstance().milliseconds();
     logger.trace("Starting to validate message stream ");
     for (MessageInfo msgInfo : messageInfoList) {
       int msgSize = (int) msgInfo.getSize();
-      byte[] msg = Utils.readBytesFromStream(inStream, msgSize);
+      Message msg = new Message(msgInfo, Utils.readBytesFromStream(inStream, msgSize));
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
-      StoreKey transformedKey =
-          storeKeyConverter != null ? convertedMap.get(msgInfo.getStoreKey()) : msgInfo.getStoreKey();
-      if (transformedKey != null) {
-        PutMessageFormatInputStream transformedStream =
-            validateAndTransform(msg, msgInfo, storeKeyFactory, transformedKey);
-        if (transformedStream != null) {
-          sievedMessageInfoList.add(
-              new MessageInfo(transformedKey, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
-                  msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),
-                  msgInfo.getOperationTimeMs()));
-          Utils.transferBytes(transformedStream, sievedStream, (int) transformedStream.getSize());
-          logger.trace("Original message length {}, transformed bytes read {}", msgSize,
-              (int) transformedStream.getSize());
-        } else {
-          logger.error("Error reading the message at " + bytesRead + " with messageInfo " + msgInfo
-              + " and hence skipping the message");
-          hasInvalidMessages = true;
-        }
-      } else {
-        logger.trace("Transformation is on, and the given message with id {} does not have a replacement. Discarding.",
-            msgInfo.getStoreKey());
-        messageSievingDeprecatedMessagesDiscardedCount.inc();
-        hasInvalidMessages = true;
+
+      try {
+        sieve(msg, sievedOutputStream, bytesRead);
+      } catch (Exception e) {
+        throw new IllegalStateException("Caught exception sieving messages", e);
       }
       bytesRead += msgSize;
     }
@@ -146,7 +138,7 @@ public class MessageSievingInputStream extends InputStream {
       logger.error("All messages are invalidated in this message stream ");
     }
     messageFormatBatchValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
-    byteBuffer = ByteBuffer.wrap(sievedStream.toByteArray());
+    byteBuffer = ByteBuffer.wrap(sievedOutputStream.toByteArray());
     this.sievedStreamSize = byteBuffer.remaining();
     logger.trace("Completed validation of message stream ");
   }
@@ -192,86 +184,150 @@ public class MessageSievingInputStream extends InputStream {
     return hasInvalidMessages;
   }
 
+  public boolean hasDeprecatedMessages() {
+    return hasDeprecatedMessages;
+  }
+
   public List<MessageInfo> getValidMessageInfoList() {
     return sievedMessageInfoList;
   }
 
   /**
-   * Validates and potentially transforms the given input stream consisting of message data. Blobs are validated for
+   * Validates and potentially transforms the given input stream consisting of message data. It does so using the list
+   * of {@link Transformer}s associated with this instance.
    * message corruption and acceptable formats.
-   * @param msg byte array containing the message that needs to be validated and possibly transformed.
-   * @param msgInfo the {@link MessageInfo} associated with the message.
-   * @param storeKeyFactory StoreKeyFactory used to get store key
-   * @param replacementKey the converted {@link StoreKey} to replace the one in msgInfo with. This can also be the same
-   *                       key as the original (if no transformation is required).
-   * @return {@link PutMessageFormatInputStream} a validated and possibly transformed message stream, if message is
-   *         valid and successfully transformed; null otherwise
-   * @throws IOException
+   * @param inMsg the original {@link Message} that needs to be validated and possibly transformed.
+   * @param sievedOutputStream the output {@link OutputStream}
+   * @param msgOffset the offset of the message in the stream.
+   * @throws Exception if an exception was encountered by any of the transformers.
    */
-  private PutMessageFormatInputStream validateAndTransform(byte[] msg, MessageInfo msgInfo,
-      StoreKeyFactory storeKeyFactory, StoreKey replacementKey) throws IOException {
-    PutMessageFormatInputStream transformedStream = null;
-    ByteBuffer encryptionKey;
-    BlobProperties props;
-    ByteBuffer metadata;
-    BlobData blobData;
-    long startTime = SystemTime.getInstance().milliseconds();
-    try {
-      // Read header
-      ByteBuffer headerVersion = ByteBuffer.wrap(msg, 0, Version_Field_Size_In_Bytes);
-      short version = headerVersion.getShort();
-      if (!isValidHeaderVersion(version)) {
-        throw new MessageFormatException("Header version not supported " + version,
-            MessageFormatErrorCodes.Data_Corrupt);
-      }
-      int headerSize = getHeaderSizeForVersion(version);
-      ByteBuffer headerBuffer = ByteBuffer.wrap(msg, 0, headerSize);
-      MessageHeader_Format header = getMessageHeader(version, headerBuffer);
-      ByteArrayInputStream msgStream = new ByteArrayInputStream(msg, headerSize, msg.length - headerSize);
-      StoreKey originalKey = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
-      if (header.isPutRecord()) {
-        encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(msgStream) : null;
-        props = deserializeBlobProperties(msgStream);
-        metadata = deserializeUserMetadata(msgStream);
-        blobData = deserializeBlob(msgStream);
-      } else {
-        throw new IllegalStateException("Message cannot be a deleted record ");
-      }
-      if (msgStream.available() != 0) {
-        logger.error("{} bytes remaining after parsing message, the size in message info is {}", msgStream.available(),
-            msg.length);
-      } else {
-        logger.trace("Message Successfully read");
-        logger.trace("Header - version {} Message Size {} BlobEncryptionKeyRecord {} BlobPropertiesRelativeOffset {}"
-                + " UserMetadataRelativeOffset {} DataRelativeOffset {} UpdateRecordRelativeOffset {} Crc {}",
-            header.getVersion(), header.getMessageSize(), header.getBlobEncryptionKeyRecordRelativeOffset(),
-            header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
-            header.getBlobRecordRelativeOffset(), header.getUpdateRecordRelativeOffset(), header.getCrc());
-        logger.trace(
-            "Original Id {} Replacement Id {} Encryption Key -size {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ",
-            originalKey.getID(), replacementKey.getID(), encryptionKey == null ? 0 : encryptionKey.capacity(),
-            props.getBlobSize(), metadata.capacity(), blobData.getSize());
-        if (msgInfo.getStoreKey().equals(originalKey)) {
-          if (!originalKey.equals(replacementKey)) {
-            logger.trace("Replacing original id {} with replacement id {}", originalKey.getID(),
-                replacementKey.getID());
-            messageSievingConvertedMessagesCount.inc();
-          }
-          transformedStream =
-              new PutMessageFormatInputStream(replacementKey, encryptionKey, props, metadata, blobData.getStream(),
-                  blobData.getSize(), blobData.getBlobType());
-        } else {
-          logger.error("StoreKey in log {} failed to match store key from Index {}", originalKey,
-              msgInfo.getStoreKey());
-        }
-      }
-    } catch (MessageFormatException e) {
-      logger.error("MessageFormat exception thrown for blob {} with exception {}", msgInfo.getStoreKey().getID(), e);
-      messageSievingCorruptMessagesDiscardedCount.inc();
-    } finally {
-      messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
+  private void sieve(Message inMsg, OutputStream sievedOutputStream, int msgOffset) throws Exception {
+    if (transformers.isEmpty()) {
+      return;
     }
-    return transformedStream;
+    Message msg = inMsg;
+    TransformationOutput output = null;
+    for (Transformer transformer : transformers) {
+      output = transformer.transform(msg);
+      if (output.getException() != null || output.getMsg() == null) {
+        break;
+      } else {
+        msg = output.getMsg();
+      }
+    }
+    if (output.getException() != null) {
+      logger.error("Error validating/transforming the message at {} with messageInfo {} and hence skipping the message",
+          msgOffset, inMsg.getMessageInfo());
+      hasInvalidMessages = true;
+      messageSievingCorruptMessagesDiscardedCount.inc();
+    } else if (output.getMsg() == null) {
+      logger.trace("Transformation is on, and the message with id {} does not have a replacement and was discarded.",
+          inMsg.getMessageInfo().getStoreKey());
+      hasDeprecatedMessages = true;
+      messageSievingDeprecatedMessagesDiscardedCount.inc();
+    } else {
+      MessageInfo tfmMsgInfo = output.getMsg().getMessageInfo();
+      byte[] tfmMsgBytes = output.getMsg().getBytes();
+      sievedMessageInfoList.add(tfmMsgInfo);
+      sievedOutputStream.write(tfmMsgBytes);
+      logger.trace("Original message length {}, transformed bytes read {}", inMsg.getMessageInfo().getSize(),
+          (int) tfmMsgInfo.getSize());
+    }
+  }
+
+  class ValidatingKeyConvertingTransformer implements Transformer {
+    private final StoreKeyFactory storeKeyFactory;
+    private final boolean conversionOn;
+    private final Map<StoreKey, StoreKey> conversionMap;
+
+    public ValidatingKeyConvertingTransformer(StoreKeyFactory storeKeyFactory, boolean conversionOn,
+        Map<StoreKey, StoreKey> conversionMap) {
+      this.storeKeyFactory = storeKeyFactory;
+      this.conversionOn = conversionOn;
+      this.conversionMap = conversionMap;
+    }
+
+    @Override
+    public TransformationOutput transform(Message message) throws Exception {
+      ByteBuffer encryptionKey;
+      BlobProperties props;
+      ByteBuffer metadata;
+      BlobData blobData;
+      MessageInfo msgInfo = message.getMessageInfo();
+      byte[] msg = message.getBytes();
+      TransformationOutput transformationOutput = null;
+      long startTime = SystemTime.getInstance().milliseconds();
+      try {
+        // Read header
+        ByteBuffer headerVersion = ByteBuffer.wrap(msg, 0, Version_Field_Size_In_Bytes);
+        short version = headerVersion.getShort();
+        if (!isValidHeaderVersion(version)) {
+          throw new MessageFormatException("Header version not supported " + version,
+              MessageFormatErrorCodes.Data_Corrupt);
+        }
+        int headerSize = getHeaderSizeForVersion(version);
+        ByteBuffer headerBuffer = ByteBuffer.wrap(msg, 0, headerSize);
+        MessageHeader_Format header = getMessageHeader(version, headerBuffer);
+        ByteArrayInputStream msgStream = new ByteArrayInputStream(msg, headerSize, msg.length - headerSize);
+        StoreKey originalKey = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
+        if (header.isPutRecord()) {
+          encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(msgStream) : null;
+          props = deserializeBlobProperties(msgStream);
+          metadata = deserializeUserMetadata(msgStream);
+          blobData = deserializeBlob(msgStream);
+        } else {
+          throw new IllegalStateException("Message cannot be a deleted record ");
+        }
+        if (msgStream.available() != 0) {
+          logger.error("{} bytes remaining after parsing message, the size in message info is {}",
+              msgStream.available(), msg.length);
+        } else {
+          logger.trace("Message Successfully read");
+          logger.trace("Header - version {} Message Size {} BlobEncryptionKeyRecord {} BlobPropertiesRelativeOffset {}"
+                  + " UserMetadataRelativeOffset {} DataRelativeOffset {} UpdateRecordRelativeOffset {} Crc {}",
+              header.getVersion(), header.getMessageSize(), header.getBlobEncryptionKeyRecordRelativeOffset(),
+              header.getBlobPropertiesRecordRelativeOffset(), header.getUserMetadataRecordRelativeOffset(),
+              header.getBlobRecordRelativeOffset(), header.getUpdateRecordRelativeOffset(), header.getCrc());
+          if (msgInfo.getStoreKey().equals(originalKey)) {
+            StoreKey newKey = conversionOn ? conversionMap.get(originalKey) : originalKey;
+            if (newKey == null) {
+              logger.trace("No mapping for the given key, transformed message will be null");
+              transformationOutput = new TransformationOutput(null, null);
+            } else {
+              MessageInfo transformedMsgInfo;
+              PutMessageFormatInputStream transformedStream =
+                  new PutMessageFormatInputStream(newKey, encryptionKey, props, metadata, blobData.getStream(),
+                      blobData.getSize(), blobData.getBlobType());
+              logger.trace(
+                  "Original Id {} Replacement Id {} Encryption Key -size {} Blob Properties - blobSize {} Metadata - size {} Blob - size {} ",
+                  originalKey.getID(), newKey.getID(), encryptionKey == null ? 0 : encryptionKey.capacity(),
+                  props.getBlobSize(), metadata.capacity(), blobData.getSize());
+              if (!originalKey.equals(newKey)) {
+                logger.trace("Replacing original id {} with replacement id {}", originalKey.getID(), newKey.getID());
+                messageSievingConvertedMessagesCount.inc();
+                transformedMsgInfo =
+                    new MessageInfo(newKey, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
+                        msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(),
+                        msgInfo.getContainerId(), msgInfo.getOperationTimeMs());
+              } else {
+                transformedMsgInfo = msgInfo;
+              }
+              byte[] transformedBytes = Utils.readBytesFromStream(transformedStream, (int) transformedStream.getSize());
+              transformationOutput = new TransformationOutput(null, new Message(transformedMsgInfo, transformedBytes));
+            }
+          } else {
+            throw new IllegalStateException(
+                "StoreKey in log " + originalKey + " failed to match store key from Index " + msgInfo.getStoreKey());
+          }
+        }
+      } catch (MessageFormatException e) {
+        logger.error("Exception thrown for blob {} with exception {}", msgInfo.getStoreKey().getID(), e);
+        transformationOutput = new TransformationOutput(e, null);
+      } finally {
+        messageFormatValidationTime.update(SystemTime.getInstance().milliseconds() - startTime);
+      }
+      return transformationOutput;
+    }
   }
 }
 
