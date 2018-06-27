@@ -184,7 +184,10 @@ public class MessageSievingInputStream extends InputStream {
     return hasInvalidMessages;
   }
 
-  public boolean hasDeprecatedMessages() {
+  /**
+   * @return Whether this stream had messages that were deprecated as part of the sieving.
+   */
+  boolean hasDeprecatedMessages() {
     return hasDeprecatedMessages;
   }
 
