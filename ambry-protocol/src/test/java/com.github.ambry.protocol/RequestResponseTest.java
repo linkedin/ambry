@@ -221,7 +221,8 @@ public class RequestResponseTest {
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM),
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, null);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     byte[] userMetadata = new byte[50];
     TestUtils.RANDOM.nextBytes(userMetadata);
     int blobKeyLength = TestUtils.RANDOM.nextInt(4096);
@@ -286,7 +287,8 @@ public class RequestResponseTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, null);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
     blobIdList.add(id1);
     PartitionRequestInfo partitionRequestInfo1 = new PartitionRequestInfo(new MockPartitionId(), blobIdList);
@@ -355,7 +357,8 @@ public class RequestResponseTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, null);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     short[] versions = new short[]{DeleteRequest.DELETE_REQUEST_VERSION_1, DeleteRequest.DELETE_REQUEST_VERSION_2};
     for (short version : versions) {
       long deletionTimeMs = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
@@ -402,7 +405,8 @@ public class RequestResponseTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, null);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
         new ReplicaMetadataRequestInfo(new MockPartitionId(), new MockFindToken(0, 1000), "localhost", "path");
@@ -590,7 +594,8 @@ public class RequestResponseTest {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobId id1 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, accountId, containerId,
-        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, null);
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     short[] versions = new short[]{TtlUpdateRequest.TTL_UPDATE_REQUEST_VERSION_1};
     for (short version : versions) {
       TtlUpdateRequest ttlUpdateRequest =

@@ -553,10 +553,10 @@ public class AmbryRequestsTest {
     for (int i = 0; i < 10; i++) {
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-          Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, null);
+          Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
       BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(),
-          partitionId, false, null);
+          partitionId, false, BlobId.BlobDataType.DATACHUNK);
       conversionMap.put(originalBlobId, convertedBlobId);
       validKeysInStore.add(convertedBlobId);
       blobIds.add(originalBlobId);
@@ -566,7 +566,7 @@ public class AmbryRequestsTest {
     // Check a valid key mapped to null
     BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, null);
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
     blobIds.add(originalBlobId);
     conversionMap.put(originalBlobId, null);
     validKeysInStore.add(originalBlobId);
@@ -575,7 +575,7 @@ public class AmbryRequestsTest {
     // Check a invalid key mapped to null
     originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, null);
+        Utils.getRandomShort(TestUtils.RANDOM), partitionId, false, BlobId.BlobDataType.DATACHUNK);
     blobIds.add(originalBlobId);
     conversionMap.put(originalBlobId, null);
     sendAndVerifyGetOriginalStoreKeys(blobIds, ServerErrorCode.Blob_Not_Found);
@@ -722,10 +722,10 @@ public class AmbryRequestsTest {
       String clientId = UtilsTest.getRandomString(10);
       BlobId originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
-          Utils.getRandomShort(TestUtils.RANDOM), id, false, null);
+          Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
       BlobId convertedBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.CRAFTED,
           ClusterMapUtils.UNKNOWN_DATACENTER_ID, originalBlobId.getAccountId(), originalBlobId.getContainerId(), id,
-          false, null);
+          false, BlobId.BlobDataType.DATACHUNK);
       conversionMap.put(originalBlobId, convertedBlobId);
       validKeysInStore.add(convertedBlobId);
       RequestOrResponse request;

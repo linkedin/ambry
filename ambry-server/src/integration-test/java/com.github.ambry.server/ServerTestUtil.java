@@ -125,15 +125,20 @@ public final class ServerTestUtil {
       List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false, null);
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false, null);
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false, null);
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId4 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false, null);
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId5 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false, null);
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
@@ -351,7 +356,7 @@ public final class ServerTestUtil {
       partition = (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), properties.getAccountId(), properties.getContainerId(), partition, false,
-          null));
+          BlobId.BlobDataType.DATACHUNK));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
@@ -1203,7 +1208,7 @@ public final class ServerTestUtil {
     byte[] data = new byte[3187];
     BlobProperties properties = new BlobProperties(3187, "serviceid1", accountId, containerId, false);
     BlobId blobId2 = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-        clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false, null);
+        clusterMap.getLocalDatacenterId(), accountId, containerId, partitionId, false, BlobId.BlobDataType.DATACHUNK);
     PutRequest putRequest2 =
         new PutRequest(1, "clientId2", blobId2, properties, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(data),
             properties.getBlobSize(), BlobType.DataBlob, null);
@@ -1311,7 +1316,7 @@ public final class ServerTestUtil {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, testEncryption));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false, null));
+            clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false, BlobId.BlobDataType.DATACHUNK));
         dataList.add(TestUtils.getRandomBytes(1000));
         if (testEncryption) {
           encryptionKeyList.add(TestUtils.getRandomBytes(128));
@@ -1544,7 +1549,7 @@ public final class ServerTestUtil {
           (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       ids.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), propertyList.get(0).getAccountId(), propertyList.get(0).getContainerId(),
-          mockPartitionId, false, null));
+          mockPartitionId, false, BlobId.BlobDataType.DATACHUNK));
       partitionRequestInfoList.clear();
       partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);

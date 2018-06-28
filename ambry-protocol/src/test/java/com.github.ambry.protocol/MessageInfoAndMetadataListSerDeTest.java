@@ -67,12 +67,13 @@ public class MessageInfoAndMetadataListSerDeTest {
     Long[] crcs = {null, 100L, Long.MIN_VALUE, Long.MAX_VALUE};
     StoreKey[] keys =
         {new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0,
-            accountIds[0], containerIds[0], partitionId, false, null), new BlobId(
+            accountIds[0], containerIds[0], partitionId, false, BlobId.BlobDataType.DATACHUNK), new BlobId(
             TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[1],
-            containerIds[1], partitionId, false, null), new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()),
-            BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2], partitionId, false, null), new BlobId(
+            containerIds[1], partitionId, false, BlobId.BlobDataType.DATACHUNK), new BlobId(TestUtils.getRandomElement(BlobId.getAllValidVersions()),
+            BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[2], containerIds[2], partitionId, false,
+            BlobId.BlobDataType.DATACHUNK), new BlobId(
             TestUtils.getRandomElement(BlobId.getAllValidVersions()), BlobId.BlobIdType.NATIVE, (byte) 0, accountIds[3],
-            containerIds[3], partitionId, false, null)};
+            containerIds[3], partitionId, false, BlobId.BlobDataType.DATACHUNK)};
     long[] blobSizes = {1024, 2048, 4096, 8192};
     long[] times = {SystemTime.getInstance().milliseconds(),
         SystemTime.getInstance().milliseconds() - 1,

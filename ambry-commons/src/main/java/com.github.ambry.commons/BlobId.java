@@ -224,6 +224,9 @@ public class BlobId extends StoreKey {
         this.accountId = accountId;
         this.containerId = containerId;
         this.isEncrypted = isEncrypted;
+        if (blobDataType == null) {
+          throw new IllegalArgumentException("blobDataType can't be null for id version " + BLOB_ID_V5);
+        }
         this.blobDataType = blobDataType;
         break;
       default:
@@ -429,9 +432,7 @@ public class BlobId extends StoreKey {
       case BLOB_ID_V5:
         flag = (byte) (type.ordinal() & BLOB_ID_TYPE_MASK);
         flag |= isEncrypted ? IS_ENCRYPTED_MASK : 0;
-        if (blobDataType != null) {
-          flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
-        }
+        flag |= (blobDataType.ordinal() << BLOB_DATA_TYPE_SHIFT);
         idBuf.put(flag);
         idBuf.put(datacenterId);
         idBuf.putShort(accountId);
