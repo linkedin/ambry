@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.commons.ValidatingTransformer;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -32,6 +33,7 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -272,6 +274,7 @@ public class ReplicationManager {
   private final Map<String, List<ReplicaThread>> replicaThreadPools;
   private final Map<String, Integer> numberOfReplicaThreads;
   private final StoreKeyConverter storeKeyConverter;
+  private final List<Transformer> transformers;
 
   private static final String replicaTokenFileName = "replicaTokens";
   private static final short Crc_Size = 8;
@@ -305,6 +308,8 @@ public class ReplicationManager {
       this.numberOfReplicaThreads = new HashMap<>();
       this.storeKeyConverter =
           storeKeyConverterFactory != null ? storeKeyConverterFactory.getStoreKeyConverter() : null;
+      // @todo: instantiate list of transformers via factory.
+      this.transformers = Collections.singletonList(new ValidatingTransformer(storeKeyFactory));
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
@@ -572,8 +577,7 @@ public class ReplicationManager {
         ReplicaThread replicaThread =
             new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
                 dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
-                replicationConfig.replicationTransformMessageStream, storeKeyConverter, metricRegistry,
-                replicatingOverSsl, datacenter, responseHandler);
+                storeKeyConverter, transformers, metricRegistry, replicatingOverSsl, datacenter, responseHandler);
         if (replicaThreadPools.containsKey(datacenter)) {
           replicaThreadPools.get(datacenter).add(replicaThread);
         } else {

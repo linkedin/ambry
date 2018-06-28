@@ -17,19 +17,19 @@ import java.io.InputStream;
 
 
 /**
- * Representation of a message in the store. Contains the {@link MessageInfo} and the {@link InputStream} of data.
+ * Representation of a message in the store. Contains the {@link MessageInfo} and the message bytes.
  */
 public class Message {
   private final MessageInfo messageInfo;
-  private final byte[] msgBytes;
+  private final InputStream msgStream;
 
   /**
    * @param messageInfo the {@link MessageInfo} for this message.
-   * @param msgBytes the byte array that represents the data of this message.
+   * @param msgStream the {@link InputStream} contains the data of this message.
    */
-  public Message(MessageInfo messageInfo, byte[] msgBytes) {
+  public Message(MessageInfo messageInfo, InputStream msgStream) {
     this.messageInfo = messageInfo;
-    this.msgBytes = msgBytes;
+    this.msgStream = msgStream;
   }
 
   /**
@@ -40,10 +40,10 @@ public class Message {
   }
 
   /**
-   * @return the byte array that represents the data of this message.
+   * @return the {@link InputStream} that contains the data of this message.
    */
-  public byte[] getBytes() {
-    return msgBytes;
+  public InputStream getStream() {
+    return msgStream;
   }
 }
 

@@ -23,9 +23,8 @@ public interface Transformer {
    * Transforms the input {@link Message} into an output {@link Message}.
    * @param message the input {@link Message} to change.
    * @return the output {@link TransformationOutput}.
-   * @throws Exception if transform encounters an exception when transforming a message
    */
-  TransformationOutput transform(Message message) throws Exception;
+  TransformationOutput transform(Message message);
 }
 
 

@@ -14,15 +14,20 @@
 package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.TransformationOutput;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -60,7 +65,7 @@ public class MessageSievingInputStreamTest {
   @Test
   public void testEmptyMsgInfoList() throws Exception {
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(null, new ArrayList<>(), new MockIdFactory(), null, new MetricRegistry());
+        new MessageSievingInputStream(null, Collections.emptyList(), Collections.emptyList(), new MetricRegistry());
     Assert.assertFalse(sievedStream.hasInvalidMessages());
     Assert.assertEquals(0, sievedStream.getSize());
     Assert.assertEquals(0, sievedStream.getValidMessageInfoList().size());
@@ -262,8 +267,10 @@ public class MessageSievingInputStreamTest {
       msgInfoList.add(msgInfo5);
     }
 
+    Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
+
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), storeKeyConverter,
+        new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
             new MetricRegistry());
 
     Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(Arrays.asList(key1, key2, key3));
@@ -450,8 +457,9 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
+    Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), storeKeyConverter,
+        new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
             new MetricRegistry());
 
     Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(Arrays.asList(key1, key2, key3));
@@ -594,13 +602,13 @@ public class MessageSievingInputStreamTest {
         msgInfoList.add(msgInfo2);
         msgInfoList.add(msgInfo3);
 
+        Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
         MessageSievingInputStream sievedStream =
-            new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), storeKeyConverter,
+            new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
                 new MetricRegistry());
-        Assert.fail("IllegalStateException should have been thrown due to delete record ");
+        Assert.fail("IOException should have been thrown due to delete record ");
       }
-    } catch (IllegalStateException e) {
-      Assert.assertTrue("IllegalStateException thrown as expected ", true);
+    } catch (IOException e) {
     }
     headerVersionToUse = Message_Header_Version_V1;
   }
@@ -731,8 +739,9 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
+    Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, new MockIdFactory(), storeKeyConverter,
+        new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
             new MetricRegistry());
 
     Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(Arrays.asList(key1, key2, key3));
@@ -838,5 +847,74 @@ class RandomKeyConverter implements StoreKeyConverter {
       }
     });
     return output;
+  }
+}
+
+class ValidatingKeyConvertingTransformer implements Transformer {
+  private final StoreKeyFactory storeKeyFactory;
+  private final StoreKeyConverter storeKeyConverter;
+
+  ValidatingKeyConvertingTransformer(StoreKeyFactory storeKeyFactory, StoreKeyConverter storeKeyConverter) {
+    this.storeKeyFactory = storeKeyFactory;
+    this.storeKeyConverter = storeKeyConverter;
+  }
+
+  @Override
+  public TransformationOutput transform(Message message) {
+    ByteBuffer encryptionKey;
+    BlobProperties props;
+    ByteBuffer metadata;
+    BlobData blobData;
+    MessageInfo msgInfo = message.getMessageInfo();
+    InputStream msgStream = message.getStream();
+    TransformationOutput transformationOutput;
+    try {
+      // Read header
+      ByteBuffer headerVersion = ByteBuffer.allocate(Version_Field_Size_In_Bytes);
+      msgStream.read(headerVersion.array());
+      short version = headerVersion.getShort();
+      if (!isValidHeaderVersion(version)) {
+        throw new MessageFormatException("Header version not supported " + version,
+            MessageFormatErrorCodes.Data_Corrupt);
+      }
+      int headerSize = getHeaderSizeForVersion(version);
+      ByteBuffer headerBuffer = ByteBuffer.allocate(headerSize);
+      headerBuffer.put(headerVersion.array());
+      msgStream.read(headerBuffer.array(), Version_Field_Size_In_Bytes, headerSize - Version_Field_Size_In_Bytes);
+      headerBuffer.rewind();
+      MessageHeader_Format header = getMessageHeader(version, headerBuffer);
+      StoreKey originalKey = storeKeyFactory.getStoreKey(new DataInputStream(msgStream));
+      if (header.isPutRecord()) {
+        encryptionKey = header.hasEncryptionKeyRecord() ? deserializeBlobEncryptionKey(msgStream) : null;
+        props = deserializeBlobProperties(msgStream);
+        metadata = deserializeUserMetadata(msgStream);
+        blobData = deserializeBlob(msgStream);
+      } else {
+        throw new IllegalArgumentException("Message cannot be a deleted record ");
+      }
+      if (msgInfo.getStoreKey().equals(originalKey)) {
+        StoreKey newKey = storeKeyConverter.convert(Collections.singletonList(originalKey)).get(originalKey);
+        if (newKey == null) {
+          System.out.println("No mapping for the given key, transformed message will be null");
+          transformationOutput = new TransformationOutput((Message) null);
+        } else {
+          MessageInfo transformedMsgInfo;
+          PutMessageFormatInputStream transformedStream =
+              new PutMessageFormatInputStream(newKey, encryptionKey, props, metadata, blobData.getStream(),
+                  blobData.getSize(), blobData.getBlobType());
+          transformedMsgInfo =
+              new MessageInfo(newKey, transformedStream.getSize(), msgInfo.isDeleted(), msgInfo.isTtlUpdated(),
+                  msgInfo.getExpirationTimeInMs(), msgInfo.getCrc(), msgInfo.getAccountId(), msgInfo.getContainerId(),
+                  msgInfo.getOperationTimeMs());
+          transformationOutput = new TransformationOutput(new Message(transformedMsgInfo, transformedStream));
+        }
+      } else {
+        throw new IllegalStateException(
+            "StoreKey in log " + originalKey + " failed to match store key from Index " + msgInfo.getStoreKey());
+      }
+    } catch (Exception e) {
+      transformationOutput = new TransformationOutput(e);
+    }
+    return transformationOutput;
   }
 }

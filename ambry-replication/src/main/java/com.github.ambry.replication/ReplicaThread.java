@@ -51,6 +51,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
@@ -92,9 +93,7 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final StoreKeyFactory storeKeyFactory;
-  private final boolean transformMessageStream;
-  private final StoreKeyConverter storeKeyConverter;
+  private final List<Transformer> transformers;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
   private final boolean replicatingFromRemoteColo;
@@ -109,7 +108,7 @@ class ReplicaThread implements Runnable {
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      boolean transformMessageStream, StoreKeyConverter storeKeyConverter, MetricRegistry metricRegistry,
+      StoreKeyConverter storeKeyConverter, List<Transformer> transformers, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
@@ -122,9 +121,7 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
-    this.storeKeyFactory = storeKeyFactory;
-    this.transformMessageStream = transformMessageStream;
-    this.storeKeyConverter = storeKeyConverter;
+    this.transformers = transformers;
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
@@ -689,8 +686,8 @@ class ReplicaThread implements Runnable {
 
               MessageFormatWriteSet writeset;
               MessageSievingInputStream validMessageDetectionInputStream =
-                  new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
-                      transformMessageStream ? storeKeyConverter : null, metricRegistry);
+                  new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, transformers,
+                      metricRegistry);
               if (validMessageDetectionInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 logger.error("Out of " + (messageInfoList.size()) + " messages, " + (messageInfoList.size()

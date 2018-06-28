@@ -21,14 +21,22 @@ public class TransformationOutput {
   Message msg;
 
   /**
-   * Instantiate an instance of this class
-   * @param exception the exception encountered with the associated transformation, if any.
-   * @param msg the resulting message after the transformation. Should be null if exception is non-null. May be null
-   *            even if exception is null, which signifies that the transformation resulted in the message being discarded.
+   * Instantiate an instance of this class with a message.
+   * @param msg the resulting message after the transformation. May be null, which signifies that the transformation
+   *            resulted in the message being discarded.
    */
-  public TransformationOutput(Exception exception, Message msg) {
-    this.exception = exception;
+  public TransformationOutput(Message msg) {
+    this.exception = null;
     this.msg = msg;
+  }
+
+  /**
+   * Instantiate an instance of this class with an exception.
+   * @param exception the exception encountered with the associated transformation, if any.
+   */
+  public TransformationOutput(Exception exception) {
+    this.exception = exception;
+    this.msg = null;
   }
 
   /**

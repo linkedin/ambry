@@ -219,7 +219,7 @@ public class StoreCopier implements Closeable {
             MessageReadSet readSet = storeInfo.getMessageReadSet();
             byte[] buf = new byte[size];
             readSet.writeTo(0, new ByteBufferChannel(ByteBuffer.wrap(buf)), 0, size);
-            Message message = new Message(messageInfo, buf);
+            Message message = new Message(messageInfo, new ByteArrayInputStream(buf));
             for (Transformer transformer : transformers) {
               TransformationOutput tfmOutput = transformer.transform(message);
               if (tfmOutput.getException() != null) {
@@ -235,8 +235,9 @@ public class StoreCopier implements Closeable {
               logger.trace("Dropping {} because the transformers did not return a message", messageInfo.getStoreKey());
               continue;
             }
-            MessageFormatWriteSet writeSet = new MessageFormatWriteSet(new ByteArrayInputStream(message.getBytes()),
-                Collections.singletonList(message.getMessageInfo()), false);
+            MessageFormatWriteSet writeSet =
+                new MessageFormatWriteSet(message.getStream(), Collections.singletonList(message.getMessageInfo()),
+                    false);
             tgt.put(writeSet);
             logger.trace("Copied {} as {}", messageInfo.getStoreKey(), message.getMessageInfo().getStoreKey());
           } else {

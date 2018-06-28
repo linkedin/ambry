@@ -61,7 +61,7 @@ public class MessageFormatRecord {
   private static final short Delete_Subrecord_Version_V1 = 1;
   private static final short Ttl_Update_Subrecord_Version_V1 = 1;
 
-  static boolean isValidHeaderVersion(short headerVersion) {
+  public static boolean isValidHeaderVersion(short headerVersion) {
     switch (headerVersion) {
       case Message_Header_Version_V1:
       case Message_Header_Version_V2:
@@ -77,7 +77,7 @@ public class MessageFormatRecord {
    * @return the size of the header for the given header version.
    * @throws MessageFormatException if the given header version is invalid.
    */
-  static int getHeaderSizeForVersion(short headerVersion) throws MessageFormatException {
+  public static int getHeaderSizeForVersion(short headerVersion) throws MessageFormatException {
     switch (headerVersion) {
       case Message_Header_Version_V1:
         return MessageHeader_Format_V1.getHeaderSize();
@@ -96,7 +96,7 @@ public class MessageFormatRecord {
    * @return a formatted header for the given version.
    * @throws MessageFormatException if the given header version is invalid.
    */
-  static MessageHeader_Format getMessageHeader(short headerVersion, ByteBuffer input) throws MessageFormatException {
+  public static MessageHeader_Format getMessageHeader(short headerVersion, ByteBuffer input) throws MessageFormatException {
     switch (headerVersion) {
       case Message_Header_Version_V1:
         return new MessageHeader_Format_V1(input);

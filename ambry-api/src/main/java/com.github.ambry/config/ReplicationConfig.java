@@ -68,10 +68,6 @@ public class ReplicationConfig {
   @Default("1048576")
   public final long replicationFetchSizeInBytes;
 
-  @Config("replication.transform.message.stream")
-  @Default("false")
-  public final boolean replicationTransformMessageStream;
-
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -88,6 +84,5 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
-    replicationTransformMessageStream = verifiableProperties.getBoolean("replication.transform.message.stream", false);
   }
 }

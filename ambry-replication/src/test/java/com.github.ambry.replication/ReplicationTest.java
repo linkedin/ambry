@@ -25,6 +25,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.commons.ValidatingTransformer;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -156,8 +157,9 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, storeKeyConverter, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
+            storeKeyFactory, storeKeyConverter, Collections.singletonList(new ValidatingTransformer(storeKeyFactory)),
+            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+            new ResponseHandler(clusterMap));
     Thread thread = Utils.newThread(replicaThread, false);
     thread.start();
 
@@ -236,8 +238,9 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, storeKeyConverter, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
+            storeKeyFactory, storeKeyConverter, Collections.singletonList(new ValidatingTransformer(storeKeyFactory)),
+            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+            new ResponseHandler(clusterMap));
 
     Map<PartitionId, Integer> progressTracker = new HashMap<>();
     PartitionId idToLeaveOut = clusterMap.getAllPartitionIds(null).get(0);
@@ -392,8 +395,9 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, storeKeyConverter, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
+            storeKeyFactory, storeKeyConverter, Collections.singletonList(new ValidatingTransformer(storeKeyFactory)),
+            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+            new ResponseHandler(clusterMap));
 
     Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
