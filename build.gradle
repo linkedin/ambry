@@ -234,6 +234,7 @@ project(':ambry-tools') {
         testCompile project(':ambry-store').sourceSets.test.output
         testCompile project(':ambry-utils').sourceSets.test.output
         testCompile project(':ambry-api').sourceSets.test.output
+        testCompile project(':ambry-messageformat').sourceSets.test.output
     }
 }
 

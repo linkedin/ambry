@@ -15,6 +15,7 @@ package com.github.ambry.utils;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -24,6 +25,8 @@ import java.util.function.Consumer;
 import org.I0Itec.zkclient.IDefaultNameSpace;
 import org.I0Itec.zkclient.ZkServer;
 import org.junit.Assert;
+
+import static org.junit.Assert.*;
 
 
 /**
@@ -138,6 +141,21 @@ public class TestUtils {
         throw e;
       }
     }
+  }
+
+  /**
+   * Asserts that {@code actual} and {@code expect} are equal. Checks that {@code actual}
+   * contains no extra data if {@code checkActualComplete} is {@code true}.
+   */
+  public static void assertInputStreamEqual(InputStream actual, InputStream expect, int size, boolean checkActualComplete) throws IOException {
+    byte[] actualBuf = Utils.readBytesFromStream(actual, size);
+    if (checkActualComplete) {
+      int finalRead = actual.read();
+      // some InputStream impls in Ambry return 0 instead of -1 when they end
+      assertTrue("Actual stream had more bytes than expected", finalRead == 0 || finalRead == -1);
+    }
+    byte[] expectBuf = Utils.readBytesFromStream(expect, size);
+    assertArrayEquals("Data from actual stream does not match expected", expectBuf, actualBuf);
   }
 
   /**
