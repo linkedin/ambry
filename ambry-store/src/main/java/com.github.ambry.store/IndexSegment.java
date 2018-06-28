@@ -38,10 +38,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.TimeUnit;
@@ -86,27 +87,28 @@ class IndexSegment {
   private final Offset startOffset;
   private final AtomicReference<Offset> endOffset;
   private final File indexFile;
-  private final ReadWriteLock rwLock;
-  private final AtomicBoolean mapped;
+  private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+  private final AtomicBoolean mapped = new AtomicBoolean(false);
+  private final AtomicBoolean immutable = new AtomicBoolean(false);
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final AtomicLong sizeWritten;
+  private final AtomicLong sizeWritten = new AtomicLong(0);
   private final StoreKeyFactory factory;
   private final File bloomFile;
   private final StoreMetrics metrics;
-  private final AtomicInteger numberOfItems;
+  private final AtomicInteger numberOfItems = new AtomicInteger(0);
   private final Time time;
 
   // an approximation of the last modified time.
-  private final AtomicLong lastModifiedTimeSec;
+  private final AtomicLong lastModifiedTimeSec = new AtomicLong(0);
   private MappedByteBuffer mmap = null;
-  private IFilter bloomFilter;
+  private IFilter bloomFilter = null;
   private int valueSize;
   private int persistedEntrySize;
   private short version;
   private Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
   private Pair<StoreKey, PersistentIndex.IndexEntryType> resetKey = null;
-  private ConcurrentSkipListMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
+  private NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
 
   /**
    * Creates a new segment
@@ -122,23 +124,19 @@ class IndexSegment {
    */
   IndexSegment(String dataDir, Offset startOffset, StoreKeyFactory factory, int entrySize, int valueSize,
       StoreConfig config, StoreMetrics metrics, Time time) {
-    this.rwLock = new ReentrantReadWriteLock();
     this.config = config;
     this.startOffset = startOffset;
-    this.endOffset = new AtomicReference<>(startOffset);
-    index = new ConcurrentSkipListMap<>();
-    mapped = new AtomicBoolean(false);
-    sizeWritten = new AtomicLong(0);
     this.factory = factory;
-    this.version = PersistentIndex.CURRENT_VERSION;
-    this.valueSize = valueSize;
-    this.persistedEntrySize = Math.max(config.storeIndexPersistedEntryMinBytes, entrySize);
-    bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
-        config.storeIndexBloomMaxFalsePositiveProbability);
-    numberOfItems = new AtomicInteger(0);
     this.metrics = metrics;
     this.time = time;
-    lastModifiedTimeSec = new AtomicLong(time.seconds());
+    this.valueSize = valueSize;
+    endOffset = new AtomicReference<>(startOffset);
+    index = new ConcurrentSkipListMap<>();
+    version = PersistentIndex.CURRENT_VERSION;
+    persistedEntrySize = Math.max(config.storeIndexPersistedEntryMinBytes, entrySize);
+    bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
+        config.storeIndexBloomMaxFalsePositiveProbability);
+    lastModifiedTimeSec.set(time.seconds());
     indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
     indexFile = new File(dataDir, indexSegmentFilenamePrefix + INDEX_SEGMENT_FILE_NAME_SUFFIX);
     bloomFile = new File(dataDir, indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
@@ -148,7 +146,7 @@ class IndexSegment {
    * Initializes an existing segment. Memory maps the segment or reads the segment into memory. Also reads the
    * persisted bloom filter from disk.
    * @param indexFile The index file that the segment needs to be initialized from
-   * @param shouldMap Indicates if the segment needs to be memory mapped
+   * @param immutable Indicates that the segment is immutable
    * @param factory The store key factory used to create new store keys
    * @param config The store config used to initialize the index segment
    * @param metrics The store metrics used to track metrics
@@ -156,24 +154,21 @@ class IndexSegment {
    * @param time the {@link Time} instance to use
    * @throws StoreException
    */
-  IndexSegment(File indexFile, boolean shouldMap, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
+  IndexSegment(File indexFile, boolean immutable, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
       Journal journal, Time time) throws StoreException {
     try {
       this.config = config;
+      this.indexFile = indexFile;
+      this.factory = factory;
+      this.metrics = metrics;
+      this.time = time;
+      this.immutable.set(immutable);
       startOffset = getIndexSegmentStartOffset(indexFile.getName());
       endOffset = new AtomicReference<>(startOffset);
       indexSegmentFilenamePrefix = generateIndexSegmentFilenamePrefix(startOffset);
-      this.indexFile = indexFile;
-      this.rwLock = new ReentrantReadWriteLock();
-      this.factory = factory;
-      this.time = time;
-      sizeWritten = new AtomicLong(0);
-      numberOfItems = new AtomicInteger(0);
-      mapped = new AtomicBoolean(false);
-      lastModifiedTimeSec = new AtomicLong(0);
-      if (shouldMap) {
-        map(false);
-        bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+      bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+      if (immutable && !config.storeKeepIndexInMemory) {
+        map();
         if (!bloomFile.exists()) {
           generateBloomFilterAndPersist();
         } else {
@@ -194,15 +189,16 @@ class IndexSegment {
           stream.close();
         }
       } else {
-        index = new ConcurrentSkipListMap<>();
-        bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
-            config.storeIndexBloomMaxFalsePositiveProbability);
-        bloomFile = new File(indexFile.getParent(), indexSegmentFilenamePrefix + BLOOM_FILE_NAME_SUFFIX);
+        index = immutable ? new TreeMap<>() : new ConcurrentSkipListMap<>();
+        if (!immutable) {
+          bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
+              config.storeIndexBloomMaxFalsePositiveProbability);
+        }
         try {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
-          if (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
-              || e.getErrorCode() == StoreErrorCodes.Index_Version_Error) {
+          if (!immutable && (e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
+              || e.getErrorCode() == StoreErrorCodes.Index_Version_Error)) {
             // we just log the error here and retain the index so far created.
             // subsequent recovery process will add the missed out entries
             logger.error("Index Segment : {} error while reading from index {}", indexFile.getAbsolutePath(),
@@ -211,13 +207,15 @@ class IndexSegment {
             throw e;
           }
         }
+        if (immutable) {
+          index = Collections.unmodifiableNavigableMap(index);
+        }
       }
     } catch (Exception e) {
       throw new StoreException(
           "Index Segment : " + indexFile.getAbsolutePath() + " error while loading index from file", e,
           StoreErrorCodes.Index_Creation_Failure);
     }
-    this.metrics = metrics;
   }
 
   /**
@@ -244,11 +242,11 @@ class IndexSegment {
   }
 
   /**
-   * Returns if this segment is mapped or not
-   * @return True, if the segment is readonly and mapped. False, otherwise
+   * Returns if this segment is immutable or not
+   * @return {@code true}, if the segment is sealed
    */
-  boolean isMapped() {
-    return mapped.get();
+  boolean isImmutable() {
+    return immutable.get();
   }
 
   /**
@@ -330,7 +328,7 @@ class IndexSegment {
       if (!mapped.get()) {
         ConcurrentSkipListSet<IndexValue> values = index.get(keyToFind);
         if (values != null) {
-          metrics.blobFoundInActiveSegmentCount.inc();
+          metrics.blobFoundInMemSegmentCount.inc();
           toReturn = values.clone();
         }
       } else {
@@ -489,8 +487,8 @@ class IndexSegment {
   void addEntry(IndexEntry entry, Offset fileEndOffset) throws StoreException {
     try {
       rwLock.readLock().lock();
-      if (mapped.get()) {
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to a mapped index ",
+      if (immutable.get()) {
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " cannot add to an immutable index ",
             StoreErrorCodes.Illegal_Index_Operation);
       }
       logger.trace("IndexSegment {} inserting key - {} value - offset {} size {} ttl {} "
@@ -545,8 +543,8 @@ class IndexSegment {
   long getSizeWritten() {
     try {
       rwLock.readLock().lock();
-      if (mapped.get()) {
-        throw new UnsupportedOperationException("Operation supported only on umapped indexes");
+      if (immutable.get()) {
+        throw new UnsupportedOperationException("Operation supported only on mutable indexes");
       }
       return sizeWritten.get();
     } finally {
@@ -561,8 +559,8 @@ class IndexSegment {
   int getNumberOfItems() {
     try {
       rwLock.readLock().lock();
-      if (mapped.get()) {
-        throw new UnsupportedOperationException("Operation supported only on unmapped indexes");
+      if (immutable.get()) {
+        throw new UnsupportedOperationException("Operation supported only on mutable indexes");
       }
       return numberOfItems.get();
     } finally {
@@ -637,6 +635,9 @@ class IndexSegment {
    * @throws StoreException
    */
   void writeIndexSegmentToFile(Offset safeEndPoint) throws IOException, StoreException {
+    if (immutable.get()) {
+      throw new StoreException("Cannot persist an immutable index segment", StoreErrorCodes.Illegal_Index_Operation);
+    }
     if (safeEndPoint.compareTo(startOffset) <= 0) {
       return;
     }
@@ -649,8 +650,7 @@ class IndexSegment {
       File temp = new File(getFile().getAbsolutePath() + ".tmp");
       FileOutputStream fileStream = new FileOutputStream(temp);
       CrcOutputStream crc = new CrcOutputStream(fileStream);
-      DataOutputStream writer = new DataOutputStream(crc);
-      try {
+      try (DataOutputStream writer = new DataOutputStream(crc)) {
         rwLock.readLock().lock();
 
         writer.writeShort(getVersion());
@@ -700,7 +700,6 @@ class IndexSegment {
             "IndexSegment : " + indexFile.getAbsolutePath() + " IO error while persisting index to disk", e,
             StoreErrorCodes.IOError);
       } finally {
-        writer.close();
         rwLock.readLock().unlock();
       }
       logger.trace("IndexSegment : {} completed writing index to file", indexFile.getAbsolutePath());
@@ -708,15 +707,28 @@ class IndexSegment {
   }
 
   /**
-   * Memory maps the segment of index. Optionally, it also persist the bloom filter to disk
-   * @param persistBloom True, if the bloom filter needs to be persisted. False otherwise.
-   * @throws IOException
-   * @throws StoreException
+   * Marks the segment as immutable. Optionally, it also persist the bloom filter to disk
+   * @throws IOException if there is any problem with I/O
+   * @throws StoreException if there are problems with the index
    */
-  void map(boolean persistBloom) throws IOException, StoreException {
-    RandomAccessFile raf = new RandomAccessFile(indexFile, "r");
+  void seal() throws IOException, StoreException {
+    if (immutable.compareAndSet(false, true)) {
+      if (!config.storeKeepIndexInMemory) {
+        map();
+      }
+      // we should be fine reading bloom filter here without synchronization as the index is read only
+      persistBloomFilter();
+    }
+  }
+
+  /**
+   * Memory maps the segment of index.
+   * @throws IOException if there is any problem reading or mapping files
+   * @throws StoreException if there are problems with the index
+   */
+  private void map() throws IOException, StoreException {
     rwLock.writeLock().lock();
-    try {
+    try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
       mmap = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
       mmap.position(0);
       version = mmap.getShort();
@@ -768,13 +780,7 @@ class IndexSegment {
       mapped.set(true);
       index = null;
     } finally {
-      raf.close();
       rwLock.writeLock().unlock();
-    }
-    // we should be fine reading bloom filter here without synchronization as the index is read only
-    // we only persist the bloom filter once during its entire lifetime
-    if (persistBloom) {
-      persistBloomFilter();
     }
   }
 
@@ -789,8 +795,7 @@ class IndexSegment {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
-    DataInputStream stream = new DataInputStream(crcStream);
-    try {
+    try (DataInputStream stream = new DataInputStream(crcStream)) {
       version = stream.readShort();
       switch (version) {
         case PersistentIndex.VERSION_0:
@@ -841,20 +846,22 @@ class IndexSegment {
           index.computeIfAbsent(key, k -> new ConcurrentSkipListSet<>()).add(blobValue);
           logger.trace("IndexSegment : {} putting key {} in index offset {} size {}", indexFile.getAbsolutePath(), key,
               blobValue.getOffset(), blobValue.getSize());
-          // regenerate the bloom filter for in memory indexes
-          if (!isPresent) {
-            bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+          if (!immutable.get()) {
+            // regenerate the bloom filter for mutable indexes
+            if (!isPresent) {
+              bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
+            }
+            // add to the journal
+            long oMsgOff = blobValue.getOriginalMessageOffset();
+            if (oMsgOff != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
+                && oMsgOff >= startOffset.getOffset()
+                && journal.getKeyAtOffset(new Offset(startOffset.getName(), oMsgOff)) == null) {
+              // we add an entry for the original message offset if it is within the same index segment and
+              // an entry is not already in the journal
+              journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
+            }
+            journal.addEntry(blobValue.getOffset(), key);
           }
-          // add to the journal
-          long oMsgOff = blobValue.getOriginalMessageOffset();
-          if (oMsgOff != IndexValue.UNKNOWN_ORIGINAL_MESSAGE_OFFSET && offsetInLogSegment != oMsgOff
-              && oMsgOff >= startOffset.getOffset()
-              && journal.getKeyAtOffset(new Offset(startOffset.getName(), oMsgOff)) == null) {
-            // we add an entry for the original message offset if it is within the same index segment and
-            // an entry is not already in the journal
-            journal.addEntry(new Offset(startOffset.getName(), blobValue.getOriginalMessageOffset()), key);
-          }
-          journal.addEntry(blobValue.getOffset(), key);
           // sizeWritten is only used for in-memory segments, and for those the padding does not come into picture.
           sizeWritten.addAndGet(key.sizeInBytes() + valueSize);
           numberOfItems.incrementAndGet();
@@ -878,15 +885,15 @@ class IndexSegment {
         valueSize = VALUE_SIZE_INVALID_VALUE;
         endOffset.set(startOffset);
         index.clear();
-        bloomFilter.clear();
+        if (!immutable.get()) {
+          bloomFilter.clear();
+        }
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
             StoreErrorCodes.Index_Creation_Failure);
       }
     } catch (IOException e) {
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " IO error while reading from file ",
           e, StoreErrorCodes.IOError);
-    } finally {
-      stream.close();
     }
   }
 
@@ -964,7 +971,7 @@ class IndexSegment {
         metrics.keyInFindEntriesAbsent.inc();
       }
     } else if (key == null || index.containsKey(key)) {
-      ConcurrentNavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = index;
+      NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = index;
       if (key != null) {
         tempMap = index.tailMap(key, true);
       }

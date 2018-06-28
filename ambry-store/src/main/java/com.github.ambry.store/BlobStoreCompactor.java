@@ -386,7 +386,7 @@ class BlobStoreCompactor {
     tgtLog.close();
     // persist the bloom of the "latest" index segment if it exists
     if (numSwapsUsed > 0) {
-      tgtIndex.getIndexSegments().lastEntry().getValue().map(true);
+      tgtIndex.getIndexSegments().lastEntry().getValue().seal();
     } else {
       // there were no valid entries copied, return any temp segments back to the pool
       logger.trace("Cleaning up temp segments in {} because no swap spaces were used", storeId);

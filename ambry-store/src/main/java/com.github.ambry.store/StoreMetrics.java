@@ -54,7 +54,7 @@ public class StoreMetrics {
   public final Timer hardDeleteTime;
   public final Counter putEntryDeletedInfoMismatchCount;
   public final Counter nonzeroMessageRecovery;
-  public final Counter blobFoundInActiveSegmentCount;
+  public final Counter blobFoundInMemSegmentCount;
   public final Counter bloomAccessedCount;
   public final Counter bloomPositiveCount;
   public final Counter bloomFalsePositiveCount;
@@ -132,8 +132,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "PutEntryDeletedInfoMismatchCount"));
     nonzeroMessageRecovery =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "NonZeroMessageRecovery"));
-    blobFoundInActiveSegmentCount =
-        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BlobFoundInActiveSegmentCount"));
+    blobFoundInMemSegmentCount =
+        registry.counter(MetricRegistry.name(IndexSegment.class, name + "BlobFoundInMemSegmentCount"));
     bloomAccessedCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomAccessedCount"));
     bloomPositiveCount = registry.counter(MetricRegistry.name(IndexSegment.class, name + "BloomPositiveCount"));
     bloomFalsePositiveCount =
