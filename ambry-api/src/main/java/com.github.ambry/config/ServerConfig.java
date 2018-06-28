@@ -69,7 +69,8 @@ public class ServerConfig {
   public final String serverStoreKeyConverterFactory;
 
   /**
-   * Implementation classes for message transformation.
+   * Implementation classes for message transformation. The class names should be comma separated and in the order in
+   * which transformation is intended.
    */
   @Config("server.message.transformers")
   @Default("com.github.ambry.messageformat.ValidatingTransformer")
