@@ -60,8 +60,14 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     this.exception = e;
   }
 
-  public void setReturnInputIfAbsent(boolean bool) {
-    returnKeyIfAbsent = bool;
+  /**
+   * Sets whether produced StoreKeyConverters will return the
+   * input key if it is absent from the underlying map. If false,
+   * the StoreKeyConverter will return null for missing inputs
+   * @param returnInputIfAbsent
+   */
+  public void setReturnInputIfAbsent(boolean returnInputIfAbsent) {
+    returnKeyIfAbsent = returnInputIfAbsent;
   }
 
   /**
