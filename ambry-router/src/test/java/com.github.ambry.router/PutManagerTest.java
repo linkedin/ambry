@@ -19,6 +19,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobId.BlobDataType;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -873,8 +874,11 @@ public class PutManagerTest {
     ByteBuffer serializedRequest = serializedRequests.get(blobId);
     PutRequest.ReceivedPutRequest request = deserializePutRequest(serializedRequest);
     NotificationBlobType notificationBlobType;
+    BlobId origBlobId = new BlobId(blobId, mockClusterMap);
+
     if (request.getBlobType() == BlobType.MetadataBlob) {
       notificationBlobType = NotificationBlobType.Composite;
+      assertEquals("Expected metadata", BlobDataType.METADATA, origBlobId.getBlobDataType());
       byte[] data = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       CompositeBlobInfo compositeBlobInfo = MetadataContentSerDe.deserializeMetadataContentRecord(ByteBuffer.wrap(data),
           new BlobIdFactory(mockClusterMap));
@@ -883,10 +887,14 @@ public class PutManagerTest {
       List<StoreKey> dataBlobIds = compositeBlobInfo.getKeys();
       assertEquals("Number of chunks is not as expected",
           RouterUtils.getNumChunksForBlobAndChunkSize(originalPutContent.length, chunkSize), dataBlobIds.size());
+      // Verify all dataBlobIds are DataChunk
+      for (StoreKey key: dataBlobIds) {
+        BlobId origDataBlobId = (BlobId) key;
+        assertEquals("Expected datachunk", BlobDataType.DATACHUNK, origDataBlobId.getBlobDataType());
+      }
       // verify user-metadata
       if (properties.isEncrypted()) {
         ByteBuffer userMetadata = request.getUsermetadata();
-        BlobId origBlobId = new BlobId(blobId, mockClusterMap);
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), null, userMetadata, cryptoService, kms,
@@ -903,6 +911,11 @@ public class PutManagerTest {
           serializedRequests);
     } else {
       notificationBlobType = NotificationBlobType.Simple;
+      // TODO: Currently, we don't have the logic to distinguish Simple vs DataChunk for the first chunk
+      // Once the logic is fixed we should assert Simple.
+      BlobDataType dataType = origBlobId.getBlobDataType();
+      assertTrue("Invalid blob data type", dataType == BlobDataType.DATACHUNK || dataType == BlobDataType.SIMPLE);
+
       byte[] content = Utils.readBytesFromStream(request.getBlobStream(), (int) request.getBlobSize());
       if (!properties.isEncrypted()) {
         Assert.assertArrayEquals("Input blob and written blob should be the same", originalPutContent, content);
@@ -911,7 +924,6 @@ public class PutManagerTest {
         notificationSystem.verifyNotification(blobId, notificationBlobType, request.getBlobProperties());
       } else {
         ByteBuffer userMetadata = request.getUsermetadata();
-        BlobId origBlobId = new BlobId(blobId, mockClusterMap);
         // reason to directly call run() instead of spinning up a thread instead of calling start() is that, any exceptions or
         // assertion failures in non main thread will not fail the test.
         new DecryptJob(origBlobId, request.getBlobEncryptionKey().duplicate(), ByteBuffer.wrap(content), userMetadata,

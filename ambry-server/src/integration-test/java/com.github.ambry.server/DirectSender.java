@@ -56,7 +56,7 @@ class DirectSender implements Runnable {
       int partitionIndex = new Random().nextInt(partitionIds.size());
       BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
           clusterMap.getLocalDatacenterId(), blobProperties.getAccountId(), blobProperties.getContainerId(),
-          partitionIds.get(partitionIndex), false);
+          partitionIds.get(partitionIndex), false, BlobId.BlobDataType.DATACHUNK);
       blobIds.add(blobId);
     }
     this.data = data;

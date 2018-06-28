@@ -42,7 +42,7 @@ public class RouterUtilsTest {
     partition = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     originalBlobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         clusterMap.getLocalDatacenterId(), Utils.getRandomShort(random), Utils.getRandomShort(random), partition,
-        false);
+        false, BlobId.BlobDataType.DATACHUNK);
     blobIdStr = originalBlobId.getID();
   }
 

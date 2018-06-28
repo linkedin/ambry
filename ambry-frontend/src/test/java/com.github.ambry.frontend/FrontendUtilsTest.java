@@ -58,7 +58,7 @@ public class FrontendUtilsTest {
     for (short version : versions) {
       BlobId blobId =
           new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-              referencePartitionId, referenceIsEncrypted);
+              referencePartitionId, referenceIsEncrypted, BlobId.BlobDataType.DATACHUNK);
       BlobId regeneratedBlobId = FrontendUtils.getBlobIdFromString(blobId.getID(), referenceClusterMap);
       assertEquals("BlobId mismatch", blobId, regeneratedBlobId);
       assertBlobIdFieldValues(regeneratedBlobId, referenceType, referenceDatacenterId, referenceAccountId,

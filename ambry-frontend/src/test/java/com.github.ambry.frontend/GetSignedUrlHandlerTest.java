@@ -97,7 +97,8 @@ public class GetSignedUrlHandlerTest {
 
     BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
         ClusterMapUtils.UNKNOWN_DATACENTER_ID, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
-        CLUSTER_MAP.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false);
+        CLUSTER_MAP.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
     idConverterFactory.translation = blobId.getID();
     // GET (also makes sure that the IDConverter is used)
     restRequest = new MockRestRequest(MockRestRequest.DUMMY_DATA, null);

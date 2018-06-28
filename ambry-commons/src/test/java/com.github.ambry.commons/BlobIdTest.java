@@ -57,6 +57,7 @@ public class BlobIdTest {
   private final ClusterMap referenceClusterMap;
   private final PartitionId referencePartitionId;
   private final boolean referenceIsEncrypted;
+  private final BlobDataType referenceDataType;
 
   /**
    * Running for both {@link BlobId#BLOB_ID_V1} and {@link BlobId#BLOB_ID_V2}
@@ -64,7 +65,7 @@ public class BlobIdTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{BLOB_ID_V1}, {BLOB_ID_V2}, {BLOB_ID_V3}, {BLOB_ID_V4}});
+    return Arrays.asList(new Object[][]{{BLOB_ID_V1}, {BLOB_ID_V2}, {BLOB_ID_V3}, {BLOB_ID_V4}, {BLOB_ID_V5}});
   }
 
   /**
@@ -83,6 +84,7 @@ public class BlobIdTest {
     referenceContainerId = getRandomShort(random);
     referencePartitionId = referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     referenceIsEncrypted = random.nextBoolean();
+    referenceDataType = BlobDataType.values()[random.nextInt(BlobDataType.values().length)];
   }
 
   /**
@@ -91,10 +93,10 @@ public class BlobIdTest {
   @Test
   public void testBuildBlobId() throws Exception {
     BlobId blobId = new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-        referencePartitionId, referenceIsEncrypted);
+        referencePartitionId, referenceIsEncrypted, referenceDataType);
     assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
     assertBlobIdFieldValues(version, blobId, referenceType, referenceDatacenterId, referenceAccountId,
-        referenceContainerId, referencePartitionId, referenceIsEncrypted);
+        referenceContainerId, referencePartitionId, referenceIsEncrypted, referenceDataType);
   }
 
   /**
@@ -104,7 +106,7 @@ public class BlobIdTest {
   @Test
   public void testSerDes() throws Exception {
     BlobId blobId = new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId, referenceContainerId,
-        referencePartitionId, referenceIsEncrypted);
+        referencePartitionId, referenceIsEncrypted, referenceDataType);
     deserializeBlobIdAndAssert(version, blobId.getID());
     BlobId blobIdSerDed =
         new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
@@ -127,13 +129,24 @@ public class BlobIdTest {
       for (BlobIdType type : BlobIdType.values()) {
         for (boolean isEncrypted : isEncryptedValues) {
           BlobId blobId = new BlobId(version, type, referenceDatacenterId, referenceAccountId, referenceContainerId,
-              referencePartitionId, isEncrypted);
+              referencePartitionId, isEncrypted, referenceDataType);
           BlobId blobIdSerDed =
               new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
           assertEquals("The type should match the original's type", type, blobIdSerDed.getType());
           assertEquals("The isEncrypted should match the original", version == BLOB_ID_V3 ? false : isEncrypted,
               BlobId.isEncrypted(blobId.getID()));
         }
+      }
+    }
+
+    if (version >= BLOB_ID_V5) {
+      for (BlobDataType dataType : BlobDataType.values()) {
+        BlobId blobId =
+            new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId, referenceContainerId,
+                referencePartitionId, false, dataType);
+        BlobId blobIdSerDed =
+            new BlobId(new DataInputStream(new ByteArrayInputStream(blobId.toBytes())), referenceClusterMap);
+        assertEquals("The data type should match the original's", dataType, blobIdSerDed.getBlobDataType());
       }
     }
   }
@@ -170,7 +183,7 @@ public class BlobIdTest {
       BlobId blobIdV4 =
           new BlobId(BLOB_ID_V4, random.nextBoolean() ? BlobIdType.NATIVE : BlobIdType.CRAFTED, (byte) 1, (short) 1,
               (short) 1, referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
-              .get(random.nextInt(3)), isEncrypted);
+              .get(random.nextInt(3)), isEncrypted, null);
       assertEquals("V4 should return true or false based on its encrypted bit", isEncrypted,
           BlobId.isEncrypted(blobIdV4.getID()));
     }
@@ -271,13 +284,13 @@ public class BlobIdTest {
     BlobId inputs[];
     if (version >= BLOB_ID_V3) {
       inputs = new BlobId[]{new BlobId(version, BlobIdType.NATIVE, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, false), new BlobId(version, BlobIdType.CRAFTED,
-          referenceDatacenterId, referenceAccountId, referenceContainerId, referencePartitionId, false)};
+          referenceContainerId, referencePartitionId, false, referenceDataType), new BlobId(version, BlobIdType.CRAFTED,
+          referenceDatacenterId, referenceAccountId, referenceContainerId, referencePartitionId, false, referenceDataType)};
       assertFalse("isCrafted() should be false for native id", BlobId.isCrafted(inputs[0].getID()));
       assertTrue("isCrafted() should be true for crafted id", BlobId.isCrafted(inputs[1].getID()));
     } else {
       inputs = new BlobId[]{new BlobId(version, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, false)};
+          referenceContainerId, referencePartitionId, false, null)};
       assertFalse("isCrafted() should be false for ids below BLOB_ID_V3", BlobId.isCrafted(inputs[0].getID()));
     }
     short newAccountId = (short) (referenceAccountId + 1 + TestUtils.RANDOM.nextInt(100));
@@ -295,11 +308,12 @@ public class BlobIdTest {
         fail("Crafting should fail for target version " + BLOB_ID_V2);
       } catch (IllegalArgumentException e) {
       }
-      crafted = BlobId.craft(id, CommonTestUtils.getCurrentBlobIdVersion(), newAccountId, newContainerId);
+      short idVersion = (short) Math.max(id.getVersion(), BLOB_ID_V3);
+      crafted = BlobId.craft(id, idVersion, newAccountId, newContainerId);
       verifyCrafting(id, crafted);
     }
 
-    BlobId craftedAgain = BlobId.craft(crafted, CommonTestUtils.getCurrentBlobIdVersion(), crafted.getAccountId(),
+    BlobId craftedAgain = BlobId.craft(crafted, crafted.getVersion(), crafted.getAccountId(),
         crafted.getContainerId());
     verifyCrafting(crafted, craftedAgain);
     assertEquals("Accounts should match", crafted.getAccountId(), craftedAgain.getAccountId());
@@ -372,8 +386,7 @@ public class BlobIdTest {
     assertEquals("Partition of input id should match that of the crafted id", input.getPartition(),
         crafted.getPartition());
     assertEquals("UUID of input id should match that of the crafted id", input.getUuid(), crafted.getUuid());
-    assertEquals("Crafted id should have the latest version", CommonTestUtils.getCurrentBlobIdVersion(),
-        crafted.getVersion());
+    assertTrue("Crafted id should have at least version 3", crafted.getVersion() >= BLOB_ID_V3);
     assertEquals("Crafted id should have the Crafted type", BlobIdType.CRAFTED, crafted.getType());
     assertTrue("isCrafted() should be true for crafted ids", BlobId.isCrafted(crafted.getID()));
   }
@@ -461,6 +474,7 @@ public class BlobIdTest {
         break;
       case BLOB_ID_V3:
       case BLOB_ID_V4:
+      case BLOB_ID_V5:
         idLength = 2 + 1 + 1 + 2 + 2 + partitionId.getBytes().length + 4 + uuidLike.length();
         idBuf = ByteBuffer.allocate(idLength);
         idBuf.putShort(version);
@@ -496,7 +510,7 @@ public class BlobIdTest {
       assertEquals("Wrong base-64 ID in blobId: " + blobId, srcBlobIdStr, blobId.getID());
       assertEquals("Wrong blobId version", version, getVersionFromBlobString(blobId.getID()));
       assertBlobIdFieldValues(version, blobId, referenceType, referenceDatacenterId, referenceAccountId,
-          referenceContainerId, referencePartitionId, referenceIsEncrypted);
+          referenceContainerId, referencePartitionId, referenceIsEncrypted, referenceDataType);
     }
   }
 
@@ -529,7 +543,8 @@ public class BlobIdTest {
    * @throws Exception Any unexpected exception.
    */
   private void assertBlobIdFieldValues(short version, BlobId blobId, BlobIdType type, byte datacenterId,
-      short accountId, short containerId, PartitionId partitionId, boolean isEncrypted) throws Exception {
+      short accountId, short containerId, PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType)
+      throws Exception {
     assertTrue("Used unrecognized version", Arrays.asList(BlobId.getAllValidVersions()).contains(version));
     assertEquals("Wrong partition id in blobId: " + blobId, partitionId, blobId.getPartition());
     switch (version) {
@@ -540,6 +555,7 @@ public class BlobIdTest {
         assertEquals("Wrong container id in blobId: " + blobId, Container.UNKNOWN_CONTAINER_ID,
             blobId.getContainerId());
         assertFalse("Wrong isEncrypted value in blobId: " + blobId, BlobId.isEncrypted(blobId.getID()));
+        assertNull("Expected null blobDataType in blobId", blobId.getBlobDataType());
         break;
       case BLOB_ID_V2:
         assertEquals("Wrong type in blobId: " + blobId, BlobIdType.NATIVE, blobId.getType());
@@ -547,6 +563,7 @@ public class BlobIdTest {
         assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
         assertFalse("Wrong isEncrypted value id in blobId: " + blobId, BlobId.isEncrypted(blobId.getID()));
+        assertNull("Expected null blobDataType in blobId", blobId.getBlobDataType());
         break;
       case BLOB_ID_V3:
         assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
@@ -554,6 +571,7 @@ public class BlobIdTest {
         assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
         assertFalse("Wrong isEncrypted value id in blobId: " + blobId, BlobId.isEncrypted(blobId.getID()));
+        assertNull("Expected null blobDataType in blobId", blobId.getBlobDataType());
         break;
       case BLOB_ID_V4:
         assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
@@ -561,6 +579,15 @@ public class BlobIdTest {
         assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
         assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
         assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, BlobId.isEncrypted(blobId.getID()));
+        assertNull("Expected null blobDataType in blobId", blobId.getBlobDataType());
+        break;
+      case BLOB_ID_V5:
+        assertEquals("Wrong type in blobId: " + blobId, type, blobId.getType());
+        assertEquals("Wrong datacenter id in blobId: " + blobId, datacenterId, blobId.getDatacenterId());
+        assertEquals("Wrong account id in blobId: " + blobId, accountId, blobId.getAccountId());
+        assertEquals("Wrong container id in blobId: " + blobId, containerId, blobId.getContainerId());
+        assertEquals("Wrong isEncrypted value in blobId: " + blobId, isEncrypted, BlobId.isEncrypted(blobId.getID()));
+        assertEquals("Wrong blobDataType value in blobId: " + blobId, blobDataType, blobId.getBlobDataType());
         break;
       default:
         fail("Unrecognized version");
@@ -605,6 +632,7 @@ public class BlobIdTest {
     PartitionId partitionId =
         referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(random.nextInt(3));
     boolean isEncrypted = random.nextBoolean();
-    return new BlobId(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted);
+    BlobDataType dataType = BlobDataType.values()[random.nextInt(BlobDataType.values().length)];
+    return new BlobId(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, dataType);
   }
 }
