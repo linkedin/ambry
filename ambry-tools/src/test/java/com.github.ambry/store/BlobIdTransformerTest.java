@@ -249,20 +249,6 @@ public class BlobIdTransformerTest {
     return factory.getStoreKeyConverter();
   }
 
-  private String notEqualPrint(int loc, byte[] actual, byte[] expect) {
-    StringBuilder sb = new StringBuilder();
-    sb.append("Not equal at byte ")
-        .append(loc)
-        .append("\n")
-        .append("Actual: ")
-        .append(Hex.encodeHexString(actual))
-        .append("\n")
-        .append("Expect: ")
-        .append(Hex.encodeHexString(expect))
-        .append("\n");
-    return sb.toString();
-  }
-
   private void verifyOutput(StoreCopier.Message output, StoreCopier.Message expected) throws IOException {
     if (expected == null) {
       assertNull("output should be null", output);
