@@ -116,7 +116,6 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * |  1 to 3 bits | 4 and 5th bit |    6th bit  | 7 and 8th bit |
  * |  un-assigned | BlobDataType  | IsEncrypted |  BlobIdType   |
  * +--------------+---------------+-------------+---------------|
-
  * </pre>
  */
 
@@ -587,7 +586,7 @@ public class BlobId extends StoreKey {
       throw new IllegalArgumentException("Target version for crafting must be V3 or higher");
     }
     return new BlobId(targetVersion, BlobIdType.CRAFTED, inputId.getDatacenterId(), accountId, containerId,
-        inputId.partitionId, inputId.isEncrypted, null, inputId.uuid);
+        inputId.partitionId, inputId.isEncrypted, inputId.blobDataType, inputId.uuid);
   }
 
   /**

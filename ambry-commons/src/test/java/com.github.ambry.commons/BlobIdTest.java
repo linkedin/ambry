@@ -632,6 +632,7 @@ public class BlobIdTest {
     PartitionId partitionId =
         referenceClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(random.nextInt(3));
     boolean isEncrypted = random.nextBoolean();
-    return new BlobId(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, null);
+    BlobDataType dataType = BlobDataType.values()[random.nextInt(BlobDataType.values().length)];
+    return new BlobId(version, type, datacenterId, accountId, containerId, partitionId, isEncrypted, dataType);
   }
 }
