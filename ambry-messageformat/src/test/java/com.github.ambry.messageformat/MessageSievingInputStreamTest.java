@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,13 +42,31 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 import static com.github.ambry.utils.TestUtils.*;
 
 
+@RunWith(Parameterized.class)
 public class MessageSievingInputStreamTest {
+  private enum TransformerOptions {
+    Validate, KeyConvert,
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{EnumSet.noneOf(TransformerOptions.class)}, {EnumSet.of(
+        TransformerOptions.Validate)}, {EnumSet.of(TransformerOptions.KeyConvert)}, {EnumSet.allOf(
+        TransformerOptions.class)}});
+  }
+
   private static short messageFormatHeaderVersionSaved;
+  private final List<Transformer> transformers = new ArrayList<>();
+  private final EnumSet<TransformerOptions> options;
+  private final StoreKeyFactory storeKeyFactory;
+  private final RandomKeyConverter randomKeyConverter;
 
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
@@ -57,6 +76,18 @@ public class MessageSievingInputStreamTest {
   @After
   public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
+  }
+
+  public MessageSievingInputStreamTest(EnumSet<TransformerOptions> options) {
+    this.options = options;
+    this.storeKeyFactory = new MockIdFactory();
+    this.randomKeyConverter = new RandomKeyConverter();
+    if (options.contains(TransformerOptions.Validate)) {
+      transformers.add(new ValidatingTransformer(storeKeyFactory));
+    }
+    if (options.contains(TransformerOptions.KeyConvert)) {
+      transformers.add(new ValidatingKeyConvertingTransformer(storeKeyFactory, randomKeyConverter));
+    }
   }
 
   /**
@@ -85,7 +116,6 @@ public class MessageSievingInputStreamTest {
   private void testValidBlobs(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
     // MessageSievingInputStream contains put records for 3 valid blobs
     // id1(put record for valid blob), id2(put record for valid blob) and id3(put record for valid blob)
-    StoreKeyConverter storeKeyConverter = new RandomKeyConverter(Collections.emptyList());
 
     MessageFormatRecord.headerVersionToUse = headerVersionToUse;
     byte[] encryptionKey = new byte[100];
@@ -267,14 +297,11 @@ public class MessageSievingInputStreamTest {
       msgInfoList.add(msgInfo5);
     }
 
-    Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
-
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
-            new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
 
-    Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(Arrays.asList(key1, key2, key3));
-    Map<StoreKey, StoreKey> convertedMapExtra = storeKeyConverter.convert(Arrays.asList(key4, key5));
+    Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
+    Map<StoreKey, StoreKey> convertedMapExtra = randomKeyConverter.convert(Arrays.asList(key4, key5));
     int headerSizeV1 = MessageHeader_Format_V1.getHeaderSize();
     int headerSizeV2 = MessageHeader_Format_V2.getHeaderSize();
     int blobPropertiesRecordSize = BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
@@ -286,7 +313,10 @@ public class MessageSievingInputStreamTest {
     int totalBlobPropertiesSize = 3 * blobPropertiesRecordSize;
     int totalUserMetadataSize = 3 * userMetadataSize;
     int totalBlobSize = 3 * (int) blobSize;
-    int totalKeySize = convertedMap.values().stream().mapToInt(StoreKey::sizeInBytes).sum();
+    int totalKeySize = (options.contains(TransformerOptions.KeyConvert) ? convertedMap.values() : convertedMap.keySet())
+        .stream()
+        .mapToInt(StoreKey::sizeInBytes)
+        .sum();
     int encryptionRecordSize =
         BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey));
 
@@ -297,33 +327,46 @@ public class MessageSievingInputStreamTest {
       totalBlobPropertiesSize += 2 * blobPropertiesRecordSize;
       totalUserMetadataSize += 2 * userMetadataSize;
       totalBlobSize += 2 * (int) blobSize;
-      totalKeySize += convertedMapExtra.values().stream().mapToInt(StoreKey::sizeInBytes).sum();
+      totalKeySize += (options.contains(TransformerOptions.KeyConvert) ? convertedMapExtra.values()
+          : convertedMapExtra.keySet()).stream().mapToInt(StoreKey::sizeInBytes).sum();
     }
 
     Assert.assertFalse(sievedStream.hasInvalidMessages());
 
-    Assert.assertEquals(
-        totalHeadSize + totalEncryptionRecordSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize
-            + totalKeySize, sievedStream.getSize());
+    if (!options.isEmpty()) {
+      Assert.assertEquals(options.isEmpty() ? totalMessageStreamContent.length
+          : totalHeadSize + totalEncryptionRecordSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize
+              + totalKeySize, sievedStream.getSize());
 
-    Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
-        sievedStream.getSize());
+      Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
+          sievedStream.getSize());
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key1), "servid1", accountId1, containerId1, null,
-        usermetadata1, data1, blobVersion, blobType);
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1) : key1, "servid1", accountId1,
+          containerId1, null, usermetadata1, data1, blobVersion, blobType);
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key2), "servid2", accountId2, containerId2,
-        blobVersion == Blob_Version_V2 ? encryptionKey : null, usermetadata2, data2, blobVersion, blobType);
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key2) : key2, "servid2", accountId2,
+          containerId2, blobVersion == Blob_Version_V2 ? encryptionKey : null, usermetadata2, data2, blobVersion,
+          blobType);
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key3), "servid3", accountId3, containerId3, null,
-        usermetadata3, data3, blobVersion, blobType);
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key3) : key3, "servid3", accountId3,
+          containerId3, null, usermetadata3, data3, blobVersion, blobType);
 
-    if (blobVersion == Blob_Version_V2) {
-      verifySievedTransformedMessage(sievedStream, convertedMapExtra.get(key4), "servid4", accountId4, containerId4,
-          encryptionKey, usermetadata4, data4, blobVersion, blobType);
+      if (blobVersion == Blob_Version_V2) {
+        verifySievedTransformedMessage(sievedStream,
+            options.contains(TransformerOptions.KeyConvert) ? convertedMapExtra.get(key4) : key4, "servid4", accountId4,
+            containerId4, encryptionKey, usermetadata4, data4, blobVersion, blobType);
 
-      verifySievedTransformedMessage(sievedStream, convertedMapExtra.get(key5), "servid5", accountId5, containerId5,
-          null, usermetadata5, data5, blobVersion, blobType);
+        verifySievedTransformedMessage(sievedStream,
+            options.contains(TransformerOptions.KeyConvert) ? convertedMapExtra.get(key5) : key5, "servid5", accountId5,
+            containerId5, null, usermetadata5, data5, blobVersion, blobType);
+      }
+    } else {
+      Assert.assertEquals(totalMessageStreamContent.length, sievedStream.getSize());
+      byte[] sievedBytes = Utils.readBytesFromStream(sievedStream, sievedStream.getSize());
+      Assert.assertArrayEquals(totalMessageStreamContent, sievedBytes);
     }
     Assert.assertEquals(-1, sievedStream.read());
   }
@@ -340,7 +383,6 @@ public class MessageSievingInputStreamTest {
 
   private void testInValidBlobs(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
     MessageFormatRecord.headerVersionToUse = headerVersionToUse;
-    StoreKeyConverter storeKeyConverter = new RandomKeyConverter(Collections.emptyList());
 
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
     // id1(put record for valid blob), id2(corrupt) and id3(put record for valid blob)
@@ -457,12 +499,10 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
-            new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
 
-    Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(Arrays.asList(key1, key2, key3));
+    Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
 
     int headerSize =
         headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
@@ -474,23 +514,35 @@ public class MessageSievingInputStreamTest {
     int totalBlobPropertiesSize = 2 * blobPropertiesRecordSize;
     int totalUserMetadataSize = 2 * userMetadataSize;
     int totalBlobSize = 2 * (int) blobSize;
-    int totalKeySize = convertedMap.get(key1).sizeInBytes() + convertedMap.get(key3).sizeInBytes();
+    int totalKeySize =
+        options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1).sizeInBytes() + convertedMap.get(key3)
+            .sizeInBytes() : key1.sizeInBytes() + key3.sizeInBytes();
     int totalEncryptionRecordSize = blobVersion > Blob_Version_V1 ?
         BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey1))
             + BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey3)) : 0;
 
-    Assert.assertTrue(sievedStream.hasInvalidMessages());
-    Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
-        sievedStream.getSize());
+    if (!options.isEmpty()) {
+      Assert.assertTrue(sievedStream.hasInvalidMessages());
+      Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
+          sievedStream.getSize());
 
-    Assert.assertEquals(totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize
-        + totalEncryptionRecordSize, sievedStream.getSize());
+      Assert.assertEquals(totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize
+          + totalEncryptionRecordSize, sievedStream.getSize());
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key1), "servid1", accountId1, containerId1,
-        blobVersion > Blob_Version_V1 ? encryptionKey1 : null, usermetadata1, data1, blobVersion, blobType);
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1) : key1, "servid1", accountId1,
+          containerId1, blobVersion > Blob_Version_V1 ? encryptionKey1 : null, usermetadata1, data1, blobVersion,
+          blobType);
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key3), "servid3", accountId3, containerId3,
-        blobVersion > Blob_Version_V1 ? encryptionKey3 : null, usermetadata3, data3, blobVersion, blobType);
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key3) : key3, "servid3", accountId3,
+          containerId3, blobVersion > Blob_Version_V1 ? encryptionKey3 : null, usermetadata3, data3, blobVersion,
+          blobType);
+    } else {
+      Assert.assertEquals(totalMessageStreamContent.length, sievedStream.getSize());
+      byte[] sievedBytes = Utils.readBytesFromStream(sievedStream, sievedStream.getSize());
+      Assert.assertArrayEquals(totalMessageStreamContent, sievedBytes);
+    }
 
     Assert.assertEquals(-1, sievedStream.read());
   }
@@ -508,7 +560,6 @@ public class MessageSievingInputStreamTest {
   private void testDeletedBlobs(short blobVersion, BlobType blobType) throws Exception {
     // MessageSievingInputStream contains put records for 2 valid blobs and 1 deleted blob
     // id1(put record for valid blob), id2(delete record) and id3(put record for valid blob)
-    StoreKeyConverter storeKeyConverter = new RandomKeyConverter(Collections.emptyList());
     ArrayList<Short> versions = new ArrayList<>();
     versions.add(Message_Header_Version_V1);
     if (blobVersion != Blob_Version_V1) {
@@ -602,13 +653,15 @@ public class MessageSievingInputStreamTest {
         msgInfoList.add(msgInfo2);
         msgInfoList.add(msgInfo3);
 
-        Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
-        MessageSievingInputStream sievedStream =
-            new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
-                new MetricRegistry());
-        Assert.fail("IOException should have been thrown due to delete record ");
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
+        if (!options.isEmpty()) {
+          Assert.fail("IOException should have been thrown due to delete record ");
+        }
       }
     } catch (IOException e) {
+      if (options.isEmpty()) {
+        Assert.fail("No exceptions should have occurred");
+      }
     }
     headerVersionToUse = Message_Header_Version_V1;
   }
@@ -691,7 +744,7 @@ public class MessageSievingInputStreamTest {
         new MessageInfo(key2, messageFormatStream2.getSize(), accountId2, containerId2, prop2.getCreationTimeInMs());
 
     // Add the key for the second message to the discardable ones.
-    StoreKeyConverter storeKeyConverter = new RandomKeyConverter(Collections.singletonList(key2));
+    randomKeyConverter.addInvalids(Collections.singletonList(key2));
 
     // create message stream for blob 3
     StoreKey key3 = new MockId("id3");
@@ -739,12 +792,10 @@ public class MessageSievingInputStreamTest {
     msgInfoList.add(msgInfo2);
     msgInfoList.add(msgInfo3);
 
-    Transformer transformer = new ValidatingKeyConvertingTransformer(new MockIdFactory(), storeKeyConverter);
     MessageSievingInputStream sievedStream =
-        new MessageSievingInputStream(inputStream, msgInfoList, Collections.singletonList(transformer),
-            new MetricRegistry());
+        new MessageSievingInputStream(inputStream, msgInfoList, transformers, new MetricRegistry());
 
-    Map<StoreKey, StoreKey> convertedMap = storeKeyConverter.convert(Arrays.asList(key1, key2, key3));
+    Map<StoreKey, StoreKey> convertedMap = randomKeyConverter.convert(Arrays.asList(key1, key2, key3));
 
     int headerSize =
         headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1 ? MessageHeader_Format_V1.getHeaderSize()
@@ -752,28 +803,49 @@ public class MessageSievingInputStreamTest {
     int blobPropertiesRecordSize = BlobProperties_Format_V1.getBlobPropertiesRecordSize(prop1);
     int userMetadataSize = UserMetadata_Format_V1.getUserMetadataSize(ByteBuffer.wrap(usermetadata1));
 
-    int totalHeadSize = 2 * headerSize;
-    int totalBlobPropertiesSize = 2 * blobPropertiesRecordSize;
-    int totalUserMetadataSize = 2 * userMetadataSize;
-    int totalBlobSize = 2 * (int) blobSize;
-    int totalKeySize = convertedMap.get(key1).sizeInBytes() + convertedMap.get(key3).sizeInBytes();
+    int totalHeadSize = (options.contains(TransformerOptions.KeyConvert) ? 2 : 3) * headerSize;
+    int totalBlobPropertiesSize = (options.contains(TransformerOptions.KeyConvert) ? 2 : 3) * blobPropertiesRecordSize;
+    int totalUserMetadataSize = (options.contains(TransformerOptions.KeyConvert) ? 2 : 3) * userMetadataSize;
+    int totalBlobSize = (options.contains(TransformerOptions.KeyConvert) ? 2 : 3) * (int) blobSize;
+    int totalKeySize =
+        options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1).sizeInBytes() + convertedMap.get(key3)
+            .sizeInBytes() : key1.sizeInBytes() + key2.sizeInBytes() + key3.sizeInBytes();
     int totalEncryptionRecordSize = blobVersion > Blob_Version_V1 ?
-        BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey1))
+        BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey1)) + (
+            options.contains(TransformerOptions.KeyConvert) ? 0
+                : BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey2)))
             + BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(ByteBuffer.wrap(encryptionKey3)) : 0;
 
-    Assert.assertTrue(sievedStream.hasDeprecatedMessages());
-    Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
-        sievedStream.getSize());
+    if (!options.isEmpty()) {
+      if (options.contains(TransformerOptions.KeyConvert)) {
+        Assert.assertTrue(sievedStream.hasDeprecatedMessages());
+      }
+      Assert.assertEquals((int) sievedStream.getValidMessageInfoList().stream().mapToLong(MessageInfo::getSize).sum(),
+          sievedStream.getSize());
 
-    Assert.assertEquals(totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize
-        + totalEncryptionRecordSize, sievedStream.getSize());
+      Assert.assertEquals(options.isEmpty() ? totalMessageStreamContent.length
+          : totalHeadSize + totalBlobPropertiesSize + totalUserMetadataSize + totalBlobSize + totalKeySize
+              + totalEncryptionRecordSize, sievedStream.getSize());
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key1), "servid1", accountId1, containerId1,
-        blobVersion > Blob_Version_V1 ? encryptionKey1 : null, usermetadata1, data1, blobVersion, blobType);
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key1) : key1, "servid1", accountId1,
+          containerId1, blobVersion > Blob_Version_V1 ? encryptionKey1 : null, usermetadata1, data1, blobVersion,
+          blobType);
 
-    verifySievedTransformedMessage(sievedStream, convertedMap.get(key3), "servid3", accountId3, containerId3,
-        blobVersion > Blob_Version_V1 ? encryptionKey3 : null, usermetadata3, data3, blobVersion, blobType);
+      if (!options.contains(TransformerOptions.KeyConvert)) {
+        verifySievedTransformedMessage(sievedStream, key2, "servid2", accountId2, containerId2,
+            blobVersion > Blob_Version_V1 ? encryptionKey2 : null, usermetadata2, data2, blobVersion, blobType);
+      }
 
+      verifySievedTransformedMessage(sievedStream,
+          options.contains(TransformerOptions.KeyConvert) ? convertedMap.get(key3) : key3, "servid3", accountId3,
+          containerId3, blobVersion > Blob_Version_V1 ? encryptionKey3 : null, usermetadata3, data3, blobVersion,
+          blobType);
+    } else {
+      Assert.assertEquals(totalMessageStreamContent.length, sievedStream.getSize());
+      byte[] sievedBytes = Utils.readBytesFromStream(sievedStream, sievedStream.getSize());
+      Assert.assertArrayEquals(totalMessageStreamContent, sievedBytes);
+    }
     Assert.assertEquals(-1, sievedStream.read());
   }
 
@@ -822,14 +894,14 @@ public class MessageSievingInputStreamTest {
  */
 class RandomKeyConverter implements StoreKeyConverter {
 
-  Collection<? extends StoreKey> invalids;
+  Collection<? extends StoreKey> invalids = Collections.emptyList();
   Map<StoreKey, StoreKey> onceConverted = new HashMap<>();
 
   /**
-   * Instantiate with the given set of invalid keys.
+   * Add invalid mappings.
    * @param invalids the keys for which no mapping will be generated during conversion.
    */
-  RandomKeyConverter(Collection<? extends StoreKey> invalids) {
+  public void addInvalids(Collection<? extends StoreKey> invalids) {
     this.invalids = invalids;
   }
 
@@ -850,6 +922,9 @@ class RandomKeyConverter implements StoreKeyConverter {
   }
 }
 
+/**
+ * A {@link Transformer} implementation that does random key conversions, used for testing.
+ */
 class ValidatingKeyConvertingTransformer implements Transformer {
   private final StoreKeyFactory storeKeyFactory;
   private final StoreKeyConverter storeKeyConverter;

@@ -11,13 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.commons;
+package com.github.ambry.messageformat;
 
-import com.github.ambry.messageformat.BlobData;
-import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.messageformat.MessageFormatErrorCodes;
-import com.github.ambry.messageformat.MessageFormatException;
-import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
@@ -31,6 +26,9 @@ import java.nio.ByteBuffer;
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
 
+/**
+ * An implementation of the {@link Transformer} interface that simply deserializes the message to validate it.
+ */
 public class ValidatingTransformer implements Transformer {
   private final StoreKeyFactory storeKeyFactory;
 

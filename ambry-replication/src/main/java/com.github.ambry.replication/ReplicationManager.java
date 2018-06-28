@@ -19,7 +19,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.commons.ValidatingTransformer;
+import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -308,7 +308,7 @@ public class ReplicationManager {
       this.numberOfReplicaThreads = new HashMap<>();
       this.storeKeyConverter =
           storeKeyConverterFactory != null ? storeKeyConverterFactory.getStoreKeyConverter() : null;
-      // @todo: instantiate list of transformers via factory.
+      // @todo: instantiate list of transformers via factory. For now, use the ValidatingTransformer.
       this.transformers = Collections.singletonList(new ValidatingTransformer(storeKeyFactory));
 
       // initialize all partitions

@@ -25,7 +25,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.commons.ValidatingTransformer;
+import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;

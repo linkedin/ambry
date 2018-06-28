@@ -1,5 +1,5 @@
-/**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+/*
+ * Copyright 2018 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,8 +35,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * InputStream that skips invalid blobs based on some validation criteria.
- * For now, the check only supports detection of message corruption
+ * InputStream that transforms messages.
  */
 public class MessageSievingInputStream extends InputStream {
   private int sievedStreamSize;
@@ -64,14 +63,16 @@ public class MessageSievingInputStream extends InputStream {
       List<Transformer> transformers, MetricRegistry metricRegistry) throws IOException {
     this.logger = LoggerFactory.getLogger(getClass());
     this.transformers = transformers;
-    singleMessageSieveTime =
-        metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));
-    batchMessageSieveTime =
-        metricRegistry.histogram(MetricRegistry.name(MessageSievingInputStream.class, "BatchMessageSieveTime"));
+    singleMessageSieveTime = metricRegistry.histogram(
+        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class, "SingleMessageSieveTime"));
+    batchMessageSieveTime = metricRegistry.histogram(
+        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class, "BatchMessageSieveTime"));
     messageSievingCorruptMessagesDiscardedCount = metricRegistry.counter(
-        MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingCorruptMessagesDiscardedCount"));
+        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class,
+            "MessageSievingCorruptMessagesDiscardedCount"));
     messageSievingDeprecatedMessagesDiscardedCount = metricRegistry.counter(
-        MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingDeprecatedMessagesDiscardedCount"));
+        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class,
+            "MessageSievingDeprecatedMessagesDiscardedCount"));
     sievedStreamSize = 0;
     hasInvalidMessages = false;
     hasDeprecatedMessages = false;
