@@ -68,6 +68,13 @@ public class ServerConfig {
   @Default("com.github.ambry.server.StoreKeyConverterFactoryImpl")
   public final String serverStoreKeyConverterFactory;
 
+  /**
+   * Implementation classes for message transformation.
+   */
+  @Config("server.message.transformers")
+  @Default("com.github.ambry.messageformat.ValidatingTransformer")
+  public final String serverMessageTransformers;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -79,5 +86,7 @@ public class ServerConfig {
     serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
         "com.github.ambry.server.StoreKeyConverterFactoryImpl");
+    serverMessageTransformers = verifiableProperties.getString("server.message.transformers",
+        "com.github.ambry.messageformat.ValidatingTransformer");
   }
 }

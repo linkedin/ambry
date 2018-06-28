@@ -43,8 +43,10 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -83,7 +85,6 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
-  private StoreKeyConverterFactory storeKeyConverterFactory = null;
   private Time time;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
@@ -144,11 +145,20 @@ public class AmbryServer {
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
-      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
+      StoreKeyConverter storeKeyConverter =
+          ((StoreKeyConverterFactory) Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties,
+              registry)).getStoreKeyConverter();
+
+      List<Transformer> transformers = new ArrayList<>();
+      String[] transformerClasses = serverConfig.serverMessageTransformers.split(",");
+      for (String transformerClass : transformerClasses) {
+        transformers.add(Utils.getObj(transformerClass, storeKeyFactory, storeKeyConverter));
+      }
 
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory);
+              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverter,
+              transformers);
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
@@ -161,7 +171,7 @@ public class AmbryServer {
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory,
-              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
+              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverter);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();

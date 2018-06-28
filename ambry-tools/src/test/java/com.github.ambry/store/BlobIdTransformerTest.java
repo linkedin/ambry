@@ -83,7 +83,7 @@ public class BlobIdTransformerTest {
     factory = new MockStoreKeyConverterFactory(null, null);
     factory.setReturnInputIfAbsent(true);
     StoreKeyConverter storeKeyConverter = createAndSetupMockStoreKeyConverter(factory, pairs);
-    transformer = new BlobIdTransformer(storeKeyConverter, blobIdFactory);
+    transformer = new BlobIdTransformer(blobIdFactory, storeKeyConverter);
     pairList = new ArrayList<>(Arrays.asList(pairs));
     pairList.add(new Pair<>(VERSION_3_UNCONVERTED, VERSION_3_UNCONVERTED));
   }
@@ -154,7 +154,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testNullStoreKeyConverter() throws IOException {
     try {
-      new BlobIdTransformer(null, blobIdFactory);
+      new BlobIdTransformer(blobIdFactory, null);
       fail("Did not throw NullPointerException");
     } catch (NullPointerException e) {
       //expected
@@ -167,7 +167,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testNullStoreKeyFactory() throws IOException {
     try {
-      new BlobIdTransformer(factory.getStoreKeyConverter(), null);
+      new BlobIdTransformer(null, factory.getStoreKeyConverter());
       fail("Did not throw NullPointerException");
     } catch (NullPointerException e) {
       //expected

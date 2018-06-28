@@ -78,12 +78,12 @@ public class MessageSievingInputStreamTest {
     MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
   }
 
-  public MessageSievingInputStreamTest(EnumSet<TransformerOptions> options) {
+  public MessageSievingInputStreamTest(EnumSet<TransformerOptions> options) throws Exception {
     this.options = options;
     this.storeKeyFactory = new MockIdFactory();
     this.randomKeyConverter = new RandomKeyConverter();
     if (options.contains(TransformerOptions.Validate)) {
-      transformers.add(new ValidatingTransformer(storeKeyFactory));
+      transformers.add(new ValidatingTransformer(storeKeyFactory, randomKeyConverter));
     }
     if (options.contains(TransformerOptions.KeyConvert)) {
       transformers.add(new ValidatingKeyConvertingTransformer(storeKeyFactory, randomKeyConverter));

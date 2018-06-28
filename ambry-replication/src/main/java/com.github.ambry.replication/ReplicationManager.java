@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
-import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -31,7 +30,6 @@ import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKeyConverter;
-import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.CrcInputStream;
@@ -283,9 +281,8 @@ public class ReplicationManager {
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
-      MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory) throws ReplicationException {
-
+      MetricRegistry metricRegistry, NotificationSystem requestNotification, StoreKeyConverter storeKeyConverter,
+      List<Transformer> transformers) throws ReplicationException {
     try {
       this.replicationConfig = replicationConfig;
       this.storeKeyFactory = storeKeyFactory;
@@ -306,10 +303,8 @@ public class ReplicationManager {
       this.dataNodeRemoteReplicaInfosPerDC = new HashMap<>();
       this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
       this.numberOfReplicaThreads = new HashMap<>();
-      this.storeKeyConverter =
-          storeKeyConverterFactory != null ? storeKeyConverterFactory.getStoreKeyConverter() : null;
-      // @todo: instantiate list of transformers via factory. For now, use the ValidatingTransformer.
-      this.transformers = Collections.singletonList(new ValidatingTransformer(storeKeyFactory));
+      this.storeKeyConverter = storeKeyConverter;
+      this.transformers = transformers;
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {

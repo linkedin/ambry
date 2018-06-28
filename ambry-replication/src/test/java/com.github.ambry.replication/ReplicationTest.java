@@ -25,7 +25,6 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -34,6 +33,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
@@ -157,7 +157,8 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, storeKeyConverter, Collections.singletonList(new ValidatingTransformer(storeKeyFactory)),
+            storeKeyFactory, storeKeyConverter,
+            Collections.singletonList(new ValidatingTransformer(storeKeyFactory, storeKeyConverter)),
             clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
             new ResponseHandler(clusterMap));
     Thread thread = Utils.newThread(replicaThread, false);
@@ -238,7 +239,8 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, storeKeyConverter, Collections.singletonList(new ValidatingTransformer(storeKeyFactory)),
+            storeKeyFactory, storeKeyConverter,
+            Collections.singletonList(new ValidatingTransformer(storeKeyFactory, storeKeyConverter)),
             clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
             new ResponseHandler(clusterMap));
 
@@ -395,7 +397,8 @@ public class ReplicationTest {
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, storeKeyConverter, Collections.singletonList(new ValidatingTransformer(storeKeyFactory)),
+            storeKeyFactory, storeKeyConverter,
+            Collections.singletonList(new ValidatingTransformer(storeKeyFactory, storeKeyConverter)),
             clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
             new ResponseHandler(clusterMap));
 

@@ -16,6 +16,7 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
@@ -32,7 +33,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
 public class ValidatingTransformer implements Transformer {
   private final StoreKeyFactory storeKeyFactory;
 
-  public ValidatingTransformer(StoreKeyFactory storeKeyFactory) {
+  public ValidatingTransformer(StoreKeyFactory storeKeyFactory, StoreKeyConverter storeKeyConverter) {
     this.storeKeyFactory = storeKeyFactory;
   }
 

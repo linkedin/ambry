@@ -71,7 +71,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.store.StoreKeyConverterFactory;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -113,12 +113,12 @@ public class AmbryRequests implements RequestAPI {
   private final ConcurrentHashMap<RequestOrResponseType, Set<PartitionId>> requestsDisableInfo =
       new ConcurrentHashMap<>();
   private final boolean enableDataPrefetch;
-  private final StoreKeyConverterFactory storeKeyConverterFactory;
+  private final StoreKeyConverter storeKeyConverter;
 
   public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
       ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
       NotificationSystem operationNotification, ReplicationManager replicationManager, StoreKeyFactory storeKeyFactory,
-      boolean enableDataPrefetch, StoreKeyConverterFactory storeKeyConverterFactory) {
+      boolean enableDataPrefetch, StoreKeyConverter storeKeyConverter) {
     this.storageManager = storageManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
@@ -130,7 +130,7 @@ public class AmbryRequests implements RequestAPI {
     this.replicationManager = replicationManager;
     this.storeKeyFactory = storeKeyFactory;
     this.enableDataPrefetch = enableDataPrefetch;
-    this.storeKeyConverterFactory = storeKeyConverterFactory;
+    this.storeKeyConverter = storeKeyConverter;
 
     requestsDisableInfo.put(RequestOrResponseType.PutRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
     requestsDisableInfo.put(RequestOrResponseType.GetRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
@@ -1066,12 +1066,12 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * Convert StoreKeys based on {@link StoreKeyConverterFactory}
+   * Convert StoreKeys based on {@link StoreKeyConverter}
    * @param storeKeys A list of original storeKeys.
    * @return A list of converted storeKeys.
    */
   private List<StoreKey> getConvertedStoreKeys(List<? extends StoreKey> storeKeys) throws Exception {
-    Map<StoreKey, StoreKey> conversionMap = storeKeyConverterFactory.getStoreKeyConverter().convert(storeKeys);
+    Map<StoreKey, StoreKey> conversionMap = storeKeyConverter.convert(storeKeys);
     List<StoreKey> convertedStoreKeys = new ArrayList<>();
     for (StoreKey key : storeKeys) {
       StoreKey convertedKey = conversionMap.get(key);

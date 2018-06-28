@@ -75,6 +75,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.ByteBufferChannel;
@@ -132,13 +133,14 @@ public class AmbryRequestsTest {
     properties.setProperty("replication.no.of.inter.dc.replica.threads", "0");
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     dataNodeId = clusterMap.getDataNodeIds().get(0);
-    replicationManager =
-        MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId);
     storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(conversionMap);
+    replicationManager =
+        MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId,
+            storeKeyConverterFactory.getStoreKeyConverter());
     ambryRequests = new AmbryRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), FIND_TOKEN_FACTORY, null, replicationManager, null, false,
-        storeKeyConverterFactory);
+        storeKeyConverterFactory.getStoreKeyConverter());
   }
 
   /**
@@ -1239,16 +1241,18 @@ public class AmbryRequestsTest {
      * @param storageManager the {@link StorageManager} to use.
      * @param clusterMap the {@link ClusterMap} to use.
      * @param dataNodeId the {@link DataNodeId} to use.
+     * @param storeKeyConverter the {@link StoreKeyConverter} to use.
      * @return an instance of {@link MockReplicationManager}
      * @throws ReplicationException
      */
     static MockReplicationManager getReplicationManager(VerifiableProperties verifiableProperties,
-        StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId) throws ReplicationException {
+        StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
+        StoreKeyConverter storeKeyConverter) throws ReplicationException {
       ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
       StoreConfig storeConfig = new StoreConfig(verifiableProperties);
       return new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-          dataNodeId);
+          dataNodeId, storeKeyConverter);
     }
 
     /**
@@ -1259,11 +1263,12 @@ public class AmbryRequestsTest {
      * @param storageManager the {@link StorageManager} to use.
      * @param clusterMap the {@link ClusterMap} to use.
      * @param dataNodeId the {@link DataNodeId} to use.
+     * @param storeKeyConverter the {@link StoreKeyConverter} to use.
      * @throws ReplicationException
      */
     MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
-        StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId)
-        throws ReplicationException {
+        StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
+        StoreKeyConverter storeKeyConverter) throws ReplicationException {
       super(replicationConfig, clusterMapConfig, storeConfig, storageManager, new StoreKeyFactory() {
 
         @Override
@@ -1275,7 +1280,7 @@ public class AmbryRequestsTest {
         public StoreKey getStoreKey(String input) {
           return null;
         }
-      }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, null);
+      }, clusterMap, null, dataNodeId, null, clusterMap.getMetricRegistry(), null, storeKeyConverter, null);
       this.dataNodeId = dataNodeId;
       reset();
     }

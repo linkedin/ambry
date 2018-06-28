@@ -44,7 +44,7 @@ public class BlobIdTransformer implements Transformer {
    * @param storeKeyConverter
    * @param storeKeyFactory
    */
-  public BlobIdTransformer(StoreKeyConverter storeKeyConverter, StoreKeyFactory storeKeyFactory) {
+  public BlobIdTransformer(StoreKeyFactory storeKeyFactory, StoreKeyConverter storeKeyConverter) {
     this.storeKeyFactory = Objects.requireNonNull(storeKeyFactory, "storeKeyFactory must not be null");
     this.storeKeyConverter = Objects.requireNonNull(storeKeyConverter, "storeKeyConverter must not be null");
   }
