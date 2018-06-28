@@ -17,8 +17,8 @@ package com.github.ambry.store;
  * A class that holds the result of a transformation (by the {@link Transformer}).
  */
 public class TransformationOutput {
-  Exception exception;
-  Message msg;
+  private Exception exception;
+  private Message msg;
 
   /**
    * Instantiate an instance of this class with a message.
