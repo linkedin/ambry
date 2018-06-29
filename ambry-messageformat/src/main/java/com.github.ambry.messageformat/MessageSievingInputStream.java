@@ -43,7 +43,7 @@ public class MessageSievingInputStream extends InputStream {
   private final InputStream sievedStream;
   private boolean hasInvalidMessages;
   private boolean hasDeprecatedMessages;
-  private List<MessageInfo> sievedMessageInfoList;
+  private final List<MessageInfo> sievedMessageInfoList;
   private final List<Transformer> transformers;
 
   //metrics
@@ -107,8 +107,11 @@ public class MessageSievingInputStream extends InputStream {
       logger.error(
           "Failed to read intended size from stream. Expected " + totalMessageListSize + ", actual " + bytesRead);
     }
-    if (sievedMessageInfoList.size() == 0) {
-      logger.error("All messages are invalidated in this message stream ");
+    if (hasInvalidMessages) {
+      logger.error("There are invalidated messages in this stream");
+    }
+    if (hasDeprecatedMessages) {
+      logger.trace("There are deprecated messages in this stream");
     }
     batchMessageSieveTime.update(SystemTime.getInstance().milliseconds() - batchStartTime);
     ListIterator<InputStream> msgStreamIterator = msgStreamList.listIterator();
