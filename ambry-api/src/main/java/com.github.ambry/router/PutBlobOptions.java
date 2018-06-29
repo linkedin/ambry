@@ -19,13 +19,6 @@ package com.github.ambry.router;
  * Represents any options associated with a putBlob request.
  */
 public class PutBlobOptions {
-
-  /**
-   * Construct a {@link PutBlobOptions} object that represents any options associated with a getBlob request.
-   */
-  PutBlobOptions() {
-  }
-
   @Override
   public String toString() {
     return "PutBlobOptions{}";
