@@ -205,9 +205,9 @@ public class FrontendMetrics {
     optionsMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options", metricRegistry);
     optionsSSLMetrics = new RestRequestMetrics(AmbryBlobStorageService.class, "Options" + SSL_SUFFIX, metricRegistry);
     // PUT
-    updateBlobTtlMetrics = new RestRequestMetrics(GetSignedUrlHandler.class, "UpdateBlobTtl", metricRegistry);
+    updateBlobTtlMetrics = new RestRequestMetrics(TtlUpdateHandler.class, "UpdateBlobTtl", metricRegistry);
     updateBlobTtlSSLMetrics =
-        new RestRequestMetrics(GetSignedUrlHandler.class, "UpdateBlobTtl" + SSL_SUFFIX, metricRegistry);
+        new RestRequestMetrics(TtlUpdateHandler.class, "UpdateBlobTtl" + SSL_SUFFIX, metricRegistry);
 
     // RestRequestMetricsGroup
     postRequestMetricsGroup = new RestRequestMetricsGroup("Post", BLOB);

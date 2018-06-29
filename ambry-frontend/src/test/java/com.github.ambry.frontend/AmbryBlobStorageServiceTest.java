@@ -1601,7 +1601,8 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Deletes the blob with blob ID {@code blobId} and verifies the response returned.
+   * Deletes the blob with blob ID {@code blobId} and verifies the response returned. Also checks responses from
+   * GET, HEAD, TTL Update and DELETE
    * @param blobId the blob ID of the blob to DELETE.
    * @param expectedHeaders the expected headers in the GET response triggered for verification (if right options are
    *                        provided).

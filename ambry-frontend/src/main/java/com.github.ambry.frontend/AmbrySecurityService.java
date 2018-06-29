@@ -103,8 +103,8 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
     }
-    // check preconditions for DELETE request
-    if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod().equals(RestMethod.PUT)) {
+    // check preconditions for request
+    if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
       try {
         accountAndContainerNamePreconditionCheck(restRequest);
       } catch (Exception e) {

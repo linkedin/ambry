@@ -49,6 +49,9 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 
+/**
+ * Tests for {@link TtlUpdateHandler}.
+ */
 public class TtlUpdateHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
@@ -91,7 +94,7 @@ public class TtlUpdateHandlerTest {
   }
 
   /**
-   * Handles the case where TTL update succeeds
+   * Tests the case where TTL update succeeds
    * @throws Exception
    */
   @Test
@@ -137,13 +140,14 @@ public class TtlUpdateHandlerTest {
   }
 
   /**
-   * Verifies that the TTL is {@code expectedTtl}
-   * @param expectedTtl the expected TTL of the blob
+   * Verifies that the TTL is {@code expectedTtlSecs}
+   * @param expectedTtlSecs the expected TTL (in secs) of the blob
    * @throws Exception
    */
-  private void assertTtl(long expectedTtl) throws Exception {
+  private void assertTtl(long expectedTtlSecs) throws Exception {
     GetBlobResult result = router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
-    assertEquals("TTL not as expected", expectedTtl, result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
+    assertEquals("TTL not as expected", expectedTtlSecs,
+        result.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds());
   }
 
   // handleGoodCaseTest()
@@ -268,7 +272,9 @@ public class TtlUpdateHandlerTest {
       sendRequestGetResponse(restRequest, new MockRestResponseChannel());
       fail("Request should have failed");
     } catch (Exception e) {
-      assertEquals("Unexpected Exception", msg, e.getMessage());
+      if (!msg.equals(e.getMessage())) {
+        throw e;
+      }
     }
   }
 
