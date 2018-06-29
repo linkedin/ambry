@@ -413,6 +413,9 @@ class NettyResponseChannel implements RestResponseChannel {
     // if there is an ALLOW header in the response so far constructed, copy it
     if (responseMetadata.headers().contains(HttpHeaderNames.ALLOW)) {
       response.headers().set(HttpHeaderNames.ALLOW, responseMetadata.headers().get(HttpHeaderNames.ALLOW));
+    } else if (errorResponseStatus == ResponseStatus.MethodNotAllowed) {
+      logger.warn("Response is {} but there is no value for {}", ResponseStatus.MethodNotAllowed,
+          HttpHeaderNames.ALLOW);
     }
     HttpUtil.setKeepAlive(response, shouldKeepAlive(status));
     return response;

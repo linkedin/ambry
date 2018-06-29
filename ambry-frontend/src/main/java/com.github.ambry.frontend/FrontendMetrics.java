@@ -69,7 +69,7 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityPostProcessRequestMetrics;
-  public final AsyncOperationTracker.Metrics updateBlobTtlRouterPutBlobMetrics;
+  public final AsyncOperationTracker.Metrics updateBlobTtlRouterMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlIdConversionMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessResponseMetrics;
 
@@ -231,8 +231,7 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityProcessRequest", metricRegistry);
     updateBlobTtlSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityPostProcessRequest", metricRegistry);
-    updateBlobTtlRouterPutBlobMetrics =
-        new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "routerPutBlob", metricRegistry);
+    updateBlobTtlRouterMetrics = new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "router", metricRegistry);
     updateBlobTtlIdConversionMetrics =
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "idConversion", metricRegistry);
     updateBlobTtlSecurityProcessResponseMetrics =

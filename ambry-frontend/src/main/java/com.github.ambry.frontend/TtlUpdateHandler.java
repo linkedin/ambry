@@ -145,7 +145,7 @@ class TtlUpdateHandler {
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl}.
      */
     private Callback<Void> routerCallback() {
-      return buildCallback(metrics.updateBlobTtlRouterPutBlobMetrics, result -> {
+      return buildCallback(metrics.updateBlobTtlRouterMetrics, result -> {
         LOGGER.debug("Updated TTL of {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
