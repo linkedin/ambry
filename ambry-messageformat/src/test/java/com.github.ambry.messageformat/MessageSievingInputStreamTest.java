@@ -920,6 +920,11 @@ class RandomKeyConverter implements StoreKeyConverter {
     });
     return output;
   }
+
+  @Override
+  public StoreKey getConverted(StoreKey storeKey) {
+    return onceConverted.get(storeKey);
+  }
 }
 
 /**
