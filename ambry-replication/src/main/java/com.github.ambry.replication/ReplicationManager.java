@@ -29,8 +29,10 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.SystemTime;
@@ -569,12 +571,14 @@ public class ReplicationManager {
             "Replica Thread-" + (dataNodeId.getDatacenterName().equals(datacenter) ? "Intra-" : "Inter") + i
                 + datacenter;
         try {
+          StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+          Transformer threadSpecificTransformer =
+              Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
           ReplicaThread replicaThread =
               new ReplicaThread(threadIdentity, replicasForThread, factory, clusterMap, correlationIdGenerator,
                   dataNodeId, connectionPool, replicationConfig, replicationMetrics, notification, storeKeyFactory,
-                  storeKeyConverterFactory.getStoreKeyConverter(),
-                  Utils.getObj(transformerClassName, storeKeyFactory, storeKeyConverterFactory), metricRegistry,
-                  replicatingOverSsl, datacenter, responseHandler);
+                  threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
+                  responseHandler);
           if (replicaThreadPools.containsKey(datacenter)) {
             replicaThreadPools.get(datacenter).add(replicaThread);
           } else {

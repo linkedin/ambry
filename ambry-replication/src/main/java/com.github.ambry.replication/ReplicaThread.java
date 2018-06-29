@@ -93,7 +93,7 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final List<Transformer> transformers;
+  private final Transformer transformer;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
   private final boolean replicatingFromRemoteColo;
@@ -108,7 +108,7 @@ class ReplicaThread implements Runnable {
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      StoreKeyConverter storeKeyConverter, List<Transformer> transformers, MetricRegistry metricRegistry,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
@@ -121,7 +121,7 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
-    this.transformers = transformers;
+    this.transformer = transformer;
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
@@ -686,8 +686,8 @@ class ReplicaThread implements Runnable {
 
               MessageFormatWriteSet writeset;
               MessageSievingInputStream validMessageDetectionInputStream =
-                  new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, transformers,
-                      metricRegistry);
+                  new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
+                      Collections.singletonList(transformer), metricRegistry);
               if (validMessageDetectionInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 logger.error("Out of " + (messageInfoList.size()) + " messages, " + (messageInfoList.size()
