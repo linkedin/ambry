@@ -16,6 +16,7 @@ package com.github.ambry.account;
 
 import com.github.ambry.router.Callback;
 import java.io.Closeable;
+import java.util.List;
 
 
 /**
@@ -33,6 +34,17 @@ public interface AclService<P> extends Closeable {
    * @return {@code true} if the principal is allowed to perform the specified operation on the target resource.
    */
   boolean hasAccess(P principal, Resource resource, Operation operation);
+
+  /**
+   * Makes a resource access decision.
+   * @param principal the requester principal (identity).
+   * @param resources the {@link Resource} list to check for access to.
+   * @param operation the {@link Operation} to perform on the resource.
+   * @param resolution the {@link Resolution} strategy to use in case of multiple resources.
+   * @return {@code true} if the principal is allowed to perform the specified operation on the target resources,
+   * given the specified resolution strategy.
+   */
+  boolean hasAccess(P principal, List<Resource> resources, Operation operation, Resolution resolution);
 
   /**
    * Allow the provided principal to perform an {@link Operation} on a {@link Resource}.
@@ -77,6 +89,22 @@ public interface AclService<P> extends Closeable {
      */
     DELETE,
 
+  }
+
+  /**
+   * The resolution strategy to use on multiple resources.
+   */
+  enum Resolution {
+
+    /**
+     * Require the principal to have access to all of the target resources.
+     */
+    ALL,
+
+    /**
+     * Allow access if the principal has access to any of the target resources.
+     */
+    ANY
   }
 
   /**
