@@ -33,7 +33,7 @@ public interface StoreKeyConverter {
    * @return a mapping for each {@link StoreKey} in the new format.
    * @throws Exception that may be thrown when performing the conversion operation
    */
-  public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception;
+  Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception;
 
   /**
    * Returns converted storeKey. Intended to use after running {@link #convert(Collection)}, as
@@ -44,5 +44,5 @@ public interface StoreKeyConverter {
    *                 IllegalStateException
    * @return the previously converted storeKey
    */
-  public StoreKey getConverted(StoreKey storeKey);
+  StoreKey getConverted(StoreKey storeKey);
 }

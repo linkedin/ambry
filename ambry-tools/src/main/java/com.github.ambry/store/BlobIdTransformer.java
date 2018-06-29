@@ -25,9 +25,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
@@ -37,7 +34,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
  * Transformer implementation that replaces BlobIds in messages with
  * the converted value from the StoreKeyConverter
  */
-public class BlobIdTransformer implements StoreCopier.Transformer {
+public class BlobIdTransformer implements Transformer {
 
   private final StoreKeyConverter storeKeyConverter;
   private final StoreKeyFactory storeKeyFactory;
@@ -47,31 +44,27 @@ public class BlobIdTransformer implements StoreCopier.Transformer {
    * @param storeKeyConverter
    * @param storeKeyFactory
    */
-  public BlobIdTransformer(StoreKeyConverter storeKeyConverter, StoreKeyFactory storeKeyFactory) {
+  public BlobIdTransformer(StoreKeyFactory storeKeyFactory, StoreKeyConverter storeKeyConverter) {
     this.storeKeyFactory = Objects.requireNonNull(storeKeyFactory, "storeKeyFactory must not be null");
     this.storeKeyConverter = Objects.requireNonNull(storeKeyConverter, "storeKeyConverter must not be null");
   }
 
-  /**
-   * Takes the input message and transforms it by possibly
-   * replacing the store key and account/container IDs
-   * with a new store key and account/container IDs
-   * @param message
-   * @return
-   * @throws Exception
-   */
   @Override
-  public StoreCopier.Message transform(StoreCopier.Message message) throws Exception {
-    Objects.requireNonNull(message, "message must not be null");
-    Objects.requireNonNull(message.getMessageInfo(), "message's messageInfo must not be null");
-    Objects.requireNonNull(message.getStream(), "message's inputStream must not be null");
-    StoreKey oldStoreKey = message.getMessageInfo().getStoreKey();
-    StoreKey newStoreKey;
-    newStoreKey = storeKeyConverter.getConverted(oldStoreKey);
-    if (newStoreKey == null) {
-      return null;
+  public TransformationOutput transform(Message message) {
+    Message transformedMsg = null;
+    try {
+      Objects.requireNonNull(message, "message must not be null");
+      Objects.requireNonNull(message.getMessageInfo(), "message's messageInfo must not be null");
+      Objects.requireNonNull(message.getStream(), "message's inputStream must not be null");
+      StoreKey oldStoreKey = message.getMessageInfo().getStoreKey();
+      StoreKey newStoreKey = storeKeyConverter.getConverted(oldStoreKey);
+      if (newStoreKey != null) {
+        transformedMsg = newMessage(message.getStream(), newStoreKey);
+      }
+    } catch (Exception e) {
+      return new TransformationOutput(e);
     }
-    return newMessage(message.getStream(), newStoreKey);
+    return new TransformationOutput(transformedMsg);
   }
 
   /**
@@ -113,17 +106,16 @@ public class BlobIdTransformer implements StoreCopier.Transformer {
   }
 
   /**
-   * Creates a StoreCopier.Message from the old StoreCopier.Message
+   * Creates a Message from the old Message
    * input stream, replacing the old store key and account/container IDs
    * with a new store key and account/container IDs
-   * @param inputStream the input stream of the StoreCopier.Message
+   * @param inputStream the input stream of the Message
    * @param newKey the new StoreKey
-   * @return new StoreCopier.Message message
+   * @return new Message message
    * @throws IOException
    * @throws MessageFormatException
    */
-  private StoreCopier.Message newMessage(InputStream inputStream, StoreKey newKey)
-      throws IOException, MessageFormatException {
+  private Message newMessage(InputStream inputStream, StoreKey newKey) throws IOException, MessageFormatException {
     MessageHeader_Format headerFormat = getMessageHeader(inputStream);
     storeKeyFactory.getStoreKey(new DataInputStream(inputStream));
     BlobId newBlobId = (BlobId) newKey;
@@ -148,7 +140,7 @@ public class BlobIdTransformer implements StoreCopier.Transformer {
       MessageInfo info = new MessageInfo(newKey, putMessageFormatInputStream.getSize(),
           Utils.addSecondsToEpochTime(newProperties.getCreationTimeInMs(), newProperties.getTimeToLiveInSeconds()),
           newProperties.getAccountId(), newProperties.getContainerId(), newProperties.getCreationTimeInMs());
-      return new StoreCopier.Message(info, putMessageFormatInputStream);
+      return new Message(info, putMessageFormatInputStream);
     } else {
       throw new IllegalArgumentException("Only 'put' records are valid");
     }

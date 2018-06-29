@@ -32,7 +32,6 @@ import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -57,52 +56,6 @@ import static com.github.ambry.utils.Utils.*;
  * tgt) are offline.
  */
 public class StoreCopier implements Closeable {
-
-  /**
-   * Representation of a message in the store. Contains the {@link MessageInfo} and the {@link InputStream} of data.
-   */
-  public static class Message {
-    private final MessageInfo messageInfo;
-    private final InputStream stream;
-
-    /**
-     * @param messageInfo the {@link MessageInfo} for this message.
-     * @param stream the {@link InputStream} that represents the data of this message.
-     */
-    public Message(MessageInfo messageInfo, InputStream stream) {
-      this.messageInfo = messageInfo;
-      this.stream = stream;
-    }
-
-    /**
-     * @return the {@link MessageInfo} for this message.
-     */
-    public MessageInfo getMessageInfo() {
-      return messageInfo;
-    }
-
-    /**
-     * @return the {@link InputStream} that represents the data of this message.
-     */
-    public InputStream getStream() {
-      return stream;
-    }
-  }
-
-  /**
-   * An interface for a transformation function. Transformations can modify any data in the message (including keys).
-   * Needs to be thread safe.
-   */
-  public interface Transformer {
-
-    /**
-     * Transforms the input {@link Message} into an output {@link Message}.
-     * @param message the input {@link Message} to change.
-     * @return the output {@link Message}.
-     * @throws Exception if transform encounters an exception when transforming a message
-     */
-    Message transform(Message message) throws Exception;
-  }
 
   /**
    * Config class for the {@link StoreCopier}.
@@ -268,7 +221,12 @@ public class StoreCopier implements Closeable {
             readSet.writeTo(0, new ByteBufferChannel(ByteBuffer.wrap(buf)), 0, size);
             Message message = new Message(messageInfo, new ByteArrayInputStream(buf));
             for (Transformer transformer : transformers) {
-              message = transformer.transform(message);
+              TransformationOutput tfmOutput = transformer.transform(message);
+              if (tfmOutput.getException() != null) {
+                throw tfmOutput.getException();
+              } else {
+                message = tfmOutput.getMsg();
+              }
               if (message == null) {
                 break;
               }

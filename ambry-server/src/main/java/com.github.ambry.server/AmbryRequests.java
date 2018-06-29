@@ -71,6 +71,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -1066,7 +1067,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   /**
-   * Convert StoreKeys based on {@link StoreKeyConverterFactory}
+   * Convert StoreKeys based on {@link StoreKeyConverter}
    * @param storeKeys A list of original storeKeys.
    * @return A list of converted storeKeys.
    */

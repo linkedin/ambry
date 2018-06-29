@@ -68,13 +68,6 @@ public class ReplicationConfig {
   @Default("1048576")
   public final long replicationFetchSizeInBytes;
 
-  /**
-   * Whether message stream should be tested for validity so that only valid ones are considered during replication
-   */
-  @Config("replication.validate.message.stream")
-  @Default("false")
-  public final boolean replicationValidateMessageStream;
-
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationTokenFactory =
@@ -91,6 +84,5 @@ public class ReplicationConfig {
         verifiableProperties.getIntInRange("replication.token.flush.delay.seconds", 5, 1, Integer.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
-    replicationValidateMessageStream = verifiableProperties.getBoolean("replication.validate.message.stream", false);
   }
 }

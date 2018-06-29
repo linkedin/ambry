@@ -33,6 +33,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
@@ -54,14 +55,18 @@ import com.github.ambry.store.FindToken;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreStats;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.store.Write;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
@@ -126,6 +131,7 @@ public class ReplicationTest {
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    StoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
 
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
     CountDownLatch readyToPause = new CountDownLatch(1);
@@ -150,11 +156,13 @@ public class ReplicationTest {
     int batchSize = 4;
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
 
+    StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap));
+            storeKeyFactory, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
     Thread thread = Utils.newThread(replicaThread, false);
     thread.start();
 
@@ -222,6 +230,7 @@ public class ReplicationTest {
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    StoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
     replicasToReplicate.put(remoteHost.dataNodeId, localHost.getRemoteReplicaInfos(remoteHost, null));
     Map<DataNodeId, Host> hosts = new HashMap<>();
@@ -229,11 +238,13 @@ public class ReplicationTest {
     int batchSize = 4;
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
 
+    StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap));
+            storeKeyFactory, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
 
     Map<PartitionId, Integer> progressTracker = new HashMap<>();
     PartitionId idToLeaveOut = clusterMap.getAllPartitionIds(null).get(0);
@@ -377,6 +388,7 @@ public class ReplicationTest {
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     replicationMetrics.populatePerColoMetrics(Collections.singleton(remoteHost.dataNodeId.getDatacenterName()));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    StoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
     replicasToReplicate.put(remoteHost.dataNodeId, localHost.getRemoteReplicaInfos(remoteHost, null));
     Map<DataNodeId, Host> hosts = new HashMap<>();
@@ -384,11 +396,13 @@ public class ReplicationTest {
     int batchSize = 4;
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
 
+    StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", replicasToReplicate, new MockFindTokenFactory(), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, config, replicationMetrics, null,
-            storeKeyFactory, true, clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap));
+            storeKeyFactory, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap));
 
     Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
@@ -615,8 +629,8 @@ public class ReplicationTest {
     ByteBuffer buffer = getDeleteMessage(id, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs);
     for (Host host : hosts) {
       host.addMessage(partitionId,
-          new MessageInfo(id, buffer.remaining(), true, false, putMsg.getAccountId(), putMsg.getContainerId(), deletionTimeMs),
-          buffer.duplicate());
+          new MessageInfo(id, buffer.remaining(), true, false, putMsg.getAccountId(), putMsg.getContainerId(),
+              deletionTimeMs), buffer.duplicate());
     }
   }
 
@@ -994,7 +1008,8 @@ public class ReplicationTest {
         } catch (IOException e) {
           throw new IllegalStateException(e);
         }
-        messageInfos.add(new MessageInfo(deleteInfo.getStoreKey(), deleteInfo.getSize(), true, false, messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
+        messageInfos.add(new MessageInfo(deleteInfo.getStoreKey(), deleteInfo.getSize(), true, false,
+            messageInfoFound.getExpirationTimeInMs(), messageInfoFound.getAccountId(),
             messageInfoFound.getContainerId(), System.currentTimeMillis()));
       }
     }

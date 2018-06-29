@@ -49,7 +49,9 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import java.io.DataInputStream;
@@ -91,8 +93,7 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
-  private final StoreKeyFactory storeKeyFactory;
-  private final boolean validateMessageStream;
+  private final Transformer transformer;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
   private final boolean replicatingFromRemoteColo;
@@ -107,8 +108,8 @@ class ReplicaThread implements Runnable {
       FindTokenFactory findTokenFactory, ClusterMap clusterMap, AtomicInteger correlationIdGenerator,
       DataNodeId dataNodeId, ConnectionPool connectionPool, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyFactory storeKeyFactory,
-      boolean validateMessageStream, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName,
-      ResponseHandler responseHandler) {
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler) {
     this.threadName = threadName;
     this.replicasToReplicateGroupedByNode = replicasToReplicateGroupedByNode;
     this.running = true;
@@ -120,8 +121,7 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
-    this.storeKeyFactory = storeKeyFactory;
-    this.validateMessageStream = validateMessageStream;
+    this.transformer = transformer;
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
     this.replicatingFromRemoteColo = !(dataNodeId.getDatacenterName().equals(datacenterName));
@@ -526,9 +526,8 @@ class ReplicaThread implements Runnable {
           MessageFormatInputStream deleteStream =
               new DeleteMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
                   messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
-          MessageInfo info =
-              new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, false, messageInfo.getAccountId(),
-                  messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
+          MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, false,
+              messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
@@ -685,26 +684,21 @@ class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.missingStoreKeys, remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
-              MessageFormatWriteSet writeset = null;
-              if (validateMessageStream) {
-                MessageSievingInputStream validMessageDetectionInputStream =
-                    new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList, storeKeyFactory,
-                        metricRegistry);
-                if (validMessageDetectionInputStream.hasInvalidMessages()) {
-                  replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
-                  logger.error("Out of " + (messageInfoList.size()) + " messages, " + (messageInfoList.size()
-                      - validMessageDetectionInputStream.getValidMessageInfoList().size())
-                      + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
-                }
-                messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
-                if (messageInfoList.size() == 0) {
-                  logger.error("MessageInfoList is of size 0 as all messages are invalidated ");
-                } else {
-                  writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
-                  remoteReplicaInfo.getLocalStore().put(writeset);
-                }
+              MessageFormatWriteSet writeset;
+              MessageSievingInputStream validMessageDetectionInputStream =
+                  new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
+                      Collections.singletonList(transformer), metricRegistry);
+              if (validMessageDetectionInputStream.hasInvalidMessages()) {
+                replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
+                logger.error("Out of " + (messageInfoList.size()) + " messages, " + (messageInfoList.size()
+                    - validMessageDetectionInputStream.getValidMessageInfoList().size())
+                    + " invalid messages were found in message stream from " + remoteReplicaInfo.getReplicaId());
+              }
+              messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
+              if (messageInfoList.size() == 0) {
+                logger.error("MessageInfoList is of size 0 as all messages are invalidated or deprecated");
               } else {
-                writeset = new MessageFormatWriteSet(getResponse.getInputStream(), messageInfoList, true);
+                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
                 remoteReplicaInfo.getLocalStore().put(writeset);
               }
 

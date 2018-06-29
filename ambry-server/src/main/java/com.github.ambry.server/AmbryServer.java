@@ -43,13 +43,16 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -83,7 +86,6 @@ public class AmbryServer {
   private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
-  private StoreKeyConverterFactory storeKeyConverterFactory = null;
   private Time time;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory, Time time)
@@ -144,11 +146,14 @@ public class AmbryServer {
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
-      storeKeyConverterFactory = Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
+      StoreKeyConverterFactory storeKeyConverterFactory =
+          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties,
+              registry);
 
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory);
+              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
+              serverConfig.serverMessageTransformer);
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
