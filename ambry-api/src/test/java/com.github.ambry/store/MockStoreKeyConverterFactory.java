@@ -89,9 +89,9 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
     }
 
     @Override
-    public StoreKey getConverted(StoreKey storeKey) throws StoreKeyConverterNotConvertedException {
+    public StoreKey getConverted(StoreKey storeKey) {
       if (exception != null) {
-        throw new StoreKeyConverterNotConvertedException();
+        throw new IllegalStateException(exception);
       }
       if (returnKeyIfAbsent && !conversionMap.containsKey(storeKey)) {
         return storeKey;

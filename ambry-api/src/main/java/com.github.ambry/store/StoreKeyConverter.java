@@ -38,20 +38,11 @@ public interface StoreKeyConverter {
   /**
    * Returns converted storeKey. Intended to use after running {@link #convert(Collection)}, as
    * intention is that this will retrieve an already converted storeKey.  If called prior to
-   * {@link #convert(Collection)} it may throw a StoreKeyConverterNotConvertedException
+   * {@link #convert(Collection)} it may throw an IllegalStateException
    * @param storeKey storeKey you want the converted version of.  If the key was not apart
    *                 of a previous {@link #convert(Collection)} call, method may throw
-   *                 StoreKeyConverterNotConvertedException
+   *                 IllegalStateException
    * @return the previously converted storeKey
    */
-  public StoreKey getConverted(StoreKey storeKey) throws StoreKeyConverterNotConvertedException;
-
-  /**
-   * Exception that can be called if {@link #getConverted(StoreKey)} is called
-   * before {@link #convert(Collection)}
-   */
-  public class StoreKeyConverterNotConvertedException extends Exception {
-
-  }
-
+  public StoreKey getConverted(StoreKey storeKey);
 }
