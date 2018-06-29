@@ -23,13 +23,13 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
+import java.io.SequenceInputStream;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.ListIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
 public class MessageSievingInputStream extends InputStream {
   private int sievedStreamSize;
   private final Logger logger;
-  private ByteBuffer byteBuffer;
+  private final InputStream sievedStream;
   private boolean hasInvalidMessages;
   private boolean hasDeprecatedMessages;
   private List<MessageInfo> sievedMessageInfoList;
@@ -80,7 +80,7 @@ public class MessageSievingInputStream extends InputStream {
 
     // check for empty list
     if (messageInfoList.size() == 0) {
-      byteBuffer = ByteBuffer.allocate(0);
+      sievedStream = new ByteArrayInputStream(new byte[0]);
       return;
     }
 
@@ -90,7 +90,7 @@ public class MessageSievingInputStream extends InputStream {
     }
 
     int bytesRead = 0;
-    ByteArrayOutputStream sievedOutputStream = new ByteArrayOutputStream(totalMessageListSize);
+    List<InputStream> msgStreamList = new ArrayList<>();
     long batchStartTime = SystemTime.getInstance().milliseconds();
     logger.trace("Starting to validate message stream ");
     for (MessageInfo msgInfo : messageInfoList) {
@@ -100,7 +100,7 @@ public class MessageSievingInputStream extends InputStream {
       // was an error during the sieving for this message.
       Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
-      sieve(msg, sievedOutputStream, bytesRead);
+      sieve(msg, msgStreamList, bytesRead);
       bytesRead += msgSize;
     }
     if (bytesRead != totalMessageListSize) {
@@ -111,8 +111,20 @@ public class MessageSievingInputStream extends InputStream {
       logger.error("All messages are invalidated in this message stream ");
     }
     batchMessageSieveTime.update(SystemTime.getInstance().milliseconds() - batchStartTime);
-    byteBuffer = ByteBuffer.wrap(sievedOutputStream.toByteArray());
-    this.sievedStreamSize = byteBuffer.remaining();
+    ListIterator<InputStream> msgStreamIterator = msgStreamList.listIterator();
+    Enumeration<InputStream> inputStreamEnumeration = new Enumeration<InputStream>() {
+      @Override
+      public boolean hasMoreElements() {
+        return msgStreamIterator.hasNext();
+      }
+
+      @Override
+      public InputStream nextElement() {
+        return msgStreamIterator.next();
+      }
+    };
+    sievedStream = new SequenceInputStream(inputStreamEnumeration);
+    this.sievedStreamSize = (int) sievedMessageInfoList.stream().mapToLong(MessageInfo::getSize).sum();
     logger.trace("Completed validation of message stream ");
   }
 
@@ -126,27 +138,12 @@ public class MessageSievingInputStream extends InputStream {
 
   @Override
   public int read() throws IOException {
-    if (!byteBuffer.hasRemaining()) {
-      return -1;
-    }
-    return byteBuffer.get() & 0xFF;
+    return sievedStream.read();
   }
 
   @Override
   public int read(byte[] bytes, int offset, int length) throws IOException {
-    if (bytes == null) {
-      throw new IllegalArgumentException("Byte array cannot be null");
-    } else if (offset < 0 || length < 0 || length > bytes.length - offset) {
-      throw new IndexOutOfBoundsException();
-    } else if (length == 0) {
-      return 0;
-    }
-    int count = Math.min(byteBuffer.remaining(), length);
-    if (count == 0) {
-      return -1;
-    }
-    byteBuffer.get(bytes, offset, count);
-    return count;
+    return sievedStream.read(bytes, offset, length);
   }
 
   /**
@@ -173,15 +170,15 @@ public class MessageSievingInputStream extends InputStream {
    * of {@link Transformer}s associated with this instance.
    * message corruption and acceptable formats.
    * @param inMsg the original {@link Message} that needs to be validated and possibly transformed.
-   * @param sievedOutputStream the output {@link OutputStream}
+   * @param msgStreamList the output list to which the sieved stream output are to be added to.
    * @param msgOffset the offset of the message in the stream.
    * @throws IOException if an exception was encountered reading or writing bytes to/from streams.
    */
-  private void sieve(Message inMsg, OutputStream sievedOutputStream, int msgOffset) throws IOException {
+  private void sieve(Message inMsg, List<InputStream> msgStreamList, int msgOffset) throws IOException {
     if (transformers == null || transformers.isEmpty()) {
       // Write the message without any transformations.
       sievedMessageInfoList.add(inMsg.getMessageInfo());
-      Utils.transferBytes(inMsg.getStream(), sievedOutputStream, inMsg.getMessageInfo().getSize());
+      msgStreamList.add(inMsg.getStream());
     } else {
       long sieveStartTime = SystemTime.getInstance().milliseconds();
       Message msg = inMsg;
@@ -212,7 +209,7 @@ public class MessageSievingInputStream extends InputStream {
       } else {
         MessageInfo tfmMsgInfo = output.getMsg().getMessageInfo();
         sievedMessageInfoList.add(tfmMsgInfo);
-        Utils.transferBytes(output.getMsg().getStream(), sievedOutputStream, tfmMsgInfo.getSize());
+        msgStreamList.add(output.getMsg().getStream());
         logger.trace("Original message length {}, transformed bytes read {}", inMsg.getMessageInfo().getSize(),
             tfmMsgInfo.getSize());
       }

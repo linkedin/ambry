@@ -52,6 +52,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -145,20 +146,14 @@ public class AmbryServer {
       connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       connectionPool.start();
 
-      StoreKeyConverter storeKeyConverter =
-          ((StoreKeyConverterFactory) Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties,
-              registry)).getStoreKeyConverter();
-
-      List<Transformer> transformers = new ArrayList<>();
-      String[] transformerClasses = serverConfig.serverMessageTransformers.split(",");
-      for (String transformerClass : transformerClasses) {
-        transformers.add(Utils.getObj(transformerClass, storeKeyFactory, storeKeyConverter));
-      }
+      StoreKeyConverterFactory storeKeyConverterFactory =
+          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties,
+              registry);
 
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverter,
-              transformers);
+              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
+              serverConfig.serverMessageTransformer);
       replicationManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
@@ -171,7 +166,7 @@ public class AmbryServer {
       requests =
           new AmbryRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId, registry,
               findTokenFactory, notificationSystem, replicationManager, storeKeyFactory,
-              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverter);
+              serverConfig.serverEnableStoreDataPrefetch, storeKeyConverterFactory);
       requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();

@@ -69,12 +69,11 @@ public class ServerConfig {
   public final String serverStoreKeyConverterFactory;
 
   /**
-   * Implementation classes for message transformation. The class names should be comma separated and in the order in
-   * which transformation is intended.
+   * Implementation for message transformation.
    */
-  @Config("server.message.transformers")
+  @Config("server.message.transformer")
   @Default("com.github.ambry.messageformat.ValidatingTransformer")
-  public final String serverMessageTransformers;
+  public final String serverMessageTransformer;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
@@ -87,7 +86,7 @@ public class ServerConfig {
     serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
         "com.github.ambry.server.StoreKeyConverterFactoryImpl");
-    serverMessageTransformers = verifiableProperties.getString("server.message.transformers",
+    serverMessageTransformer = verifiableProperties.getString("server.message.transformer",
         "com.github.ambry.messageformat.ValidatingTransformer");
   }
 }
