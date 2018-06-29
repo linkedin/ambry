@@ -34,4 +34,22 @@ public interface StoreKeyConverter {
    * @throws Exception that may be thrown when performing the conversion operation
    */
   public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception;
+
+  /**
+   * Returns converted storeKey. Intended to use after running {@link #convert(Collection)}, as
+   * intention is that this will retrieve an already converted storeKey.  If called prior to
+   * {@link #convert(Collection)} it may throw a StoreKeyConverterNotConvertedException
+   * @param storeKey
+   * @return
+   */
+  public StoreKey getConverted(StoreKey storeKey) throws StoreKeyConverterNotConvertedException;
+
+  /**
+   * Exception that can be called if {@link #getConverted(StoreKey)} is called
+   * before {@link #convert(Collection)}
+   */
+  public class StoreKeyConverterNotConvertedException extends Exception {
+
+  }
+
 }
