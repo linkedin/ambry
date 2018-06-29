@@ -387,11 +387,11 @@ class IndexSegment {
    * @throws IOException
    */
   private void generateBloomFilterAndPersist() throws IOException {
-    List<IndexEntry> entries = new ArrayList<>();
-    getIndexEntriesSince(null, new FindEntriesCondition(Long.MAX_VALUE), entries, new AtomicLong(0), true);
-    bloomFilter = FilterFactory.getFilter(entries.size(), config.storeIndexBloomMaxFalsePositiveProbability);
-    for (IndexEntry entry : entries) {
-      bloomFilter.add(ByteBuffer.wrap(entry.getKey().toBytes()));
+    int numOfIndexEntries = numberOfEntries(mmap);
+    bloomFilter = FilterFactory.getFilter(numOfIndexEntries, config.storeIndexBloomMaxFalsePositiveProbability);
+    for (int i = 0; i < numOfIndexEntries; i++) {
+      StoreKey key = getKeyAt(mmap, i);
+      bloomFilter.add(ByteBuffer.wrap(key.toBytes()));
     }
     persistBloomFilter();
   }
