@@ -680,8 +680,8 @@ public class MessageSievingInputStreamTest {
   private void testDeprecatedMsg(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
     MessageFormatRecord.headerVersionToUse = headerVersionToUse;
 
-    // MessageSievingInputStream contains put records for 2 valid blobs and 1 corrupt blob
-    // id1(put record for valid blob), id2(corrupt) and id3(put record for valid blob)
+    // MessageSievingInputStream contains put records for 2 valid blobs and 1 deprecated blob
+    // id1(put record for valid blob), id2(deprecated) and id3(put record for valid blob)
 
     // create message stream for blob 1
     StoreKey key1 = new MockId("id1");

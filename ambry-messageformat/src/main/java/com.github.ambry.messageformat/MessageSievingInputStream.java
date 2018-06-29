@@ -64,14 +64,14 @@ public class MessageSievingInputStream extends InputStream {
     this.logger = LoggerFactory.getLogger(getClass());
     this.transformers = transformers;
     singleMessageSieveTime = metricRegistry.histogram(
-        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class, "SingleMessageSieveTime"));
+        MetricRegistry.name(MessageSievingInputStream.class, "SingleMessageSieveTime"));
     batchMessageSieveTime = metricRegistry.histogram(
-        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class, "BatchMessageSieveTime"));
+        MetricRegistry.name(MessageSievingInputStream.class, "BatchMessageSieveTime"));
     messageSievingCorruptMessagesDiscardedCount = metricRegistry.counter(
-        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class,
+        MetricRegistry.name(MessageSievingInputStream.class,
             "MessageSievingCorruptMessagesDiscardedCount"));
     messageSievingDeprecatedMessagesDiscardedCount = metricRegistry.counter(
-        MetricRegistry.name(com.github.ambry.messageformat.MessageSievingInputStream.class,
+        MetricRegistry.name(MessageSievingInputStream.class,
             "MessageSievingDeprecatedMessagesDiscardedCount"));
     sievedStreamSize = 0;
     hasInvalidMessages = false;
@@ -98,6 +98,8 @@ public class MessageSievingInputStream extends InputStream {
       // Read the entire message to create an InputStream for just this message. This is to isolate the message
       // from the batched stream, as well as to ensure that subsequent messages can be correctly processed even if there
       // was an error during the sieving for this message.
+      // @todo: We can use a BoundedInputStream for each message and then empty it out in case all of it was not read
+      // @todo: (say, due to corruption). This can help avoid a copy.
       Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
       logger.trace("Read stream for message info " + msgInfo + "  into memory");
       sieve(msg, msgStreamList, bytesRead);

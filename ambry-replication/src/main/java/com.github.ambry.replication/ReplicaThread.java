@@ -696,7 +696,7 @@ class ReplicaThread implements Runnable {
               }
               messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
               if (messageInfoList.size() == 0) {
-                logger.error("MessageInfoList is of size 0 as all messages are invalidated ");
+                logger.error("MessageInfoList is of size 0 as all messages are invalidated or deprecated");
               } else {
                 writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
                 remoteReplicaInfo.getLocalStore().put(writeset);
