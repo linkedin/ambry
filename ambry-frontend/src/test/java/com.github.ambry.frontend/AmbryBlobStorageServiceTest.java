@@ -488,8 +488,8 @@ public class AmbryBlobStorageServiceTest {
 
       // aid=refAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-          (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
-          false, BlobId.BlobDataType.DATACHUNK).getID();
+          (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+          BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=refCId
@@ -529,8 +529,8 @@ public class AmbryBlobStorageServiceTest {
 
       // aid=nonExistAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
-          (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
-          false, BlobId.BlobDataType.DATACHUNK).getID();
+          (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+          BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
     }
   }
@@ -779,7 +779,8 @@ public class AmbryBlobStorageServiceTest {
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false,
+          BlobId.BlobDataType.DATACHUNK);
       RestRequest restRequest =
           createRestRequest(RestMethod.GET, blobId.getID() + "/" + RestUtils.SubResource.Replicas, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -904,6 +905,34 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_MAX_AGE,
         frontendConfig.frontendOptionsValiditySeconds,
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_MAX_AGE)));
+  }
+
+  /**
+   * Tests the case when the TTL update is rejected
+   * @throws Exception
+   */
+  @Test
+  public void updateTtlRejectedTest() throws Exception {
+    FrontendTestRouter testRouter = new FrontendTestRouter();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
+    testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
+    ambryBlobStorageService =
+        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
+    ambryBlobStorageService.start();
+
+    String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
+        Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
+        BlobId.BlobDataType.DATACHUNK).getID();
+    JSONObject headers = new JSONObject();
+    setUpdateTtlHeaders(headers, blobId, "updateTtlRejectedTest");
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, Operations.UPDATE_TTL, headers, null);
+    MockRestResponseChannel restResponseChannel = verifyOperationFailure(restRequest, RestServiceErrorCode.NotAllowed);
+    assertEquals("Unexpected response status", ResponseStatus.MethodNotAllowed, restResponseChannel.getStatus());
+    assertEquals("Unexpected value for the 'allow' header",
+        AmbryBlobStorageService.TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE,
+        restResponseChannel.getHeader(RestUtils.Headers.ALLOW));
   }
 
   // helpers
@@ -1039,15 +1068,19 @@ public class AmbryBlobStorageServiceTest {
    * Verifies that the operation specified by {@code restRequest} fails with {@code errorCode}.
    * @param restRequest the {@link RestRequest} that should fail
    * @param errorCode the {@link RestServiceErrorCode} expected
+   * @return the {@link MockRestResponseChannel} used for the operation
    * @throws Exception
    */
-  private void verifyOperationFailure(RestRequest restRequest, RestServiceErrorCode errorCode) throws Exception {
+  private MockRestResponseChannel verifyOperationFailure(RestRequest restRequest, RestServiceErrorCode errorCode)
+      throws Exception {
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     try {
-      doOperation(restRequest, new MockRestResponseChannel());
+      doOperation(restRequest, restResponseChannel);
       fail("Operation should have failed");
     } catch (RestServiceException e) {
       assertEquals("Op should have failed with a specific error code", errorCode, e.getErrorCode());
     }
+    return restResponseChannel;
   }
 
   // Constructor helpers

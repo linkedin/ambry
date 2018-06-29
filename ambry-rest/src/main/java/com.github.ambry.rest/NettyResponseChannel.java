@@ -410,6 +410,10 @@ class NettyResponseChannel implements RestResponseChannel {
       response.headers().set(ERROR_CODE_HEADER, restServiceErrorCode.name());
     }
     response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
+    // if there is an ALLOW header in the response so far constructed, copy it
+    if (responseMetadata.headers().contains(HttpHeaderNames.ALLOW)) {
+      response.headers().set(HttpHeaderNames.ALLOW, responseMetadata.headers().get(HttpHeaderNames.ALLOW));
+    }
     HttpUtil.setKeepAlive(response, shouldKeepAlive(status));
     return response;
   }

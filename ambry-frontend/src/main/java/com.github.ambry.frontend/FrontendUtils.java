@@ -17,6 +17,11 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.CallbackUtils;
+import com.github.ambry.utils.AsyncOperationTracker;
+import com.github.ambry.utils.ThrowingConsumer;
+import org.slf4j.Logger;
 
 
 /**
@@ -37,5 +42,19 @@ class FrontendUtils {
     } catch (Exception e) {
       throw new RestServiceException("Invalid blob id=" + blobIdStr, RestServiceErrorCode.BadRequest);
     }
+  }
+
+  /**
+   * @param metrics the {@link AsyncOperationTracker.Metrics} instance to update.
+   * @param successAction the action to take if the callback was called successfully.
+   * @param context the context in which this callback is being called (for logging)
+   * @param logger the {@link Logger} instance to use
+   * @param finalCallback the final callback to call once the chain is complete or if it is interrupted
+   * @return the {@link Callback} returned by {@link CallbackUtils#chainCallback}.
+   */
+  static <T, V> Callback<T> buildCallback(AsyncOperationTracker.Metrics metrics, ThrowingConsumer<T> successAction,
+      String context, Logger logger, Callback<V> finalCallback) {
+    AsyncOperationTracker tracker = new AsyncOperationTracker(context, logger, metrics);
+    return CallbackUtils.chainCallback(tracker, finalCallback, successAction);
   }
 }

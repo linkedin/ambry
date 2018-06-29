@@ -20,15 +20,14 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
-import com.github.ambry.router.CallbackUtils;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.utils.AsyncOperationTracker;
-import com.github.ambry.utils.ThrowingConsumer;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.frontend.FrontendUtils.*;
 
 
 /**
@@ -139,7 +138,7 @@ class PostBlobHandler {
       return buildCallback(frontendMetrics.postSecurityPreProcessRequestMetrics, securityCheckResult -> {
         BlobInfo blobInfo = parseBlobInfoFromRequest(restRequest);
         securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
-      });
+      }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
@@ -151,7 +150,7 @@ class PostBlobHandler {
     private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityProcessRequestMetrics,
           securityCheckResult -> securityService.postProcessRequest(restRequest,
-              securityPostProcessRequestCallback(blobInfo)));
+              securityPostProcessRequestCallback(blobInfo)), restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
@@ -163,7 +162,9 @@ class PostBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postSecurityPostProcessRequestMetrics,
           securityCheckResult -> router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest,
-              new PutBlobOptionsBuilder().build(), routerPutBlobCallback(blobInfo)));
+
+              new PutBlobOptionsBuilder().build(), routerPutBlobCallback(blobInfo)), restRequest.getUri(), LOGGER,
+          finalCallback);
     }
 
     /**
@@ -174,20 +175,21 @@ class PostBlobHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postRouterPutBlobMetrics,
-          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)));
+          blobId -> idConverter.convert(restRequest, blobId, idConverterCallback(blobInfo)), restRequest.getUri(),
+          LOGGER, finalCallback);
     }
 
     /**
      * After {@link IdConverter#convert} finishes, set the "Location" header and call
      * {@link SecurityService#processResponse}.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
-     * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
+     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
-      });
+      }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
@@ -196,17 +198,7 @@ class PostBlobHandler {
      */
     private Callback<Void> securityProcessResponseCallback() {
       return buildCallback(frontendMetrics.postSecurityProcessResponseMetrics,
-          securityCheckResult -> finalCallback.onCompletion(null, null));
-    }
-
-    /**
-     * @param metrics the {@link AsyncOperationTracker.Metrics} instance to update.
-     * @param successAction the action to take if the callback was called successfully.
-     * @return the {@link Callback} returned by {@link CallbackUtils#chainCallback}.
-     */
-    private <T> Callback<T> buildCallback(AsyncOperationTracker.Metrics metrics, ThrowingConsumer<T> successAction) {
-      AsyncOperationTracker tracker = new AsyncOperationTracker(restRequest.getUri(), LOGGER, metrics);
-      return CallbackUtils.chainCallback(tracker, finalCallback, successAction);
+          securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
     }
   }
 }

@@ -38,6 +38,7 @@ import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -56,6 +57,8 @@ import static com.github.ambry.rest.RestUtils.*;
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
 class AmbryBlobStorageService implements BlobStorageService {
+  static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
+
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
@@ -231,8 +234,17 @@ class AmbryBlobStorageService implements BlobStorageService {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
       if (operationOrBlobId.equalsIgnoreCase(Operations.UPDATE_TTL)) {
-        ttlUpdateHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
+        ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          if (e != null && e instanceof RouterException
+              && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
+            try {
+              restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
+            } catch (RestServiceException exp) {
+              logger.error("Exception while setting {}", Headers.ALLOW, exp);
+            }
+          }
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
       } else {
         submitResponse(restRequest, restResponseChannel, null,
             new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest));

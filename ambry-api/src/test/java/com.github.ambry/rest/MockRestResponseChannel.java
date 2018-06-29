@@ -132,8 +132,12 @@ public class MockRestResponseChannel implements RestResponseChannel {
       this.exception = exception;
       try {
         if (!responseMetadataFinalized.get() && exception != null) {
-          // clear headers
+          // clear headers except for the value of Allow
+          String allow = getHeader(RestUtils.Headers.ALLOW);
           responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
+          if (allow != null && !allow.isEmpty()) {
+            setHeader(RestUtils.Headers.ALLOW, allow);
+          }
           setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
           ResponseStatus status = ResponseStatus.InternalServerError;
           if (exception instanceof RestServiceException) {

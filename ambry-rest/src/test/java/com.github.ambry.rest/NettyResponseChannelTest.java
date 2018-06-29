@@ -434,6 +434,11 @@ public class NettyResponseChannelTest {
           assertFalse("Should not have found error code header",
               response.headers().contains(NettyResponseChannel.ERROR_CODE_HEADER));
         }
+        if (expectedStatus == HttpResponseStatus.METHOD_NOT_ALLOWED) {
+          assertEquals("Unexpected value for " + HttpHeaderNames.ALLOW,
+              MockNettyMessageProcessor.METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE,
+              response.headers().get(HttpHeaderNames.ALLOW));
+        }
         if (response instanceof FullHttpResponse) {
           // assert that there is no content
           assertEquals("The response should not contain content", 0,
@@ -947,6 +952,7 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
   static final String STATUS_HEADER_NAME = "status";
   static final String REST_SERVICE_ERROR_CODE_HEADER_NAME = "restServiceErrorCode";
   static final String INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME = "includeExceptionMessageInResponse";
+  static final String METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE = "thisIsAHeaderValueForAllow";
 
   // CHUNK and CHUNK_COUNT HEADER_NAME together help in Content-Length tests.
   // If a test sets CHUNK_COUNT_HEADER_NAME to 3,
@@ -1047,6 +1053,9 @@ class MockNettyMessageProcessor extends SimpleChannelInboundHandler<HttpObject> 
         boolean includeExceptionMessageInResponse =
             request.getArgs().containsKey(INCLUDE_EXCEPTION_MESSAGE_IN_RESPONSE_HEADER_NAME);
         RestServiceErrorCode errorCode = RestServiceErrorCode.valueOf(errorCodeStr);
+        if (errorCode == RestServiceErrorCode.NotAllowed) {
+          restResponseChannel.setHeader(RestUtils.Headers.ALLOW, METHOD_NOT_ALLOWED_ALLOW_HEADER_VALUE);
+        }
         restResponseChannel.onResponseComplete(
             new RestServiceException(errorCodeStr, errorCode, includeExceptionMessageInResponse));
         assertEquals("ResponseStatus does not reflect error", ResponseStatus.getResponseStatus(errorCode),

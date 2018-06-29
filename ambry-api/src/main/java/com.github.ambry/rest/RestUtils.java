@@ -185,6 +185,10 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
+    /**
+     * {@code "allow"}
+     */
+    public final static String ALLOW = "allow";
   }
 
   /**

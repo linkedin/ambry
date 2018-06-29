@@ -21,11 +21,12 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.Router;
-import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.frontend.FrontendUtils.*;
 
 
 /**
@@ -67,195 +68,98 @@ class TtlUpdateHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
-    RestRequestMetrics requestMetrics =
-        restRequest.getSSLSession() != null ? metrics.updateBlobTtlSSLMetrics : metrics.updateBlobTtlMetrics;
-    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-    restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
-    securityService.processRequest(restRequest,
-        new SecurityProcessRequestCallback(restRequest, restResponseChannel, callback));
+    new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
-   * Callback for {@link SecurityService#processRequest(RestRequest, Callback)} that subsequently issues a call to
-   * the {@link IdConverter}
+   * Represents the chain of actions to take. Keeps request context that is relevant to all callback stages.
    */
-  private class SecurityProcessRequestCallback implements Callback<Void> {
+  private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> callback;
-    private final long operationStartTimeMs = SystemTime.getInstance().milliseconds();
+    private final Callback<Void> finalCallback;
 
     /**
-     * @param restRequest the {@link RestRequest} received
-     * @param restResponseChannel the {@link RestResponseChannel} to return the response over
-     * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+     * @param restRequest the {@link RestRequest}.
+     * @param restResponseChannel the {@link RestResponseChannel}.
+     * @param finalCallback the {@link Callback} to call on completion.
      */
-    SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> callback) {
+    private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
+        Callback<Void> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
-      this.callback = callback;
+      this.finalCallback = finalCallback;
     }
-
-    @Override
-    public void onCompletion(Void result, Exception exception) {
-      long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.updateBlobTtlSecurityRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
-      try {
-        if (exception == null) {
-          String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
-          idConverter.convert(restRequest, blobIdStr,
-              new IdConverterCallback(restRequest, restResponseChannel, callback));
-        }
-      } catch (Exception e) {
-        exception = e;
-      } finally {
-        metrics.updateBlobTtlSecurityRequestCallbackProcessingTimeInMs.update(
-            SystemTime.getInstance().milliseconds() - processingStartTimeMs);
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-        }
-      }
-    }
-  }
-
-  /**
-   * Callback for calls to {@link IdConverter}
-   */
-  private class IdConverterCallback implements Callback<String> {
-    private final RestRequest restRequest;
-    private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> callback;
-    private final long operationStartTimeMs = SystemTime.getInstance().milliseconds();
 
     /**
-     * @param restRequest the {@link RestRequest} received
-     * @param restResponseChannel the {@link RestResponseChannel} to return the response over
-     * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+     * Start the chain by calling {@link SecurityService#processRequest}.
      */
-    IdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
-      this.restRequest = restRequest;
-      this.restResponseChannel = restResponseChannel;
-      this.callback = callback;
+    private void start() {
+      RestRequestMetrics requestMetrics =
+          restRequest.getSSLSession() != null ? metrics.updateBlobTtlSSLMetrics : metrics.updateBlobTtlMetrics;
+      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+      restRequest.setArg(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
+      securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
-
-    @Override
-    public void onCompletion(String result, Exception exception) {
-      long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.idConverterProcessingTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
-      try {
-        if (exception == null) {
-          BlobId blobId = FrontendUtils.getBlobIdFromString(result, clusterMap);
-          accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
-          securityService.postProcessRequest(restRequest,
-              new SecurityPostProcessRequestCallback(restRequest, restResponseChannel, blobId, callback));
-        }
-      } catch (Exception e) {
-        exception = e;
-      } finally {
-        metrics.updateBlobTtlIdConverterCallbackProcessingTimeInMs.update(
-            SystemTime.getInstance().milliseconds() - processingStartTimeMs);
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-        }
-      }
-    }
-  }
-
-  /**
-   * Callback for {@link SecurityService#postProcessRequest(RestRequest, Callback)} that forwards the TTL update
-   * request to the {@link Router} on success.
-   */
-  private class SecurityPostProcessRequestCallback implements Callback<Void> {
-    private final RestRequest restRequest;
-    private final RestResponseChannel restResponseChannel;
-    private final BlobId blobId;
-    private final Callback<Void> callback;
-    private final long operationStartTimeMs = SystemTime.getInstance().milliseconds();
 
     /**
-     * @param restRequest the {@link RestRequest} received
-     * @param restResponseChannel the {@link RestResponseChannel} to return the response over
-     * @param blobId the {@link BlobId} to operate on
-     * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+     * After {@link SecurityService#processRequest} finishes, call {@link IdConverter#convert} to convert the incoming
+     * ID if required.
+     * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
-    SecurityPostProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, BlobId blobId,
-        Callback<Void> callback) {
-      this.restRequest = restRequest;
-      this.restResponseChannel = restResponseChannel;
-      this.blobId = blobId;
-      this.callback = callback;
+    private Callback<Void> securityProcessRequestCallback() {
+      return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
+        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+      }, restRequest.getUri(), LOGGER, finalCallback);
     }
-
-    @Override
-    public void onCompletion(Void result, Exception exception) {
-      long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.updateBlobTtlSecurityPostProcessRequestTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
-      try {
-        if (exception == null) {
-          String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-          router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time,
-              new RouterCallback(restRequest, restResponseChannel, callback));
-        }
-      } catch (Exception e) {
-        exception = e;
-      } finally {
-        metrics.updateBlobTtlSecurityPostProcessRequestCallbackProcessingTimeInMs.update(
-            SystemTime.getInstance().milliseconds() - processingStartTimeMs);
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-        }
-      }
-    }
-  }
-
-  /**
-   * Callback for update blob TTL in the {@link Router}
-   */
-  private class RouterCallback implements Callback<Void> {
-    private final RestRequest restRequest;
-    private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> callback;
-    private final long operationStartTimeMs = SystemTime.getInstance().milliseconds();
 
     /**
-     * @param restRequest the {@link RestRequest} received
-     * @param restResponseChannel the {@link RestResponseChannel} to return the response over
-     * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+     * After {@link IdConverter#convert} finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
-    RouterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
-      this.restRequest = restRequest;
-      this.restResponseChannel = restResponseChannel;
-      this.callback = callback;
+    private Callback<String> idConverterCallback() {
+      return buildCallback(metrics.updateBlobTtlIdConversionMetrics, convertedBlobId -> {
+        BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
+        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest);
+        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
+      }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
-    @Override
-    public void onCompletion(Void result, Exception exception) {
-      long processingStartTimeMs = SystemTime.getInstance().milliseconds();
-      metrics.updateBlobTtlRouterTimeInMs.update(processingStartTimeMs - operationStartTimeMs);
-      try {
-        if (exception == null) {
-          LOGGER.debug("Updated TTL of {}",
-              RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-          final long processResponseStartTimeMs = SystemTime.getInstance().milliseconds();
-          securityService.processResponse(restRequest, restResponseChannel, null,
-              (processResponseResult, processResponseException) -> {
-                metrics.updateBlobTtlSecurityResponseTimeInMs.update(
-                    SystemTime.getInstance().milliseconds() - processResponseStartTimeMs);
-                callback.onCompletion(null, processResponseException);
-              });
-        }
-      } catch (Exception e) {
-        exception = e;
-      } finally {
-        metrics.updateBlobTtlRouterCallbackTimeInMs.update(
-            SystemTime.getInstance().milliseconds() - processingStartTimeMs);
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-        }
-      }
+    /**
+     * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#updateBlobTtl} to update the TTL of
+     * the blob in the storage layer.
+     * @param blobId the {@link BlobId} to update
+     * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
+     */
+    private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
+      return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
+        String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
+        router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback());
+      }, restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link Router#updateBlobTtl} finishes, call {@link SecurityService#processResponse}.
+     * @return a {@link Callback} to be used with {@link Router#updateBlobTtl}.
+     */
+    private Callback<Void> routerCallback() {
+      return buildCallback(metrics.updateBlobTtlRouterPutBlobMetrics, result -> {
+        LOGGER.debug("Updated TTL of {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+      }, restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link SecurityService#processResponse}, call {@code finalCallback}.
+     * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
+     */
+    private Callback<Void> securityProcessResponseCallback() {
+      return buildCallback(metrics.updateBlobTtlSecurityProcessResponseMetrics,
+          securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
     }
   }
 }
