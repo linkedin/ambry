@@ -23,6 +23,7 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
@@ -104,7 +105,7 @@ public class MockBlobStorageService implements BlobStorageService {
         restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
         BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
-        router.putBlob(blobProperties, usermetadata, restRequest,
+        router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
             new MockPostCallback(this, restRequest, restResponseChannel, blobProperties));
       } catch (RestServiceException e) {
         handleResponse(restRequest, restResponseChannel, null, e);

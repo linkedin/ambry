@@ -66,6 +66,7 @@ import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.NonBlockingRouterFactory;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.store.FindTokenFactory;
@@ -1138,7 +1139,7 @@ public final class ServerTestUtil {
       TestUtils.RANDOM.nextBytes(blob);
       Future<String> future =
           router.putBlob(properties, metadata, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
-              new Callback<String>() {
+              new PutBlobOptionsBuilder().build(), new Callback<String>() {
                 @Override
                 public void onCompletion(String result, Exception exception) {
                   if (exception == null) {

@@ -21,6 +21,7 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -101,12 +102,13 @@ class PerfRouter implements Router {
    * @param blobProperties The properties of the blob.
    * @param usermetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options
    * @param callback the {@link Callback} to invoke on operation completion.
    * @return a {@link Future} that will contain a (dummy) blob id.
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, final ReadableStreamChannel channel,
-      final Callback<String> callback) {
+      PutBlobOptions options, final Callback<String> callback) {
     logger.trace("Received putBlob call");
     final FutureResult<String> futureResult = new FutureResult<String>();
     if (!routerOpen) {

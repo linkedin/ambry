@@ -43,11 +43,12 @@ public interface Router extends Closeable {
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param usermetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-      Callback<String> callback);
+      PutBlobOptions options, Callback<String> callback);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -101,10 +102,12 @@ public interface Router extends Closeable {
    *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
    * @param usermetadata Optional user metadata about the blob. This can be null.
    * @param channel The {@link ReadableStreamChannel} that contains the content of the blob.
+   * @param options The {@link PutBlobOptions} associated with the request. This cannot be null.
    * @return A future that would contain the BlobId eventually.
    */
-  default Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel) {
-    return putBlob(blobProperties, usermetadata, channel, null);
+  default Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
+      PutBlobOptions options) {
+    return putBlob(blobProperties, usermetadata, channel, options, null);
   }
 
   /**
