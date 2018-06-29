@@ -47,6 +47,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
@@ -55,6 +56,8 @@ import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,6 +68,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
@@ -85,6 +89,8 @@ public class NettyPerfClient {
   private final String host;
   private final int port;
   private final String path;
+  private final List<String> pathList;
+  private AtomicInteger counter = new AtomicInteger();
   private final int concurrency;
   private final long totalSize;
   private final byte[] chunk;
@@ -113,6 +119,7 @@ public class NettyPerfClient {
     final String host;
     final Integer port;
     final String path;
+    final String pathFileName;
     final String requestType;
     final Integer concurrency;
     final Long postBlobTotalSize;
@@ -146,6 +153,10 @@ public class NettyPerfClient {
           .describedAs("path")
           .ofType(String.class)
           .defaultsTo("/");
+      ArgumentAcceptingOptionSpec<String> pathFileName = parser.accepts("pathFileName", "file contains pathes")
+          .withOptionalArg()
+          .describedAs("pathFileName")
+          .ofType(String.class);
       ArgumentAcceptingOptionSpec<String> requestType =
           parser.accepts("requestType", "The type of request to make (POST, GET)")
               .withOptionalArg()
@@ -202,6 +213,7 @@ public class NettyPerfClient {
       this.host = options.valueOf(host);
       this.port = options.valueOf(port);
       this.path = options.valueOf(path);
+      this.pathFileName = options.valueOf(pathFileName);
       this.requestType = options.valueOf(requestType);
       this.concurrency = options.valueOf(concurrency);
       this.postBlobTotalSize = options.valueOf(postBlobTotalSize);
@@ -217,6 +229,7 @@ public class NettyPerfClient {
       logger.info("Host: {}", this.host);
       logger.info("Port: {}", this.port);
       logger.info("Path: {}", this.path);
+      logger.info("Path File Name: {}", this.pathFileName);
       logger.info("Request type: {}", this.requestType);
       logger.info("Concurrency: {}", this.concurrency);
       logger.info("Post blob total size: {}", this.postBlobTotalSize);
@@ -255,10 +268,10 @@ public class NettyPerfClient {
     try {
       ClientArgs clientArgs = new ClientArgs(args);
       final NettyPerfClient nettyPerfClient =
-          new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.concurrency,
-              clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize, clientArgs.sslPropsFilePath,
-              clientArgs.serviceId, clientArgs.targetAccountName, clientArgs.targetContainerName,
-              clientArgs.customHeaders);
+          new NettyPerfClient(clientArgs.host, clientArgs.port, clientArgs.path, clientArgs.pathFileName,
+              clientArgs.concurrency, clientArgs.postBlobTotalSize, clientArgs.postBlobChunkSize,
+              clientArgs.sslPropsFilePath, clientArgs.serviceId, clientArgs.targetAccountName,
+              clientArgs.targetContainerName, clientArgs.customHeaders);
       // attach shutdown handler to catch control-c
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         logger.info("Received shutdown signal. Requesting NettyPerfClient shutdown");
@@ -295,12 +308,17 @@ public class NettyPerfClient {
    * @throws IOException
    * @throws GeneralSecurityException
    */
-  private NettyPerfClient(String host, int port, String path, int concurrency, Long totalSize, Integer chunkSize,
-      String sslPropsFilePath, String serviceId, String targetAccountName, String targetContainerName,
-      List<String> customHeaders) throws Exception {
+  private NettyPerfClient(String host, int port, String path, String pathFileName, int concurrency, Long totalSize,
+      Integer chunkSize, String sslPropsFilePath, String serviceId, String targetAccountName,
+      String targetContainerName, List<String> customHeaders) throws Exception {
     this.host = host;
     this.port = port;
     this.path = path;
+    if (pathFileName != null) {
+      this.pathList = Files.readAllLines(Paths.get(pathFileName));
+    } else {
+      this.pathList = null;
+    }
     this.concurrency = concurrency;
     if (chunkSize != null) {
       this.totalSize = totalSize;
@@ -322,7 +340,8 @@ public class NettyPerfClient {
       }
     }
     logger.info("Instantiated NettyPerfClient which will interact with host {}, port {}, path {} with concurrency {}",
-        this.host, this.port, this.path, this.concurrency);
+        this.host, this.port, this.pathList == null ? this.path : "has " + this.pathList.size() + "paths",
+        this.concurrency);
   }
 
   /**
@@ -427,6 +446,9 @@ public class NettyPerfClient {
         perfClientMetrics.timeToFirstResponseChunkInMs.update(responseReceiveStart);
         logger.trace("Response receive has started on channel {}. Took {} ms", ctx.channel(), responseReceiveStart);
         response = (HttpResponse) in;
+        if (response.status() != HttpResponseStatus.OK) {
+          logger.error("Got Response code {} and headers were {}", response.status().code(), response.headers());
+        }
       }
       if (in instanceof HttpContent) {
         recognized = true;
@@ -513,7 +535,12 @@ public class NettyPerfClient {
         request.headers().add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
         request.headers().add(RestUtils.Headers.TARGET_CONTAINER_NAME, targetContainerName);
       } else {
-        request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
+        if (pathList == null) {
+          request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, path);
+        } else {
+          request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET,
+              pathList.get(counter.getAndIncrement() % pathList.size()));
+        }
       }
       for (Pair<String, String> headerNameValue : customHeaders) {
         request.headers().add(headerNameValue.getFirst(), headerNameValue.getSecond());
