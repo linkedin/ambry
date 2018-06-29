@@ -55,6 +55,8 @@ public class StoreKeyConverterImplNoOpTest {
     assertTrue("storeKey1 not in mapping", storeKeyMap.containsKey(storeKey1));
     storeKeyMap.forEach(
         (key, value) -> assertEquals("Returned StoreKey keys should be the same as their values", key, value));
+    assertEquals("storeKey0 not equal", storeKey0, storeKeyConverter.getConverted(storeKey0));
+    assertEquals("storeKey1 not equal", storeKey1, storeKeyConverter.getConverted(storeKey1));
   }
 
   /**

@@ -34,4 +34,9 @@ class StoreKeyConverterImplNoOp implements StoreKeyConverter {
     }
     return output;
   }
+
+  @Override
+  public StoreKey getConverted(StoreKey storeKey) {
+    return storeKey;
+  }
 }

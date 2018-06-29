@@ -155,8 +155,8 @@ public class BlobIdTransformerTest {
     inputAndExpected = new InputAndExpected(pairList.get(1), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
     try {
       transformer.transform(inputAndExpected.getInput());
-      fail("Did not throw MockStoreKeyConverterException");
-    } catch (BlobIdTransformerTestException e) {
+      fail("Did not throw IllegalStateException");
+    } catch (IllegalStateException e) {
       //exception expected
     }
 
