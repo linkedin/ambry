@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
  * Manages all the stores on a disk.
  */
 class DiskManager {
-  static final String CLEANUP_OPS_JOB_NAME = "cleanupOps";
 
   private final Map<PartitionId, BlobStore> stores = new HashMap<>();
   private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new HashMap<>();
@@ -344,9 +343,12 @@ class DiskManager {
    */
   private Map<String, Throttler> getThrottlers(StoreConfig config, Time time) {
     Map<String, Throttler> throttlers = new HashMap<>();
-    // cleanup ops
-    Throttler cleanupOpsThrottler = new Throttler(config.storeCleanupOperationsBytesPerSec, -1, true, time);
-    throttlers.put(CLEANUP_OPS_JOB_NAME, cleanupOpsThrottler);
+    // compaction ops
+    Throttler compactionOpsThrottler = new Throttler(config.storeCompactionOperationsBytesPerSec, -1, true, time);
+    throttlers.put(BlobStoreCompactor.COMPACTION_CLEANUP_JOB_NAME, compactionOpsThrottler);
+    // hard delete ops
+    Throttler hardDeleteOpsThrottler = new Throttler(config.storeHardDeleteOperationsBytesPerSec, -1, true, time);
+    throttlers.put(HardDeleter.HARD_DELETE_CLEANUP_JOB_NAME, hardDeleteOpsThrottler);
     // stats
     Throttler statsIndexScanThrottler = new Throttler(config.storeStatsIndexEntriesPerSecond, 1000, true, time);
     throttlers.put(BlobStoreStats.IO_SCHEDULER_JOB_TYPE, statsIndexScanThrottler);

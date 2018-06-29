@@ -76,11 +76,18 @@ public class StoreConfig {
   public final int storeDeletedMessageRetentionDays;
 
   /**
-   * The rate of I/O allowed for compaction and hard deletes.
+   * The rate of I/O allowed per disk for hard deletes.
    */
-  @Config("store.cleanup.operations.bytes.per.sec")
+  @Config("store.hard.delete.operations.bytes.per.sec")
+  @Default("100*1024")
+  public final int storeHardDeleteOperationsBytesPerSec;
+
+  /**
+   * The rate of I/O allowed per disk for compaction.
+   */
+  @Config("store.compaction.operations.bytes.per.sec")
   @Default("1*1024*1024")
-  public final int storeCleanupOperationsBytesPerSec;
+  public final int storeCompactionOperationsBytesPerSec;
 
   /**
    * The minimum buffer size for compaction copy phase.
@@ -235,8 +242,11 @@ public class StoreConfig {
     storeMaxNumberOfEntriesToReturnFromJournal =
         verifiableProperties.getIntInRange("store.max.number.of.entries.to.return.from.journal", 5000, 1, 10000);
     storeDeletedMessageRetentionDays = verifiableProperties.getInt("store.deleted.message.retention.days", 7);
-    storeCleanupOperationsBytesPerSec =
-        verifiableProperties.getIntInRange("store.cleanup.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
+    storeHardDeleteOperationsBytesPerSec =
+        verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,
+            Integer.MAX_VALUE);
+    storeCompactionOperationsBytesPerSec =
+        verifiableProperties.getIntInRange("store.compaction.operations.bytes.per.sec", 1 * 1024 * 1024, 1,
             Integer.MAX_VALUE);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);

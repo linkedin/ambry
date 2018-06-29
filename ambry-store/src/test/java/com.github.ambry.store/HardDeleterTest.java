@@ -164,7 +164,7 @@ public class HardDeleterTest {
     props.setProperty("store.index.max.number.of.inmem.elements", "2");
     // the following determines the number of entries that will be fetched at most. We need this to test the
     // case where the endToken does not reach the journal.
-    props.setProperty("store.cleanup.operations.bytes.per.sec", "40");
+    props.setProperty("store.hard.delete.operations.bytes.per.sec", "40");
     StoreConfig config = new StoreConfig(new VerifiableProperties(props));
     StoreKeyFactory factory = Utils.getObj("com.github.ambry.store.MockIdFactory");
     time = new MockTime(SystemTime.getInstance().milliseconds());
