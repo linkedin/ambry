@@ -29,6 +29,7 @@ import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -45,6 +46,8 @@ public class AmbryUrlSigningServiceTest {
   private static final long DEFAULT_URL_TTL_SECS = 5 * 60;
   private static final long DEFAULT_MAX_UPLOAD_SIZE = 100 * 1024 * 1024;
   private static final long MAX_URL_TTL_SECS = 60 * 60;
+  private static final long CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS = 24 * 1024 * 1024;
+  private static final long CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
   private static final String RANDOM_AMBRY_HEADER = AmbryUrlSigningService.AMBRY_PARAMETERS_PREFIX + "random";
 
   /**
@@ -58,6 +61,9 @@ public class AmbryUrlSigningServiceTest {
     properties.setProperty("frontend.url.signer.default.url.ttl.secs", Long.toString(DEFAULT_URL_TTL_SECS));
     properties.setProperty("frontend.url.signer.default.max.upload.size.bytes", Long.toString(DEFAULT_MAX_UPLOAD_SIZE));
     properties.setProperty("frontend.url.signer.max.url.ttl.secs", Long.toString(MAX_URL_TTL_SECS));
+    properties.setProperty(FrontendConfig.CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY,
+        Long.toString(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS));
+    properties.setProperty(FrontendConfig.CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY, Long.toString(CHUNK_UPLOAD_MAX_CHUNK_SIZE));
     UrlSigningService signer = new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
         new MetricRegistry()).getUrlSigningService();
     assertNotNull("UrlSigningService is null", signer);
@@ -139,7 +145,7 @@ public class AmbryUrlSigningServiceTest {
    */
   private AmbryUrlSigningService getUrlSignerWithDefaults(Time time) {
     return new AmbryUrlSigningService(UPLOAD_ENDPOINT, DOWNLOAD_ENDPOINT, DEFAULT_URL_TTL_SECS, DEFAULT_MAX_UPLOAD_SIZE,
-        MAX_URL_TTL_SECS, time);
+        MAX_URL_TTL_SECS, CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS, CHUNK_UPLOAD_MAX_CHUNK_SIZE, time);
   }
 
   /**
@@ -149,11 +155,12 @@ public class AmbryUrlSigningServiceTest {
    * @param randomHeaderVal the value of {@link #RANDOM_AMBRY_HEADER}.
    * @param maxUploadSize if {@code restMethod} is {@link RestMethod#POST}, the value of max upload size. Ignored if
    *                      {@code null}.
+   * @param chunkUpload
    * @return a {@link RestRequest} that is a request to sign a URL.
    * @throws Exception
    */
   private RestRequest getUrlSignRequest(RestMethod restMethod, long urlTtlSecs, String randomHeaderVal,
-      Long maxUploadSize) throws Exception {
+      Long maxUploadSize, boolean chunkUpload) throws Exception {
     RestRequest request = getRequestFromUrl(RestMethod.GET, "signedUrl");
     if (restMethod != null) {
       request.setArg(RestUtils.Headers.URL_TYPE, restMethod.name());
@@ -166,6 +173,9 @@ public class AmbryUrlSigningServiceTest {
     }
     if (RestMethod.POST.equals(restMethod) && maxUploadSize != null) {
       request.setArg(RestUtils.Headers.MAX_UPLOAD_SIZE, Long.toString(maxUploadSize));
+    }
+    if (chunkUpload) {
+      request.setArg(RestUtils.Headers.CHUNK_UPLOAD, "true");
     }
     return request;
   }
@@ -199,19 +209,26 @@ public class AmbryUrlSigningServiceTest {
     long maxUploadSize = Utils.getRandomLong(TestUtils.RANDOM, 4001) + 2000;
 
     // all defaults overridden
-    RestRequest request = getUrlSignRequest(restMethod, urlTtl, randomHeaderVal, maxUploadSize);
+    RestRequest request = getUrlSignRequest(restMethod, urlTtl, randomHeaderVal, maxUploadSize, false);
     String url = signer.getSignedUrl(request);
-    verifySignedUrl(signer, url, restMethod, randomHeaderVal, maxUploadSize);
+    verifySignedUrl(signer, url, restMethod, randomHeaderVal, maxUploadSize, Utils.Infinite_Time, false);
+    time.sleep(TimeUnit.SECONDS.toMillis(urlTtl + 1));
+    ensureVerificationFailure(signer, getRequestFromUrl(restMethod, url), RestServiceErrorCode.Unauthorized);
+    // chunk upload case, should use special stitched chunk upload settings.
+    request = getUrlSignRequest(restMethod, urlTtl, randomHeaderVal, maxUploadSize, true);
+    url = signer.getSignedUrl(request);
+    verifySignedUrl(signer, url, restMethod, randomHeaderVal, CHUNK_UPLOAD_MAX_CHUNK_SIZE,
+        CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS, true);
     time.sleep(TimeUnit.SECONDS.toMillis(urlTtl + 1));
     ensureVerificationFailure(signer, getRequestFromUrl(restMethod, url), RestServiceErrorCode.Unauthorized);
     // no defaults overridden
-    request = getUrlSignRequest(restMethod, Utils.Infinite_Time, randomHeaderVal, null);
+    request = getUrlSignRequest(restMethod, Utils.Infinite_Time, randomHeaderVal, null, false);
     url = signer.getSignedUrl(request);
-    verifySignedUrl(signer, url, restMethod, randomHeaderVal, DEFAULT_MAX_UPLOAD_SIZE);
-    time.sleep(TimeUnit.SECONDS.toMillis(DEFAULT_URL_TTL_SECS + 1));
-    ensureVerificationFailure(signer, getRequestFromUrl(restMethod, url), RestServiceErrorCode.Unauthorized);
+    verifySignedUrl(signer, url, restMethod, randomHeaderVal, DEFAULT_MAX_UPLOAD_SIZE, Utils.Infinite_Time, false);
     // change RestMethod and ensure verification failure
     ensureVerificationFailure(signer, getRequestFromUrl(RestMethod.UNKNOWN, url), RestServiceErrorCode.Unauthorized);
+    time.sleep(TimeUnit.SECONDS.toMillis(DEFAULT_URL_TTL_SECS + 1));
+    ensureVerificationFailure(signer, getRequestFromUrl(restMethod, url), RestServiceErrorCode.Unauthorized);
   }
 
   /**
@@ -224,16 +241,31 @@ public class AmbryUrlSigningServiceTest {
    * @throws Exception
    */
   private void verifySignedUrl(AmbryUrlSigningService signer, String url, RestMethod restMethod, String randomHeaderVal,
-      long maxUploadSize) throws Exception {
+      long maxUploadSize, long blobTtl, boolean chunkUploadSessionSet) throws Exception {
     RestRequest signedRequest = getRequestFromUrl(restMethod, url);
     assertTrue("Request should be declared as signed", signer.isRequestSigned(signedRequest));
     signer.verifySignedRequest(signedRequest);
     Map<String, Object> args = signedRequest.getArgs();
     assertEquals("URL type not as expected", restMethod.name(), args.get(RestUtils.Headers.URL_TYPE).toString());
     assertEquals("Random header value is not as expected", randomHeaderVal, args.get(RANDOM_AMBRY_HEADER).toString());
+    Object blobTtlVal = args.get(RestUtils.Headers.TTL);
+    Object chunkUploadSessionVal = args.get(RestUtils.Headers.CHUNK_UPLOAD_SESSION);
     if (restMethod.equals(RestMethod.POST)) {
       assertEquals("Max upload size not as expected", maxUploadSize,
           Long.parseLong(args.get(RestUtils.Headers.MAX_UPLOAD_SIZE).toString()));
+      if (blobTtl != Utils.Infinite_Time) {
+        assertEquals("Blob TTL not as expected", blobTtl, Long.parseLong(blobTtlVal.toString()));
+      }
+      if (chunkUploadSessionSet) {
+        assertNotNull("Chunk upload session should be set", chunkUploadSessionVal);
+        // ensure that the x-ambry-chunk-upload-session value is a valid UUID.
+        UUID.fromString(chunkUploadSessionVal.toString());
+      } else {
+        assertNull("Chunk upload session should not be set", chunkUploadSessionVal);
+      }
+    } else {
+      assertNull("Blob TTL should not be set", blobTtlVal);
+      assertNull("Chunk upload session should not be set", chunkUploadSessionVal);
     }
   }
 
@@ -265,25 +297,25 @@ public class AmbryUrlSigningServiceTest {
   private void signFailuresTest() throws Exception {
     AmbryUrlSigningService signer = getUrlSignerWithDefaults(new MockTime());
     // RestMethod not present
-    RestRequest request = getUrlSignRequest(null, Utils.Infinite_Time, null, -1L);
+    RestRequest request = getUrlSignRequest(null, Utils.Infinite_Time, null, -1L, false);
     ensureSignedUrlCreationFailure(signer, request, RestServiceErrorCode.MissingArgs);
 
     // unknown RestMethod
-    request = getUrlSignRequest(null, Utils.Infinite_Time, null, -1L);
+    request = getUrlSignRequest(null, Utils.Infinite_Time, null, -1L, false);
     request.setArg(RestUtils.Headers.URL_TYPE, "@@unknown@@");
     ensureSignedUrlCreationFailure(signer, request, RestServiceErrorCode.InvalidArgs);
 
     // RestMethod not supported
-    request = getUrlSignRequest(RestMethod.DELETE, Utils.Infinite_Time, null, -1L);
+    request = getUrlSignRequest(RestMethod.DELETE, Utils.Infinite_Time, null, -1L, false);
     ensureSignedUrlCreationFailure(signer, request, RestServiceErrorCode.InvalidArgs);
 
     // url ttl not long
-    request = getUrlSignRequest(RestMethod.POST, Utils.Infinite_Time, null, -1L);
+    request = getUrlSignRequest(RestMethod.POST, Utils.Infinite_Time, null, -1L, false);
     request.setArg(RestUtils.Headers.URL_TTL, "@@notlong@@");
     ensureSignedUrlCreationFailure(signer, request, RestServiceErrorCode.InvalidArgs);
 
     // max upload size not long
-    request = getUrlSignRequest(RestMethod.POST, Utils.Infinite_Time, null, -1L);
+    request = getUrlSignRequest(RestMethod.POST, Utils.Infinite_Time, null, -1L, false);
     request.setArg(RestUtils.Headers.MAX_UPLOAD_SIZE, "@@notlong@@");
     ensureSignedUrlCreationFailure(signer, request, RestServiceErrorCode.InvalidArgs);
   }

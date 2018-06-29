@@ -19,7 +19,11 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Time;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 
 /**
@@ -42,6 +46,8 @@ public class AmbryUrlSigningService implements UrlSigningService {
 
   private final long defaultUrlTtlSecs;
   private final long defaultMaxUploadSize;
+  private final long chunkUploadInitialChunkTtlSecs;
+  private final long chunkUploadMaxChunkSize;
   private final long maxUrlTtlSecs;
   private final Time time;
 
@@ -53,11 +59,14 @@ public class AmbryUrlSigningService implements UrlSigningService {
    * @param defaultMaxUploadSize the default max size of upload from signed POST URLs if the request does not customize
    *                             it.
    * @param maxUrlTtlSecs the maximum ttl of signed URLs. If the request specifies a higher TTL, it will be lowered
-   *                      to this number.
+   * @param  chunkUploadInitialChunkTtlSecs the preconfigured blob TTL for chunks of a stitched upload. These chunks
+   *                                        will be made permanent once the blob is stitched together.
+   * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param time the {@link Time} instance to use.
    */
   AmbryUrlSigningService(String uploadEndpoint, String downloadEndpoint, long defaultUrlTtlSecs,
-      long defaultMaxUploadSize, long maxUrlTtlSecs, Time time) {
+      long defaultMaxUploadSize, long maxUrlTtlSecs, long chunkUploadInitialChunkTtlSecs,
+      long chunkUploadMaxChunkSize, Time time) {
     if (!uploadEndpoint.endsWith(ENDPOINT_SUFFIX)) {
       uploadEndpoint = uploadEndpoint + ENDPOINT_SUFFIX;
     }
@@ -68,6 +77,8 @@ public class AmbryUrlSigningService implements UrlSigningService {
     this.downloadEndpoint = downloadEndpoint;
     this.defaultUrlTtlSecs = defaultUrlTtlSecs;
     this.defaultMaxUploadSize = defaultMaxUploadSize;
+    this.chunkUploadInitialChunkTtlSecs = chunkUploadInitialChunkTtlSecs;
+    this.chunkUploadMaxChunkSize = chunkUploadMaxChunkSize;
     this.maxUrlTtlSecs = maxUrlTtlSecs;
     this.time = time;
   }
@@ -86,17 +97,20 @@ public class AmbryUrlSigningService implements UrlSigningService {
     StringBuilder urlBuilder = new StringBuilder();
     switch (restMethodInSignedUrl) {
       case GET:
-        urlBuilder.append(downloadEndpoint).append(QUERY_STRING_START);
+        urlBuilder.append(downloadEndpoint);
         break;
       case POST:
-        urlBuilder.append(uploadEndpoint).append(QUERY_STRING_START);
+        urlBuilder.append(uploadEndpoint);
         break;
       default:
         throw new RestServiceException("Signing request for " + restMethodInSignedUrl + " is not supported",
             RestServiceErrorCode.InvalidArgs);
     }
+
     long urlTtlSecs = defaultUrlTtlSecs;
     long maxUploadSize = defaultMaxUploadSize;
+    boolean chunkUpload = false;
+    Map<String, Object> argsForUrl = new HashMap<>();
     for (Map.Entry<String, Object> entry : args.entrySet()) {
       String name = entry.getKey();
       Object value = entry.getValue();
@@ -109,20 +123,35 @@ public class AmbryUrlSigningService implements UrlSigningService {
           case RestUtils.Headers.MAX_UPLOAD_SIZE:
             maxUploadSize = RestUtils.getLongHeader(args, RestUtils.Headers.MAX_UPLOAD_SIZE, true);
             break;
+          case RestUtils.Headers.CHUNK_UPLOAD:
+            chunkUpload = RestUtils.getBooleanHeader(args, RestUtils.Headers.CHUNK_UPLOAD, true);
+            break;
           default:
-            urlBuilder.append(name).append(PARAMETER_ASSIGN).append(value).append(PARAMETER_SEPARATOR);
+            argsForUrl.put(name, value);
             break;
         }
       }
     }
     if (RestMethod.POST.equals(restMethodInSignedUrl)) {
-      urlBuilder.append(RestUtils.Headers.MAX_UPLOAD_SIZE)
-          .append(PARAMETER_ASSIGN)
-          .append(maxUploadSize)
-          .append(PARAMETER_SEPARATOR);
+      if (chunkUpload) {
+        // Chunks of a stitched blob have a fixed max size to ensure that the router does not do further chunking as
+        // this is not supported by the current metadata format.
+        maxUploadSize = chunkUploadMaxChunkSize;
+        // They also have a non-optional blob TTL to ensure that chunks that were not stitched within a reasonable time
+        // span are cleaned up.
+        argsForUrl.put(RestUtils.Headers.TTL, chunkUploadInitialChunkTtlSecs);
+        argsForUrl.put(RestUtils.Headers.CHUNK_UPLOAD_SESSION, UUID.randomUUID().toString());
+      }
+      argsForUrl.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
     }
-    urlBuilder.append(LINK_EXPIRY_TIME).append(PARAMETER_ASSIGN).append(time.seconds() + urlTtlSecs);
-    // since all strings came from the URL, they are assumed to be url encodable.
+    argsForUrl.put(LINK_EXPIRY_TIME, time.seconds() + urlTtlSecs);
+
+    String nextSeparator = QUERY_STRING_START;
+    for (Map.Entry<String, Object> entry : argsForUrl.entrySet()) {
+      String value = urlEncode(entry.getValue());
+      urlBuilder.append(nextSeparator).append(entry.getKey()).append(PARAMETER_ASSIGN).append(value);
+      nextSeparator = PARAMETER_SEPARATOR;
+    }
     return urlBuilder.toString();
   }
 
@@ -157,5 +186,18 @@ public class AmbryUrlSigningService implements UrlSigningService {
 
   public String getDownloadEndpoint() {
     return downloadEndpoint;
+  }
+
+  /**
+   * @param obj the object to encode.
+   * @return a UTF-8 URL encoded version of {@code obj.toString()}
+   *
+   */
+  private static String urlEncode(Object obj) throws RestServiceException {
+    try {
+      return URLEncoder.encode(obj.toString(), "UTF-8");
+    } catch (UnsupportedEncodingException e) {
+      throw new RestServiceException("Unsupported URL encoding", e, RestServiceErrorCode.InternalServerError);
+    }
   }
 }

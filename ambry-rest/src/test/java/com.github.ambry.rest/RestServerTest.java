@@ -213,7 +213,7 @@ public class RestServerTest {
     try {
       new RestServer(verifiableProperties, new MockClusterMap(), new LoggingNotificationSystem(), SSL_FACTORY);
       fail("Properties file contained invalid " + configKey + " class, yet no exception was thrown");
-    } catch (NullPointerException e) {
+    } catch (NoSuchMethodException e) {
       // nothing to do. expected.
     }
 

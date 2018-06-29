@@ -135,6 +135,13 @@ public interface RestRequest extends ReadableStreamChannel {
   byte[] getDigest();
 
   /**
+   * Gets the number of bytes read from the request body at this point in time. After the request has been fully read,
+   * this can be used to determine the full body size in bytes.
+   * @return the current number of bytes read from the request body.
+   */
+  long getBytesReceived();
+
+  /**
    * @return {@code true} if SSL was used for this request (i.e. the request has an associated {@link SSLSession})
    */
   default boolean isSslUsed() {

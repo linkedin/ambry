@@ -126,7 +126,8 @@ class AmbryBlobStorageService implements BlobStorageService {
         new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap);
     postBlobHandler =
-        new PostBlobHandler(securityService, idConverter, accountAndContainerInjector, frontendMetrics, router);
+        new PostBlobHandler(securityService, idConverter, router, accountAndContainerInjector, frontendConfig,
+            frontendMetrics);
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap);

@@ -49,6 +49,7 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
 
     return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint,
         config.frontendUrlSignerDefaultUrlTtlSecs, config.frontendUrlSignerDefaultMaxUploadSizeBytes,
-        config.frontendUrlSignerMaxUrlTtlSecs, SystemTime.getInstance());
+        config.frontendUrlSignerMaxUrlTtlSecs, config.chunkUploadInitialChunkTtlSecs, config.chunkUploadMaxChunkSize,
+        SystemTime.getInstance());
   }
 }

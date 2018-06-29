@@ -387,6 +387,11 @@ class NettyRequest implements RestRequest {
     return digestBytes;
   }
 
+  @Override
+  public long getBytesReceived() {
+    return bytesReceived.get();
+  }
+
   /**
    * Adds some content in the form of {@link HttpContent} to this RestRequest. This content will be available to read
    * through the read operations.

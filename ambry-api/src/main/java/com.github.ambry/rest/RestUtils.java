@@ -174,13 +174,20 @@ public class RestUtils {
      */
     public static final String BLOB_ID = "x-ambry-blob-id";
     /**
-     * A signed Blob ID with additional metadata.
-     */
-    public static final String SIGNED_BLOB_ID = "x-ambry-signed-blob-id";
-    /**
      * The signed URL header name in the response for signed url requests.
      */
     public static final String SIGNED_URL = "x-ambry-signed-url";
+    /**
+     * Boolean field set to "true" for getting chunk upload URLs with {@code GET /signedUrl} that will eventually be
+     * stitched together.
+     */
+    public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
+
+    /**
+     * This header will carry a UUID that represents a stitched upload session.
+     */
+    public static final String CHUNK_UPLOAD_SESSION = "x-ambry-chunk-upload-session";
+
     /**
      * prefix for any header to be set as user metadata for the given blob
      */
@@ -195,22 +202,29 @@ public class RestUtils {
    * Ambry specific keys used internally in a {@link RestRequest}.
    */
   public static final class InternalKeys {
+    private static final String KEY_PREFIX = "ambry-internal-key-";
 
     /**
      * The key for the target {@link com.github.ambry.account.Account} indicated by the request.
      */
-    public final static String TARGET_ACCOUNT_KEY = "ambry-internal-key-target-account";
+    public static final String TARGET_ACCOUNT_KEY = KEY_PREFIX + "target-account";
 
     /**
      * The key for the target {@link com.github.ambry.account.Container} indicated by the request.
      */
-    public final static String TARGET_CONTAINER_KEY = "ambry-internal-key-target-container";
+    public static final String TARGET_CONTAINER_KEY = KEY_PREFIX + "target-container";
+
+    /**
+     * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null
+     * to indicate that a signed ID should be created and returned to the requester on a POST request.
+     */
+    public static final String SIGNED_ID_METADATA_KEY = KEY_PREFIX + "signed-id-metadata";
 
     /**
      * To be set if the operation knows the keep-alive behavior it prefers on error. Valid values are boolean.
      * Not authoritative, only a hint
      */
-    public final static String KEEP_ALIVE_ON_ERROR_HINT = "ambry-internal-key-keep-alive-on-error-hint";
+    public final static String KEEP_ALIVE_ON_ERROR_HINT = KEY_PREFIX + "keep-alive-on-error-hint";
   }
 
   /**
@@ -246,7 +260,7 @@ public class RestUtils {
   private static final int CRC_SIZE = 8;
   private static final short USER_METADATA_VERSION_V1 = 1;
   private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
-  private static Logger logger = LoggerFactory.getLogger(RestUtils.class);
+  private static final Logger logger = LoggerFactory.getLogger(RestUtils.class);
 
   /**
    * Builds {@link BlobProperties} given the arguments associated with a request.
@@ -289,6 +303,10 @@ public class RestUtils {
   }
 
   /**
+   * Builds user metadata given the arguments associated with a request.
+   * <p>
+   * The following binary format will be used:
+   * <pre>
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * |         |   size    |  total   |           |          |             |            |            |            |            |
    * | version | excluding |  no of   | key1 size |   key1   | value1 size |  value 1   |  key2 size |     ...    |     Crc    |
@@ -314,11 +332,8 @@ public class RestUtils {
    *  key2 size      - Size of 2nd key
    *
    *  crc        - The crc of the user metadata record
+   * </pre>
    *
-   */
-
-  /**
-   * Builds user metadata given the arguments associated with a request.
    * @param args the arguments associated with the request.
    * @return the user metadata extracted from arguments.
    * @throws RestServiceException if usermetadata arguments have null values.
@@ -595,6 +610,16 @@ public class RestUtils {
    */
   public static boolean isPrivate(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.PRIVATE, false);
+  }
+
+  /**
+   * Determine if {@link Headers#CHUNK_UPLOAD_SESSION} is set in the request args.
+   * @param args The request arguments.
+   * @return {@code true} if {@link Headers#CHUNK_UPLOAD_SESSION} is set.
+   * @throws RestServiceException if exception occurs during parsing the arg.
+   */
+  public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
+    return getHeader(args, Headers.CHUNK_UPLOAD_SESSION, false) != null;
   }
 
   /**

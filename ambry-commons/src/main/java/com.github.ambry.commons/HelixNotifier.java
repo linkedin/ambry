@@ -174,7 +174,7 @@ public class HelixNotifier implements Notifier<String> {
    * @param topic The topic which the message belongs to.
    * @param path The path to the topic.
    */
-  private void sendMessageToLocalTopicListener(TopicListener topicListener, String topic, String path) {
+  private void sendMessageToLocalTopicListener(TopicListener<String> topicListener, String topic, String path) {
     String message = null;
     try {
       ZNRecord zNRecord = helixStore.get(path, null, AccessOption.PERSISTENT);

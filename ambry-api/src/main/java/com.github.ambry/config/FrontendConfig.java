@@ -23,6 +23,7 @@ import java.util.List;
  * Configuration parameters required by the Ambry frontend.
  */
 public class FrontendConfig {
+  private static final String PREFIX = "frontend.";
 
   // Property keys
   public static final String URL_SIGNER_ENDPOINTS = "frontend.url.signer.endpoints";
@@ -73,6 +74,14 @@ public class FrontendConfig {
   @Config("frontend.url.signing.service.factory")
   @Default("com.github.ambry.frontend.AmbryUrlSigningServiceFactory")
   public final String frontendUrlSigningServiceFactory;
+
+  /**
+   * The IdSigningService that needs to be used by AmbryBlobStorageService to sign and verify IDs.
+   */
+  private static final String ID_SIGNING_SERVICE_FACTORY_KEY = PREFIX + "id.signing.service.factory";
+  @Config(ID_SIGNING_SERVICE_FACTORY_KEY)
+  @Default("com.github.ambry.frontend.AmbryIdSigningServiceFactory")
+  public final String frontendIdSigningServiceFactory;
 
   /**
    * The comma separated list of prefixes to remove from paths.
@@ -135,6 +144,16 @@ public class FrontendConfig {
   @Default("GetOption.None")
   public final GetOption frontendDefaultRouterGetOption;
 
+  public static final String CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY = PREFIX + "chunk.upload.initial.chunk.ttl.secs";
+  @Config(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY)
+  @Default("24 * 60 * 60")
+  public final long chunkUploadInitialChunkTtlSecs;
+
+  public static final String CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY = PREFIX + "chunk.upload.max.chunk.size";
+  @Config(CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY)
+  @Default("4 * 1024 * 1024")
+  public final long chunkUploadMaxChunkSize;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     frontendCacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     frontendOptionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -146,6 +165,8 @@ public class FrontendConfig {
         "com.github.ambry.frontend.AmbrySecurityServiceFactory");
     frontendUrlSigningServiceFactory = verifiableProperties.getString("frontend.url.signing.service.factory",
         "com.github.ambry.frontend.AmbryUrlSigningServiceFactory");
+    frontendIdSigningServiceFactory = verifiableProperties.getString(ID_SIGNING_SERVICE_FACTORY_KEY,
+        "com.github.ambry.frontend.AmbryIdSigningServiceFactory");
     frontendPathPrefixesToRemove =
         Arrays.asList(verifiableProperties.getString("frontend.path.prefixes.to.remove", "").split(","));
     frontendChunkedGetResponseThresholdInBytes =
@@ -163,5 +184,8 @@ public class FrontendConfig {
             frontendUrlSignerMaxUrlTtlSecs);
     frontendDefaultRouterGetOption =
         GetOption.valueOf(verifiableProperties.getString("frontend.default.router.get.option", GetOption.None.name()));
+    chunkUploadInitialChunkTtlSecs =
+        verifiableProperties.getLong(CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS_KEY, 24 * 60 * 60);
+    chunkUploadMaxChunkSize = verifiableProperties.getLong(CHUNK_UPLOAD_MAX_CHUNK_SIZE_KEY, 4 * 1024 * 1024);
   }
 }

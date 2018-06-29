@@ -45,6 +45,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -358,7 +359,7 @@ public class Utils {
         return (T) ctor.newInstance(arg);
       }
     }
-    return null;
+    throw buildNoConstructorException(className, arg);
   }
 
   /**
@@ -383,7 +384,7 @@ public class Utils {
         return (T) ctor.newInstance(arg1, arg2);
       }
     }
-    return null;
+    throw buildNoConstructorException(className, arg1, arg2);
   }
 
   /**
@@ -410,13 +411,13 @@ public class Utils {
         return (T) ctor.newInstance(arg1, arg2, arg3);
       }
     }
-    return null;
+    throw buildNoConstructorException(className, arg1, arg2, arg3);
   }
 
   /**
    * Instantiate a class instance from a given className with variable number of args
    * @param className
-   * @param objects
+   * @param args
    * @param <T>
    * @return
    * @throws ClassNotFoundException
@@ -425,24 +426,24 @@ public class Utils {
    * @throws NoSuchMethodException
    * @throws InvocationTargetException
    */
-  public static <T> T getObj(String className, Object... objects)
+  public static <T> T getObj(String className, Object... args)
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
       Class<?>[] paramTypes = ctor.getParameterTypes();
-      if (paramTypes.length == objects.length) {
+      if (paramTypes.length == args.length) {
         int i = 0;
-        for (; i < objects.length; i++) {
-          if (!checkAssignable(paramTypes[i], objects[i])) {
+        for (; i < args.length; i++) {
+          if (!checkAssignable(paramTypes[i], args[i])) {
             break;
           }
         }
-        if (i == objects.length) {
-          return (T) ctor.newInstance(objects);
+        if (i == args.length) {
+          return (T) ctor.newInstance(args);
         }
       }
     }
-    return null;
+    throw buildNoConstructorException(className, args);
   }
 
   /**
@@ -453,6 +454,20 @@ public class Utils {
    */
   private static boolean checkAssignable(Class<?> parameterType, Object arg) {
     return arg == null || parameterType.isAssignableFrom(arg.getClass());
+  }
+
+  /**
+   * Create a {@link NoSuchMethodException} for situations where a constructor for a class that conforms to the provided
+   * argument types was not found.
+   * @param className the class for which a suitable constructor was not found.
+   * @param args the constructor arguments.
+   * @return the {@link NoSuchMethodException} to throw.
+   */
+  private static NoSuchMethodException buildNoConstructorException(String className, Object... args) {
+    String argTypes =
+        Stream.of(args).map(arg -> arg == null ? "null" : arg.getClass().getName()).collect(Collectors.joining(", "));
+    return new NoSuchMethodException(
+        "No constructor found for " + className + " that takes arguments of types: " + argTypes);
   }
 
   /**
