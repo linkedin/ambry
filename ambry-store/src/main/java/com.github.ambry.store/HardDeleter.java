@@ -95,6 +95,7 @@ public class HardDeleter implements Runnable {
   private final AtomicBoolean paused = new AtomicBoolean(false);
   private final ReentrantLock hardDeleteLock = new ReentrantLock();
   private final Condition pauseCondition = hardDeleteLock.newCondition();
+  static final String HARD_DELETE_CLEANUP_JOB_NAME = "hard_deleter_cleanup";
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
       MessageStoreHardDelete hardDelete, StoreKeyFactory factory, DiskIOScheduler diskIOScheduler, Time time) {
@@ -106,7 +107,8 @@ public class HardDeleter implements Runnable {
     this.factory = factory;
     this.diskIOScheduler = diskIOScheduler;
     this.time = time;
-    scanSizeInBytes = Math.min(config.storeCleanupOperationsBytesPerSec * 10, 1024 * 1024);
+    // Times 10 is an optimization for findDeletedEntriesSince, which keeps delete entries only in the end.
+    scanSizeInBytes = config.storeHardDeleteOperationsBytesPerSec * 10;
     messageRetentionSeconds = (int) TimeUnit.DAYS.toSeconds(config.storeDeletedMessageRetentionDays);
   }
 
@@ -612,7 +614,7 @@ public class HardDeleter implements Runnable {
         }
         logWriteInfo.logSegment.writeFrom(logWriteInfo.channel, logWriteInfo.offset, logWriteInfo.size);
         metrics.hardDeleteDoneCount.inc(1);
-        diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME, logWriteInfo.size);
+        diskIOScheduler.getSlice(HARD_DELETE_CLEANUP_JOB_NAME, HARD_DELETE_CLEANUP_JOB_NAME, logWriteInfo.size);
       }
     } catch (IOException e) {
       throw new StoreException("IO exception while performing hard delete ", e, StoreErrorCodes.IOError);

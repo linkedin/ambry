@@ -327,7 +327,7 @@ public class IndexTest {
   @Test
   public void hardDeleteTest() throws IOException, StoreException {
     state.properties.put("store.deleted.message.retention.days", Integer.toString(1));
-    state.properties.put("store.cleanup.operations.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
+    state.properties.put("store.hard.delete.operations.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
     state.reloadIndex(true, false);
     state.index.hardDeleter.enabled.set(true);
     assertFalse("Hard delete did work even though no message is past retention time",
@@ -1447,7 +1447,7 @@ public class IndexTest {
    */
   private void testHardDeletePauseResume(boolean reloadIndex) throws InterruptedException, IOException, StoreException {
     state.properties.put("store.deleted.message.retention.days", Integer.toString(1));
-    state.properties.put("store.cleanup.operations.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
+    state.properties.put("store.hard.delete.operations.bytes.per.sec", Integer.toString(Integer.MAX_VALUE / 10));
     state.properties.setProperty("store.data.flush.interval.seconds", "3600");
     // enable daemon thread to run hard deletes
     state.properties.put("store.enable.hard.delete", "true");

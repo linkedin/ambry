@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
  * the swap spaces.
  */
 class BlobStoreCompactor {
+  static final String COMPACTION_CLEANUP_JOB_NAME = "blob_store_compactor_cleanup";
   static final String INDEX_SEGMENT_READ_JOB_NAME = "blob_store_compactor_index_segment_read";
   static final String TARGET_INDEX_CLEAN_SHUTDOWN_FILE_NAME = "compactor_clean_shutdown";
   static final String TEMP_LOG_SEGMENT_NAME_SUFFIX = BlobStore.SEPARATOR + "temp";
@@ -797,8 +798,7 @@ class BlobStoreCompactor {
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
             // call into diskIOScheduler to make sure we can proceed (assuming it won't be 0).
-            diskIOScheduler.getSlice(DiskManager.CLEANUP_OPS_JOB_NAME, DiskManager.CLEANUP_OPS_JOB_NAME,
-                writtenLastTime);
+            diskIOScheduler.getSlice(COMPACTION_CLEANUP_JOB_NAME, COMPACTION_CLEANUP_JOB_NAME, writtenLastTime);
             long bufferPosition = srcValue.getOffset().getOffset() - startOffset;
             bufferToUse.limit((int) (bufferPosition + srcIndexEntry.getValue().getSize()));
             bufferToUse.position((int) (bufferPosition));

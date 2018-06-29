@@ -71,8 +71,7 @@ public class BlobStoreCompactorTest {
 
   private MetricRegistry metricRegistry;
 
-  private ByteBuffer bundleReadBuffer =
-      ByteBuffer.allocateDirect((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1);
+  private ByteBuffer bundleReadBuffer = ByteBuffer.allocateDirect((int) CuratedLogIndexState.PUT_RECORD_SIZE * 2 + 1);
 
   /**
    * Creates a temporary directory for the store.
@@ -1974,7 +1973,7 @@ public class BlobStoreCompactorTest {
     long getSlice(String jobType, String jobId, long usedSinceLastCall) {
       if (jobType.equals(BlobStoreCompactor.INDEX_SEGMENT_READ_JOB_NAME)) {
         indexSegmentsCopied += usedSinceLastCall;
-      } else if (jobType.equals(DiskManager.CLEANUP_OPS_JOB_NAME)) {
+      } else if (jobType.equals(BlobStoreCompactor.COMPACTION_CLEANUP_JOB_NAME)) {
         numBytesCopied += usedSinceLastCall;
       }
       if (indexSegmentsCopied == indexSegmentCountToCutoffAt || numBytesCopied >= numBytesToCutoffAt) {
