@@ -308,7 +308,8 @@ class PersistentIndex {
           logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
         } else if (info.isTtlUpdated()) {
-          markAsPermanent(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info.getOperationTimeMs());
+          markAsPermanent(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
+              info.getOperationTimeMs());
           logger.info("Index : {} updated message with key {} by inserting TTL update entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
         } else if (value != null) {
@@ -627,7 +628,8 @@ class PersistentIndex {
    * Marks the index entry represented by the key for delete
    * @param id The id of the entry that needs to be deleted
    * @param fileSpan The file span represented by this entry in the log
-   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise.
+   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
+   *             record could not be found
    * @param deletionTimeMs deletion time of the blob. In-case of recovery, deletion time is obtained from {@code info}.
    * @return the {@link IndexValue} of the delete record
    * @throws StoreException
@@ -644,9 +646,7 @@ class PersistentIndex {
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue;
     if (value == null) {
-      // it is possible that during recovery, the PUT record need not exist because it had been replaced by a
-      // delete record in the map in IndexSegment but not written yet because the safe end point hadn't been reached
-      // SEE: NOTE in IndexSegment::writeIndexSegmentToFile()
+      // It is possible that the PUT has been cleaned by compaction
       newValue =
           new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
               info.getAccountId(), info.getContainerId());
@@ -672,22 +672,46 @@ class PersistentIndex {
    * @throws StoreException if there is any problem writing the index record
    */
   IndexValue markAsPermanent(StoreKey id, FileSpan fileSpan, long operationTimeMs) throws StoreException {
+    return markAsPermanent(id, fileSpan, null, operationTimeMs);
+  }
+
+  /**
+   * Marks a blob as permanent
+   * @param id the {@link StoreKey} of the blob
+   * @param fileSpan the file span represented by this entry in the log
+   * @param operationTimeMs the time of the update operation
+   * @param info this needs to be non-null in the case of recovery. Can be {@code null} otherwise. Used if the PUT
+   *             record could not be found
+   * @return the {@link IndexValue} of the ttl update record
+   * @throws StoreException if there is any problem writing the index record
+   */
+  private IndexValue markAsPermanent(StoreKey id, FileSpan fileSpan, MessageInfo info, long operationTimeMs)
+      throws StoreException {
     validateFileSpan(fileSpan, true);
     IndexValue value = findKey(id);
-    if (value == null) {
+    if (value == null && info == null) {
       throw new StoreException("Id " + id + " not present in index " + dataDir, StoreErrorCodes.ID_Not_Found);
-    } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+    } else if (value != null && value.isFlagSet(IndexValue.Flags.Delete_Index)) {
       throw new StoreException("Id " + id + " deleted in index " + dataDir, StoreErrorCodes.ID_Deleted);
-    } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+    } else if (value != null && value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
       throw new StoreException("TTL of " + id + " already updated in index" + dataDir, StoreErrorCodes.Already_Updated);
     }
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
-    IndexValue newValue =
-        new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), Utils.Infinite_Time, operationTimeMs,
-            value.getAccountId(), value.getContainerId());
+    IndexValue newValue;
+    if (value == null) {
+      // It is possible that the PUT has been cleaned by compaction
+      newValue =
+          new IndexValue(size, fileSpan.getStartOffset(), info.getExpirationTimeInMs(), info.getOperationTimeMs(),
+              info.getAccountId(), info.getContainerId());
+      newValue.clearOriginalMessageOffset();
+    } else {
+      newValue =
+          new IndexValue(value.getSize(), value.getOffset(), value.getFlags(), Utils.Infinite_Time, operationTimeMs,
+              value.getAccountId(), value.getContainerId());
+      newValue.setNewOffset(fileSpan.getStartOffset());
+      newValue.setNewSize(size);
+    }
     newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
-    newValue.setNewOffset(fileSpan.getStartOffset());
-    newValue.setNewSize(size);
     addToIndex(new IndexEntry(id, newValue, null), fileSpan);
     return newValue;
   }
