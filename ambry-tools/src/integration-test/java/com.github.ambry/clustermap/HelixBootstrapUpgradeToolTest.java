@@ -41,6 +41,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static com.github.ambry.clustermap.HelixBootstrapUpgradeTool.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
@@ -62,8 +63,6 @@ public class HelixBootstrapUpgradeToolTest {
   private static final String CLUSTER_NAME_IN_STATIC_CLUSTER_MAP = "ToolTestStatic";
   private static final String CLUSTER_NAME_PREFIX = "Ambry-";
   private static final String ROOT_PATH = "/" + CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
-  private static final String ZNRECORD_NAME = "PartitionOverride";
-  private static final String PROPERTYSTORE_PATH = "/PROPERTYSTORE/ClusterConfigs";
   private static HelixPropertyStoreConfig propertyStoreConfig;
 
   /**

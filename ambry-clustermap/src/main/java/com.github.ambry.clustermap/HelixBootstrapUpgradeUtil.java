@@ -111,9 +111,8 @@ class HelixBootstrapUpgradeUtil {
   private int resourcesDropped = 0;
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
-  private final Map<String, HelixPropertyStore<ZNRecord>> dataCenterToPropertyStore = new HashMap<>();
-  private static final String ZNRECORD_NAME = "PartitionOverride";
-  private static final String PROPERTYSTORE_PATH = "/PROPERTYSTORE/ClusterConfigs";
+  static final String ZNRECORD_NAME = "PartitionOverride";
+  static final String PROPERTYSTORE_PATH = "/PROPERTYSTORE/ClusterConfigs";
 
   /**
    * Takes in the path to the files that make up the static cluster map and adds or updates the cluster map information
@@ -170,9 +169,10 @@ class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
             maxPartitionsInOneResource, false, false, helixAdminFactory);
-    clusterMapToHelixMapper.createHelixPropertyStoreForAllDCs();
+    Map<String, Map<String, String>> partitionOverrideInfos =
+        clusterMapToHelixMapper.generatePartitionOverrideFromAllDCs();
     info("Uploading partition override to HelixPropertyStore based on static clustermap.");
-    clusterMapToHelixMapper.uploadPartitionOverride();
+    clusterMapToHelixMapper.uploadPartitionOverride(partitionOverrideInfos);
     info("Upload cluster configs completed.");
   }
 
@@ -269,53 +269,45 @@ class HelixBootstrapUpgradeUtil {
   }
 
   /**
-   * Create HelixPropertyStore for all datacenters. Also it checks if the zNode exists, if not the method will create a
-   * new zNode for PartitionOverride.
+   * Generate the partition override map containing partition state from all datacenters.
    */
-  private void createHelixPropertyStoreForAllDCs() {
-    Properties storeProps = new Properties();
-    storeProps.setProperty("helix.property.store.root.path", "/" + this.clusterName);
-    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      ZkClient zkClient = new ZkClient(entry.getValue().getZkConnectStr(), propertyStoreConfig.zkClientSessionTimeoutMs,
-          propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-      List<String> subscribedPaths = Collections.singletonList(propertyStoreConfig.rootPath);
-      HelixPropertyStore<ZNRecord> helixPropertyStore =
-          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath, subscribedPaths);
-      if (!helixPropertyStore.exists(PROPERTYSTORE_PATH, AccessOption.PERSISTENT)) {
-        ZNRecord znRecord = new ZNRecord(ZNRECORD_NAME);
-        helixPropertyStore.create(PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME, znRecord, AccessOption.PERSISTENT);
-        info("Creating a new zNode: ", PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME);
+  private Map<String, Map<String, String>> generatePartitionOverrideFromAllDCs() {
+    Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
+    for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
+      String partitionName = partitionId.toPathString();
+      Map<String, String> partitionProperties = new HashMap<>();
+      partitionProperties.put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_WRITE_STR);
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.isSealed()) {
+          partitionProperties.put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
+          break;
+        }
       }
-      dataCenterToPropertyStore.put(entry.getKey(), helixPropertyStore);
+      partitionOverrideInfos.put(partitionName, partitionProperties);
     }
+    return partitionOverrideInfos;
   }
 
   /**
    * Uploads the seal state of all partitions in the format of map.
    * TODO: add partitionClass info of all partitions into map.
    */
-  private void uploadPartitionOverride() {
-    Map<String, Map<String, String>> partitionOverrideInfos = new HashMap<>();
-    for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
-      String partitionName = partitionId.toPathString();
-      Map<String, String> partitionProperties = new HashMap<>();
-      partitionProperties.put("state", "RW");
-      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-        if (replicaId.isSealed()) {
-          partitionProperties.put("state", "RO");
-          break;
-        }
-      }
-      partitionOverrideInfos.put(partitionName, partitionProperties);
-    }
+  private void uploadPartitionOverride(Map<String, Map<String, String>> partitionOverrideInfos) {
+    Properties storeProps = new Properties();
+    storeProps.setProperty("helix.property.store.root.path", "/" + this.clusterName);
+    HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
     info("Setting partition override for all datacenters.");
-    // set partitionOverride in PROPERTYSTORE for all datacenters
-    for (HelixPropertyStore<ZNRecord> helixPropertyStore : dataCenterToPropertyStore.values()) {
+    for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
+      ZkClient zkClient = new ZkClient(entry.getValue().getZkConnectStr(), propertyStoreConfig.zkClientSessionTimeoutMs,
+          propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+      HelixPropertyStore<ZNRecord> helixPropertyStore =
+          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath, null);
       ZNRecord znRecord = new ZNRecord(ZNRECORD_NAME);
       znRecord.setMapFields(partitionOverrideInfos);
       String path = "/" + this.clusterName + PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME;
-      helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT);
+      if (!helixPropertyStore.set(path, znRecord, AccessOption.PERSISTENT)) {
+        info("Failed to upload partition override for datacenter {}", entry.getKey());
+      }
     }
   }
 

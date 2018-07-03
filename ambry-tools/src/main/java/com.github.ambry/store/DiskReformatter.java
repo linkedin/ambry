@@ -21,7 +21,6 @@ import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
-import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -159,11 +158,10 @@ public class DiskReformatter {
     DiskReformatterConfig config = new DiskReformatterConfig(properties);
     StoreConfig storeConfig = new StoreConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
-    HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(properties);
     ServerConfig serverConfig = new ServerConfig(properties);
     ClusterAgentsFactory clusterAgentsFactory =
-        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, helixPropertyStoreConfig,
-            config.hardwareLayoutFilePath, config.partitionLayoutFilePath);
+        Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig, config.hardwareLayoutFilePath,
+            config.partitionLayoutFilePath);
     try (ClusterMap clusterMap = clusterAgentsFactory.getClusterMap()) {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, clusterMap.getMetricRegistry());
