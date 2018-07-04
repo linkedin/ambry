@@ -35,15 +35,11 @@ import java.util.TreeSet;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.ZNRecord;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -298,10 +294,8 @@ class HelixBootstrapUpgradeUtil {
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
     info("Setting partition override for all datacenters.");
     for (Map.Entry<String, ClusterMapUtils.DcZkInfo> entry : dataCenterToZkAddress.entrySet()) {
-      ZkClient zkClient = new ZkClient(entry.getValue().getZkConnectStr(), propertyStoreConfig.zkClientSessionTimeoutMs,
-          propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
       HelixPropertyStore<ZNRecord> helixPropertyStore =
-          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath, null);
+          ClusterMapUtils.createHelixPropertyStore(entry.getValue().getZkConnectStr(), propertyStoreConfig, null);
       ZNRecord znRecord = new ZNRecord(ZNRECORD_NAME);
       znRecord.setMapFields(partitionOverrideInfos);
       String path = "/" + this.clusterName + PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME;

@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
@@ -24,7 +25,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import org.apache.helix.ZNRecord;
+import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
+import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.model.InstanceConfig;
+import org.apache.helix.store.HelixPropertyStore;
+import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -124,6 +131,21 @@ public class ClusterMapUtils {
       dataCenterToZkAddress.put(dcZkInfo.dcName, dcZkInfo);
     }
     return dataCenterToZkAddress;
+  }
+
+  /**
+   * Create a instance of {@link HelixPropertyStore} based on given {@link HelixPropertyStoreConfig}.
+   * @param zkServers the ZooKeeper server address.
+   * @param propertyStoreConfig the config for {@link HelixPropertyStore}.
+   * @param subscribedPaths a list of paths to which the PropertyStore subscribes.
+   * @return the instance of {@link HelixPropertyStore}.
+   */
+  public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkServers,
+      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) {
+    ZkClient zkClient = new ZkClient(zkServers, propertyStoreConfig.zkClientSessionTimeoutMs,
+        propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
+    return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath,
+        subscribedPaths);
   }
 
   /**

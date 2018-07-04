@@ -29,11 +29,7 @@ import java.util.Set;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ZNRecord;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.AfterClass;
@@ -248,18 +244,16 @@ public class HelixBootstrapUpgradeToolTest {
         CLUSTER_NAME_PREFIX, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, new HelixAdminFactory());
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      ZkClient zkClient = new ZkClient("localhost:" + zkInfo.getPort(), propertyStoreConfig.zkClientSessionTimeoutMs,
-          propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-      List<String> subscribedPaths = Collections.singletonList(propertyStoreConfig.rootPath);
       HelixPropertyStore<ZNRecord> propertyStore =
-          new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath, subscribedPaths);
+          ClusterMapUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
+              Collections.singletonList(propertyStoreConfig.rootPath));
       String getPath = ROOT_PATH + PROPERTYSTORE_PATH + "/" + ZNRECORD_NAME;
       ZNRecord zNRecord = propertyStore.get(getPath, null, AccessOption.PERSISTENT);
       assertNotNull(zNRecord);
       Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();
       Set<String> writableInDC = new HashSet<>();
       for (Map.Entry<String, Map<String, String>> entry : overridePartition.entrySet()) {
-        if (entry.getValue().get("state").equals("RW")) {
+        if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
           writableInDC.add(entry.getKey());
         }
       }

@@ -221,10 +221,10 @@ class HelixClusterManager implements ClusterMap {
     helixPropertyStore.subscribe(ZNODE_PATH, helixListener);
     ZNRecord zNRecord = helixPropertyStore.get(ZNODE_PATH, null, AccessOption.PERSISTENT);
     if (clusterMapConfig.clusterMapEnableOverride) {
-      if(zNRecord != null){
-      partitionOverrideInfoMap = zNRecord.getMapFields();
-      logger.info("partitionOverrideInfoMap is initialized!");
-      }else{
+      if (zNRecord != null) {
+        partitionOverrideInfoMap = zNRecord.getMapFields();
+        logger.info("partitionOverrideInfoMap is initialized!");
+      } else {
         logger.warn("ZNRecord from HelixPropertyStore is NULL, the partitionOverrideInfoMap is empty.");
       }
     }
@@ -568,15 +568,17 @@ class HelixClusterManager implements ClusterMap {
             }
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             // Create replica associated with this node.
-            boolean replicaSealState;
+            boolean isSealed;
             if (clusterMapConfig.clusterMapEnableOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
-              replicaSealState = partitionOverrideInfoMap.get(partitionName).get("state").equals("RO");
+              isSealed = partitionOverrideInfoMap.get(partitionName)
+                  .get(ClusterMapUtils.PARTITION_STATE)
+                  .equals(ClusterMapUtils.READ_ONLY_STR);
             } else {
-              replicaSealState = sealedReplicas.contains(partitionName);
+              isSealed = sealedReplicas.contains(partitionName);
             }
             AmbryReplica replica =
                 new AmbryReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                    replicaCapacity, replicaSealState);
+                    replicaCapacity, isSealed);
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }

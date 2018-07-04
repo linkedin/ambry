@@ -158,10 +158,12 @@ public class HelixClusterManagerTest {
     int numOfReadWrite = totalPartitionNum - numOfReadOnly;
     partitionOverrideMap = new HashMap<>();
     for (int i = 0; i < numOfReadWrite; ++i) {
-      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>()).put("state", "RW");
+      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
+          .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_WRITE_STR);
     }
     for (int i = numOfReadWrite; i < totalPartitionNum; ++i) {
-      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>()).put("state", "RO");
+      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
+          .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
     }
     ZNRecord znRecord = new ZNRecord(ZNODE_NAME);
     znRecord.setMapFields(partitionOverrideMap);
@@ -508,7 +510,7 @@ public class HelixClusterManagerTest {
       // Verify clustermap uses partition override for initialization
       Set<String> writableInOverrideMap = new HashSet<>();
       for (Map.Entry<String, Map<String, String>> entry : partitionOverrideMap.entrySet()) {
-        if (entry.getValue().get("state").equals("RW")) {
+        if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
           writableInOverrideMap.add(entry.getKey());
         }
       }
