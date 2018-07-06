@@ -385,7 +385,7 @@ public final class ServerTestUtil {
       channel.send(putRequest);
       putResponseStream = channel.receive().getInputStream();
       response = PutResponse.readFrom(new DataInputStream(putResponseStream));
-      assertEquals("Put blob on stopped store should fail", ServerErrorCode.Disk_Unavailable, response.getError());
+      assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response.getError());
 
       // get a blob properties on a stopped store, which should fail
       ids = new ArrayList<BlobId>();
@@ -399,7 +399,7 @@ public final class ServerTestUtil {
       channel.send(getRequest1);
       stream = channel.receive().getInputStream();
       resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-      assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Disk_Unavailable,
+      assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           resp1.getPartitionResponseInfoList().get(0).getErrorCode());
 
       // delete a blob on a stopped store, which should fail
@@ -407,7 +407,7 @@ public final class ServerTestUtil {
       channel.send(deleteRequest);
       stream = channel.receive().getInputStream();
       DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(stream));
-      assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Disk_Unavailable,
+      assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           deleteResponse.getError());
 
       // start the store via AdminRequest
@@ -1182,7 +1182,7 @@ public final class ServerTestUtil {
     channel.send(putRequest2);
     InputStream putResponseStream = channel.receive().getInputStream();
     PutResponse response2 = PutResponse.readFrom(new DataInputStream(putResponseStream));
-    assertEquals("Put blob on stopped store should fail", ServerErrorCode.Disk_Unavailable, response2.getError());
+    assertEquals("Put blob on stopped store should fail", ServerErrorCode.Replica_Unavailable, response2.getError());
 
     // get a blob properties on a stopped store, which should fail
     ArrayList<BlobId> ids = new ArrayList<BlobId>();
@@ -1195,7 +1195,7 @@ public final class ServerTestUtil {
     channel.send(getRequest1);
     stream = channel.receive().getInputStream();
     GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
-    assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Disk_Unavailable,
+    assertEquals("Get blob properties on stopped store should fail", ServerErrorCode.Replica_Unavailable,
         resp1.getPartitionResponseInfoList().get(0).getErrorCode());
 
     // delete a blob on a stopped store, which should fail
@@ -1203,7 +1203,7 @@ public final class ServerTestUtil {
     channel.send(deleteRequest);
     stream = channel.receive().getInputStream();
     DeleteResponse deleteResponse = DeleteResponse.readFrom(new DataInputStream(stream));
-    assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Disk_Unavailable,
+    assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Replica_Unavailable,
         deleteResponse.getError());
 
     // start the store via AdminRequest

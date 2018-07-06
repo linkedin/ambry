@@ -168,6 +168,7 @@ public class ServerMetrics {
 
   public final Counter partitionUnknownError;
   public final Counter diskUnavailableError;
+  public final Counter replicaUnavailableError;
   public final Counter partitionReadOnlyError;
   public final Counter storeIOError;
   public final Counter unExpectedStorePutError;
@@ -398,6 +399,7 @@ public class ServerMetrics {
 
     partitionUnknownError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionUnknownError"));
     diskUnavailableError = registry.counter(MetricRegistry.name(AmbryRequests.class, "DiskUnavailableError"));
+    replicaUnavailableError = registry.counter(MetricRegistry.name(AmbryRequests.class, "ReplicaUnavailableError"));
     partitionReadOnlyError = registry.counter(MetricRegistry.name(AmbryRequests.class, "PartitionReadOnlyError"));
     storeIOError = registry.counter(MetricRegistry.name(AmbryRequests.class, "StoreIOError"));
     idAlreadyExistError = registry.counter(MetricRegistry.name(AmbryRequests.class, "IDAlreadyExistError"));

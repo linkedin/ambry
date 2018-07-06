@@ -162,34 +162,37 @@ public class DynamicClusterManagerComponentsTest {
 
     // AmbryReplica tests
     try {
-      new AmbryReplica(null, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryReplica(clusterMapConfig1, null, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     try {
-      new AmbryReplica(partition1, null, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryReplica(clusterMapConfig1, partition1, null, MAX_REPLICA_CAPACITY_IN_BYTES, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     try {
-      new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
+      new AmbryReplica(clusterMapConfig1, partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
     }
 
     // Create a few replicas and make the mockClusterManagerCallback aware of the association.
-    AmbryReplica replica1 = new AmbryReplica(partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+    AmbryReplica replica1 =
+        new AmbryReplica(clusterMapConfig1, partition1, disk1, MAX_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica1);
-    AmbryReplica replica2 = new AmbryReplica(partition2, disk1, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+    AmbryReplica replica2 =
+        new AmbryReplica(clusterMapConfig1, partition2, disk1, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica2);
-    AmbryReplica replica3 = new AmbryReplica(partition1, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+    AmbryReplica replica3 =
+        new AmbryReplica(clusterMapConfig2, partition1, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, false);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica3);
-    AmbryReplica replica4 = new AmbryReplica(partition2, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, true);
+    AmbryReplica replica4 = new AmbryReplica(clusterMapConfig2, partition2, disk2, MIN_REPLICA_CAPACITY_IN_BYTES, true);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica4);
     sealedStateChangeCounter.incrementAndGet();
 

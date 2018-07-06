@@ -56,6 +56,20 @@ public class ClusterMapConfig {
   public final int clusterMapFixedTimeoutDiskRetryBackoffMs;
 
   /**
+   * The threshold for the number of errors to tolerate for a replica.
+   */
+  @Config("clustermap.fixedtimeout.replica.error.threshold")
+  @Default("1")
+  public final int clusterMapFixedTimeoutReplicaErrorThreshold;
+
+  /**
+   * The time to wait before a replica is retried after it has been determined to be down.
+   */
+  @Config("clustermap.fixedtimeout.replica.retry.backoff.ms")
+  @Default("10 * 60 * 1000")
+  public final int clusterMapFixedTimeoutReplicaRetryBackoffMs;
+
+  /**
    * List of Datacenters to which local node needs SSL encryption to communicate
    */
   @Config("clustermap.ssl.enabled.datacenters")
@@ -150,6 +164,11 @@ public class ClusterMapConfig {
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.error.threshold", 1, 1, 100);
     clusterMapFixedTimeoutDiskRetryBackoffMs =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.disk.retry.backoff.ms", 10 * 60 * 1000, 1,
+            30 * 60 * 1000);
+    clusterMapFixedTimeoutReplicaErrorThreshold =
+        verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.error.threshold", 1, 1, 100);
+    clusterMapFixedTimeoutReplicaRetryBackoffMs =
+        verifiableProperties.getIntInRange("clustermap.fixedtimeout.replica.retry.backoff.ms", 10 * 60 * 1000, 1,
             30 * 60 * 1000);
     clusterMapSslEnabledDatacenters = verifiableProperties.getString("clustermap.ssl.enabled.datacenters", "");
     clusterMapClusterAgentsFactory = verifiableProperties.getString("clustermap.clusteragents.factory",

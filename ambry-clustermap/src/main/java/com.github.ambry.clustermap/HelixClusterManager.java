@@ -231,6 +231,12 @@ class HelixClusterManager implements ClusterMap {
       case Partition_ReadOnly:
         replica.getPartitionId().onPartitionReadOnly();
         break;
+      case Replica_Unavailable:
+        replica.onReplicaUnavailable();
+        break;
+      case Replica_Response:
+        replica.onReplicaResponse();
+        break;
     }
   }
 
@@ -460,7 +466,7 @@ class HelixClusterManager implements ClusterMap {
             ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode, replicaCapacity);
             // Create replica associated with this node.
             AmbryReplica replica =
-                new AmbryReplica(mappedPartition, disk, replicaCapacity, sealedReplicas.contains(partitionName));
+                new AmbryReplica(clusterMapConfig, mappedPartition, disk, replicaCapacity, sealedReplicas.contains(partitionName));
             ambryPartitionToAmbryReplicas.get(mappedPartition).add(replica);
             ambryDataNodeToAmbryReplicas.get(datanode).add(replica);
           }

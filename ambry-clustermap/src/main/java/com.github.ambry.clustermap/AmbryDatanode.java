@@ -140,8 +140,7 @@ class AmbryDataNode implements DataNodeId {
       throw new IllegalStateException("Incompatible objects to compare");
     }
     AmbryDataNode other = (AmbryDataNode) o;
-    int compare = (plainTextPort.getPort() < other.plainTextPort.getPort()) ? -1
-        : ((plainTextPort.getPort() == other.plainTextPort.getPort()) ? 0 : 1);
+    int compare = Integer.compare(plainTextPort.getPort(), other.plainTextPort.getPort());
     if (compare == 0) {
       compare = hostName.compareTo(other.hostName);
     }
