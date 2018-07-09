@@ -35,6 +35,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -89,7 +90,8 @@ public class TtlUpdateHandlerTest {
         new TtlUpdateHandler(router, securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
             accountAndContainerInjector, metrics, CLUSTER_MAP);
     ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(BLOB_DATA));
-    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel).get(1, TimeUnit.SECONDS);
+    blobId = router.putBlob(BLOB_PROPERTIES, new byte[0], channel, new PutBlobOptionsBuilder().build())
+        .get(1, TimeUnit.SECONDS);
     idConverterFactory.translation = blobId;
   }
 
