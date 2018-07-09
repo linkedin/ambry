@@ -327,7 +327,10 @@ public class ReplicationTest {
     Pair<Host, Host> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
     Host localHost = localAndRemoteHosts.getFirst();
     Host remoteHost = localAndRemoteHosts.getSecond();
-    ReplicationMockStoreKeyConverter storeKeyConverter = new ReplicationMockStoreKeyConverter();
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    storeKeyConverterFactory.setReturnInputIfAbsent(true);
+    StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
 
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
@@ -497,7 +500,7 @@ public class ReplicationTest {
 
      */
     Map<PartitionId, List<BlobId>> partitionIdToDeleteBlobId = new HashMap<>();
-
+    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
       List<BlobId> deleteBlobIds = new ArrayList<>();
@@ -509,12 +512,13 @@ public class ReplicationTest {
       BlobId b1p = generateRandomBlobId(partitionId);
       BlobId b2 = generateRandomBlobId(partitionId);
       deleteBlobIds.add(b2);
-      storeKeyConverter.put(b0, b0p);
-      storeKeyConverter.put(b1, b1p);
-      storeKeyConverter.put(b2, null);
+      conversionMap.put(b0, b0p);
+      conversionMap.put(b1, b1p);
+      conversionMap.put(b2, null);
       addPutMessagesToReplicasOfPartition(Arrays.asList(b0p), Arrays.asList(localHost));
       addPutMessagesToReplicasOfPartition(Arrays.asList(b0, b1, b2), Arrays.asList(remoteHost));
     }
+    storeKeyConverterFactory.setConversionMap(conversionMap);
 
     expectedIndex =
         assertMissingKeysAndFixMissingStoreKeys(expectedIndex, expectedIndex + 1, batchSize - 1, batchSize, 1,

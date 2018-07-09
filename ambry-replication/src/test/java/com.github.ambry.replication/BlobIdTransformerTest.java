@@ -84,7 +84,7 @@ public class BlobIdTransformerTest {
    * Sets up common components
    * @throws IOException
    */
-  public BlobIdTransformerTest() throws IOException {
+  public BlobIdTransformerTest() throws Exception {
     Pair<String, String>[] pairs =
         new Pair[]{BLOB_ID_PAIR_VERSION_1_CONVERTED, BLOB_ID_PAIR_VERSION_2_CONVERTED, BLOB_ID_PAIR_VERSION_3_CONVERTED, BLOB_ID_PAIR_VERSION_3_NULL};
     factory = new MockStoreKeyConverterFactory(null, null);
@@ -93,6 +93,7 @@ public class BlobIdTransformerTest {
     transformer = new BlobIdTransformer(blobIdFactory, storeKeyConverter);
     pairList = new ArrayList<>(Arrays.asList(pairs));
     pairList.add(new Pair<>(VERSION_3_UNCONVERTED, VERSION_3_UNCONVERTED));
+    preConvertPairFirsts(pairList, storeKeyConverter);
   }
 
   /**
@@ -105,6 +106,7 @@ public class BlobIdTransformerTest {
       for (Class clazz : VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS) {
         InputAndExpected inputAndExpected = new InputAndExpected(pair, clazz);
         TransformationOutput output = transformer.transform(inputAndExpected.getInput());
+        assertNull("output exception should be null", output.getException());
         verifyOutput(output.getMsg(), inputAndExpected.getExpected());
       }
     }
@@ -210,13 +212,22 @@ public class BlobIdTransformerTest {
   }
 
   private StoreKeyConverter createAndSetupMockStoreKeyConverter(MockStoreKeyConverterFactory factory,
-      Pair<String, String>[] pairs) throws IOException {
+      Pair<String, String>[] pairs) throws Exception {
     Map<StoreKey, StoreKey> map = new HashMap<>();
     for (Pair<String, String> pair : pairs) {
       map.put(createBlobId(pair.getFirst()), createBlobId(pair.getSecond()));
     }
     factory.setConversionMap(map);
     return factory.getStoreKeyConverter();
+  }
+
+  private void preConvertPairFirsts(List<Pair> pairs, StoreKeyConverter storeKeyConverter)
+      throws Exception {
+    List<StoreKey> pairFirsts = new ArrayList<>();
+    for (Pair<String,String> pair : pairs) {
+      pairFirsts.add(createBlobId(pair.getFirst()));
+    }
+    storeKeyConverter.convert(pairFirsts);
   }
 
   private void verifyOutput(Message output, Message expected) throws IOException {
