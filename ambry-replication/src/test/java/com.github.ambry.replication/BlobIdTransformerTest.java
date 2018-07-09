@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.store;
+package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -23,6 +23,13 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatBlobV1InputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.replication.BlobIdTransformer;
+import com.github.ambry.store.Message;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MockStoreKeyConverterFactory;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -110,9 +117,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testNonPutTransform() throws Exception {
     InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), DeleteMessageFormatInputStream.class);
-    TransformationOutput output = transformer.transform(inputAndExpected.getInput());
-    Assert.assertTrue("Should lead to IllegalArgumentException",
-        output.getException() instanceof IllegalArgumentException);
+    assertException(transformer.transform(inputAndExpected.getInput()), IllegalArgumentException.class);
   }
 
   /**
@@ -122,8 +127,7 @@ public class BlobIdTransformerTest {
   @Test
   public void testGarbageInputStream() throws Exception {
     InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), null);
-    TransformationOutput output = transformer.transform(inputAndExpected.getInput());
-    Assert.assertTrue("Should lead to MessageFormatException", output.getException() instanceof MessageFormatException);
+    assertException(transformer.transform(inputAndExpected.getInput()), MessageFormatException.class);
   }
 
   /**
@@ -180,8 +184,7 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testNullTransformInput() throws Exception {
-    Assert.assertTrue("Should lead to NullPointerException",
-        transformer.transform(null).getException() instanceof NullPointerException);
+    assertException(transformer.transform(null), NullPointerException.class);
   }
 
   /**
@@ -191,15 +194,12 @@ public class BlobIdTransformerTest {
   @Test
   public void testNullComponentsTransformInput() throws Exception {
     MessageInfo messageInfo = new MessageInfo(createBlobId(VERSION_1_UNCONVERTED), 123, (short) 123, (short) 123, 0L);
-    InputStream inputStream = null;
-    //null inputStream
-    Message message = new Message(messageInfo, inputStream);
-    Assert.assertTrue("Should lead to NullPointerException",
-        transformer.transform(message).getException() instanceof NullPointerException);
+    //null msgBytes
+    Message message = new Message(messageInfo, null);
+    assertException(transformer.transform(message), NullPointerException.class);
     //null messageInfo
     message = new Message(null, new ByteArrayInputStream(new byte[30]));
-    Assert.assertTrue("Should lead to NullPointerException",
-        transformer.transform(message).getException() instanceof NullPointerException);
+    assertException(transformer.transform(message), NullPointerException.class);
   }
 
   private BlobId createBlobId(String hexBlobId) throws IOException {
@@ -224,9 +224,15 @@ public class BlobIdTransformerTest {
       assertNull("output should be null", output);
     } else {
       assertEquals("MessageInfos not equal", expected.getMessageInfo(), output.getMessageInfo());
-      TestUtils.assertInputStreamEqual(output.getStream(), expected.getStream(),
+      TestUtils.assertInputStreamEqual(expected.getStream(), output.getStream(),
           (int) expected.getMessageInfo().getSize(), true);
     }
+  }
+
+  private void assertException(TransformationOutput transformationOutput, Class exceptionClass) {
+    assertNull("Message in output is not null", transformationOutput.getMsg());
+    assertTrue("Exception from output is not " + exceptionClass.getName(),
+        exceptionClass.isInstance(transformationOutput.getException()));
   }
 
   /**

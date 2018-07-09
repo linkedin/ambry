@@ -750,6 +750,24 @@ public class Utils {
   }
 
   /**
+   * Read the given number of bytes from the given {@link InputStream} into the given {@link OutputStream}
+   * @param inStream the {@link InputStream} from which to read.
+   * @param outStream the {@link OutputStream} to which to write.
+   * @param size the number of bytes to be transferred.
+   * @throws IOException if there is an exception reading or writing to the given streams.
+   */
+  public static void transferBytes(InputStream inStream, OutputStream outStream, long size) throws IOException {
+    long totalTransferred = 0;
+    byte[] readBytes = new byte[(int) Math.min(1024, size)];
+    while (totalTransferred < size) {
+      int bytesToRead = (int) Math.min(readBytes.length, size - totalTransferred);
+      readBytesFromStream(inStream, readBytes, 0, bytesToRead);
+      outStream.write(readBytes, 0, bytesToRead);
+      totalTransferred += bytesToRead;
+    }
+  }
+
+  /**
    * Split the input string "data" using the delimiter and return as list of strings for the slices obtained
    * @param data
    * @param delimiter

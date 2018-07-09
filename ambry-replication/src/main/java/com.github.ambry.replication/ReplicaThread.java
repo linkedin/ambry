@@ -59,6 +59,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +94,7 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final StoreKeyConverter storeKeyConverter;
   private final Transformer transformer;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
@@ -121,6 +123,7 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
+    this.storeKeyConverter = storeKeyConverter;
     this.transformer = transformer;
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
@@ -327,6 +330,9 @@ class ReplicaThread implements Runnable {
         ReplicaMetadataResponse response =
             getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
         long startTimeInMs = SystemTime.getInstance().milliseconds();
+
+        batchConvertReplicaMetadataResponseKeys(response);
+
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
@@ -337,10 +343,11 @@ class ReplicaThread implements Runnable {
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                   replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
+              TwoWayConverterCache twoWayConverterCache = new TwoWayConverterCache();
               Set<StoreKey> missingStoreKeys =
-                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
+                  getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo, twoWayConverterCache);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
-                  remoteNode);
+                  remoteNode, twoWayConverterCache);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
@@ -467,6 +474,39 @@ class ReplicaThread implements Runnable {
   }
 
   /**
+   * Takes a map of store keys to store keys
+   * and creates a two way mapping between the
+   * store keys.  Assumes that input mapping
+   * maps remote keys to local keys.
+   */
+  private class TwoWayConverterCache {
+    private Map<StoreKey, StoreKey> localToRemote;
+    private Map<StoreKey, StoreKey> remoteToLocal;
+
+    public void setRemoteToLocal(Map<StoreKey, StoreKey> map) {
+      remoteToLocal = map;
+      localToRemote = new HashMap<>();
+      for (Map.Entry<StoreKey, StoreKey> entry : remoteToLocal.entrySet()) {
+        localToRemote.put(entry.getValue(), entry.getKey());
+      }
+    }
+
+    public StoreKey getRemote(StoreKey localKey) {
+      if (!localToRemote.containsKey(localKey)) {
+        throw new IllegalStateException("Found input not in the cache. All inputs should be in the cache");
+      }
+      return localToRemote.get(localKey);
+    }
+
+    public StoreKey getLocal(StoreKey remoteKey) {
+      if (!remoteToLocal.containsKey(remoteKey)) {
+        throw new IllegalStateException("Found input not in the cache. All inputs should be in the cache");
+      }
+      return remoteToLocal.get(remoteKey);
+    }
+  }
+
+  /**
    * Gets the missing store keys by comparing the messages from the remote node
    * @param replicaMetadataResponseInfo The response that contains the messages from the remote node
    * @param remoteNode The remote node from which replication needs to happen
@@ -475,7 +515,8 @@ class ReplicaThread implements Runnable {
    * @throws StoreException
    */
   private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
-      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo, TwoWayConverterCache twoWayConverterCache)
+      throws Exception {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     List<StoreKey> storeKeysToCheck = new ArrayList<StoreKey>(messageInfoList.size());
@@ -485,14 +526,28 @@ class ReplicaThread implements Runnable {
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
     }
 
-    Set<StoreKey> missingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(storeKeysToCheck);
-    for (StoreKey storeKey : missingStoreKeys) {
+    Map<StoreKey, StoreKey> unconvertedToConverted = new HashMap<>();
+    for (StoreKey storeKey : storeKeysToCheck) {
+      unconvertedToConverted.put(storeKey, storeKeyConverter.getConverted(storeKey));
+    }
+
+    twoWayConverterCache.setRemoteToLocal(unconvertedToConverted);
+    List<StoreKey> convertedKeys = new ArrayList<>();
+    for (StoreKey val : unconvertedToConverted.values()) {
+      if (val != null) {
+        convertedKeys.add(val);
+      }
+    }
+    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(convertedKeys);
+    Set<StoreKey> unconvertedStoreKeys = new HashSet<>();
+    for (StoreKey storeKey : convertedMissingStoreKeys) {
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id: {}", remoteNode, threadName,
           remoteReplicaInfo.getReplicaId(), storeKey);
+      unconvertedStoreKeys.add(twoWayConverterCache.getRemote(storeKey));
     }
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
-    return missingStoreKeys;
+    return unconvertedStoreKeys;
   }
 
   /**
@@ -509,7 +564,8 @@ class ReplicaThread implements Runnable {
    */
   private void processReplicaMetadataResponse(Set<StoreKey> missingStoreKeys,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
-      DataNodeId remoteNode) throws IOException, StoreException, MessageFormatException {
+      DataNodeId remoteNode, TwoWayConverterCache converter)
+      throws IOException, StoreException, MessageFormatException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     for (MessageInfo messageInfo : messageInfoList) {
@@ -519,15 +575,16 @@ class ReplicaThread implements Runnable {
             "Blob id is not in the expected partition Actual partition " + blobId.getPartition()
                 + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
       }
-      if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
+      BlobId localKey = (BlobId) converter.getLocal(messageInfo.getStoreKey());
+      if (!missingStoreKeys.contains(messageInfo.getStoreKey()) && localKey != null) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
         // deleted yet locally
-        if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(messageInfo.getStoreKey())) {
+        if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey)) {
           MessageFormatInputStream deleteStream =
-              new DeleteMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
-                  messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
-          MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, false,
-              messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
+              new DeleteMessageFormatInputStream(localKey, localKey.getAccountId(), localKey.getContainerId(),
+                  messageInfo.getOperationTimeMs());
+          MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, false, localKey.getAccountId(),
+              localKey.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
@@ -582,6 +639,31 @@ class ReplicaThread implements Runnable {
     } else {
       replicationMetrics.intraColoProcessMetadataResponseTime.update(
           SystemTime.getInstance().milliseconds() - startTime);
+    }
+  }
+
+  /**
+   * Batch converts all keys in the {@link ReplicaMetadataResponse} response.
+   * Intention is that conversion is done all at once so that followup calls to
+   * {@link StoreKeyConverter#getConverted(StoreKey)} will work
+   * @param response the {@link ReplicaMetadataResponse} whose keys you want converted
+   * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
+   * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
+   */
+  private Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response)
+      throws IOException {
+    try {
+      List<StoreKey> storeKeysToConvert = new ArrayList<>();
+      for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
+        ReplicaMetadataResponseInfo replicaMetadataResponseInfo = response.getReplicaMetadataResponseInfoList().get(i);
+        List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
+        for (MessageInfo messageInfo : messageInfoList) {
+          storeKeysToConvert.add(messageInfo.getStoreKey());
+        }
+      }
+      return storeKeyConverter.convert(storeKeysToConvert);
+    } catch (Exception e) {
+      throw new IOException("Problem with store key conversion", e);
     }
   }
 

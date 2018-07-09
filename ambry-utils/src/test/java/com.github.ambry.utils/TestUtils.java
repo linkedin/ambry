@@ -147,7 +147,7 @@ public class TestUtils {
    * Asserts that {@code actual} and {@code expect} are equal. Checks that {@code actual}
    * contains no extra data if {@code checkActualComplete} is {@code true}.
    */
-  public static void assertInputStreamEqual(InputStream actual, InputStream expect, int size, boolean checkActualComplete) throws IOException {
+  public static void assertInputStreamEqual(InputStream expect, InputStream actual, int size, boolean checkActualComplete) throws IOException {
     byte[] actualBuf = Utils.readBytesFromStream(actual, size);
     if (checkActualComplete) {
       int finalRead = actual.read();

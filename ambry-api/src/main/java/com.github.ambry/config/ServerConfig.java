@@ -65,7 +65,7 @@ public class ServerConfig {
    * Implementation class for StoreKeyConverterFactory
    */
   @Config("server.store.key.converter.factory")
-  @Default("com.github.ambry.server.StoreKeyConverterFactoryImpl")
+  @Default("com.github.ambry.store.StoreKeyConverterFactoryImpl")
   public final String serverStoreKeyConverterFactory;
 
   /**
