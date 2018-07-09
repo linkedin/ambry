@@ -1799,6 +1799,13 @@ public class IndexTest {
     }
     assertEquals("Inconsistent size", info.getSize(), value.getSize());
     assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
+    // if the info says ttl update is true, then the value must reflect that. vice versa need not be true because put
+    // infos won't have it set but the value returned from the index will if a ttl update was applied later. Same
+    // applies if the info is for a delete record in which case it won't have the ttl update set to true because it is
+    // not known at the time of the info generation from the log that the id was previously updated
+    if (info.isTtlUpdated()) {
+      assertTrue("Inconsistent ttl update state ", value.isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+    }
     assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
     assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
     assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
