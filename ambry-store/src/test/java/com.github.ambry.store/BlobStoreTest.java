@@ -1782,7 +1782,8 @@ public class BlobStoreTest {
   // ttlUpdateErrorCasesTest() helpers
 
   /**
-   * Tests the case where the TTL update arrives when the the blob has not expired but cannot be TTL updated
+   * Tests the case where the TTL update arrives when the the blob has not expired but cannot be TTL updated because
+   * it is past the buffer time for TTL updates (i.e. expiry time of the blob is "too close")
    * @throws Exception
    */
   private void inNoTtlUpdatePeriodTest() throws Exception {

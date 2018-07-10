@@ -154,7 +154,7 @@ public class StoreMetrics {
     deleteAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "DeleteAuthorizationFailureCount"));
     ttlUpdateAuthorizationFailureCount =
-        registry.counter(MetricRegistry.name(BlobStore.class, name + "T tlUpdateAuthorizationFailureCount"));
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "TtlUpdateAuthorizationFailureCount"));
     keyInFindEntriesAbsent = registry.counter(MetricRegistry.name(BlobStore.class, name + "KeyInFindEntriesAbsent"));
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
