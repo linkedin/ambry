@@ -64,6 +64,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -83,7 +84,6 @@ public class NonBlockingRouterTest {
   private static final int DELETE_REQUEST_PARALLELISM = 3;
   private static final int DELETE_SUCCESS_TARGET = 2;
   private static final int PUT_CONTENT_SIZE = 1000;
-  private static final long TTL_SECS = 7200;
   private int maxPutChunkSize = PUT_CONTENT_SIZE;
   private final Random random = new Random();
   private NonBlockingRouter router;

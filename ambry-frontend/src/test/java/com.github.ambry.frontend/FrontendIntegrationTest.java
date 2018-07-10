@@ -90,6 +90,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -98,7 +99,6 @@ import static org.junit.Assert.*;
  */
 @RunWith(Parameterized.class)
 public class FrontendIntegrationTest {
-  private static final long TTL_SECS = 7200;
   private static final int PLAINTEXT_SERVER_PORT = 1174;
   private static final int SSL_SERVER_PORT = 1175;
   private static final int MAX_MULTIPART_POST_SIZE_BYTES = 10 * 10 * 1024;

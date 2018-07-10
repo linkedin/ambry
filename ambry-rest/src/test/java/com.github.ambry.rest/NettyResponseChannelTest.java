@@ -800,7 +800,7 @@ public class NettyResponseChannelTest {
       if (contentSize > 0) {
         content = TestUtils.getRandomBytes(contentSize);
       }
-      HttpRequest request = RestTestUtils.createRequest(httpMethod, uri.toString(), httpHeaders, content);
+      HttpRequest request = RestTestUtils.createFullRequest(httpMethod, uri.toString(), httpHeaders, content);
       if (contentSize > 1) {
         HttpUtil.setTransferEncodingChunked(request, true);
       } else {

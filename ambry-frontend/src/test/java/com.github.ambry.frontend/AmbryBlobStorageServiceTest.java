@@ -96,6 +96,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -103,8 +104,6 @@ import static org.junit.Assert.*;
  * Unit tests for {@link AmbryBlobStorageService}. Also tests {@link AccountAndContainerInjector}.
  */
 public class AmbryBlobStorageServiceTest {
-  private static final long TTL_SECS = 7200;
-
   private final Account refAccount;
   private final Properties configProps = new Properties();
   private final MetricRegistry metricRegistry = new MetricRegistry();
@@ -1162,7 +1161,7 @@ public class AmbryBlobStorageServiceTest {
   // postGetHeadUpdateDeleteTest() helpers
 
   /**
-   * Tests blob POST, GET, HEAD and DELETE operations on the given {@code container}.
+   * Tests blob POST, GET, HEAD, TTL Update and DELETE operations on the given {@code container}.
    * @param toPostAccount the {@link Account} to use in post headers. Can be {@code null} if only using service ID.
    * @param toPostContainer the {@link Container} to use in post headers. Can be {@code null} if only using service ID.
    * @param serviceId the serviceId to use for the POST

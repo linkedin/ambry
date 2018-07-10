@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -60,7 +61,6 @@ public class TtlUpdateHandlerTest {
   private static final Container REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
   private static final ClusterMap CLUSTER_MAP;
   private static final String SERVICE_ID = "TtlUpdateHandlerTest";
-  private static final long TTL_SECS = 7200;
 
   private static final BlobProperties BLOB_PROPERTIES =
       new BlobProperties(100, SERVICE_ID, null, null, false, TTL_SECS, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),

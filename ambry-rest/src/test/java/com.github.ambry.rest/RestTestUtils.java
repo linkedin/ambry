@@ -62,7 +62,8 @@ public class RestTestUtils {
    * @param content the content to add to the request
    * @return a {@link FullHttpRequest} with the given parameters.
    */
-  public static FullHttpRequest createRequest(HttpMethod httpMethod, String uri, HttpHeaders headers, byte[] content) {
+  public static FullHttpRequest createFullRequest(HttpMethod httpMethod, String uri, HttpHeaders headers,
+      byte[] content) {
     ByteBuf buf = content == null ? Unpooled.buffer(0) : Unpooled.wrappedBuffer(content);
     FullHttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, httpMethod, uri, buf);
     if (headers != null) {
