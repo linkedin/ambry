@@ -363,6 +363,9 @@ class CuratedLogIndexState {
       newValue = new IndexValue(CuratedLogIndexState.DELETE_RECORD_SIZE, startOffset, info.getExpirationTimeInMs(),
           info.getOperationTimeMs(), info.getAccountId(), info.getContainerId());
       newValue.clearOriginalMessageOffset();
+      if (info.isTtlUpdated()) {
+        newValue.setFlag(IndexValue.Flags.Ttl_Update_Index);
+      }
       forcePut = true;
     }
     newValue.setFlag(IndexValue.Flags.Delete_Index);
@@ -1112,8 +1115,11 @@ class CuratedLogIndexState {
       for (MockId id : idsToDelete) {
         addDeleteEntry(id);
       }
-      // 1 more PUT with non zero expire time
-      addPutEntries(1, PUT_RECORD_SIZE, expiresAtMs);
+      // 1 DELETE that has the TTL update flag set but has no corresponding TTL update or PUT entries
+      uniqueId = getUniqueId();
+      addDeleteEntry(uniqueId,
+          new MessageInfo(uniqueId, Integer.MAX_VALUE, true, true, Utils.Infinite_Time, uniqueId.getAccountId(),
+              uniqueId.getContainerId(), time.milliseconds()));
 
       // tenth index segment
       // 1 orphaned TTL update entry (with delete in the same index segment)

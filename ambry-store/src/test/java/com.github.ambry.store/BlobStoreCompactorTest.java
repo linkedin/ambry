@@ -961,14 +961,33 @@ public class BlobStoreCompactorTest {
     // compact everything except the first log segment (all the TTL updates and deletes will be retained - no change)
     // using expire time as the ref time
     expiryTimeMs = createStateForTtlUpdateSpecificTest();
-    segmentsUnderCompaction = getLogSegments(1, 1);
+    segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
     compactAndVerify(segmentsUnderCompaction, expiryTimeMs, false);
 
     // using delete time as the ref time
     createStateForTtlUpdateSpecificTest();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
-    segmentsUnderCompaction = getLogSegments(1, 1);
+    segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
     compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false);
+
+    // segment that has only ttl updates and deletes (no corresponding puts)
+    // TODO
+  }
+
+  /**
+   * Tests some recovery scenarios related to TTL update records in particular
+   * @throws Exception
+   */
+  @Test
+  public void ttlUpdateSpecificRecoveryTest() throws Exception {
+    bundleReadBuffer = null;
+    // close testing
+    doTtlUpdateSrcDupTest();
+    doTtlUpdateTgtDupTest();
+    // crash testing
+    throwExceptionInsteadOfClose = true;
+    doTtlUpdateSrcDupTest();
+    doTtlUpdateTgtDupTest();
   }
 
   // helpers
@@ -1826,6 +1845,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private void doInterruptionDuringOrAfterIndexSegmentProcessingTest() throws Exception {
+    bundleReadBuffer = null;
     for (int interruptAt : Arrays.asList(1, 2, 7, -3)) {
       // no change before expiry time
       Pair<Long, List<String>> expiryTimeAndSegmentsUnderCompaction = setupStateWithExpiredBlobsAtSpecificTime();
@@ -1877,6 +1897,7 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private void doInterruptionDuringRecordCopyTest() throws Exception {
+    bundleReadBuffer = null;
     for (long interruptAt : Arrays.asList(CuratedLogIndexState.PUT_RECORD_SIZE,
         -2 * CuratedLogIndexState.PUT_RECORD_SIZE)) {
       // no change before expiry time
@@ -1925,6 +1946,7 @@ public class BlobStoreCompactorTest {
    */
   private void doCompactWholeLogWithHardDeleteEnabledTest(boolean shouldInduceInterruption,
       boolean interruptionDuringCopy) throws Exception {
+    bundleReadBuffer = null;
     refreshState(true, true);
     long requiredCount = state.log.getCapacityInBytes() / state.log.getSegmentCapacity() - 2;
     writeDataToMeetRequiredSegmentCount(requiredCount, null);
@@ -1965,11 +1987,14 @@ public class BlobStoreCompactorTest {
    * @throws Exception
    */
   private long createStateForTtlUpdateSpecificTest() throws Exception {
-    // this test sets up state such that one log semgent contains a bunch of puts with TTL, the same log segment has
-    // ttl updates for all but two PUTs. The second log segment has TTL updates for another quarter of the puts
-    // and also has deletes for all of the puts (which may spill over to another segment).
+    // this test sets up state such that there are a bunch of PUTs with TTL such that they expire immediately, TTL
+    // updates for all but two PUTs and deletes for all PUTs. The key is that the first log segment contains some TTL
+    // updates at least so that the the removal of the two PUTs without TTL updates will cause some TTL updates that
+    // were originally in the second segment to move to the first.
     refreshState(false, false);
-    // this code is trying to determine how many put records there should be (close is good enough)
+    // this code is trying to determine how many put records there should be (close is good enough). It aims to have
+    // just enough PUT records such that a quarter of the TTL updates for these PUT records fits in the first log
+    // segment along with the PUTs themselves
     // numPuts * PUT_RECORD_SIZE + numPuts/4 * TTL_UPDATE_RECORD_SIZE + HEADER_SIZE < SEGMENT_CAPACITY
     // we have to solve for numPuts
     // numPuts < (SEGMENT_CAPACITY - HEADER_SIZE) / (PUT_RECORD_SIZE + TTL_UPDATE_RECORD_SIZE/4)
@@ -1998,6 +2023,46 @@ public class BlobStoreCompactorTest {
     // reload index to make sure journal is on only the latest log segment
     state.reloadIndex(true, false);
     return expiryTimeMs;
+  }
+
+  // ttlUpdateSpecificRecoveryTest() helpers
+
+  /**
+   * Tests the case where close/crash creates a situation where duplicates will be detected during the search for copy
+   * candidates in the srcIndex
+   * @throws Exception
+   */
+  private void doTtlUpdateSrcDupTest() throws Exception {
+    // close/crash after the first log segment is switched out
+    long expiryTimeMs = createStateForTtlUpdateSpecificTest();
+    state.advanceTime(TimeUnit.SECONDS.toMillis(1));
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    Log log = new InterruptionInducingLog(Integer.MAX_VALUE, 1);
+    compactWithRecoveryAndVerify(log, DISK_IO_SCHEDULER, state.index, segmentsUnderCompaction, expiryTimeMs, true,
+        true);
+  }
+
+  /**
+   * Tests the case where close/crash creates a situation where duplicates will be detected during the search for copy
+   * candidates in the tgtIndex
+   * @throws Exception
+   */
+  private void doTtlUpdateTgtDupTest() throws Exception {
+    // second segment only (close/crash in the middle)
+    createStateForTtlUpdateSpecificTest();
+    state.advanceTime(TimeUnit.SECONDS.toMillis(1));
+    List<String> segmentsUnderCompaction = getLogSegments(1, 1);
+    Map<String, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(segmentsUnderCompaction);
+    DiskIOScheduler diskIOScheduler;
+    if (throwExceptionInsteadOfClose) {
+      diskIOScheduler = new InterruptionInducingDiskIOScheduler(2, Integer.MAX_VALUE);
+    } else {
+      diskIOScheduler =
+          new InterruptionInducingDiskIOScheduler(Integer.MAX_VALUE, 2 * CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE);
+    }
+    compactWithRecoveryAndVerify(state.log, diskIOScheduler, state.index, segmentsUnderCompaction,
+        state.time.milliseconds(), false, true);
+    verifyNoChangeInEndOffsets(oldSegmentNamesAndEndOffsets);
   }
 
   // support class helpers
