@@ -948,30 +948,50 @@ public class BlobStoreCompactorTest {
   public void ttlUpdateSpecificTest() throws Exception {
     // compact everything
     // using expire time as the ref time
-    long expiryTimeMs = createStateForTtlUpdateSpecificTest();
+    long expiryTimeMs = createStateWithPutTtlUpdateAndDelete();
     List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     compactAndVerify(segmentsUnderCompaction, expiryTimeMs, true);
 
     // using delete time as the ref time
-    createStateForTtlUpdateSpecificTest();
+    createStateWithPutTtlUpdateAndDelete();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
 
     // compact everything except the first log segment (all the TTL updates and deletes will be retained - no change)
     // using expire time as the ref time
-    expiryTimeMs = createStateForTtlUpdateSpecificTest();
+    expiryTimeMs = createStateWithPutTtlUpdateAndDelete();
     segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
     compactAndVerify(segmentsUnderCompaction, expiryTimeMs, false);
 
     // using delete time as the ref time
-    createStateForTtlUpdateSpecificTest();
+    createStateWithPutTtlUpdateAndDelete();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     segmentsUnderCompaction = getLogSegments(1, state.index.getLogSegmentCount() - 2);
     compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false);
 
-    // segment that has only ttl updates and deletes (no corresponding puts)
-    // TODO
+    // segment that has only ttl updates and deletes (no corresponding puts). All the ttl updates should be cleaned up
+    Set<MockId> ids = createStateWithTtlUpdatesAndDeletes();
+    state.advanceTime(TimeUnit.SECONDS.toMillis(1));
+    segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), true);
+
+    // there should be no ttl updates in the final index (but the deletes should be there)
+    Set<MockId> seenIds = new HashSet<>();
+    List<IndexEntry> indexEntries = new ArrayList<>();
+    FindEntriesCondition condition = new FindEntriesCondition(Long.MAX_VALUE);
+    AtomicLong currentTotalSize = new AtomicLong(0);
+    for (IndexSegment segment : state.index.getIndexSegments().values()) {
+      if (LogSegmentNameHelper.getGeneration(segment.getLogSegmentName()) == 0) {
+        break;
+      }
+      segment.getIndexEntriesSince(null, condition, indexEntries, currentTotalSize, false);
+    }
+    indexEntries.forEach(entry -> {
+      assertTrue("There cannot be a non-delete entry", entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index));
+      assertTrue("Every key should be seen only once", seenIds.add((MockId) entry.getKey()));
+    });
+    assertEquals("All ids not present", ids, seenIds);
   }
 
   /**
@@ -1979,14 +1999,14 @@ public class BlobStoreCompactorTest {
     assertTrue("Hard delete should be running", state.index.hardDeleter.isRunning());
   }
 
-  // ttlUpdateSpecificTest() helpers
+  // ttlUpdateSpecificTest() and ttlUpdateSpecificRecoveryTest() helpers
 
   /**
-   * Creates state required for some TTL update specific tests
+   * Creates state required for some TTL update specific tests that need PUTs, TTL updates and DELETEs.
    * @return the time at which the PUT records that don't have TTL update records expire.
    * @throws Exception
    */
-  private long createStateForTtlUpdateSpecificTest() throws Exception {
+  private long createStateWithPutTtlUpdateAndDelete() throws Exception {
     // this test sets up state such that there are a bunch of PUTs with TTL such that they expire immediately, TTL
     // updates for all but two PUTs and deletes for all PUTs. The key is that the first log segment contains some TTL
     // updates at least so that the the removal of the two PUTs without TTL updates will cause some TTL updates that
@@ -2025,7 +2045,29 @@ public class BlobStoreCompactorTest {
     return expiryTimeMs;
   }
 
-  // ttlUpdateSpecificRecoveryTest() helpers
+  /**
+   * Creates state required for some TTL update specific tests that need TTL updates and DELETEs only.
+   * @return the {@link MockId}s for which TTL updates and deletes were added.
+   * @throws Exception
+   */
+  private Set<MockId> createStateWithTtlUpdatesAndDeletes() throws Exception {
+    Set<MockId> ids = new HashSet<>();
+    refreshState(false, false);
+    int numEntries =
+        (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / (CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE
+            + CuratedLogIndexState.DELETE_RECORD_SIZE));
+    for (int i = 0; i < numEntries; i++) {
+      MockId id = state.getUniqueId();
+      state.makePermanent(id, true);
+      state.addDeleteEntry(id);
+      ids.add(id);
+    }
+    // add put entries so that the log segment rolls over
+    writeDataToMeetRequiredSegmentCount(state.index.getLogSegmentCount() + 1, null);
+    // reload index to make sure journal is on only the latest log segment
+    state.reloadIndex(true, false);
+    return ids;
+  }
 
   /**
    * Tests the case where close/crash creates a situation where duplicates will be detected during the search for copy
@@ -2034,7 +2076,7 @@ public class BlobStoreCompactorTest {
    */
   private void doTtlUpdateSrcDupTest() throws Exception {
     // close/crash after the first log segment is switched out
-    long expiryTimeMs = createStateForTtlUpdateSpecificTest();
+    long expiryTimeMs = createStateWithPutTtlUpdateAndDelete();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     Log log = new InterruptionInducingLog(Integer.MAX_VALUE, 1);
@@ -2049,7 +2091,7 @@ public class BlobStoreCompactorTest {
    */
   private void doTtlUpdateTgtDupTest() throws Exception {
     // second segment only (close/crash in the middle)
-    createStateForTtlUpdateSpecificTest();
+    createStateWithPutTtlUpdateAndDelete();
     state.advanceTime(TimeUnit.SECONDS.toMillis(1));
     List<String> segmentsUnderCompaction = getLogSegments(1, 1);
     Map<String, Long> oldSegmentNamesAndEndOffsets = getEndOffsets(segmentsUnderCompaction);
