@@ -493,16 +493,13 @@ class ReplicaThread implements Runnable {
 
     Map<StoreKey, StoreKey> originalToConverted = new HashMap<>();
     for (StoreKey storeKey : storeKeysToCheck) {
-      originalToConverted.put(storeKey, storeKeyConverter.getConverted(storeKey));
-    }
-
-    List<StoreKey> convertedKeys = new ArrayList<>();
-    for (StoreKey val : originalToConverted.values()) {
-      if (val != null) {
-        convertedKeys.add(val);
+      StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
+      if (convertedKey != null) {
+        originalToConverted.put(storeKey, convertedKey);
       }
     }
-    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(convertedKeys);
+
+    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(originalToConverted.values()));
     Set<StoreKey> originalStoreKeys = new HashSet<>();
 
     for (Map.Entry<StoreKey, StoreKey> entry : originalToConverted.entrySet()) {
