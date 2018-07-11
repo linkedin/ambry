@@ -847,7 +847,7 @@ public class ReplicationTest {
    * @param messageEntries The message entry list where duplicates need to be removed
    */
   private static void eliminateDuplicates(List<MessageInfo> messageEntries) {
-    Set<StoreKey> setToFindDuplicate = new HashSet<StoreKey>();
+    Set<StoreKey> setToFindDuplicate = new HashSet<>();
     ListIterator<MessageInfo> messageEntriesIterator = messageEntries.listIterator(messageEntries.size());
     while (messageEntriesIterator.hasPrevious()) {
       MessageInfo messageInfo = messageEntriesIterator.previous();

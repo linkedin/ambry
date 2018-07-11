@@ -24,7 +24,6 @@ import java.util.Map;
  * A mock factory of {@link StoreKeyConverterFactory}.  Creates MockStoreKeyConverter.
  */
 public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
-  private final StoreKeyConverter storeKeyConverter = new MockStoreKeyConverter();
   private Map<StoreKey, StoreKey> conversionMap;
   private Exception exception;
   private boolean returnKeyIfAbsent;
@@ -34,7 +33,7 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
 
   @Override
   public StoreKeyConverter getStoreKeyConverter() {
-    return storeKeyConverter;
+    return new MockStoreKeyConverter();
   }
 
   /**
