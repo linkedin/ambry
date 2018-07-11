@@ -79,8 +79,12 @@ public class HelixClusterAggregator {
    * @param snapshotWrapper the {@link StatsSnapshot} to be added to the raw base {@link StatsSnapshot}
    */
   private void combineRaw(StatsSnapshot rawBaseSnapshot, StatsWrapper snapshotWrapper) {
-    long totalValue = rawBaseSnapshot.getValue();
     Map<String, StatsSnapshot> partitionSnapshotMap = snapshotWrapper.getSnapshot().getSubMap();
+    if (partitionSnapshotMap == null) {
+      logger.info("There is no partition in given StatsSnapshot, skip aggregation on it.");
+      return;
+    }
+    long totalValue = rawBaseSnapshot.getValue();
     Map<String, StatsSnapshot> basePartitionSnapshotMap = rawBaseSnapshot.getSubMap();
     for (Map.Entry<String, StatsSnapshot> partitionSnapshot : partitionSnapshotMap.entrySet()) {
       if (basePartitionSnapshotMap.containsKey(partitionSnapshot.getKey())) {
@@ -109,10 +113,14 @@ public class HelixClusterAggregator {
    *                              partition entry in the base {@link StatsSnapshot}
    */
   private void combine(StatsSnapshot baseSnapshot, StatsWrapper snapshotWrapper, String instance,
-      Map<String, Long> partitionTimestampMap) throws IOException {
+      Map<String, Long> partitionTimestampMap) {
+    Map<String, StatsSnapshot> partitionSnapshotMap = snapshotWrapper.getSnapshot().getSubMap();
+    if (partitionSnapshotMap == null) {
+      logger.info("There is no partition in given StatsSnapshot, skip aggregation on it.");
+      return;
+    }
     long totalValue = baseSnapshot.getValue();
     long snapshotTimestamp = snapshotWrapper.getHeader().getTimestamp();
-    Map<String, StatsSnapshot> partitionSnapshotMap = snapshotWrapper.getSnapshot().getSubMap();
     Map<String, StatsSnapshot> basePartitionSnapshotMap = baseSnapshot.getSubMap();
     for (Map.Entry<String, StatsSnapshot> partitionSnapshot : partitionSnapshotMap.entrySet()) {
       String partitionId = partitionSnapshot.getKey();
