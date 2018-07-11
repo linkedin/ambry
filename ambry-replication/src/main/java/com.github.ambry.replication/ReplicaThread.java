@@ -507,8 +507,8 @@ class ReplicaThread implements Runnable {
 
     for (Map.Entry<StoreKey, StoreKey> entry : originalToConverted.entrySet()) {
       if (convertedMissingStoreKeys.contains(entry.getValue())) {
-        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id: {}", remoteNode, threadName,
-            remoteReplicaInfo.getReplicaId(), entry.getValue());
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (original): {}", remoteNode, threadName,
+            remoteReplicaInfo.getReplicaId(), entry.getValue(), entry.getKey());
         originalStoreKeys.add(entry.getKey());
       }
     }
