@@ -330,7 +330,7 @@ public class ReplicationTest {
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     storeKeyConverterFactory.setReturnInputIfAbsent(true);
-    StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+    MockStoreKeyConverterFactory.MockStoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
 
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
@@ -518,7 +518,7 @@ public class ReplicationTest {
       addPutMessagesToReplicasOfPartition(Arrays.asList(b0p), Arrays.asList(localHost));
       addPutMessagesToReplicasOfPartition(Arrays.asList(b0, b1, b2), Arrays.asList(remoteHost));
     }
-    storeKeyConverterFactory.setConversionMap(conversionMap);
+    storeKeyConverter.setConversionMap(conversionMap);
 
     expectedIndex =
         assertMissingKeysAndFixMissingStoreKeys(expectedIndex, expectedIndex + 1, batchSize - 1, batchSize, 1,

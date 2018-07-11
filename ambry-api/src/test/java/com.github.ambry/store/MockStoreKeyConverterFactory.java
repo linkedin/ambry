@@ -32,13 +32,14 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   }
 
   @Override
-  public StoreKeyConverter getStoreKeyConverter() {
-    return new MockStoreKeyConverter();
+  public MockStoreKeyConverter getStoreKeyConverter() {
+    return new MockStoreKeyConverter(new HashMap<>(conversionMap));
   }
 
   /**
    * Set conversionMap for reference.
-   * @param conversionMap used by {@link MockStoreKeyConverter}.
+   * @param conversionMap initially used by {@link MockStoreKeyConverter} instances
+   *                      created by the factory.
    */
   public void setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
     this.conversionMap = conversionMap;
@@ -72,9 +73,22 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   /**
    * A mock implementation of {@link StoreKeyConverter}.
    */
-  private class MockStoreKeyConverter implements StoreKeyConverter {
+  public class MockStoreKeyConverter implements StoreKeyConverter {
 
     private Map<StoreKey, StoreKey> lastConverted = new HashMap<>();
+    private Map<StoreKey, StoreKey> conversionMap;
+
+    private MockStoreKeyConverter(Map<StoreKey, StoreKey> conversionMap) {
+      this.conversionMap = conversionMap;
+    }
+
+    /**
+     * Set conversionMap for reference.
+     * @param conversionMap used by this {@link MockStoreKeyConverter} instance
+     */
+    public void setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
+      this.conversionMap = conversionMap;
+    }
 
     @Override
     public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
