@@ -39,6 +39,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -221,6 +222,16 @@ public class BlobIdTransformerTest {
     return factory.getStoreKeyConverter();
   }
 
+  /**
+   * Runs all the {@link Pair#getFirst()} outputs from the {@link Pair} list through
+   * the {@link StoreKeyConverter} storeKeyConverter.
+   * Intended to be run so that the StoreKeyConverter's
+   * {@link StoreKeyConverter#getConverted(StoreKey)} method can
+   * work on any of the pairs' getFirst() outputs.
+   * @param pairs
+   * @param storeKeyConverter
+   * @throws Exception {@link StoreKeyConverter#convert(Collection)} may throw an Exception
+   */
   private void preConvertPairFirsts(List<Pair> pairs, StoreKeyConverter storeKeyConverter)
       throws Exception {
     List<StoreKey> pairFirsts = new ArrayList<>();

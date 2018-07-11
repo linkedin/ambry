@@ -656,6 +656,18 @@ public class ReplicationTest {
     remoteReplicaInfo.onTokenPersisted();
   }
 
+  /**
+   * Asserts the number of missing keys between the local and remote replicas and fixes the keys
+   * @param expectedIndex initial expected index
+   * @param expectedIndexInc increment level for the expected index (how much the findToken index is expected to increment)
+   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
+   * @param expectedMissingKeysSum the number of missing keys expected
+   * @param replicaThread replicaThread that will be performing replication
+   * @param remoteHost the remote host that keys are being pulled from
+   * @param replicasToReplicate list of replicas to replicate between
+   * @return expectedIndex + expectedIndexInc
+   * @throws Exception
+   */
   private int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexInc, int batchSize,
       int expectedMissingKeysSum, ReplicaThread replicaThread, Host remoteHost,
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
@@ -663,6 +675,19 @@ public class ReplicationTest {
         expectedMissingKeysSum, replicaThread, remoteHost, replicasToReplicate);
   }
 
+  /**
+   * Asserts the number of missing keys between the local and remote replicas and fixes the keys
+   * @param expectedIndex initial expected index for even numbered partitions
+   * @param expectedIndexOdd initial expected index for odd numbered partitions
+   * @param expectedIndexInc increment level for the expected index (how much the findToken index is expected to increment)
+   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
+   * @param expectedMissingKeysSum the number of missing keys expected
+   * @param replicaThread replicaThread that will be performing replication
+   * @param remoteHost the remote host that keys are being pulled from
+   * @param replicasToReplicate list of replicas to replicate between
+   * @return expectedIndex + expectedIndexInc
+   * @throws Exception
+   */
   private int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexOdd, int expectedIndexInc,
       int batchSize, int expectedMissingKeysSum, ReplicaThread replicaThread, Host remoteHost,
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {

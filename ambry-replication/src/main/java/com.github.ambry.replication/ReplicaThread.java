@@ -543,6 +543,9 @@ class ReplicaThread implements Runnable {
             "Blob id is not in the expected partition Actual partition " + blobId.getPartition()
                 + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
       }
+      if (!remoteToLocal.containsKey(messageInfo.getStoreKey())) {
+        throw new IllegalStateException("remoteToLocal does not contain key "+messageInfo.getStoreKey());
+      }
       BlobId localKey = (BlobId) remoteToLocal.get(messageInfo.getStoreKey());
       if (!missingStoreKeys.contains(messageInfo.getStoreKey()) && localKey != null) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
