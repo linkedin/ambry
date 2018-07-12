@@ -484,15 +484,12 @@ class ReplicaThread implements Runnable {
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws Exception {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
-    List<StoreKey> storeKeysToCheck = new ArrayList<>(messageInfoList.size());
-    for (MessageInfo messageInfo : messageInfoList) {
-      storeKeysToCheck.add(messageInfo.getStoreKey());
-      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
-          remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
-    }
-
     Map<StoreKey, StoreKey> remoteToConvertedNonNull = new HashMap<>();
-    for (StoreKey storeKey : storeKeysToCheck) {
+
+    for (MessageInfo messageInfo : messageInfoList) {
+      StoreKey storeKey = messageInfo.getStoreKey();
+      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
+          remoteReplicaInfo.getReplicaId(), storeKey);
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
       if (convertedKey != null) {
         remoteToConvertedNonNull.put(storeKey, convertedKey);
@@ -562,16 +559,16 @@ class ReplicaThread implements Runnable {
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
           try {
             remoteReplicaInfo.getLocalStore().delete(writeset);
-            logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
-                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+            logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {} Local Key: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
           } catch (StoreException e) {
             // The blob may get deleted between the time the above check is done and the delete is
             // attempted. For example, this can happen if the key gets deleted in the context of another replica
             // thread. This is more likely when replication is already caught up - when similar set of
             // messages are received from different replicas around the same time.
             if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already deleted: {}", remoteNode,
-                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote Key already deleted: {} Local Key: {}", remoteNode,
+                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
             } else {
               throw e;
             }
@@ -588,8 +585,8 @@ class ReplicaThread implements Runnable {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
           missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
-          logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {}",
-              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+          logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {} Local key: {}",
+              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
           if (notification != null) {
