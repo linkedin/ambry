@@ -633,19 +633,18 @@ class BlobStoreCompactor {
       if (duplicateSearchSpan != null && alreadyExists(srcIndex, duplicateSearchSpan, copyCandidate.getKey(),
           copyCandidateValue)) {
         // is a duplicate because it already is in the store
-        logger.trace("Skipping the copying of {} in segment with start offset {} in {} - it already exists",
+        logger.trace("{} in segment with start offset {} in {} is a duplicate because it already exists in store",
             copyCandidate, indexSegmentStartOffset, storeId);
         isDuplicate = true;
       } else if (checkAlreadyCopied && alreadyExists(tgtIndex, null, copyCandidate.getKey(), copyCandidateValue)) {
         // is a duplicate because it has already been copied
-        logger.trace("Skipping the copying of {} in segment with start offset {} in {} - it has already been copied",
+        logger.trace("{} in segment with start offset {} in {} is a duplicate because it has already been copied",
             copyCandidate, indexSegmentStartOffset, storeId);
         isDuplicate = true;
       } else {
         // not a duplicate
-        logger.trace(
-            "Adding index entry {} in index segment with start offset {} in {} because it does not already exist",
-            copyCandidate, indexSegmentStartOffset, storeId);
+        logger.trace("{} in index segment with start offset {} in {} is not a duplicate", copyCandidate,
+            indexSegmentStartOffset, storeId);
       }
       return isDuplicate;
     } catch (StoreException e) {
@@ -707,7 +706,7 @@ class BlobStoreCompactor {
               // Add all values in this index segment (to account for the presence of TTL updates)
               addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
             } else {
-              logger.trace("Skipping {} in index segment with start offset {} in {} because it is a deleted PUT",
+              logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
                   indexEntry, indexSegment.getStartOffset(), storeId);
             }
           } else {
@@ -716,7 +715,7 @@ class BlobStoreCompactor {
             addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
           }
         } else {
-          logger.trace("Skipping {} in index segment with start offset {} in {} because it is an expired PUT",
+          logger.trace("{} in index segment with start offset {} in {} is not valid because it is an expired PUT",
               indexEntry, indexSegment.getStartOffset(), storeId);
         }
       }
@@ -739,9 +738,8 @@ class BlobStoreCompactor {
     IndexValue srcValue = srcIndex.findKey(key, srcSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
     if (srcValue == null) {
       // PUT is not in the source - therefore can't be in target. This TTL update can be cleaned up
-      logger.trace(
-          "Skipping copying TTL update of {} in segment with start offset {} in {} because the corresponding PUT entry "
-              + "does not exist anymore", key, indexSegmentStartOffset, storeId);
+      logger.trace("TTL update of {} in segment with start offset {} in {} is not valid the corresponding PUT entry "
+          + "does not exist anymore", key, indexSegmentStartOffset, storeId);
     } else {
       IndexValue tgtValue = tgtIndex.findKey(key, null, EnumSet.of(PersistentIndex.IndexEntryType.PUT));
       if (tgtValue == null && isOffsetInCurrentCycle(srcValue.getOffset())) {
@@ -750,7 +748,7 @@ class BlobStoreCompactor {
         // 2. srcValue will be compacted in this cycle
         // However, the second check ensures that this piece of code is reached only if #2 is true
         logger.trace(
-            "Skipping copying TTL update of {} in segment with start offset {} in {} because the corresponding PUT entry"
+            "TTL update of {} in segment with start offset {} in {} is not valid because the corresponding PUT entry"
                 + " {} will be compacted in this cycle ({} are being compacted in this cycle)", key,
             indexSegmentStartOffset, storeId, srcValue,
             compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction());
@@ -827,9 +825,7 @@ class BlobStoreCompactor {
    */
   private boolean isDeleted(StoreKey key, Offset searchStartOffset, Offset searchEndOffset) throws StoreException {
     FileSpan deleteSearchSpan = new FileSpan(searchStartOffset, searchEndOffset);
-    return srcIndex.findKey(key, deleteSearchSpan,
-        EnumSet.of(PersistentIndex.IndexEntryType.PUT, PersistentIndex.IndexEntryType.DELETE))
-        .isFlagSet(IndexValue.Flags.Delete_Index);
+    return srcIndex.findKey(key, deleteSearchSpan, EnumSet.of(PersistentIndex.IndexEntryType.DELETE)) != null;
   }
 
   /**

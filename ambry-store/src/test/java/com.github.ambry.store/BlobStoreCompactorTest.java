@@ -946,10 +946,17 @@ public class BlobStoreCompactorTest {
    */
   @Test
   public void ttlUpdateSpecificTest() throws Exception {
+    // ensure that puts are not cleaned up if they have ttl updates
+    Pair<List<MockId>, Long> idsAndExpiryTimeMs = createStateWithPutAndTtlUpdate();
+    assertTrue("Current time should be beyond expiry time of blobs",
+        state.time.milliseconds() > idsAndExpiryTimeMs.getSecond());
+    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    compactAndVerify(segmentsUnderCompaction, state.time.milliseconds(), false);
+
     // compact everything
     // using expire time as the ref time
     long expiryTimeMs = createStateWithPutTtlUpdateAndDelete();
-    List<String> segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
+    segmentsUnderCompaction = getLogSegments(0, state.index.getLogSegmentCount() - 1);
     compactAndVerify(segmentsUnderCompaction, expiryTimeMs, true);
 
     // using delete time as the ref time
@@ -2002,12 +2009,37 @@ public class BlobStoreCompactorTest {
   // ttlUpdateSpecificTest() and ttlUpdateSpecificRecoveryTest() helpers
 
   /**
+   * Creates state required for some TTL update specific tests that need PUTs and TTL updates
+   * @return
+   * @throws Exception
+   */
+  private Pair<List<MockId>, Long> createStateWithPutAndTtlUpdate() throws Exception {
+    refreshState(false, false);
+    int numPuts =
+        (int) ((state.log.getSegmentCapacity() - LogSegment.HEADER_SIZE) / (2 * CuratedLogIndexState.PUT_RECORD_SIZE));
+    long expiryTimeMs = getInvalidationTime(1);
+    List<IndexEntry> entries = state.addPutEntries(numPuts, CuratedLogIndexState.PUT_RECORD_SIZE, expiryTimeMs);
+    List<MockId> ids = new ArrayList<>(entries.size());
+    for (IndexEntry entry : entries) {
+      MockId id = (MockId) entry.getKey();
+      state.makePermanent(id, false);
+      ids.add(id);
+    }
+    state.advanceTime(expiryTimeMs + 1 - state.time.milliseconds());
+    // add put entries so that the log segment rolls over
+    writeDataToMeetRequiredSegmentCount(state.index.getLogSegmentCount() + 1, null);
+    // reload index to make sure journal is on only the latest log segment
+    state.reloadIndex(true, false);
+    return new Pair<>(ids, expiryTimeMs);
+  }
+
+  /**
    * Creates state required for some TTL update specific tests that need PUTs, TTL updates and DELETEs.
    * @return the time at which the PUT records that don't have TTL update records expire.
    * @throws Exception
    */
   private long createStateWithPutTtlUpdateAndDelete() throws Exception {
-    // this test sets up state such that there are a bunch of PUTs with TTL such that they expire immediately, TTL
+    // this sets up state such that there are a bunch of PUTs with TTL such that they expire immediately, TTL
     // updates for all but two PUTs and deletes for all PUTs. The key is that the first log segment contains some TTL
     // updates at least so that the the removal of the two PUTs without TTL updates will cause some TTL updates that
     // were originally in the second segment to move to the first.
