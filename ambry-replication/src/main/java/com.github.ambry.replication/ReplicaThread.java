@@ -593,16 +593,15 @@ class ReplicaThread implements Runnable {
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey()).getID(), BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
+                BlobReplicaSourceType.REPAIRED);
           }
         } else if (messageInfo.isExpired()) {
           // if the key is not present locally and if the remote replica has the key as expired,
           // it is not considered missing locally.
           missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}",
-              remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
-              remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey()));
+              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), localKey);
         }
       }
     }
