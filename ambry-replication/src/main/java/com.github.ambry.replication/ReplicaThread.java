@@ -521,7 +521,7 @@ class ReplicaThread implements Runnable {
    * Takes the missing keys and the message list from the remote store and identifies messages that are deleted
    * on the remote store and updates them locally. Also, if the message that is missing is deleted in the remote
    * store, we remove the message from the list of missing keys
-   * @param missingStoreKeys The list of keys missing from the local store
+   * @param missingRemoteStoreKeys The list of keys missing from the local store
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @param remoteNode The remote node from which replication needs to happen
@@ -530,7 +530,7 @@ class ReplicaThread implements Runnable {
    * @throws StoreException
    * @throws MessageFormatException
    */
-  private void processReplicaMetadataResponse(Set<StoreKey> missingStoreKeys,
+  private void processReplicaMetadataResponse(Set<StoreKey> missingRemoteStoreKeys,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
       DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap)
       throws IOException, StoreException, MessageFormatException {
@@ -544,50 +544,50 @@ class ReplicaThread implements Runnable {
                 + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
       }
       BlobId localKey = (BlobId) remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey());
-      if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
-        //If localKey is null, that means the key is deprecated
-        //and can be skipped
-        if (localKey != null) {
-          // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
-          // deleted yet locally
-          if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey)) {
-            MessageFormatInputStream deleteStream =
-                new DeleteMessageFormatInputStream(localKey, localKey.getAccountId(), localKey.getContainerId(),
-                    messageInfo.getOperationTimeMs());
-            MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, false, localKey.getAccountId(),
-                localKey.getContainerId(), messageInfo.getOperationTimeMs());
-            ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
-            infoList.add(info);
-            MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
-            try {
-              remoteReplicaInfo.getLocalStore().delete(writeset);
-              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
-                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
-            } catch (StoreException e) {
-              // The blob may get deleted between the time the above check is done and the delete is
-              // attempted. For example, this can happen if the key gets deleted in the context of another replica
-              // thread. This is more likely when replication is already caught up - when similar set of
-              // messages are received from different replicas around the same time.
-              if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-                logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already deleted: {}", remoteNode,
-                    threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
-              } else {
-                throw e;
-              }
+      if (localKey == null) {
+        missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote key deprecated locally: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+      } else if (!missingRemoteStoreKeys.contains(messageInfo.getStoreKey())) {
+        // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
+        // deleted yet locally
+        if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey)) {
+          MessageFormatInputStream deleteStream =
+              new DeleteMessageFormatInputStream(localKey, localKey.getAccountId(), localKey.getContainerId(),
+                  messageInfo.getOperationTimeMs());
+          MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, false, localKey.getAccountId(),
+              localKey.getContainerId(), messageInfo.getOperationTimeMs());
+          ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
+          infoList.add(info);
+          MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
+          try {
+            remoteReplicaInfo.getLocalStore().delete(writeset);
+            logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+          } catch (StoreException e) {
+            // The blob may get deleted between the time the above check is done and the delete is
+            // attempted. For example, this can happen if the key gets deleted in the context of another replica
+            // thread. This is more likely when replication is already caught up - when similar set of
+            // messages are received from different replicas around the same time.
+            if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already deleted: {}", remoteNode,
+                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+            } else {
+              throw e;
             }
-            // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
-            // as long as the Delete is guaranteed to have taken effect locally.
-            if (notification != null) {
-              notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
-                  BlobReplicaSourceType.REPAIRED);
-            }
+          }
+          // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
+          // as long as the Delete is guaranteed to have taken effect locally.
+          if (notification != null) {
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
+                BlobReplicaSourceType.REPAIRED);
           }
         }
       } else {
         if (messageInfo.isDeleted()) {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
-          missingStoreKeys.remove(messageInfo.getStoreKey());
+          missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
@@ -599,7 +599,7 @@ class ReplicaThread implements Runnable {
         } else if (messageInfo.isExpired()) {
           // if the key is not present locally and if the remote replica has the key as expired,
           // it is not considered missing locally.
-          missingStoreKeys.remove(messageInfo.getStoreKey());
+          missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
               remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey()));
