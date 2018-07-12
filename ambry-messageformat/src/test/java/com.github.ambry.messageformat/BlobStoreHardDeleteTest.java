@@ -106,7 +106,8 @@ public class BlobStoreHardDeleteTest {
 
       MessageFormatInputStream msg3t;
       if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
-        msg3t = new TtlUpdateMessageFormatInputStream(keys[1], accountId, containerId, updateTimeMs);
+        msg3t =
+            new TtlUpdateMessageFormatInputStream(keys[1], accountId, containerId, Utils.Infinite_Time, updateTimeMs);
       } else {
         msg3t = getPutMessage(keys[5], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
             blobVersions[0], blobTypes[0]);
@@ -125,7 +126,8 @@ public class BlobStoreHardDeleteTest {
 
       MessageFormatInputStream msg7t;
       if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
-        msg7t = new TtlUpdateMessageFormatInputStream(keys[0], accountId, containerId, updateTimeMs);
+        msg7t =
+            new TtlUpdateMessageFormatInputStream(keys[0], accountId, containerId, Utils.Infinite_Time, updateTimeMs);
       } else {
         msg7t = getPutMessage(keys[6], ByteBuffer.wrap(encryptionKey), blobProperties, usermetadata, blob, BLOB_SIZE,
             blobVersions[0], blobTypes[0]);

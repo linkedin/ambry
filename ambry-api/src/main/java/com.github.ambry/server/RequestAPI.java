@@ -53,5 +53,13 @@ public interface RequestAPI {
    * @throws IOException
    * @throws InterruptedException
    */
-  public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException;
+  void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException;
+
+  /**
+   * Updates the TTL of a blob as required in {@code request}
+   * @param request The request that contains the partition and id of the blob that needs to be updated
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException;
 }

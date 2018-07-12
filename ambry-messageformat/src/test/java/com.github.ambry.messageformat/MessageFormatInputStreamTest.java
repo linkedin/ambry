@@ -27,6 +27,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Random;
 import org.junit.After;
@@ -320,45 +321,90 @@ public class MessageFormatInputStreamTest {
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     long ttlUpdateTimeMs = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    long updatedExpiryMs = ttlUpdateTimeMs + TestUtils.RANDOM.nextInt();
     MessageFormatInputStream messageFormatStream =
-        new TtlUpdateMessageFormatInputStream(key, accountId, containerId, ttlUpdateTimeMs);
-    int ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
+        new TtlUpdateMessageFormatInputStream(key, accountId, containerId, updatedExpiryMs, ttlUpdateTimeMs);
+    long ttlUpdateRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     Assert.assertEquals(headerSize + ttlUpdateRecordSize + key.sizeInBytes(), messageFormatStream.getSize());
+    checkTtlUpdateMessage(messageFormatStream, ttlUpdateRecordSize, key, accountId, containerId, ttlUpdateTimeMs,
+        updatedExpiryMs);
+  }
 
-    // check header
-    byte[] headerOutput = new byte[headerSize];
-    Assert.assertEquals("Did not read all bytes", headerSize, messageFormatStream.read(headerOutput));
-    ByteBuffer headerBuf = ByteBuffer.wrap(headerOutput);
-    Assert.assertEquals(MessageFormatRecord.headerVersionToUse, headerBuf.getShort());
-    Assert.assertEquals(ttlUpdateRecordSize, headerBuf.getLong());
-    // read encryption key relative offset
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    // blob properties relative offset
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
+  /**
+   * Checks a TTL update message including headers and the {@link UpdateRecord}.
+   * @param stream the {@link InputStream} to read data from
+   * @param expectedRecordSize the expected size of the record in the message. Can be {@code null} if unknown (won't be
+   *                            checked)
+   * @param key the expected {@link StoreKey}
+   * @param accountId the account id expected
+   * @param containerId the container id expected
+   * @param updateTimeMs the expected time of update
+   * @param updatedExpiresAtMs the expected updated expiry time
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  public static void checkTtlUpdateMessage(InputStream stream, Long expectedRecordSize, StoreKey key, short accountId,
+      short containerId, long updateTimeMs, long updatedExpiresAtMs) throws IOException, MessageFormatException {
+    checkHeaderAndStoreKeyForUpdate(stream, expectedRecordSize, key);
+    checkTtlUpdateSubRecord(stream, accountId, containerId, updateTimeMs, updatedExpiresAtMs);
+  }
+
+  /**
+   * Checks the header and storekey for an update message in {@code stream}
+   * @param stream the {@link InputStream} to read data from
+   * @param expectedRecordSize the expected size of the record in the message. Can be {@code null} if unknown (won't be
+   *                            checked)
+   * @param key the expected {@link StoreKey}
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  private static void checkHeaderAndStoreKeyForUpdate(InputStream stream, Long expectedRecordSize, StoreKey key)
+      throws IOException, MessageFormatException {
+    MessageFormatRecord.MessageHeader_Format header = MessageFormatRecordTest.getHeader(new DataInputStream(stream));
+    header.verifyHeader();
+
+    Assert.assertEquals("Version not as expected", MessageFormatRecord.headerVersionToUse, header.getVersion());
     // update record relative offset. This is the only relative offset with a valid value.
-    Assert.assertEquals(headerSize + key.sizeInBytes(), headerBuf.getInt());
-    // user metadata relative offset
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    // blob relative offset
-    Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-    Crc32 crc = new Crc32();
-    crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
-    Assert.assertEquals(crc.getValue(), headerBuf.getLong());
+    Assert.assertEquals("Update record relative offset not as expected",
+        MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse) + key.sizeInBytes(),
+        header.getUpdateRecordRelativeOffset());
+    if (expectedRecordSize != null) {
+      Assert.assertEquals("Size of record not as expected", expectedRecordSize.longValue(), header.getMessageSize());
+    }
+    Assert.assertEquals("Encryption key relative should be invalid",
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobEncryptionKeyRecordRelativeOffset());
+    Assert.assertEquals("Blob props relative offset should be invalid",
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobPropertiesRecordRelativeOffset());
+    Assert.assertEquals("UM relative offset should be invalid",
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getUserMetadataRecordRelativeOffset());
+    Assert.assertEquals("Blob relative offset should be invalid",
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset, header.getBlobRecordRelativeOffset());
 
-    // verify handle
-    byte[] handleOutput = new byte[key.sizeInBytes()];
-    Assert.assertEquals("Did not read all bytes", handleOutput.length, messageFormatStream.read(handleOutput));
-    Assert.assertArrayEquals(handleOutput, key.toBytes());
+    // verify StoreKey
+    byte[] keyBytes = Utils.readBytesFromStream(stream, key.sizeInBytes());
+    Assert.assertArrayEquals("StoreKey not as expected", key.toBytes(), keyBytes);
+  }
 
-    // check ttl update record
-    UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(messageFormatStream);
+  /**
+   * Verifies the values in the {@link UpdateRecord} obtained from {@code stream}
+   * @param stream the {@link InputStream} to obtain the records from
+   * @param accountId the account id expected
+   * @param containerId the container id expected
+   * @param updateTimeMs the expected time of update
+   * @param updatedExpiresAtMs the expected updated expiry time
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  private static void checkTtlUpdateSubRecord(InputStream stream, short accountId, short containerId, long updateTimeMs,
+      long updatedExpiresAtMs) throws IOException, MessageFormatException {
+    UpdateRecord updateRecord = MessageFormatRecord.deserializeUpdateRecord(stream);
     Assert.assertEquals("Type of update record not TTL_UPDATE", UpdateRecord.Type.TTL_UPDATE, updateRecord.getType());
     Assert.assertNotNull("TtlUpdateSubRecord should not be null", updateRecord.getTtlUpdateSubRecord());
     Assert.assertEquals("AccountId mismatch", accountId, updateRecord.getAccountId());
     Assert.assertEquals("ContainerId mismatch", containerId, updateRecord.getContainerId());
-    Assert.assertEquals("UpdateTime mismatch", ttlUpdateTimeMs, updateRecord.getUpdateTimeInMs());
-    Assert.assertEquals("Updated expiry time mismatch", Utils.Infinite_Time,
+    Assert.assertEquals("UpdateTime mismatch", updateTimeMs, updateRecord.getUpdateTimeInMs());
+    Assert.assertEquals("Updated expiry time mismatch", updatedExpiresAtMs,
         updateRecord.getTtlUpdateSubRecord().getUpdatedExpiryTimeMs());
   }
 }

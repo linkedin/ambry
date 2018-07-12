@@ -106,7 +106,7 @@ public class BlobStoreRecoveryTest {
       MessageFormatInputStream msg4;
       if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
         msg4 = new TtlUpdateMessageFormatInputStream(keys[1], keys[1].getAccountId(), keys[1].getContainerId(),
-            updateTimeInMs);
+            Utils.Infinite_Time, updateTimeInMs);
       } else {
         msg4 = new PutMessageFormatInputStream(keys[3], ByteBuffer.wrap(encryptionKey),
             new BlobProperties(4000, "test", keys[3].getAccountId(), keys[3].getContainerId(), false),
@@ -123,7 +123,7 @@ public class BlobStoreRecoveryTest {
       MessageFormatInputStream msg6;
       if (MessageFormatRecord.headerVersionToUse >= MessageFormatRecord.Message_Header_Version_V2) {
         msg6 = new TtlUpdateMessageFormatInputStream(keys[0], keys[0].getAccountId(), keys[0].getContainerId(),
-            updateTimeInMs);
+            Utils.Infinite_Time, updateTimeInMs);
       } else {
         msg6 = new PutMessageFormatInputStream(keys[4], ByteBuffer.wrap(encryptionKey),
             new BlobProperties(4000, "test", keys[4].getAccountId(), keys[4].getContainerId(), false),
