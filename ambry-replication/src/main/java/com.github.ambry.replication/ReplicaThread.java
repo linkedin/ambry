@@ -331,7 +331,7 @@ class ReplicaThread implements Runnable {
             getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
         long startTimeInMs = SystemTime.getInstance().milliseconds();
 
-        Map<StoreKey, StoreKey> remoteToLocal = batchConvertReplicaMetadataResponseKeys(response);
+        Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response);
 
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
@@ -346,7 +346,7 @@ class ReplicaThread implements Runnable {
               Set<StoreKey> missingStoreKeys =
                   getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
-                  remoteNode, remoteToLocal);
+                  remoteNode, remoteKeyToLocalKeyMap);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
@@ -478,7 +478,7 @@ class ReplicaThread implements Runnable {
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
    * @return List of store keys that are missing from the local store
-   * @throws StoreException
+   * @throws Exception
    */
   private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
       DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws Exception {
@@ -499,13 +499,15 @@ class ReplicaThread implements Runnable {
       }
     }
 
-    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
+    Set<StoreKey> convertedMissingStoreKeys =
+        remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
     Set<StoreKey> missingRemoteStoreKeys = new HashSet<>();
 
     for (Map.Entry<StoreKey, StoreKey> entry : remoteToConvertedNonNull.entrySet()) {
       if (convertedMissingStoreKeys.contains(entry.getValue())) {
-        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (original): {}", remoteNode, threadName,
-            remoteReplicaInfo.getReplicaId(), entry.getValue(), entry.getKey());
+        logger.trace(
+            "Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (original): {}",
+            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), entry.getValue(), entry.getKey());
         missingRemoteStoreKeys.add(entry.getKey());
       }
     }
@@ -523,13 +525,14 @@ class ReplicaThread implements Runnable {
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @param remoteNode The remote node from which replication needs to happen
+   * @param remoteKeyToLocalKeyMap map mapping remote keys to local key equivalents
    * @throws IOException
    * @throws StoreException
    * @throws MessageFormatException
    */
   private void processReplicaMetadataResponse(Set<StoreKey> missingStoreKeys,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
-      DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteToLocal)
+      DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap)
       throws IOException, StoreException, MessageFormatException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
@@ -540,10 +543,10 @@ class ReplicaThread implements Runnable {
             "Blob id is not in the expected partition Actual partition " + blobId.getPartition()
                 + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
       }
-      if (!remoteToLocal.containsKey(messageInfo.getStoreKey())) {
-        throw new IllegalStateException("remoteToLocal does not contain key "+messageInfo.getStoreKey());
+      if (!remoteKeyToLocalKeyMap.containsKey(messageInfo.getStoreKey())) {
+        throw new IllegalStateException("remoteKeyToLocalKeyMap does not contain key " + messageInfo.getStoreKey());
       }
-      BlobId localKey = (BlobId) remoteToLocal.get(messageInfo.getStoreKey());
+      BlobId localKey = (BlobId) remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey());
       if (!missingStoreKeys.contains(messageInfo.getStoreKey()) && localKey != null) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
         // deleted yet locally
