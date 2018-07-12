@@ -491,28 +491,28 @@ class ReplicaThread implements Runnable {
           remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
     }
 
-    Map<StoreKey, StoreKey> originalToConverted = new HashMap<>();
+    Map<StoreKey, StoreKey> remoteToConvertedNonNull = new HashMap<>();
     for (StoreKey storeKey : storeKeysToCheck) {
       StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
       if (convertedKey != null) {
-        originalToConverted.put(storeKey, convertedKey);
+        remoteToConvertedNonNull.put(storeKey, convertedKey);
       }
     }
 
-    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(originalToConverted.values()));
-    Set<StoreKey> originalStoreKeys = new HashSet<>();
+    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
+    Set<StoreKey> missingRemoteStoreKeys = new HashSet<>();
 
-    for (Map.Entry<StoreKey, StoreKey> entry : originalToConverted.entrySet()) {
+    for (Map.Entry<StoreKey, StoreKey> entry : remoteToConvertedNonNull.entrySet()) {
       if (convertedMissingStoreKeys.contains(entry.getValue())) {
         logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (original): {}", remoteNode, threadName,
             remoteReplicaInfo.getReplicaId(), entry.getValue(), entry.getKey());
-        originalStoreKeys.add(entry.getKey());
+        missingRemoteStoreKeys.add(entry.getKey());
       }
     }
 
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
-    return originalStoreKeys;
+    return missingRemoteStoreKeys;
   }
 
   /**
