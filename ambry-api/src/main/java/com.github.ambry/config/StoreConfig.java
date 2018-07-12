@@ -221,14 +221,23 @@ public class StoreConfig {
       "store.read.only.enable.size.threshold.percentage";
 
   /**
-   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
-   * converted from RO to RW
+   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will
+   * be converted from RO to RW
    */
   @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
   @Default("5")
   public final int storeReadWriteEnableSizeThresholdPercentageDelta;
   public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
       "store.read.write.enable.size.threshold.percentage.delta";
+
+  /**
+   * Specifies the minimum number of seconds before a blob's current expiry time (creation time + TTL) that the current
+   * time has to be in order for a TTL update operation on the blob to succeed.
+   */
+  @Config(storeTtlUpdateBufferTimeSecondsName)
+  @Default("60 * 60 * 24")
+  public final int storeTtlUpdateBufferTimeSeconds;
+  public static final String storeTtlUpdateBufferTimeSecondsName = "store.ttl.update.buffer.time.seconds";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -279,6 +288,8 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
+    storeTtlUpdateBufferTimeSeconds =
+        verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
   }
 }
 

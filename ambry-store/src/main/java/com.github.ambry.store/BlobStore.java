@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -64,6 +65,7 @@ class BlobStore implements Store {
   private final ReplicaStatusDelegate replicaStatusDelegate;
   private final long thresholdBytesHigh;
   private final long thresholdBytesLow;
+  private final long ttlUpdateBufferTimeMs;
 
   private Log log;
   private BlobStoreCompactor compactor;
@@ -163,6 +165,7 @@ class BlobStore implements Store {
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
     this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
+    ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -477,6 +480,93 @@ class BlobStore implements Store {
           StoreErrorCodes.IOError);
     } catch (Exception e) {
       throw new StoreException("Unknown error while trying to delete blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    } finally {
+      context.stop();
+    }
+  }
+
+  /**
+   * {@inheritDoc}
+   * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
+   * @param messageSetToUpdate The list of messages that need to be updated
+   * @throws StoreException if there is a problem persisting the operation in the store.
+   */
+  @Override
+  public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
+    checkStarted();
+    final Timer.Context context = metrics.ttlUpdateResponse.time();
+    try {
+      List<MessageInfo> infoList = messageSetToUpdate.getMessageSetInfo();
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      for (MessageInfo info : infoList) {
+        IndexValue value = index.findKey(info.getStoreKey());
+        if (value == null) {
+          throw new StoreException("Cannot update TTL of " + info.getStoreKey() + " since it's not in the index",
+              StoreErrorCodes.ID_Not_Found);
+        } else if (!info.getStoreKey().isAccountContainerMatch(value.getAccountId(), value.getContainerId())) {
+          if (config.storeValidateAuthorization) {
+            throw new StoreException(
+                "UPDATE authorization failure. Key: " + info.getStoreKey() + " AccountId in store: "
+                    + value.getAccountId() + " ContainerId in store: " + value.getContainerId(),
+                StoreErrorCodes.Authorization_Failure);
+          } else {
+            logger.warn("UPDATE authorization failure. Key: {} AccountId in store: {} ContainerId in store: {}",
+                info.getStoreKey(), value.getAccountId(), value.getContainerId());
+            metrics.ttlUpdateAuthorizationFailureCount.inc();
+          }
+        } else if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+          throw new StoreException(
+              "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
+              StoreErrorCodes.ID_Deleted);
+        } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+          throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
+              StoreErrorCodes.Already_Updated);
+        } else if (value.getExpiresAtMs() != Utils.Infinite_Time
+            && value.getExpiresAtMs() < info.getOperationTimeMs() + ttlUpdateBufferTimeMs) {
+          throw new StoreException(
+              "TTL of " + info.getStoreKey() + " cannot be updated because it is too close to expiry. Op time (ms): "
+                  + info.getOperationTimeMs() + ". ExpiresAtMs: " + value.getExpiresAtMs(),
+              StoreErrorCodes.Update_Not_Allowed);
+        }
+      }
+      synchronized (storeWriteLock) {
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          for (MessageInfo info : infoList) {
+            IndexValue value =
+                index.findKey(info.getStoreKey(), fileSpan, EnumSet.allOf(PersistentIndex.IndexEntryType.class));
+            if (value != null) {
+              if (value.isFlagSet(IndexValue.Flags.Delete_Index)) {
+                throw new StoreException(
+                    "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
+                    StoreErrorCodes.ID_Deleted);
+              } else if (value.isFlagSet(IndexValue.Flags.Ttl_Update_Index)) {
+                throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
+                    StoreErrorCodes.Already_Updated);
+              }
+            }
+          }
+        }
+        Offset endOffsetOfLastMessage = log.getEndOffset();
+        messageSetToUpdate.writeTo(log);
+        logger.trace("Store : {} ttl update mark written to log", dataDir);
+        for (MessageInfo info : infoList) {
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+          index.markAsPermanent(info.getStoreKey(), fileSpan, info.getOperationTimeMs());
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
+          // TODO: handle this in BlobStoreStats
+        }
+        logger.trace("Store : {} ttl update has been marked in the index ", dataDir);
+      }
+    } catch (StoreException e) {
+      throw e;
+    } catch (IOException e) {
+      throw new StoreException("IO error while trying to update ttl of blobs from store " + dataDir, e,
+          StoreErrorCodes.IOError);
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to update ttl of blobs from store " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
     } finally {
       context.stop();
