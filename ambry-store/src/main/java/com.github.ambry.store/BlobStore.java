@@ -486,6 +486,12 @@ class BlobStore implements Store {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   * Currently, the only supported operation is to set the TTL to infinite (i.e. no arbitrary increase or decrease)
+   * @param messageSetToUpdate The list of messages that need to be updated
+   * @throws StoreException if there is a problem persisting the operation in the store.
+   */
   @Override
   public void updateTtl(MessageWriteSet messageSetToUpdate) throws StoreException {
     checkStarted();

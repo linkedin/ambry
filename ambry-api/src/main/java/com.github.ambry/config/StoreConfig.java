@@ -221,8 +221,8 @@ public class StoreConfig {
       "store.read.only.enable.size.threshold.percentage";
 
   /**
-   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will be
-   * converted from RO to RW
+   * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will
+   * be converted from RO to RW
    */
   @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
   @Default("5")
@@ -231,8 +231,8 @@ public class StoreConfig {
       "store.read.write.enable.size.threshold.percentage.delta";
 
   /**
-   * Specifies the smallest number of seconds away that a blob's expiry time has to be for a TTL update operation on
-   * the blob to succeed.
+   * Specifies the minimum number of seconds before a blob's current expiry time (creation time + TTL) that the current
+   * time has to be in order for a TTL update operation on the blob to succeed.
    */
   @Config(storeTtlUpdateBufferTimeSecondsName)
   @Default("60 * 60 * 24")
