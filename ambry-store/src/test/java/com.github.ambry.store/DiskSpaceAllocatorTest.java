@@ -78,7 +78,8 @@ public class DiskSpaceAllocatorTest {
     // expect the pool to still be empty
     verifyPoolState(new ExpectedState());
 
-    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)));
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)),
+        false);
     // return files that were allocated before initialization to the pool
     verifyPoolState(new ExpectedState().add(50, 2).add(21, 1));
     freeAndVerify(f1, 50);
@@ -102,7 +103,7 @@ public class DiskSpaceAllocatorTest {
     List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
     requirementsList.add(new DiskSpaceRequirements(10, 500, 1));
     requirementsList.add(new DiskSpaceRequirements(5, 251, 0));
-    alloc.initializePool(requirementsList);
+    alloc.initializePool(requirementsList, false);
     verifyPoolState(new ExpectedState().add(10, 500).add(5, 251));
     exec = Executors.newCachedThreadPool();
     // allocate all files in pool
@@ -126,7 +127,8 @@ public class DiskSpaceAllocatorTest {
   @Test
   public void sizeNotInPoolTest() throws Exception {
     alloc = constructAllocator();
-    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)));
+    alloc.initializePool(Arrays.asList(new DiskSpaceRequirements(50, 2, 0), new DiskSpaceRequirements(21, 1, 0)),
+        false);
     verifyPoolState(new ExpectedState().add(50, 2).add(21, 1));
     File f1 = allocateAndVerify("file1", 25);
     verifyPoolState(new ExpectedState().add(50, 2).add(21, 1));
@@ -152,7 +154,7 @@ public class DiskSpaceAllocatorTest {
     requirementsList.add(new DiskSpaceRequirements(3, 7, 0));
     requirementsList.add(new DiskSpaceRequirements(5, 4, 0));
     requirementsList.add(new DiskSpaceRequirements(6, 3, 1));
-    alloc.initializePool(requirementsList);
+    alloc.initializePool(requirementsList, false);
     verifyPoolState(new ExpectedState().add(3, 8).add(5, 11).add(6, 3));
     File f1 = allocateAndVerify("file1", 5);
     File f2 = allocateAndVerify("file2", 3);
@@ -161,7 +163,7 @@ public class DiskSpaceAllocatorTest {
     // second startup, test freeing old files after initialization
     alloc = constructAllocator();
     verifyPoolState(new ExpectedState().add(3, 7).add(5, 10).add(6, 3));
-    alloc.initializePool(requirementsList);
+    alloc.initializePool(requirementsList, false);
     verifyPoolState(new ExpectedState().add(3, 8).add(5, 11).add(6, 3));
     freeAndVerify(f1, 5);
     freeAndVerify(f2, 3);
@@ -178,7 +180,7 @@ public class DiskSpaceAllocatorTest {
     requirementsList.clear();
     requirementsList.add(new DiskSpaceRequirements(3, 20, 1));
     requirementsList.add(new DiskSpaceRequirements(5, 6, 1));
-    alloc.initializePool(requirementsList);
+    alloc.initializePool(requirementsList, false);
     verifyPoolState(new ExpectedState().add(3, 20).add(5, 6));
     freeAndVerify(f2, 6);
     verifyPoolState(new ExpectedState().add(3, 20).add(5, 6).add(6, 1));
@@ -200,7 +202,7 @@ public class DiskSpaceAllocatorTest {
     // This should result in 0 swap segments b/c 0 > 4 - 10
     requirementsList.add(new DiskSpaceRequirements(7, 3, 10));
     Collections.shuffle(requirementsList);
-    alloc.initializePool(requirementsList);
+    alloc.initializePool(requirementsList, false);
     verifyPoolState(new ExpectedState().add(3, 11).add(5, 11).add(6, 6).add(7, 3));
     // test reinitialization with different requirements, and num swap used for each size
     requiredSwapSegmentsPerSize = 3;
@@ -212,7 +214,7 @@ public class DiskSpaceAllocatorTest {
     requirementsList.add(new DiskSpaceRequirements(5, 4, 2));
     requirementsList.add(new DiskSpaceRequirements(7, 3, 1));
     Collections.shuffle(requirementsList);
-    alloc.initializePool(requirementsList);
+    alloc.initializePool(requirementsList, false);
     verifyPoolState(new ExpectedState().add(3, 7).add(5, 10).add(7, 5));
   }
 
@@ -231,7 +233,7 @@ public class DiskSpaceAllocatorTest {
     assertFalse("Reserve file dir should not have been created if a file already exists at that path",
         reserveFileDir.isDirectory());
     try {
-      alloc.initializePool(Collections.emptyList());
+      alloc.initializePool(Collections.emptyList(), false);
       fail("Expected StoreException");
     } catch (StoreException e) {
       assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());
@@ -251,7 +253,7 @@ public class DiskSpaceAllocatorTest {
   public void initFailureTest() throws Exception {
     // build a pool with files that we can modify permissions on to induce failures
     alloc = constructAllocator();
-    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 2, 0)));
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 2, 0)), false);
     verifyPoolState(new ExpectedState().add(50, 2));
     // test a failure while deleting an unneeded directory
     runInitFailureTest(reserveFileDir, false);
@@ -269,7 +271,7 @@ public class DiskSpaceAllocatorTest {
   @Test
   public void allocateAndFreeFailureTest() throws Exception {
     alloc = constructAllocator();
-    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, 0)));
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(50, 1, 0)), false);
     verifyPoolState(new ExpectedState().add(50, 1));
     // test when a destination file already exists
     File f1 = new File(allocatedFileDir, "f1");
@@ -295,7 +297,7 @@ public class DiskSpaceAllocatorTest {
     verifyPoolState(null);
 
     // initializing should be a no-op
-    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(20, 1, 0)));
+    alloc.initializePool(Collections.singletonList(new DiskSpaceRequirements(20, 1, 0)), false);
     verifyPoolState(null);
     File f2 = allocateAndVerify("file1", 20);
     verifyPoolState(null);
@@ -378,7 +380,7 @@ public class DiskSpaceAllocatorTest {
     }
     alloc = constructAllocator();
     try {
-      alloc.initializePool(Arrays.asList(requirements));
+      alloc.initializePool(Arrays.asList(requirements), false);
       fail("Expected StoreException");
     } catch (StoreException e) {
       assertEquals("Wrong error code", StoreErrorCodes.Initialization_Error, e.getErrorCode());

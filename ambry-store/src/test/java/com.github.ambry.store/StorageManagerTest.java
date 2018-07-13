@@ -164,6 +164,38 @@ public class StorageManagerTest {
   }
 
   /**
+   * Test add new BlobStore with given {@link ReplicaId}.
+   */
+  @Test
+  public void addBlobStoreTest() throws Exception {
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    int newMountPathIndex = 3;
+    // add new MountPath to local node
+    File f = File.createTempFile("ambry", ".tmp");
+    File mountFile = new File(f.getParent(), "mountpathfile" + 62000 + newMountPathIndex);
+    MockClusterMap.deleteFileOrDirectory(mountFile);
+    mountFile.mkdir();
+    localNode.addMountPaths(Collections.singletonList(mountFile.getAbsolutePath()));
+    PartitionId newPartition1 =
+        new MockPartitionId(10L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), newMountPathIndex);
+    StorageManager storageManager = createStorageManager(localReplicas, metricRegistry, null);
+    storageManager.start();
+    // test add store that already exists
+    assertFalse("Add store which is already existing should fail", storageManager.addBlobStore(localReplicas.get(0)));
+    // test add store onto a new disk
+    assertTrue("Add new store should succeed", storageManager.addBlobStore(newPartition1.getReplicaIds().get(0)));
+    // test add store whose diskManager is not running
+    PartitionId newPartition2 =
+        new MockPartitionId(11L, MockClusterMap.DEFAULT_PARTITION_CLASS, clusterMap.getDataNodes(), 0);
+    storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).shutdown();
+    assertFalse("Add store onto the DiskManager which is not running should fail",
+        storageManager.addBlobStore(newPartition2.getReplicaIds().get(0)));
+    storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).start();
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
    * Test start BlobStore with given {@link PartitionId}.
    */
   @Test

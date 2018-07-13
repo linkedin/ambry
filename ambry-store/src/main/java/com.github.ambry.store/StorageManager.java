@@ -28,6 +28,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -39,10 +41,11 @@ import org.slf4j.LoggerFactory;
  * {@link DiskManager}
  */
 public class StorageManager {
-  private final Map<PartitionId, DiskManager> partitionToDiskManager = new HashMap<>();
-  private final Map<DiskId, DiskManager> diskToDiskManager = new HashMap<>();
+  private final ConcurrentMap<PartitionId, DiskManager> partitionToDiskManager = new ConcurrentHashMap<>();
+  private final ConcurrentMap<DiskId, DiskManager> diskToDiskManager = new ConcurrentHashMap<>();
   private final StorageManagerMetrics metrics;
   private final Time time;
+  private final DiskManagerFactory diskManagerFactory;
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
 
   /**
@@ -68,6 +71,10 @@ public class StorageManager {
     List<String> stoppedReplicas =
         replicaStatusDelegate == null ? Collections.emptyList() : replicaStatusDelegate.getStoppedReplicas();
     this.time = time;
+    diskManagerFactory =
+        (disk, replicasForDisk) -> new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler,
+            metrics, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
+            replicaStatusDelegate, stoppedReplicas, time);
     Map<DiskId, List<ReplicaId>> diskToReplicaMap = new HashMap<>();
     for (ReplicaId replica : replicas) {
       DiskId disk = replica.getDiskId();
@@ -76,10 +83,7 @@ public class StorageManager {
     for (Map.Entry<DiskId, List<ReplicaId>> entry : diskToReplicaMap.entrySet()) {
       DiskId disk = entry.getKey();
       List<ReplicaId> replicasForDisk = entry.getValue();
-      DiskManager diskManager =
-          new DiskManager(disk, replicasForDisk, storeConfig, diskManagerConfig, scheduler, metrics, storeMainMetrics,
-              storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate, stoppedReplicas,
-              time);
+      DiskManager diskManager = diskManagerFactory.getDiskManager(disk, replicasForDisk);
       diskToDiskManager.put(disk, diskManager);
       for (ReplicaId replica : replicasForDisk) {
         partitionToDiskManager.put(replica.getPartitionId(), diskManager);
@@ -221,6 +225,34 @@ public class StorageManager {
   }
 
   /**
+   * Add a new BlobStore with given {@link ReplicaId}. The new BlobStore is allowed to be placed on a brand new disk if
+   * certain disk is available.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  public boolean addBlobStore(ReplicaId replica) {
+    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      return false;
+    }
+    DiskManager diskManager = diskToDiskManager.computeIfAbsent(replica.getDiskId(), disk -> {
+      DiskManager newDiskManager = diskManagerFactory.getDiskManager(disk, Collections.EMPTY_LIST);
+      logger.info("Creating new DiskManager for new added store if certain disk is available");
+      try {
+        newDiskManager.start();
+      } catch (Exception e) {
+        logger.error("Error while starting the new DiskManager for " + disk.getMountPath(), e);
+        return null;
+      }
+      return newDiskManager;
+    });
+    if (diskManager == null || !diskManager.addBlobStore(replica)) {
+      return false;
+    }
+    partitionToDiskManager.put(replica.getPartitionId(), diskManager);
+    return true;
+  }
+
+  /**
    * Start BlobStore with given {@link PartitionId} {@code id}.
    * @param id the {@link PartitionId} of the {@link Store} which would be started.
    */
@@ -274,5 +306,10 @@ public class StorageManager {
       }
     }
     return count;
+  }
+
+  @FunctionalInterface
+  private interface DiskManagerFactory {
+    DiskManager getDiskManager(DiskId disk, List<ReplicaId> replicasForDisk);
   }
 }

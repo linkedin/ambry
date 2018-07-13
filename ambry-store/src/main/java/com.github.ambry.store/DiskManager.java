@@ -31,6 +31,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,8 +44,8 @@ import org.slf4j.LoggerFactory;
  */
 class DiskManager {
 
-  private final Map<PartitionId, BlobStore> stores = new HashMap<>();
-  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new HashMap<>();
+  private final Map<PartitionId, BlobStore> stores = new ConcurrentHashMap<>();
+  private final Map<PartitionId, ReplicaId> partitionToReplicaMap = new ConcurrentHashMap<>();
   private final DiskId disk;
   private final StorageManagerMetrics metrics;
   private final Time time;
@@ -54,6 +55,7 @@ class DiskManager {
   private final CompactionManager compactionManager;
   private final List<String> stoppedReplicas;
   private final ReplicaStatusDelegate replicaStatusDelegate;
+  private final BlobStoreFactory blobStoreFactory;
   private boolean running = false;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -88,13 +90,13 @@ class DiskManager {
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
     this.replicaStatusDelegate = replicaStatusDelegate;
     this.stoppedReplicas = stoppedReplicas;
+    blobStoreFactory =
+        replica -> new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler,
+            diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
+            replicaStatusDelegate, time);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        BlobStore store =
-            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegate,
-                time);
-        stores.put(replica.getPartitionId(), store);
+        stores.put(replica.getPartitionId(), blobStoreFactory.getBlobStore(replica));
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
       }
     }
@@ -136,18 +138,7 @@ class DiskManager {
             "Could not start " + numStoreFailures.get() + " out of " + stores.size() + " stores on the disk " + disk);
       }
 
-      // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
-      // from each store.
-      List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
-      for (BlobStore blobStore : stores.values()) {
-        if (blobStore.isStarted()) {
-          DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
-          if (requirements != null) {
-            requirementsList.add(requirements);
-          }
-        }
-      }
-      diskSpaceAllocator.initializePool(requirementsList);
+      initializeDiskSpaceAllocatorPool(false);
 
       compactionManager.enable();
 
@@ -236,6 +227,25 @@ class DiskManager {
   }
 
   /**
+   * Compute {@link DiskSpaceRequirements} for all stores and initialize the disk space pool.
+   * @param isAddingStore {@code true} if the method is invoked for adding new store. {@code false} otherwise.
+   */
+  private void initializeDiskSpaceAllocatorPool(boolean isAddingStore) throws StoreException {
+    // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
+    // from each store.
+    List<DiskSpaceRequirements> requirementsList = new ArrayList<>();
+    for (BlobStore blobStore : stores.values()) {
+      if (blobStore.isStarted()) {
+        DiskSpaceRequirements requirements = blobStore.getDiskSpaceRequirements();
+        if (requirements != null) {
+          requirementsList.add(requirements);
+        }
+      }
+    }
+    diskSpaceAllocator.initializePool(requirementsList, isAddingStore);
+  }
+
+  /**
    * Schedules the {@link PartitionId} {@code id} for compaction next.
    * @param id the {@link PartitionId} of the {@link BlobStore} to compact.
    * @return {@code true} if the scheduling was successful. {@code false} if not.
@@ -254,6 +264,44 @@ class DiskManager {
   boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     BlobStore store = stores.get(id);
     return store != null && compactionManager.controlCompactionForBlobStore(store, enabled);
+  }
+
+  /**
+   * Add a new BlobStore with given {@link ReplicaId}.
+   * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
+   * @return {@code true} if adding store was successful. {@code false} if not.
+   */
+  boolean addBlobStore(ReplicaId replica) {
+    if (!running || stores.containsKey(replica.getPartitionId())) {
+      return false;
+    }
+    boolean succeed = true;
+    BlobStore store = blobStoreFactory.getBlobStore(replica);
+    stores.put(replica.getPartitionId(), store);
+    partitionToReplicaMap.put(replica.getPartitionId(), replica);
+    if (!startBlobStore(replica.getPartitionId())) {
+      logger.error("fail to start the new added store {}", replica.getPartitionId());
+      succeed = false;
+    }
+    if (succeed) {
+      try {
+        initializeDiskSpaceAllocatorPool(true);
+      } catch (StoreException e) {
+        logger.error("Error while initializing DiskSpaceAllocatorPool for " + disk.getMountPath(), e);
+        succeed = false;
+      }
+
+      if (succeed && !compactionManager.addBlobStore(store)) {
+        succeed = false;
+      }
+    }
+
+    if (!succeed) {
+      // revoke all updates if add BlobStore failed.
+      stores.remove(replica.getPartitionId());
+      partitionToReplicaMap.remove(replica.getPartitionId());
+    }
+    return succeed;
   }
 
   /**
@@ -378,5 +426,10 @@ class DiskManager {
       }
     }
     return true;
+  }
+
+  @FunctionalInterface
+  private interface BlobStoreFactory {
+    BlobStore getBlobStore(ReplicaId replica);
   }
 }
