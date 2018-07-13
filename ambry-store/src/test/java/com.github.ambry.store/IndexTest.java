@@ -638,6 +638,11 @@ public class IndexTest {
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
+    // recovery info contains a Ttl Update for a key that does not exist and there is no delete info that follows
+    MockId nonExistentId = state.getUniqueId();
+    info = new MessageInfo(nonExistentId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        nonExistentId.getAccountId(), nonExistentId.getContainerId(), state.time.milliseconds());
+    doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a Ttl Update for a key that is already Ttl updated
     MockId updatedId = null;
     for (MockId id : state.ttlUpdatedKeys) {

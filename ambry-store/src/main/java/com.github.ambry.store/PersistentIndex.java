@@ -288,6 +288,7 @@ class PersistentIndex {
     }
     boolean recoveryOccurred = false;
     LogSegment logSegmentToRecover = log.getSegment(recoveryStartOffset.getName());
+    Set<StoreKey> deleteExpectedKeys = new HashSet<>();
     while (logSegmentToRecover != null) {
       long endOffset = logSegmentToRecover.sizeInBytes();
       logger.info("Index : {} performing recovery on index with start offset {} and end offset {}", dataDir,
@@ -307,11 +308,19 @@ class PersistentIndex {
               info.getOperationTimeMs());
           logger.info("Index : {} updated message with key {} by inserting delete entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
+          // removes from the tracking structure if a delete was being expected for the key
+          deleteExpectedKeys.remove(info.getStoreKey());
         } else if (info.isTtlUpdated()) {
           markAsPermanent(info.getStoreKey(), new FileSpan(runningOffset, infoEndOffset), info,
               info.getOperationTimeMs());
           logger.info("Index : {} updated message with key {} by inserting TTL update entry of size {} ttl {}", dataDir,
               info.getStoreKey(), info.getSize(), info.getExpirationTimeInMs());
+          if (value == null) {
+            // this TTL update was forced even though there was no equivalent PUT record - this means that we MUST see
+            // a DELETE for this key (because the PUT record is gone, compaction must have cleaned it up because a
+            // DELETE must have been present)
+            deleteExpectedKeys.add(info.getStoreKey());
+          }
         } else if (value != null) {
           throw new StoreException("Illegal message state during recovery. Duplicate PUT record",
               StoreErrorCodes.Initialization_Error);
@@ -330,6 +339,10 @@ class PersistentIndex {
       if (logSegmentToRecover != null) {
         recoveryStartOffset = new Offset(logSegmentToRecover.getName(), logSegmentToRecover.getStartOffset());
       }
+    }
+    if (deleteExpectedKeys.size() > 0) {
+      throw new StoreException("Deletes were expected for some keys but were not encountered: " + deleteExpectedKeys,
+          StoreErrorCodes.Initialization_Error);
     }
     if (recoveryOccurred) {
       metrics.nonzeroMessageRecovery.inc();
