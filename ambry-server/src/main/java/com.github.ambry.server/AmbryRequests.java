@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatErrorCodes;
@@ -403,11 +404,12 @@ public class AmbryRequests implements RequestAPI {
         logger.error("Validating delete request failed with error {} for request {}", error, deleteRequest);
         response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), error);
       } else {
+        BlobId convertedBlobId = (BlobId) convertedStoreKey;
         MessageFormatInputStream stream =
-            new DeleteMessageFormatInputStream(convertedStoreKey, deleteRequest.getAccountId(),
-                deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
-        MessageInfo info = new MessageInfo(convertedStoreKey, stream.getSize(), deleteRequest.getAccountId(),
-            deleteRequest.getContainerId(), deleteRequest.getDeletionTimeInMs());
+            new DeleteMessageFormatInputStream(convertedStoreKey, convertedBlobId.getAccountId(),
+                convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs());
+        MessageInfo info = new MessageInfo(convertedStoreKey, stream.getSize(), convertedBlobId.getAccountId(),
+            convertedBlobId.getContainerId(), deleteRequest.getDeletionTimeInMs());
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeSet = new MessageFormatWriteSet(stream, infoList, false);
