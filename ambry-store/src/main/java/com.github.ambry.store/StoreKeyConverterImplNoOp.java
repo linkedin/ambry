@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.server;
+package com.github.ambry.store;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;

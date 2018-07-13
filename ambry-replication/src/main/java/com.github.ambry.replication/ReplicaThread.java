@@ -59,6 +59,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +94,7 @@ class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final StoreKeyConverter storeKeyConverter;
   private final Transformer transformer;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
@@ -121,6 +123,7 @@ class ReplicaThread implements Runnable {
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
+    this.storeKeyConverter = storeKeyConverter;
     this.transformer = transformer;
     this.metricRegistry = metricRegistry;
     this.responseHandler = responseHandler;
@@ -320,13 +323,16 @@ class ReplicaThread implements Runnable {
       throws IOException, ReplicationException, InterruptedException {
 
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
-    List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<ExchangeMetadataResponse>();
+    List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<>();
     if (replicasToReplicatePerNode.size() > 0) {
       try {
         DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
         ReplicaMetadataResponse response =
             getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
         long startTimeInMs = SystemTime.getInstance().milliseconds();
+
+        Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap = batchConvertReplicaMetadataResponseKeys(response);
+
         for (int i = 0; i < response.getReplicaMetadataResponseInfoList().size(); i++) {
           RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
@@ -340,7 +346,7 @@ class ReplicaThread implements Runnable {
               Set<StoreKey> missingStoreKeys =
                   getMissingStoreKeys(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
               processReplicaMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo, remoteReplicaInfo,
-                  remoteNode);
+                  remoteNode, remoteKeyToLocalKeyMap);
               ExchangeMetadataResponse exchangeMetadataResponse =
                   new ExchangeMetadataResponse(missingStoreKeys, replicaMetadataResponseInfo.getFindToken(),
                       replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
@@ -472,44 +478,58 @@ class ReplicaThread implements Runnable {
    * @param remoteNode The remote node from which replication needs to happen
    * @param remoteReplicaInfo The remote replica that contains information about the remote replica id
    * @return List of store keys that are missing from the local store
-   * @throws StoreException
+   * @throws Exception
    */
   private Set<StoreKey> getMissingStoreKeys(ReplicaMetadataResponseInfo replicaMetadataResponseInfo,
-      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+      DataNodeId remoteNode, RemoteReplicaInfo remoteReplicaInfo) throws Exception {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
-    List<StoreKey> storeKeysToCheck = new ArrayList<StoreKey>(messageInfoList.size());
+    Map<StoreKey, StoreKey> remoteToConvertedNonNull = new HashMap<>();
+
     for (MessageInfo messageInfo : messageInfoList) {
-      storeKeysToCheck.add(messageInfo.getStoreKey());
+      StoreKey storeKey = messageInfo.getStoreKey();
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
-          remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+          remoteReplicaInfo.getReplicaId(), storeKey);
+      StoreKey convertedKey = storeKeyConverter.getConverted(storeKey);
+      if (convertedKey != null) {
+        remoteToConvertedNonNull.put(storeKey, convertedKey);
+      }
     }
 
-    Set<StoreKey> missingStoreKeys = remoteReplicaInfo.getLocalStore().findMissingKeys(storeKeysToCheck);
-    for (StoreKey storeKey : missingStoreKeys) {
-      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key missing id: {}", remoteNode, threadName,
-          remoteReplicaInfo.getReplicaId(), storeKey);
-    }
+    Set<StoreKey> convertedMissingStoreKeys =
+        remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
+    Set<StoreKey> missingRemoteStoreKeys = new HashSet<>();
+    remoteToConvertedNonNull.forEach((remoteKey, convertedKey) -> {
+      if (convertedMissingStoreKeys.contains(convertedKey)) {
+        logger.trace(
+            "Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (remote): {}",
+            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), convertedKey, remoteKey);
+        missingRemoteStoreKeys.add(remoteKey);
+      }
+    });
+
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
-    return missingStoreKeys;
+    return missingRemoteStoreKeys;
   }
 
   /**
    * Takes the missing keys and the message list from the remote store and identifies messages that are deleted
    * on the remote store and updates them locally. Also, if the message that is missing is deleted in the remote
    * store, we remove the message from the list of missing keys
-   * @param missingStoreKeys The list of keys missing from the local store
+   * @param missingRemoteStoreKeys The list of keys missing from the local store
    * @param replicaMetadataResponseInfo The replica metadata response from the remote store
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @param remoteNode The remote node from which replication needs to happen
+   * @param remoteKeyToLocalKeyMap map mapping remote keys to local key equivalents
    * @throws IOException
    * @throws StoreException
    * @throws MessageFormatException
    */
-  private void processReplicaMetadataResponse(Set<StoreKey> missingStoreKeys,
+  private void processReplicaMetadataResponse(Set<StoreKey> missingRemoteStoreKeys,
       ReplicaMetadataResponseInfo replicaMetadataResponseInfo, RemoteReplicaInfo remoteReplicaInfo,
-      DataNodeId remoteNode) throws IOException, StoreException, MessageFormatException {
+      DataNodeId remoteNode, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap)
+      throws IOException, StoreException, MessageFormatException {
     long startTime = SystemTime.getInstance().milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     for (MessageInfo messageInfo : messageInfoList) {
@@ -519,30 +539,37 @@ class ReplicaThread implements Runnable {
             "Blob id is not in the expected partition Actual partition " + blobId.getPartition()
                 + " Expected partition " + remoteReplicaInfo.getLocalReplicaId().getPartitionId());
       }
-      if (!missingStoreKeys.contains(messageInfo.getStoreKey())) {
+      BlobId localKey = (BlobId) remoteKeyToLocalKeyMap.get(messageInfo.getStoreKey());
+      if (localKey == null) {
+        missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote key deprecated locally: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+      } else if (!missingRemoteStoreKeys.contains(messageInfo.getStoreKey())) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
         // deleted yet locally
-        if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(messageInfo.getStoreKey())) {
+        if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey)) {
           MessageFormatInputStream deleteStream =
-              new DeleteMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
-                  messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
-          MessageInfo info = new MessageInfo(messageInfo.getStoreKey(), deleteStream.getSize(), true, false,
-              messageInfo.getAccountId(), messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
+              new DeleteMessageFormatInputStream(localKey, localKey.getAccountId(), localKey.getContainerId(),
+                  messageInfo.getOperationTimeMs());
+          MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, false, localKey.getAccountId(),
+              localKey.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
           try {
             remoteReplicaInfo.getLocalStore().delete(writeset);
-            logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {}",
-                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+            logger.trace(
+                "Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {} Local Key: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
           } catch (StoreException e) {
             // The blob may get deleted between the time the above check is done and the delete is
             // attempted. For example, this can happen if the key gets deleted in the context of another replica
             // thread. This is more likely when replication is already caught up - when similar set of
             // messages are received from different replicas around the same time.
             if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already deleted: {}", remoteNode,
-                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+              logger.trace(
+                  "Remote node: {} Thread name: {} Remote replica: {} Remote Key already deleted: {} Local Key: {}",
+                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
             } else {
               throw e;
             }
@@ -550,29 +577,30 @@ class ReplicaThread implements Runnable {
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
+                BlobReplicaSourceType.REPAIRED);
           }
         }
       } else {
         if (messageInfo.isDeleted()) {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
-          missingStoreKeys.remove(messageInfo.getStoreKey());
-          logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {}",
-              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+          missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
+          logger.trace(
+              "Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {} Local key: {}",
+              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
           if (notification != null) {
-            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(),
-                messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
+            notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
+                BlobReplicaSourceType.REPAIRED);
           }
         } else if (messageInfo.isExpired()) {
           // if the key is not present locally and if the remote replica has the key as expired,
           // it is not considered missing locally.
-          missingStoreKeys.remove(messageInfo.getStoreKey());
+          missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
           logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in expired state remotely {}",
-              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+              remoteNode, threadName, remoteReplicaInfo.getReplicaId(), localKey);
         }
       }
     }
@@ -582,6 +610,29 @@ class ReplicaThread implements Runnable {
     } else {
       replicationMetrics.intraColoProcessMetadataResponseTime.update(
           SystemTime.getInstance().milliseconds() - startTime);
+    }
+  }
+
+  /**
+   * Batch converts all keys in the {@link ReplicaMetadataResponse} response.
+   * Intention is that conversion is done all at once so that followup calls to
+   * {@link StoreKeyConverter#getConverted(StoreKey)} will work
+   * @param response the {@link ReplicaMetadataResponse} whose keys will be converted
+   * @return the map from the {@link StoreKeyConverter#convert(Collection)} call
+   * @throws IOException thrown if {@link StoreKeyConverter#convert(Collection)} fails
+   */
+  private Map<StoreKey, StoreKey> batchConvertReplicaMetadataResponseKeys(ReplicaMetadataResponse response)
+      throws IOException {
+    try {
+      List<StoreKey> storeKeysToConvert = new ArrayList<>();
+      for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
+        for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
+          storeKeysToConvert.add(messageInfo.getStoreKey());
+        }
+      }
+      return storeKeyConverter.convert(storeKeysToConvert);
+    } catch (Exception e) {
+      throw new IOException("Problem with store key conversion", e);
     }
   }
 

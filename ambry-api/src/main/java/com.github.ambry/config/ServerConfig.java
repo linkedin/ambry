@@ -65,7 +65,7 @@ public class ServerConfig {
    * Implementation class for StoreKeyConverterFactory
    */
   @Config("server.store.key.converter.factory")
-  @Default("com.github.ambry.server.StoreKeyConverterFactoryImpl")
+  @Default("com.github.ambry.store.StoreKeyConverterFactoryImpl")
   public final String serverStoreKeyConverterFactory;
 
   /**
@@ -85,7 +85,7 @@ public class ServerConfig {
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
     serverEnableStoreDataPrefetch = verifiableProperties.getBoolean("server.enable.store.data.prefetch", false);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
-        "com.github.ambry.server.StoreKeyConverterFactoryImpl");
+        "com.github.ambry.store.StoreKeyConverterFactoryImpl");
     serverMessageTransformer = verifiableProperties.getString("server.message.transformer",
         "com.github.ambry.messageformat.ValidatingTransformer");
   }

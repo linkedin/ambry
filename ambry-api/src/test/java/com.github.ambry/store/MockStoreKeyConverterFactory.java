@@ -24,7 +24,6 @@ import java.util.Map;
  * A mock factory of {@link StoreKeyConverterFactory}.  Creates MockStoreKeyConverter.
  */
 public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
-  private final StoreKeyConverter storeKeyConverter = new MockStoreKeyConverter();
   private Map<StoreKey, StoreKey> conversionMap;
   private Exception exception;
   private boolean returnKeyIfAbsent;
@@ -33,13 +32,14 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   }
 
   @Override
-  public StoreKeyConverter getStoreKeyConverter() {
-    return storeKeyConverter;
+  public MockStoreKeyConverter getStoreKeyConverter() {
+    return new MockStoreKeyConverter(new HashMap<>(conversionMap));
   }
 
   /**
    * Set conversionMap for reference.
-   * @param conversionMap used by {@link MockStoreKeyConverter}.
+   * @param conversionMap initially used by {@link MockStoreKeyConverter} instances
+   *                      created by the factory.
    */
   public void setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
     this.conversionMap = conversionMap;
@@ -73,7 +73,23 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   /**
    * A mock implementation of {@link StoreKeyConverter}.
    */
-  private class MockStoreKeyConverter implements StoreKeyConverter {
+  public class MockStoreKeyConverter implements StoreKeyConverter {
+
+    private Map<StoreKey, StoreKey> lastConverted = new HashMap<>();
+    private Map<StoreKey, StoreKey> conversionMap;
+
+    private MockStoreKeyConverter(Map<StoreKey, StoreKey> conversionMap) {
+      this.conversionMap = conversionMap;
+    }
+
+    /**
+     * Set conversionMap for reference.
+     * @param conversionMap used by this {@link MockStoreKeyConverter} instance
+     */
+    public void setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
+      this.conversionMap = conversionMap;
+    }
+
     @Override
     public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
       if (exception != null) {
@@ -82,22 +98,23 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
       Map<StoreKey, StoreKey> output = new HashMap<>();
       if (input != null) {
         for (StoreKey storeKey : input) {
-          output.put(storeKey, getConverted(storeKey));
+          if (returnKeyIfAbsent && !conversionMap.containsKey(storeKey)) {
+            output.put(storeKey, storeKey);
+          } else {
+            output.put(storeKey, conversionMap.get(storeKey));
+          }
         }
       }
+      lastConverted = output;
       return output;
     }
 
     @Override
     public StoreKey getConverted(StoreKey storeKey) {
-      if (exception != null) {
+      if (exception != null || !lastConverted.containsKey(storeKey)) {
         throw new IllegalStateException(exception);
       }
-      if (returnKeyIfAbsent && !conversionMap.containsKey(storeKey)) {
-        return storeKey;
-      } else {
-        return conversionMap.get(storeKey);
-      }
+      return lastConverted.get(storeKey);
     }
   }
 }

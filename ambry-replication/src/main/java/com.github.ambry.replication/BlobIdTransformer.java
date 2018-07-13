@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.store;
+package com.github.ambry.replication;
 
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobData;
@@ -20,6 +20,13 @@ import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.store.Message;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.TransformationOutput;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
