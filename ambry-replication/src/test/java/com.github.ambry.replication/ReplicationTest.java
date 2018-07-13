@@ -425,7 +425,6 @@ public class ReplicationTest {
       Set<BlobId> expectedLocalHostBlobIds = new HashSet<>();
       expectedLocalHostBlobIds.add(b0p);
       expectedLocalHostBlobIds.add(b1p);
-      assertEquals("Should be two ids in expectedLocalHostBlobIds", 2, expectedLocalHostBlobIds.size());
       for (MessageInfo messageInfo : expectedLocalHost.infosByPartition.get(partitionId)) {
         assertTrue("Remove should never fail", expectedLocalHostBlobIds.remove(messageInfo.getStoreKey()));
       }
@@ -439,13 +438,9 @@ public class ReplicationTest {
     //Check that there are no missing buffers between expectedLocalHost and LocalHost
     Map<PartitionId, List<ByteBuffer>> missingBuffers =
         expectedLocalHost.getMissingBuffers(localHost.buffersByPartition);
-    for (List<ByteBuffer> list : missingBuffers.values()) {
-      assertTrue(list.isEmpty());
-    }
+    assertTrue(missingBuffers.isEmpty());
     missingBuffers = localHost.getMissingBuffers(expectedLocalHost.buffersByPartition);
-    for (List<ByteBuffer> list : missingBuffers.values()) {
-      assertTrue(list.isEmpty());
-    }
+    assertTrue(missingBuffers.isEmpty());
 
     /*
         BEFORE
@@ -484,13 +479,9 @@ public class ReplicationTest {
 
     //Check that there are no missing buffers between expectedLocalHost and LocalHost
     missingBuffers = expectedLocalHost.getMissingBuffers(localHost.buffersByPartition);
-    for (List<ByteBuffer> list : missingBuffers.values()) {
-      assertTrue(list.isEmpty());
-    }
+    assertTrue(missingBuffers.isEmpty());
     missingBuffers = localHost.getMissingBuffers(expectedLocalHost.buffersByPartition);
-    for (List<ByteBuffer> list : missingBuffers.values()) {
-      assertTrue(list.isEmpty());
-    }
+    assertTrue(missingBuffers.isEmpty());
 
     // 3 unconverted + 2 unconverted deleted expected missing buffers
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
