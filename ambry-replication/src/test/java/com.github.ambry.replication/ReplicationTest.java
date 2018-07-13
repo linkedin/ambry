@@ -817,7 +817,6 @@ public class ReplicationTest {
     }
     Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
-      // 3 unconverted + 2 unconverted deleted
       assertEquals(expectedMissingBuffers, entry.getValue().size());
     }
   }
