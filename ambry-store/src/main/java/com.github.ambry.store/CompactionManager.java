@@ -242,7 +242,7 @@ class CompactionManager {
           try {
             while (enabled && storesToCheck.peek() != null) {
               BlobStore store = storesToCheck.poll();
-              logger.info("{} being checked for compaction", store);
+              logger.trace("{} being checked for compaction", store);
               boolean compactionStarted = false;
               try {
                 if (store.isStarted() && !storesToSkip.contains(store) && !storesDisabledCompaction.contains(store)) {
@@ -254,7 +254,7 @@ class CompactionManager {
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
                   } else {
-                    logger.info("{} is not eligible for compaction, details == NULL", store);
+                    logger.info("{} is not eligible for compaction due to empty compaction details", store);
                   }
                 }
               } catch (Exception e) {

@@ -246,7 +246,7 @@ public class DiskSpaceAllocatorTest {
   }
 
   /**
-   * Exercises different failure cases for {@link DiskSpaceAllocator#initializePool(Collection)}.
+   * Exercises different failure cases for {@link DiskSpaceAllocator#initializePool(Collection, boolean)}.
    * @throws Exception
    */
   @Test
@@ -369,7 +369,7 @@ public class DiskSpaceAllocatorTest {
    * @param directoryToRestrict the directory to make unreadable or unwritable.
    * @param restrictRead {@code true} to make the directory unreadable, or {@code false} to make it unwritable
    * @param requirements the {@link DiskSpaceRequirements} to provide to
-   *                     {@link DiskSpaceAllocator#initializePool(Collection)}
+   *                     {@link DiskSpaceAllocator#initializePool(Collection, boolean)}
    */
   private void runInitFailureTest(File directoryToRestrict, boolean restrictRead,
       DiskSpaceRequirements... requirements) {
