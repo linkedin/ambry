@@ -427,7 +427,7 @@ public class ReplicationTest {
       expectedLocalHostBlobIds.add(b1p);
       assertEquals("Should be two ids in expectedLocalHostBlobIds", 2, expectedLocalHostBlobIds.size());
       for (MessageInfo messageInfo : expectedLocalHost.infosByPartition.get(partitionId)) {
-        expectedLocalHostBlobIds.remove(messageInfo.getStoreKey());
+        assertTrue("Remove should never fail", expectedLocalHostBlobIds.remove(messageInfo.getStoreKey()));
       }
       assertTrue("expectedLocalHostBlobIds should now be empty", expectedLocalHostBlobIds.isEmpty());
     }
