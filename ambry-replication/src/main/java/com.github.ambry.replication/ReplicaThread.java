@@ -499,15 +499,14 @@ class ReplicaThread implements Runnable {
     Set<StoreKey> convertedMissingStoreKeys =
         remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteToConvertedNonNull.values()));
     Set<StoreKey> missingRemoteStoreKeys = new HashSet<>();
-
-    for (Map.Entry<StoreKey, StoreKey> entry : remoteToConvertedNonNull.entrySet()) {
-      if (convertedMissingStoreKeys.contains(entry.getValue())) {
+    remoteToConvertedNonNull.forEach((remoteKey, convertedKey) -> {
+      if (convertedMissingStoreKeys.contains(convertedKey)) {
         logger.trace(
-            "Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (original): {}",
-            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), entry.getValue(), entry.getKey());
-        missingRemoteStoreKeys.add(entry.getKey());
+            "Remote node: {} Thread name: {} Remote replica: {} Key missing id (converted): {} Key missing id (remote): {}",
+            remoteNode, threadName, remoteReplicaInfo.getReplicaId(), convertedKey, remoteKey);
+        missingRemoteStoreKeys.add(remoteKey);
       }
-    }
+    });
 
     replicationMetrics.updateCheckMissingKeysTime(SystemTime.getInstance().milliseconds() - startTime,
         replicatingFromRemoteColo, datacenterName);
@@ -559,7 +558,8 @@ class ReplicaThread implements Runnable {
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
           try {
             remoteReplicaInfo.getLocalStore().delete(writeset);
-            logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {} Local Key: {}",
+            logger.trace(
+                "Remote node: {} Thread name: {} Remote replica: {} Key deleted. mark for deletion id: {} Local Key: {}",
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
           } catch (StoreException e) {
             // The blob may get deleted between the time the above check is done and the delete is
@@ -567,8 +567,9 @@ class ReplicaThread implements Runnable {
             // thread. This is more likely when replication is already caught up - when similar set of
             // messages are received from different replicas around the same time.
             if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Remote Key already deleted: {} Local Key: {}", remoteNode,
-                  threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
+              logger.trace(
+                  "Remote node: {} Thread name: {} Remote replica: {} Remote Key already deleted: {} Local Key: {}",
+                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
             } else {
               throw e;
             }
@@ -585,7 +586,8 @@ class ReplicaThread implements Runnable {
           // if the key is not present locally and if the remote replica has the message in deleted state,
           // it is not considered missing locally.
           missingRemoteStoreKeys.remove(messageInfo.getStoreKey());
-          logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {} Local key: {}",
+          logger.trace(
+              "Remote node: {} Thread name: {} Remote replica: {} Key in deleted state remotely: {} Local key: {}",
               remoteNode, threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey(), localKey);
           // A Repair event for Delete signifies that a Delete message was received from the remote and it is fired
           // as long as the Delete is guaranteed to have taken effect locally.
@@ -624,8 +626,7 @@ class ReplicaThread implements Runnable {
     try {
       List<StoreKey> storeKeysToConvert = new ArrayList<>();
       for (ReplicaMetadataResponseInfo replicaMetadataResponseInfo : response.getReplicaMetadataResponseInfoList()) {
-        List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
-        for (MessageInfo messageInfo : messageInfoList) {
+        for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
           storeKeysToConvert.add(messageInfo.getStoreKey());
         }
       }
