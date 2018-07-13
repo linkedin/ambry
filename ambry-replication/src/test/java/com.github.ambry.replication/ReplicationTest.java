@@ -420,6 +420,16 @@ public class ReplicationTest {
       addPutMessagesToReplicasOfPartition(Arrays.asList(b0, b1, b2), Arrays.asList(remoteHost));
       addPutMessagesToReplicasOfPartition(Arrays.asList(b0p, b1), Arrays.asList(null, transformer),
           Arrays.asList(expectedLocalHost));
+
+      //Check that expected local host contains the correct blob ids
+      Set<BlobId> expectedLocalHostBlobIds = new HashSet<>();
+      expectedLocalHostBlobIds.add(b0p);
+      expectedLocalHostBlobIds.add(b1p);
+      assertEquals("Should be two ids in expectedLocalHostBlobIds", 2, expectedLocalHostBlobIds.size());
+      for (MessageInfo messageInfo : expectedLocalHost.infosByPartition.get(partitionId)) {
+        expectedLocalHostBlobIds.remove(messageInfo.getStoreKey());
+      }
+      assertTrue("expectedLocalHostBlobIds should now be empty", expectedLocalHostBlobIds.isEmpty());
     }
     storeKeyConverter.setConversionMap(conversionMap);
 
