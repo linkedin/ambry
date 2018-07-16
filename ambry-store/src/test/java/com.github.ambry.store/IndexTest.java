@@ -638,10 +638,11 @@ public class IndexTest {
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
     doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
-    // recovery info contains a Ttl Update for a key that does not exist
-    info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.ID_Not_Found);
+    // recovery info contains a Ttl Update for a key that does not exist and there is no delete info that follows
+    MockId nonExistentId = state.getUniqueId();
+    info = new MessageInfo(nonExistentId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
+        nonExistentId.getAccountId(), nonExistentId.getContainerId(), state.time.milliseconds());
+    doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
     // recovery info contains a Ttl Update for a key that is already Ttl updated
     MockId updatedId = null;
     for (MockId id : state.ttlUpdatedKeys) {
@@ -1604,16 +1605,12 @@ public class IndexTest {
     // recover a few messages in a single segment
     final List<MessageInfo> infos = getCuratedSingleSegmentRecoveryInfos();
     final AtomicInteger returnTracker = new AtomicInteger(0);
-    state.recovery = new MessageStoreRecovery() {
-      @Override
-      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-          throws IOException {
-        switch (returnTracker.getAndIncrement()) {
-          case 0:
-            return infos;
-          default:
-            throw new IllegalStateException("This function should not have been called more than once");
-        }
+    state.recovery = (read, startOffset, endOffset, factory) -> {
+      switch (returnTracker.getAndIncrement()) {
+        case 0:
+          return infos;
+        default:
+          throw new IllegalStateException("This function should not have been called more than once");
       }
     };
     // This test relies on log segment not spilling over. If that happens, this test will fail.
@@ -1624,7 +1621,7 @@ public class IndexTest {
 
     state.reloadIndex(true, false);
     assertEquals("End offset not as expected", expectedSegmentEndOffset, activeSegment.getEndOffset());
-    checkInfos(infos, indexEndOffsetBeforeRecovery);
+    infos.forEach(this::checkRecoveryInfoEquivalence);
   }
 
   /**
@@ -1685,18 +1682,14 @@ public class IndexTest {
         new MessageInfo(idToUpdateAndDeleteAcrossSegments, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false,
             udAccountId, udContainerId, state.time.milliseconds()));
     final AtomicInteger returnTracker = new AtomicInteger(0);
-    state.recovery = new MessageStoreRecovery() {
-      @Override
-      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-          throws IOException {
-        switch (returnTracker.getAndIncrement()) {
-          case 0:
-            return activeSegmentInfos;
-          case 1:
-            return nextSegmentInfos;
-          default:
-            throw new IllegalStateException("This function should not have been called more than two times");
-        }
+    state.recovery = (read, startOffset, endOffset, factory) -> {
+      switch (returnTracker.getAndIncrement()) {
+        case 0:
+          return activeSegmentInfos;
+        case 1:
+          return nextSegmentInfos;
+        default:
+          throw new IllegalStateException("This function should not have been called more than two times");
       }
     };
     long activeSegmentExpectedEndOffset = activeSegment.getEndOffset();
@@ -1713,7 +1706,7 @@ public class IndexTest {
         activeSegment.getEndOffset());
     List<MessageInfo> infos = new ArrayList<>(activeSegmentInfos);
     infos.addAll(nextSegmentInfos);
-    checkInfos(infos, indexEndOffsetBeforeRecovery);
+    infos.forEach(this::checkRecoveryInfoEquivalence);
   }
 
   /**
@@ -1724,8 +1717,8 @@ public class IndexTest {
    */
   private List<MessageInfo> getCuratedSingleSegmentRecoveryInfos() throws IOException {
     List<MessageInfo> infos = new ArrayList<>();
-    state.appendToLog(4 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE
-        + 4 * TTL_UPDATE_RECORD_SIZE);
+    state.appendToLog(5 * CuratedLogIndexState.DELETE_RECORD_SIZE + 4 * CuratedLogIndexState.PUT_RECORD_SIZE
+        + 5 * TTL_UPDATE_RECORD_SIZE);
     // 1 TTL update for a PUT not in the infos (won't be deleted)
     MockId idToUpdate = state.getIdToTtlUpdateFromLogSegment(state.log.getFirstSegment());
     infos.add(
@@ -1779,119 +1772,50 @@ public class IndexTest {
     id = state.getUniqueId();
     infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
         id.getContainerId(), state.time.milliseconds()));
+    // 1 ttl update for a PUT that does not exist in the index (because compaction has cleaned the PUT)
+    id = state.getUniqueId();
+    infos.add(new MessageInfo(id, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true, id.getAccountId(),
+        id.getContainerId(), state.time.milliseconds()));
+    // a delete for the TTL update above (compaction can only clean if there was a delete - so there will never be JUST
+    // a TTL update)
+    // ttl updated is false because when the delete record is read, the MessageInfo constructed will not know if there
+    // has been a ttl update
+    infos.add(new MessageInfo(id, CuratedLogIndexState.DELETE_RECORD_SIZE, true, false, id.getAccountId(),
+        id.getContainerId(), state.time.milliseconds()));
     return infos;
   }
 
   /**
-   * Checks that the provided {@code infos} is present in the index.
-   * @param infos the {@link List} of {@link MessageInfo} whose presence needs to be checked in the index.
-   * @param indexEndOffsetBeforeRecovery the end offset of the {@link PersistentIndex} before recovery.
-   * @throws StoreException
-   */
-  private void checkInfos(List<MessageInfo> infos, Offset indexEndOffsetBeforeRecovery) throws StoreException {
-    Map<MockId, MessageInfo> effectiveInfos = getEffectiveInfos(infos);
-    Map<StoreKey, Boolean> checked = new HashMap<>();
-    effectiveInfos.forEach((id, messageInfo) -> checked.put(id, false));
-    Offset currCheckOffset = indexEndOffsetBeforeRecovery;
-    for (MessageInfo rawInfo : infos) {
-      MessageInfo info = effectiveInfos.get(rawInfo.getStoreKey());
-      checked.put(info.getStoreKey(), checkRecoveryInfoEquivalence(info, currCheckOffset));
-      FileSpan expectedFileSpan = state.log.getFileSpanForMessage(currCheckOffset, rawInfo.getSize());
-      currCheckOffset = expectedFileSpan.getEndOffset();
-    }
-    checked.forEach((key, aBoolean) -> {
-      if (!aBoolean) {
-        // these are keys for which only a ttl update is available in the provided infos
-        // in that case, the value obtained from the index will have the size and offset of the put record
-        // getEffectiveInfos() updates the size correctly so everything other than the offset can be checked
-        MessageInfo info = effectiveInfos.get(key);
-        assertTrue("Only ttl update effective infos should have been skipped: " + info, info.isTtlUpdated());
-        try {
-          checkRecoveryInfoEquivalence(info, null);
-        } catch (Exception e) {
-          throw new IllegalStateException(e);
-        }
-      }
-    });
-  }
-
-  /**
-   * Checks that the details in {@code info} are equivalent to the value returned from the index. Does not perform the
-   * check if {@code checkOffset} does not match the offset in the value.
+   * Checks that the details in {@code info} are equivalent to the value returned from the index.
    * @param info the {@link MessageInfo} to check.
-   * @param checkOffset the offset expected in the value if the check is to be performed. Can be {@code null} in which
-   *                    case the checks will be performed regardless of the offset in the value.
-   * @return {@code true} if {@code checkOffset} matched the offset in the value from the index (or was {@code null}.
-   *          {@code false} otherwise
-   * @throws StoreException
    */
-  private boolean checkRecoveryInfoEquivalence(MessageInfo info, Offset checkOffset) throws StoreException {
-    IndexValue value = state.index.findKey(info.getStoreKey());
-    boolean checked = false;
-    if (checkOffset == null || checkOffset.equals(value.getOffset())) {
-      assertEquals("Inconsistent size", info.getSize(), value.getSize());
-      assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
-      assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
-      assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
-      assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
-      assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
-          value.getOperationTimeInMs());
-      checked = true;
+  private void checkRecoveryInfoEquivalence(MessageInfo info) {
+    PersistentIndex.IndexEntryType toSearchFor = PersistentIndex.IndexEntryType.PUT;
+    if (info.isDeleted()) {
+      toSearchFor = PersistentIndex.IndexEntryType.DELETE;
+    } else if (info.isTtlUpdated()) {
+      toSearchFor = PersistentIndex.IndexEntryType.TTL_UPDATE;
     }
-    return checked;
-  }
-
-  /**
-   * Gets the "effective" {@link MessageInfo} based on what the current {@link IndexValue} should be in that index
-   * @param infos the {@link MessageInfo} that are part of the recovery
-   * @return a map from {@link MockId} to the "effective" {@link MessageInfo}
-   */
-  private Map<MockId, MessageInfo> getEffectiveInfos(List<MessageInfo> infos) {
-    Map<MockId, MessageInfo> effectiveInfos = new HashMap<>();
-    for (MessageInfo info : infos) {
-      MessageInfo effectiveInfo;
-      MockId id = (MockId) info.getStoreKey();
-      if (effectiveInfos.containsKey(info.getStoreKey())) {
-        MessageInfo prevInfo = effectiveInfos.get(info.getStoreKey());
-        if (info.isDeleted()) {
-          // this info takes precedence but the expire time must come from the previous info
-          effectiveInfo =
-              new MessageInfo(id, info.getSize(), true, prevInfo.isTtlUpdated(), prevInfo.getExpirationTimeInMs(),
-                  id.getAccountId(), id.getContainerId(), info.getOperationTimeMs());
-        } else if (info.isTtlUpdated()) {
-          if (prevInfo.isDeleted()) {
-            throw new IllegalStateException("There cannot have been a ttl update entry after a delete entry");
-          } else {
-            // the size and op time comes from the previous info
-            effectiveInfo = new MessageInfo(id, prevInfo.getSize(), false, true, Utils.Infinite_Time, id.getAccountId(),
-                id.getContainerId(), prevInfo.getOperationTimeMs());
-          }
-        } else {
-          throw new IllegalStateException("There cannot have been a put entry after a ttl update or delete entry");
-        }
-      } else {
-        if (info.isDeleted()) {
-          // expire time must come from the value in the index if any
-          IndexValue value = state.getExpectedValue(id, false);
-          if (value != null) {
-            effectiveInfo =
-                new MessageInfo(id, info.getSize(), true, value.isFlagSet(IndexValue.Flags.Ttl_Update_Index),
-                    value.getExpiresAtMs(), id.getAccountId(), id.getContainerId(), info.getOperationTimeMs());
-          } else {
-            effectiveInfo = info;
-          }
-        } else if (info.isTtlUpdated()) {
-          // value returned from the find will be that of the put
-          IndexValue value = state.getExpectedValue(id, false);
-          effectiveInfo = new MessageInfo(id, value.getSize(), false, true, Utils.Infinite_Time, id.getAccountId(),
-              id.getContainerId(), value.getOperationTimeInMs());
-        } else {
-          effectiveInfo = info;
-        }
-      }
-      effectiveInfos.put(id, effectiveInfo);
+    IndexValue value;
+    try {
+      value = state.index.findKey(info.getStoreKey(), null, EnumSet.of(toSearchFor));
+    } catch (StoreException e) {
+      throw new IllegalStateException(e);
     }
-    return effectiveInfos;
+    assertEquals("Inconsistent size", info.getSize(), value.getSize());
+    assertEquals("Inconsistent delete state ", info.isDeleted(), value.isFlagSet(IndexValue.Flags.Delete_Index));
+    // if the info says ttl update is true, then the value must reflect that. vice versa need not be true because put
+    // infos won't have it set but the value returned from the index will if a ttl update was applied later. Same
+    // applies if the info is for a delete record in which case it won't have the ttl update set to true because it is
+    // not known at the time of the info generation from the log that the id was previously updated
+    if (info.isTtlUpdated()) {
+      assertTrue("Inconsistent ttl update state ", value.isFlagSet(IndexValue.Flags.Ttl_Update_Index));
+    }
+    assertEquals("Inconsistent expiresAtMs", info.getExpirationTimeInMs(), value.getExpiresAtMs());
+    assertEquals("Incorrect accountId", info.getAccountId(), value.getAccountId());
+    assertEquals("Incorrect containerId", info.getContainerId(), value.getContainerId());
+    assertEquals("Incorrect operationTimeMs", Utils.getTimeInMsToTheNearestSec(info.getOperationTimeMs()),
+        value.getOperationTimeInMs());
   }
 
   /**
@@ -1901,17 +1825,13 @@ public class IndexTest {
   private void totalIndexLossRecoveryTest() throws StoreException {
     state.closeAndClearIndex();
     final AtomicInteger returnTracker = new AtomicInteger(0);
-    state.recovery = new MessageStoreRecovery() {
-      @Override
-      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-          throws IOException {
-        switch (returnTracker.getAndIncrement()) {
-          case 0:
-            return Collections.singletonList(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
-                Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
-          default:
-            return Collections.emptyList();
-        }
+    state.recovery = (read, startOffset, endOffset, factory) -> {
+      switch (returnTracker.getAndIncrement()) {
+        case 0:
+          return Collections.singletonList(new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
+              Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time));
+        default:
+          return Collections.emptyList();
       }
     };
     state.reloadIndex(true, false);
@@ -1931,13 +1851,7 @@ public class IndexTest {
    * @param expectedErrorCode the {@link StoreErrorCodes} expected for the failure.
    */
   private void doRecoveryFailureTest(final MessageInfo info, StoreErrorCodes expectedErrorCode) {
-    state.recovery = new MessageStoreRecovery() {
-      @Override
-      public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-          throws IOException {
-        return Collections.singletonList(info);
-      }
-    };
+    state.recovery = (read, startOffset, endOffset, factory) -> Collections.singletonList(info);
     try {
       state.reloadIndex(true, false);
       fail("Loading index should have failed because recovery contains invalid info");
