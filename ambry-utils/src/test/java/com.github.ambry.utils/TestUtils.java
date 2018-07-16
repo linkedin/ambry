@@ -33,6 +33,7 @@ import static org.junit.Assert.*;
  * A class consisting of common util methods useful for tests.
  */
 public class TestUtils {
+  public static final int TTL_SECS = 7200;
   public static final Random RANDOM = new Random();
 
   /**

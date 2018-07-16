@@ -15,6 +15,7 @@ package com.github.ambry.rest;
 
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -132,8 +133,12 @@ public class MockRestResponseChannel implements RestResponseChannel {
       this.exception = exception;
       try {
         if (!responseMetadataFinalized.get() && exception != null) {
-          // clear headers
+          // clear headers except for the value of Allow
+          String allow = getHeader(RestUtils.Headers.ALLOW);
           responseMetadata.put(RESPONSE_HEADERS_KEY, new JSONObject());
+          if (!Utils.isNullOrEmpty(allow)) {
+            setHeader(RestUtils.Headers.ALLOW, allow);
+          }
           setHeader(RestUtils.Headers.CONTENT_TYPE, "text/plain; charset=UTF-8");
           ResponseStatus status = ResponseStatus.InternalServerError;
           if (exception instanceof RestServiceException) {

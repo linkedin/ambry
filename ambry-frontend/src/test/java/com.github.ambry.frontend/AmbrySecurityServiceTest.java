@@ -51,6 +51,7 @@ import java.util.TimeZone;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -94,6 +95,30 @@ public class AmbrySecurityServiceTest {
   }
 
   /**
+   * Tests for {@link AmbrySecurityService#postProcessRequest(RestRequest, Callback)}
+   * @throws Exception
+   */
+  @Test
+  public void preProcessRequestTest() throws Exception {
+    RestMethod[] methods =
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
+    for (RestMethod restMethod : methods) {
+      // add a header that is prohibited
+      JSONObject headers = new JSONObject();
+      headers.put(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT, true);
+      RestRequest restRequest = createRestRequest(restMethod, "/", headers);
+      try {
+        securityService.preProcessRequest(restRequest).get(1, TimeUnit.SECONDS);
+        Assert.fail("Should have failed because the request contains a prohibited header: "
+            + RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT);
+      } catch (ExecutionException e) {
+        RestServiceException rse = (RestServiceException) Utils.getRootCause(e);
+        Assert.assertEquals("Should be a bad request", RestServiceErrorCode.BadRequest, rse.getErrorCode());
+      }
+    }
+  }
+
+  /**
    * Tests {@link AmbrySecurityService#processRequest(RestRequest, Callback)} for common as well as uncommon cases
    * @throws Exception
    */
@@ -108,7 +133,7 @@ public class AmbrySecurityServiceTest {
 
     // without callbacks
     RestMethod[] methods =
-        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS};
+        new RestMethod[]{RestMethod.POST, RestMethod.GET, RestMethod.DELETE, RestMethod.HEAD, RestMethod.OPTIONS, RestMethod.PUT};
     for (RestMethod restMethod : methods) {
       RestRequest restRequest = createRestRequest(restMethod, "/", null);
       securityService.preProcessRequest(restRequest).get();
@@ -161,7 +186,7 @@ public class AmbrySecurityServiceTest {
         () -> securityService.processResponse(restRequest, new MockRestResponseChannel(), null).get(), null);
 
     // for unsupported methods
-    RestMethod[] methods = {RestMethod.DELETE, RestMethod.PUT};
+    RestMethod[] methods = {RestMethod.DELETE};
     for (RestMethod restMethod : methods) {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), DEFAULT_INFO,
           RestServiceErrorCode.InternalServerError);
@@ -170,6 +195,10 @@ public class AmbrySecurityServiceTest {
     // OPTIONS (should be no errors)
     securityService.processResponse(createRestRequest(RestMethod.OPTIONS, "/", null), new MockRestResponseChannel(),
         null).get();
+
+    // PUT (should be no errors)
+    securityService.processResponse(createRestRequest(RestMethod.PUT, "/", null), new MockRestResponseChannel(), null)
+        .get();
 
     // GET signed URL (shoud be no errors)
     securityService.processResponse(createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, null),
@@ -647,7 +676,6 @@ public class AmbrySecurityServiceTest {
       Assert.assertNull("Content length value should not be set",
           restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
     }
-    ;
     verifyCacheHeaders(getAccountAndContainer(blobProperties).getSecond().isCacheable(), restResponseChannel);
   }
 
@@ -655,10 +683,8 @@ public class AmbrySecurityServiceTest {
    * Verify the headers from the response for a Not modified blob are as expected
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
    * @param cacheable {@code true} if blob is cacheable, {@code false} otherwise.
-   * @throws RestServiceException if there was any problem getting the headers.
    */
-  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, boolean cacheable)
-      throws RestServiceException {
+  private void verifyHeadersForGetBlobNotModified(MockRestResponseChannel restResponseChannel, boolean cacheable) {
     Assert.assertNotNull("Date has not been set", restResponseChannel.getHeader(RestUtils.Headers.DATE));
     Assert.assertNotNull("Last-Modified has not been set",
         restResponseChannel.getHeader(RestUtils.Headers.LAST_MODIFIED));
@@ -702,10 +728,8 @@ public class AmbrySecurityServiceTest {
    * Verify the headers from the response are as expected
    * @param blobProperties the {@link BlobProperties} to refer to while getting headers.
    * @param restResponseChannel {@link MockRestResponseChannel} from which headers are to be verified
-   * @throws RestServiceException if there was any problem getting the headers.
    */
-  private void verifyBlobPropertiesHeaders(BlobProperties blobProperties, MockRestResponseChannel restResponseChannel)
-      throws RestServiceException {
+  private void verifyBlobPropertiesHeaders(BlobProperties blobProperties, MockRestResponseChannel restResponseChannel) {
     if (blobProperties.getContentType() != null) {
       Assert.assertEquals("Ambry Content Type mismatch", blobProperties.getContentType(),
           restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));

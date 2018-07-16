@@ -510,6 +510,18 @@ public class UtilsTest {
     }
   }
 
+  /**
+   * Tests for {@link Utils#isNullOrEmpty(String)}.
+   */
+  @Test
+  public void isNullOrEmptyTest() {
+    assertTrue("String should be declared null", Utils.isNullOrEmpty(null));
+    assertTrue("String should be declared empty", Utils.isNullOrEmpty(""));
+    assertFalse("String should not be declared empty", Utils.isNullOrEmpty(" "));
+    assertFalse("String should not be declared empty", Utils.isNullOrEmpty("a"));
+    assertFalse("String should not be declared empty", Utils.isNullOrEmpty(getRandomString(10)));
+  }
+
   private static final String CHARACTERS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   static Random random = new Random();
 

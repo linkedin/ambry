@@ -49,6 +49,7 @@ import org.junit.After;
 import org.junit.Test;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -63,7 +64,6 @@ public class TtlUpdateManagerTest {
   private static final int MAX_PORTS_SSL = 3;
   private static final int CHECKOUT_TIMEOUT_MS = 1000;
   private static final int ADVANCE_TIME_INCREMENT_MS = 1000;
-  private static final long TTL_SECS = 7200;
   private static final byte[] PUT_CONTENT = new byte[1000];
   private static final int BLOBS_COUNT = 5;
   private static final String UPDATE_SERVICE_ID = "update-service-id";

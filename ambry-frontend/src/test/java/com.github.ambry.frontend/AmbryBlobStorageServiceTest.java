@@ -96,6 +96,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -174,10 +175,9 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Shuts down the {@link AmbryBlobStorageService} instance after all tests.
-   * @throws IOException
    */
   @After
-  public void shutdownAmbryBlobStorageService() throws IOException {
+  public void shutdownAmbryBlobStorageService() {
     ambryBlobStorageService.shutdown();
     responseHandler.shutdown();
     router.close();
@@ -186,10 +186,9 @@ public class AmbryBlobStorageServiceTest {
   /**
    * Tests basic startup and shutdown functionality (no exceptions).
    * @throws InstantiationException
-   * @throws IOException
    */
   @Test
-  public void startShutDownTest() throws InstantiationException, IOException {
+  public void startShutDownTest() throws InstantiationException {
     ambryBlobStorageService.start();
     ambryBlobStorageService.shutdown();
   }
@@ -217,11 +216,11 @@ public class AmbryBlobStorageServiceTest {
   public void useServiceWithoutStartTest() throws Exception {
     ambryBlobStorageService = getAmbryBlobStorageService();
     // not fine to use without start.
-    try {
-      doOperation(createRestRequest(RestMethod.GET, "/", null, null), new MockRestResponseChannel());
-      fail("Should not have been able to use AmbryBlobStorageService without start");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.ServiceUnavailable, e.getErrorCode());
+    for (RestMethod method : RestMethod.values()) {
+      if (method.equals(RestMethod.UNKNOWN)) {
+        continue;
+      }
+      verifyOperationFailure(createRestRequest(method, "/", null, null), RestServiceErrorCode.ServiceUnavailable);
     }
   }
 
@@ -236,6 +235,7 @@ public class AmbryBlobStorageServiceTest {
     doNullInputsForFunctionsTest("handleDelete");
     doNullInputsForFunctionsTest("handleHead");
     doNullInputsForFunctionsTest("handleOptions");
+    doNullInputsForFunctionsTest("handlePut");
   }
 
   /**
@@ -254,22 +254,18 @@ public class AmbryBlobStorageServiceTest {
     doRuntimeExceptionRouterTest(RestMethod.POST);
     doRuntimeExceptionRouterTest(RestMethod.DELETE);
     doRuntimeExceptionRouterTest(RestMethod.HEAD);
+    // PUT is tested in the individual handlers
   }
 
   /**
-   * Checks reactions of PUT methods in {@link AmbryBlobStorageService}
+   * Checks reactions of PUT methods in {@link AmbryBlobStorageService} when there are bad request parameters
    * @throws Exception
    */
   @Test
   public void putFailureTest() throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.PUT, "/", null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("PUT should have failed because Ambry does not support it");
-    } catch (RestServiceException e) {
-      assertEquals("PUT is an unsupported method", RestServiceErrorCode.UnsupportedHttpMethod, e.getErrorCode());
-    }
+    // unrecognized operation
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, "/non-existent-op", null, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
   }
 
   /**
@@ -279,9 +275,6 @@ public class AmbryBlobStorageServiceTest {
    */
   @Test
   public void badResponseHandlerAndRestRequestTest() throws Exception {
-    RestRequest restRequest = new BadRestRequest();
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-
     // What happens inside AmbryBlobStorageService during this test?
     // 1. Since the RestRequest throws errors, AmbryBlobStorageService will attempt to submit response with exception
     //      to FrontendTestResponseHandler.
@@ -293,31 +286,16 @@ public class AmbryBlobStorageServiceTest {
     // What the test is looking for -> No exceptions thrown when the handle is run and the original exception arrives
     // safely.
     responseHandler.shutdown();
-
-    ambryBlobStorageService.handleGet(restRequest, restResponseChannel);
-    // IllegalStateException is thrown in BadRestRequest.
-    assertEquals("Unexpected exception", IllegalStateException.class, restResponseChannel.getException().getClass());
-
-    responseHandler.reset();
-    restResponseChannel = new MockRestResponseChannel();
-    ambryBlobStorageService.handlePost(restRequest, restResponseChannel);
-    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
-    Exception e = restResponseChannel.getException();
-    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
-
-    responseHandler.reset();
-    restResponseChannel = new MockRestResponseChannel();
-    ambryBlobStorageService.handleDelete(restRequest, restResponseChannel);
-    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
-    e = restResponseChannel.getException();
-    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
-
-    responseHandler.reset();
-    restResponseChannel = new MockRestResponseChannel();
-    ambryBlobStorageService.handleHead(restRequest, restResponseChannel);
-    // IllegalStateException or NullPointerException is thrown because of BadRestRequest.
-    e = restResponseChannel.getException();
-    assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
+    for (String methodName : new String[]{"handleGet", "handlePost", "handleHead", "handleDelete", "handleOptions", "handlePut"}) {
+      Method method =
+          AmbryBlobStorageService.class.getDeclaredMethod(methodName, RestRequest.class, RestResponseChannel.class);
+      responseHandler.reset();
+      RestRequest restRequest = new BadRestRequest();
+      MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      method.invoke(ambryBlobStorageService, restRequest, restResponseChannel);
+      Exception e = restResponseChannel.getException();
+      assertTrue("Unexpected exception", e instanceof IllegalStateException || e instanceof NullPointerException);
+    }
   }
 
   /**
@@ -398,31 +376,31 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Tests blob POST, GET, HEAD and DELETE operations.
+   * Tests blob POST, GET, HEAD, TTL update and DELETE operations.
    * @throws Exception
    */
   @Test
-  public void postGetHeadDeleteTest() throws Exception {
+  public void postGetHeadUpdateDeleteTest() throws Exception {
     // add another account
     accountService.createAndAddRandomAccount();
     // valid account and container names passed as part of POST
     for (Account testAccount : accountService.getAllAccounts()) {
       if (testAccount.getId() != Account.UNKNOWN_ACCOUNT_ID) {
         for (Container container : testAccount.getAllContainers()) {
-          doPostGetHeadDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
-              container);
-          doConditionalDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(), testAccount,
-              container);
+          doPostGetHeadUpdateDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(),
+              testAccount, container);
+          doConditionalUpdateAndDeleteTest(testAccount, container, testAccount.getName(), !container.isCacheable(),
+              testAccount, container);
         }
       }
     }
     // valid account and container names but only serviceId passed as part of POST
-    doPostGetHeadDeleteTest(null, null, refAccount.getName(), false, refAccount, refDefaultPublicContainer);
-    doPostGetHeadDeleteTest(null, null, refAccount.getName(), true, refAccount, refDefaultPrivateContainer);
+    doPostGetHeadUpdateDeleteTest(null, null, refAccount.getName(), false, refAccount, refDefaultPublicContainer);
+    doPostGetHeadUpdateDeleteTest(null, null, refAccount.getName(), true, refAccount, refDefaultPrivateContainer);
     // unrecognized serviceId
-    doPostGetHeadDeleteTest(null, null, "unknown_service_id", false, InMemAccountService.UNKNOWN_ACCOUNT,
+    doPostGetHeadUpdateDeleteTest(null, null, "unknown_service_id", false, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PUBLIC_CONTAINER);
-    doPostGetHeadDeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
+    doPostGetHeadUpdateDeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PRIVATE_CONTAINER);
   }
 
@@ -461,11 +439,11 @@ public class AmbryBlobStorageServiceTest {
    * @throws Exception
    */
   @Test
-  public void injectionAccountAndContainerForPutTest() throws Exception {
-    injectAccountAndContainerForPutAndVerify(refDefaultPrivateContainer, true);
-    injectAccountAndContainerForPutAndVerify(refDefaultPrivateContainer, false);
-    injectAccountAndContainerForPutAndVerify(refDefaultPublicContainer, true);
-    injectAccountAndContainerForPutAndVerify(refDefaultPublicContainer, false);
+  public void injectionAccountAndContainerForPostTest() throws Exception {
+    injectAccountAndContainerForPostAndVerify(refDefaultPrivateContainer, true);
+    injectAccountAndContainerForPostAndVerify(refDefaultPrivateContainer, false);
+    injectAccountAndContainerForPostAndVerify(refDefaultPublicContainer, true);
+    injectAccountAndContainerForPostAndVerify(refDefaultPublicContainer, false);
   }
 
   /**
@@ -509,8 +487,8 @@ public class AmbryBlobStorageServiceTest {
 
       // aid=refAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, refAccount.getId(),
-          (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
-          false, BlobId.BlobDataType.DATACHUNK).getID();
+          (short) -1234, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+          BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidContainer);
 
       // aid=unknownAId, cid=refCId
@@ -550,8 +528,8 @@ public class AmbryBlobStorageServiceTest {
 
       // aid=nonExistAId, cid=nonExistCId
       blobId = new BlobId(version, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID, (short) -1234,
-          (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0),
-          false, BlobId.BlobDataType.DATACHUNK).getID();
+          (short) -11, clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+          BlobId.BlobDataType.DATACHUNK).getID();
       verifyAccountAndContainerFromBlobId(blobId, null, null, RestServiceErrorCode.InvalidAccount);
     }
   }
@@ -720,12 +698,7 @@ public class AmbryBlobStorageServiceTest {
   public void badRangeHeaderTest() throws Exception {
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.RANGE, "adsfksakdfsdfkdaklf");
-    try {
-      doOperation(createRestRequest(RestMethod.GET, "/", headers, null), new MockRestResponseChannel());
-      fail("GET operation should have failed because of an invalid range header");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected error code", RestServiceErrorCode.InvalidArgs, e.getErrorCode());
-    }
+    verifyOperationFailure(createRestRequest(RestMethod.GET, "/", headers, null), RestServiceErrorCode.InvalidArgs);
   }
 
   /**
@@ -788,13 +761,7 @@ public class AmbryBlobStorageServiceTest {
     }
     // test one bad request
     RestRequest restRequest = createRestRequest(RestMethod.GET, Operations.GET_PEERS, null, null);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("Request should have failed");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.MissingArgs, e.getErrorCode());
-    }
+    verifyOperationFailure(restRequest, RestServiceErrorCode.MissingArgs);
   }
 
   /**
@@ -811,7 +778,8 @@ public class AmbryBlobStorageServiceTest {
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
       BlobId blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMapUtils.UNKNOWN_DATACENTER_ID,
-          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          Account.UNKNOWN_ACCOUNT_ID, Container.UNKNOWN_CONTAINER_ID, partitionId, false,
+          BlobId.BlobDataType.DATACHUNK);
       RestRequest restRequest =
           createRestRequest(RestMethod.GET, blobId.getID() + "/" + RestUtils.SubResource.Replicas, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -832,22 +800,12 @@ public class AmbryBlobStorageServiceTest {
   public void getReplicasWithBadInputTest() throws Exception {
     // bad input - invalid blob id.
     RestRequest restRequest = createRestRequest(RestMethod.GET, "12345/" + RestUtils.SubResource.Replicas, null, null);
-    try {
-      doOperation(restRequest, new MockRestResponseChannel());
-      fail("Exception should have been thrown because the blobid is invalid");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
-    }
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
 
     // bad input - invalid blob id for this cluster map.
     String blobId = "AAEAAQAAAAAAAADFAAAAJDMyYWZiOTJmLTBkNDYtNDQyNS1iYzU0LWEwMWQ1Yzg3OTJkZQ.gif";
     restRequest = createRestRequest(RestMethod.GET, blobId + "/" + RestUtils.SubResource.Replicas, null, null);
-    try {
-      doOperation(restRequest, new MockRestResponseChannel());
-      fail("Exception should have been thrown because the blobid is invalid");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected RestServiceErrorCode", RestServiceErrorCode.BadRequest, e.getErrorCode());
-    }
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
   }
 
   /**
@@ -923,13 +881,8 @@ public class AmbryBlobStorageServiceTest {
     verifyGetBlobResponse(getSignedRequest, restResponseChannel, null, headers, content, refAccount, refContainer);
 
     // one error scenario to exercise exception path
-    try {
-      doOperation(createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, null, null),
-          new MockRestResponseChannel());
-      fail("Operation should have failed because some necessary parameters are missing");
-    } catch (RestServiceException e) {
-      assertEquals("RestServiceErrorCode not as expected", RestServiceErrorCode.MissingArgs, e.getErrorCode());
-    }
+    verifyOperationFailure(createRestRequest(RestMethod.GET, Operations.GET_SIGNED_URL, null, null),
+        RestServiceErrorCode.MissingArgs);
   }
 
   /**
@@ -951,6 +904,34 @@ public class AmbryBlobStorageServiceTest {
     assertEquals("Unexpected value for " + RestUtils.Headers.ACCESS_CONTROL_MAX_AGE,
         frontendConfig.frontendOptionsValiditySeconds,
         Long.parseLong(restResponseChannel.getHeader(RestUtils.Headers.ACCESS_CONTROL_MAX_AGE)));
+  }
+
+  /**
+   * Tests the case when the TTL update is rejected
+   * @throws Exception
+   */
+  @Test
+  public void updateTtlRejectedTest() throws Exception {
+    FrontendTestRouter testRouter = new FrontendTestRouter();
+    String exceptionMsg = UtilsTest.getRandomString(10);
+    testRouter.exceptionToReturn = new RouterException(exceptionMsg, RouterErrorCode.BlobUpdateNotAllowed);
+    testRouter.exceptionOpType = FrontendTestRouter.OpType.UpdateBlobTtl;
+    ambryBlobStorageService =
+        new AmbryBlobStorageService(frontendConfig, frontendMetrics, responseHandler, testRouter, clusterMap,
+            idConverterFactory, securityServiceFactory, accountService, urlSigningService, accountAndContainerInjector);
+    ambryBlobStorageService.start();
+
+    String blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, (byte) -1, Account.UNKNOWN_ACCOUNT_ID,
+        Container.UNKNOWN_CONTAINER_ID, clusterMap.getAllPartitionIds(null).get(0), false,
+        BlobId.BlobDataType.DATACHUNK).getID();
+    JSONObject headers = new JSONObject();
+    setUpdateTtlHeaders(headers, blobId, "updateTtlRejectedTest");
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, Operations.UPDATE_TTL, headers, null);
+    MockRestResponseChannel restResponseChannel = verifyOperationFailure(restRequest, RestServiceErrorCode.NotAllowed);
+    assertEquals("Unexpected response status", ResponseStatus.MethodNotAllowed, restResponseChannel.getStatus());
+    assertEquals("Unexpected value for the 'allow' header",
+        AmbryBlobStorageService.TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE,
+        restResponseChannel.getHeader(RestUtils.Headers.ALLOW));
   }
 
   // helpers
@@ -1082,6 +1063,25 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
+  /**
+   * Verifies that the operation specified by {@code restRequest} fails with {@code errorCode}.
+   * @param restRequest the {@link RestRequest} that should fail
+   * @param errorCode the {@link RestServiceErrorCode} expected
+   * @return the {@link MockRestResponseChannel} used for the operation
+   * @throws Exception
+   */
+  private MockRestResponseChannel verifyOperationFailure(RestRequest restRequest, RestServiceErrorCode errorCode)
+      throws Exception {
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Operation should have failed");
+    } catch (RestServiceException e) {
+      assertEquals("Op should have failed with a specific error code", errorCode, e.getErrorCode());
+    }
+    return restResponseChannel;
+  }
+
   // Constructor helpers
 
   /**
@@ -1158,10 +1158,10 @@ public class AmbryBlobStorageServiceTest {
     }
   }
 
-  // postGetHeadDeleteTest() helpers
+  // postGetHeadUpdateDeleteTest() helpers
 
   /**
-   * Tests blob POST, GET, HEAD and DELETE operations on the given {@code container}.
+   * Tests blob POST, GET, HEAD, TTL Update and DELETE operations on the given {@code container}.
    * @param toPostAccount the {@link Account} to use in post headers. Can be {@code null} if only using service ID.
    * @param toPostContainer the {@link Container} to use in post headers. Can be {@code null} if only using service ID.
    * @param serviceId the serviceId to use for the POST
@@ -1170,7 +1170,7 @@ public class AmbryBlobStorageServiceTest {
    * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
    * @throws Exception
    */
-  private void doPostGetHeadDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
+  private void doPostGetHeadUpdateDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
       boolean isPrivate, Account expectedAccount, Container expectedContainer) throws Exception {
     final int CONTENT_LENGTH = 1024;
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
@@ -1179,7 +1179,7 @@ public class AmbryBlobStorageServiceTest {
     JSONObject headers = new JSONObject();
     String accountNameInPost = toPostAccount != null ? toPostAccount.getName() : null;
     String containerNameInPost = toPostContainer != null ? toPostContainer.getName() : null;
-    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
+    setAmbryHeadersForPut(headers, TTL_SECS, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
         containerNameInPost);
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
@@ -1210,14 +1210,12 @@ public class AmbryBlobStorageServiceTest {
     getNotModifiedBlobAndVerify(blobId, null);
     getUserMetadataAndVerify(blobId, null, headers);
     getBlobInfoAndVerify(blobId, null, headers, expectedAccount, expectedContainer);
-    deleteBlobAndVerify(blobId);
-
-    // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId, headers, content, expectedAccount, expectedContainer);
+    updateBlobTtlAndVerify(blobId, headers, expectedAccount, expectedContainer, false);
+    deleteBlobAndVerify(blobId, headers, content, expectedAccount, expectedContainer, false);
   }
 
   /**
-   * Tests blob conditional DELETE operations on the given {@code container}.
+   * Tests blob conditional TTL udpate and DELETE operations on the given {@code container}.
    * @param toPostAccount the {@link Account} to use in post headers. Can be {@code null} if only using service ID.
    * @param toPostContainer the {@link Container} to use in post headers. Can be {@code null} if only using service ID.
    * @param serviceId the serviceId to use for the POST
@@ -1226,7 +1224,7 @@ public class AmbryBlobStorageServiceTest {
    * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
    * @throws Exception
    */
-  private void doConditionalDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
+  private void doConditionalUpdateAndDeleteTest(Account toPostAccount, Container toPostContainer, String serviceId,
       boolean isPrivate, Account expectedAccount, Container expectedContainer) throws Exception {
     final int CONTENT_LENGTH = 1024;
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
@@ -1235,57 +1233,45 @@ public class AmbryBlobStorageServiceTest {
     JSONObject headers = new JSONObject();
     String accountNameInPost = toPostAccount != null ? toPostAccount.getName() : null;
     String containerNameInPost = toPostContainer != null ? toPostContainer.getName() : null;
-    setAmbryHeadersForPut(headers, 7200, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
+    setAmbryHeadersForPut(headers, TTL_SECS, isPrivate, serviceId, contentType, ownerId, accountNameInPost,
         containerNameInPost);
     Map<String, String> userMetadata = new HashMap<>();
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key1", "value1");
     userMetadata.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     RestUtilsTest.setUserMetadataHeaders(headers, userMetadata);
-    // perform POST, GET, HEAD successfully before DELETE
+    // perform POST, GET, HEAD successfully
     String blobId = postBlobAndVerify(headers, content, expectedAccount, expectedContainer);
     headers.put(RestUtils.Headers.BLOB_SIZE, (long) CONTENT_LENGTH);
     getBlobAndVerify(blobId, null, null, headers, content, expectedAccount, expectedContainer);
     getHeadAndVerify(blobId, null, null, headers, expectedAccount, expectedContainer);
-    // test Conditional Delete failure because only container name is set
-    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    JSONObject headers2 = new JSONObject();
-    setAccountAndContainerHeaders(headers2, null, containerNameInPost);
-    RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, headers2, null);
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("Operation should have failed because only container name is set");
-    } catch (RestServiceException e) {
-      assertEquals("AmbryBlobStorageService should have thrown a BadRequest exception", RestServiceErrorCode.BadRequest,
-          e.getErrorCode());
+    // failures
+    Map<RestMethod, String> methodsToUris = new HashMap<>();
+    methodsToUris.put(RestMethod.PUT, Operations.UPDATE_TTL);
+    methodsToUris.put(RestMethod.DELETE, blobId);
+    for (Map.Entry<RestMethod, String> methodToUri : methodsToUris.entrySet()) {
+      RestMethod method = methodToUri.getKey();
+      String uri = methodToUri.getValue();
+      JSONObject badHeaders = new JSONObject();
+      if (uri.equals(Operations.UPDATE_TTL)) {
+        setUpdateTtlHeaders(badHeaders, blobId, "doConditionalUpdateAndDeleteTest");
+      }
+      // test Conditional op failure because only container name is set
+      setAccountAndContainerHeaders(badHeaders, null, containerNameInPost);
+      RestRequest restRequest = createRestRequest(method, uri, badHeaders, null);
+      verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
+      // test Conditional op failure because of incorrect account name
+      setAccountAndContainerHeaders(badHeaders, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
+      restRequest = createRestRequest(method, uri, badHeaders, null);
+      verifyOperationFailure(restRequest, RestServiceErrorCode.PreconditionFailed);
+      // test Conditional op failure because of incorrect container name
+      setAccountAndContainerHeaders(badHeaders, accountNameInPost, "INCORRECT_CONTAINER_NAME");
+      restRequest = createRestRequest(method, uri, badHeaders, null);
+      verifyOperationFailure(restRequest, RestServiceErrorCode.PreconditionFailed);
     }
-    // test Conditional Delete failure because of incorrect account name
-    restResponseChannel = new MockRestResponseChannel();
-    setAccountAndContainerHeaders(headers, "INCORRECT_ACCOUNT_NAME", containerNameInPost);
-    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("Operation should have failed because incorrect account name");
-    } catch (RestServiceException e) {
-      assertEquals("AmbryBlobStorageService should have thrown a PreconditionFailed exception",
-          RestServiceErrorCode.PreconditionFailed, e.getErrorCode());
-    }
-    // test Conditional Delete failure because of incorrect container name
-    restResponseChannel = new MockRestResponseChannel();
-    setAccountAndContainerHeaders(headers, accountNameInPost, "INCORRECT_CONTAINER_NAME");
-    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("Operation should have failed because incorrect container name");
-    } catch (RestServiceException e) {
-      assertEquals("AmbryBlobStorageService should have thrown a PreconditionFailed exception",
-          RestServiceErrorCode.PreconditionFailed, e.getErrorCode());
-    }
+    // test success of conditional update
+    updateBlobTtlAndVerify(blobId, headers, expectedAccount, expectedContainer, true);
     // test Conditional Delete succeeds
-    setAccountAndContainerHeaders(headers, accountNameInPost, containerNameInPost);
-    restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
-    verifyDeleteAccepted(restRequest);
-    // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId, headers, content, expectedAccount, expectedContainer);
+    deleteBlobAndVerify(blobId, headers, content, expectedAccount, expectedContainer, true);
   }
 
   /**
@@ -1549,9 +1535,12 @@ public class AmbryBlobStorageServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.AMBRY_CONTENT_TYPE));
     assertTrue(RestUtils.Headers.CREATION_TIME + " header missing",
         restResponseChannel.getHeader(RestUtils.Headers.CREATION_TIME) != null);
-    if (expectedHeaders.getLong(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
+    if (expectedHeaders.has(RestUtils.Headers.TTL)
+        && expectedHeaders.getLong(RestUtils.Headers.TTL) != Utils.Infinite_Time) {
       assertEquals(RestUtils.Headers.TTL + " does not match", expectedHeaders.get(RestUtils.Headers.TTL).toString(),
           restResponseChannel.getHeader(RestUtils.Headers.TTL));
+    } else {
+      assertNull("There should be no TTL in the response", restResponseChannel.getHeader(RestUtils.Headers.TTL));
     }
     if (expectedHeaders.has(RestUtils.Headers.OWNER_ID)) {
       assertEquals(RestUtils.Headers.OWNER_ID + " does not match",
@@ -1595,17 +1584,82 @@ public class AmbryBlobStorageServiceTest {
   }
 
   /**
-   * Deletes the blob with blob ID {@code blobId} and verifies the response returned.
-   * @param blobId the blob ID of the blob to DELETE.
+   * Updates the TTL of the blob with blob ID {@code blobId} and verifies that the operation succeeded.
+   * @param blobId the blob ID of the blob to HEAD.
+   * @param expectedHeaders the expected headers in the GET response triggered for verification.
+   * @param expectedAccount the expected account in the GET response triggered for verification. Also used to attach
+   *                        preconditions if required
+   * @param expectedContainer the expected container in the GET response triggered for verification. Also used to attach
+   *                        preconditions if required
+   * @param attachPreconditions if {@code true}, attaches preconditions to the request
    * @throws Exception
    */
-  private void deleteBlobAndVerify(String blobId) throws Exception {
-    RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
-    verifyDeleteAccepted(restRequest);
+  private void updateBlobTtlAndVerify(String blobId, JSONObject expectedHeaders, Account expectedAccount,
+      Container expectedContainer, boolean attachPreconditions) throws Exception {
+    JSONObject headers = new JSONObject();
+    setUpdateTtlHeaders(headers, blobId, "updateBlobTtlAndVerify");
+    if (attachPreconditions) {
+      setAccountAndContainerHeaders(headers, expectedAccount.getName(), expectedContainer.getName());
+    }
+    RestRequest restRequest = createRestRequest(RestMethod.PUT, Operations.UPDATE_TTL, headers, null);
+    verifyUpdateBlobTtlResponse(restRequest);
+    expectedHeaders.remove(RestUtils.Headers.TTL);
+    getBlobInfoAndVerify(blobId, GetOption.None, expectedHeaders, expectedAccount, expectedContainer);
   }
 
   /**
-   * Verifies that the right {@link ResponseStatus} is returned for GET, HEAD and DELETE once a blob is deleted.
+   * Sets headers required for TTL update
+   * @param headers the headers object to set the headers in
+   * @param blobId the blob ID being updated
+   * @param serviceId the ID of service updating the blob
+   * @throws JSONException
+   */
+  private void setUpdateTtlHeaders(JSONObject headers, String blobId, String serviceId) throws JSONException {
+    headers.put(RestUtils.Headers.BLOB_ID, blobId);
+    headers.put(RestUtils.Headers.SERVICE_ID, "updateBlobTtlAndVerify");
+  }
+
+  /**
+   * Verifies that a request returns the right response code once the blob's TTL has been updated.
+   * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
+   * @throws Exception
+   */
+  private void verifyUpdateBlobTtlResponse(RestRequest restRequest) throws Exception {
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertTrue("No Date header", restResponseChannel.getHeader(RestUtils.Headers.DATE) != null);
+    assertEquals("Content-Length is not 0", "0", restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH));
+  }
+
+  /**
+   * Deletes the blob with blob ID {@code blobId} and verifies the response returned. Also checks responses from
+   * GET, HEAD, TTL Update and DELETE
+   * @param blobId the blob ID of the blob to DELETE.
+   * @param expectedHeaders the expected headers in the GET response triggered for verification (if right options are
+   *                        provided).
+   * @param expectedContent the expected account in the GET response triggered for verification (if right options are
+   *                        provided). Also used to attach preconditions if required.
+   * @param expectedAccount the expected container in the GET response triggered for verification (if right options are
+   *                        provided). Also used to attach preconditions if required.
+   * @param expectedContainer the {@link Container} details that are eventually expected to be populated.
+   * @param attachPreconditions if {@code true}, attaches preconditions to the request
+   * @throws Exception
+   */
+  private void deleteBlobAndVerify(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent,
+      Account expectedAccount, Container expectedContainer, boolean attachPreconditions) throws Exception {
+    JSONObject headers = new JSONObject();
+    if (attachPreconditions) {
+      setAccountAndContainerHeaders(headers, expectedAccount.getName(), expectedContainer.getName());
+    }
+    RestRequest restRequest = createRestRequest(RestMethod.DELETE, blobId, headers, null);
+    verifyDeleteAccepted(restRequest);
+    verifyOperationsAfterDelete(blobId, expectedHeaders, expectedContent, expectedAccount, expectedContainer);
+  }
+
+  /**
+   * Verifies that the right {@link ResponseStatus} is returned for GET, HEAD, TTL update and DELETE once a blob is
+   * deleted.
    * @param blobId the ID of the blob that was deleted.
    * @param expectedHeaders the expected headers in the response if the right options are provided.
    * @param expectedContent the expected content of the blob if the right options are provided.
@@ -1616,10 +1670,15 @@ public class AmbryBlobStorageServiceTest {
   private void verifyOperationsAfterDelete(String blobId, JSONObject expectedHeaders, ByteBuffer expectedContent,
       Account expectedAccount, Container expectedContainer) throws Exception {
     RestRequest restRequest = createRestRequest(RestMethod.GET, blobId, null, null);
-    verifyGone(restRequest);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
 
     restRequest = createRestRequest(RestMethod.HEAD, blobId, null, null);
-    verifyGone(restRequest);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
+
+    JSONObject headers = new JSONObject();
+    setUpdateTtlHeaders(headers, blobId, "verifyOperationsAfterDelete");
+    restRequest = createRestRequest(RestMethod.PUT, Operations.UPDATE_TTL, headers, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
 
     restRequest = createRestRequest(RestMethod.DELETE, blobId, null, null);
     verifyDeleteAccepted(restRequest);
@@ -1631,21 +1690,6 @@ public class AmbryBlobStorageServiceTest {
       getUserMetadataAndVerify(blobId, option, expectedHeaders);
       getBlobInfoAndVerify(blobId, option, expectedHeaders, expectedAccount, expectedContainer);
       getHeadAndVerify(blobId, null, option, expectedHeaders, expectedAccount, expectedContainer);
-    }
-  }
-
-  /**
-   * Verifies that a blob is GONE after it is deleted.
-   * @param restRequest the {@link RestRequest} to send to {@link AmbryBlobStorageService}.
-   */
-  private void verifyGone(RestRequest restRequest) throws Exception {
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    try {
-      doOperation(restRequest, restResponseChannel);
-      fail("Operation should have failed because blob is deleted");
-    } catch (RestServiceException e) {
-      assertEquals("AmbryBlobStorageService should have thrown a Deleted exception", RestServiceErrorCode.Deleted,
-          e.getErrorCode());
     }
   }
 
@@ -1704,6 +1748,9 @@ public class AmbryBlobStorageServiceTest {
       RestMethod[] restMethods;
       if (mode.equals(FrontendTestSecurityServiceFactory.Mode.ProcessResponse)) {
         restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.OPTIONS};
+      } else if (mode.equals(FrontendTestSecurityServiceFactory.Mode.ProcessRequest)) {
+        restMethods =
+            new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.DELETE, RestMethod.OPTIONS};
       } else if (mode.equals(FrontendTestSecurityServiceFactory.Mode.PostProcessRequest)) {
         restMethods = new RestMethod[]{RestMethod.GET, RestMethod.HEAD, RestMethod.POST, RestMethod.DELETE};
       } else {
@@ -1729,7 +1776,7 @@ public class AmbryBlobStorageServiceTest {
   private void doExternalServicesBadInputTest(RestMethod[] restMethods, String expectedExceptionMsg,
       boolean expectRouterCall) throws JSONException {
     for (RestMethod restMethod : restMethods) {
-      if (restMethod.equals(RestMethod.UNKNOWN) || restMethod.equals(RestMethod.PUT)) {
+      if (restMethod.equals(RestMethod.UNKNOWN)) {
         continue;
       }
       JSONObject headers = new JSONObject();
@@ -1855,6 +1902,7 @@ public class AmbryBlobStorageServiceTest {
     if (blobId.startsWith("/")) {
       blobId = blobId.substring(1);
     }
+    // PUT is verified in the tests of the individual handlers.
     for (RestMethod restMethod : Lists.newArrayList(RestMethod.GET, RestMethod.HEAD, RestMethod.DELETE)) {
       RestRequest restRequest = createRestRequest(restMethod, "/" + blobId, null, null);
       MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
@@ -1941,9 +1989,8 @@ public class AmbryBlobStorageServiceTest {
 
   /**
    * Prepopulates the {@link AccountService} with a reference {@link Account} and {@link InMemAccountService#UNKNOWN_ACCOUNT}.
-   * @throws Exception
    */
-  private void populateAccountService() throws Exception {
+  private void populateAccountService() {
     accountService.clear();
     accountService.updateAccounts(Lists.newArrayList(refAccount, InMemAccountService.UNKNOWN_ACCOUNT));
   }
@@ -1958,12 +2005,7 @@ public class AmbryBlobStorageServiceTest {
     setAmbryHeadersForPut(headers, 7200, true, "someServiceId", "application/octet-stream", "someOwnerId",
         "someAccountName", "someContainerName");
     headers.put(header, "adsfksakdfsdfkdaklf");
-    try {
-      doOperation(createRestRequest(RestMethod.POST, "/", headers, null), new MockRestResponseChannel());
-      fail("Should have thrown");
-    } catch (RestServiceException e) {
-      assertEquals("Unexpected error code", RestServiceErrorCode.BadRequest, e.getErrorCode());
-    }
+    verifyOperationFailure(createRestRequest(RestMethod.POST, "/", headers, null), RestServiceErrorCode.BadRequest);
   }
 
   /**
@@ -1973,7 +2015,7 @@ public class AmbryBlobStorageServiceTest {
    *                                                 allowed; {@code false} otherwise.
    * @throws Exception
    */
-  private void injectAccountAndContainerForPutAndVerify(Container container, boolean shouldAllowServiceIdBasedPut)
+  private void injectAccountAndContainerForPostAndVerify(Container container, boolean shouldAllowServiceIdBasedPut)
       throws Exception {
     configProps.setProperty("frontend.allow.service.id.based.post.request",
         String.valueOf(shouldAllowServiceIdBasedPut));

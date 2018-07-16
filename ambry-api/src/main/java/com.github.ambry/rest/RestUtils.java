@@ -185,6 +185,10 @@ public class RestUtils {
      * prefix for any header to be set as user metadata for the given blob
      */
     public final static String USER_META_DATA_HEADER_PREFIX = "x-ambry-um-";
+    /**
+     * {@code "allow"}
+     */
+    public final static String ALLOW = "allow";
   }
 
   /**
@@ -201,6 +205,12 @@ public class RestUtils {
      * The key for the target {@link com.github.ambry.account.Container} indicated by the request.
      */
     public final static String TARGET_CONTAINER_KEY = "ambry-internal-key-target-container";
+
+    /**
+     * To be set if the operation knows the keep-alive behavior it prefers on error. Valid values are boolean.
+     * Not authoritative, only a hint
+     */
+    public final static String KEEP_ALIVE_ON_ERROR_HINT = "ambry-internal-key-keep-alive-on-error-hint";
   }
 
   /**

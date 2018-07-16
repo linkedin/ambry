@@ -65,6 +65,9 @@ class AmbrySecurityService implements SecurityService {
       exception = new RestServiceException("SecurityService is closed", RestServiceErrorCode.ServiceUnavailable);
     } else if (restRequest == null) {
       throw new IllegalArgumentException("RestRequest is null");
+    } else if (restRequest.getArgs().containsKey(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT)) {
+      exception = new RestServiceException(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT + " is not allowed in the request",
+          RestServiceErrorCode.BadRequest);
     } else if (urlSigningService.isRequestSigned(restRequest)) {
       try {
         urlSigningService.verifySignedRequest(restRequest);
@@ -100,8 +103,8 @@ class AmbrySecurityService implements SecurityService {
     } else if (restRequest == null || callback == null) {
       throw new IllegalArgumentException("RestRequest or Callback is null");
     }
-    // check preconditions for DELETE request
-    if (restRequest.getRestMethod() == RestMethod.DELETE) {
+    // check preconditions for request
+    if (restRequest.getRestMethod() == RestMethod.DELETE || restRequest.getRestMethod() == RestMethod.PUT) {
       try {
         accountAndContainerNamePreconditionCheck(restRequest);
       } catch (Exception e) {
@@ -130,7 +133,8 @@ class AmbrySecurityService implements SecurityService {
       if (operationOrBlobId.startsWith("/")) {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
-      if (blobInfo == null && !restRequest.getRestMethod().equals(RestMethod.OPTIONS)) {
+      RestMethod restMethod = restRequest.getRestMethod();
+      if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)) {
         if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
           throw new IllegalArgumentException("BlobInfo is null");
         }
@@ -138,7 +142,6 @@ class AmbrySecurityService implements SecurityService {
       try {
         GetBlobOptions options;
         responseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        RestMethod restMethod = restRequest.getRestMethod();
         switch (restMethod) {
           case HEAD:
             options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
@@ -182,6 +185,7 @@ class AmbrySecurityService implements SecurityService {
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
             break;
           case OPTIONS:
+          case PUT:
             break;
           default:
             exception = new RestServiceException("Cannot process response for request with method " + restMethod,

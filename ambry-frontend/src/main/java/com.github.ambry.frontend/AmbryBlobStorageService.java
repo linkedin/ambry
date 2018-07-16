@@ -38,6 +38,7 @@ import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -56,6 +57,8 @@ import static com.github.ambry.rest.RestUtils.*;
  * All the operations that need to be performed by the Ambry frontend are supported here.
  */
 class AmbryBlobStorageService implements BlobStorageService {
+  static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
+
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
   private static final String OPERATION_TYPE_INBOUND_ID_CONVERSION = "Inbound Id Conversion";
@@ -80,6 +83,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private PostBlobHandler postBlobHandler;
+  private TtlUpdateHandler ttlUpdateHandler;
   private boolean isUp = false;
 
   /**
@@ -123,6 +127,9 @@ class AmbryBlobStorageService implements BlobStorageService {
             frontendMetrics, clusterMap);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, accountAndContainerInjector, frontendMetrics, router);
+    ttlUpdateHandler =
+        new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
+            clusterMap);
     isUp = true;
     logger.info("AmbryBlobStorageService has started");
     frontendMetrics.blobStorageServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -213,11 +220,46 @@ class AmbryBlobStorageService implements BlobStorageService {
 
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    long processingStartTime = System.currentTimeMillis();
+    long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    Exception exception =
-        isUp ? new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod)
-            : new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
-    submitResponse(restRequest, restResponseChannel, null, exception);
+    ReadableStreamChannel response = null;
+    Exception exception = null;
+    try {
+      logger.trace("Handling PUT request - {}", restRequest.getUri());
+      checkAvailable();
+      // TODO: make this non blocking once all handling of individual methods is moved to their own classes
+      securityService.preProcessRequest(restRequest).get();
+      String operationOrBlobId =
+          RestUtils.getOperationOrBlobIdFromUri(restRequest, null, frontendConfig.frontendPathPrefixesToRemove);
+      if (operationOrBlobId.startsWith("/")) {
+        operationOrBlobId = operationOrBlobId.substring(1);
+      }
+      if (operationOrBlobId.equalsIgnoreCase(Operations.UPDATE_TTL)) {
+        ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          if (e != null && e instanceof RouterException
+              && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
+            try {
+              restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
+            } catch (RestServiceException exc) {
+              logger.error("Exception while setting {}", Headers.ALLOW, exc);
+            }
+          }
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      } else {
+        exception =
+            new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest);
+      }
+      preProcessingTime = System.currentTimeMillis() - processingStartTime;
+    } catch (Exception e) {
+      exception = extractExecutionExceptionCause(e);
+    } finally {
+      frontendMetrics.putPreProcessingTimeInMs.update(preProcessingTime);
+      if (exception != null) {
+        submitResponse(restRequest, restResponseChannel, response, exception);
+      }
+    }
   }
 
   @Override

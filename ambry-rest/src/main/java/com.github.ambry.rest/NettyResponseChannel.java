@@ -410,12 +410,36 @@ class NettyResponseChannel implements RestResponseChannel {
       response.headers().set(ERROR_CODE_HEADER, restServiceErrorCode.name());
     }
     response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=UTF-8");
-    boolean keepAlive =
-        !forceClose && HttpUtil.isKeepAlive(responseMetadata) && request != null && !request.getRestMethod()
-            .equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)
-            && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
-    HttpUtil.setKeepAlive(response, keepAlive);
+    // if there is an ALLOW header in the response so far constructed, copy it
+    if (responseMetadata.headers().contains(HttpHeaderNames.ALLOW)) {
+      response.headers().set(HttpHeaderNames.ALLOW, responseMetadata.headers().get(HttpHeaderNames.ALLOW));
+    } else if (errorResponseStatus == ResponseStatus.MethodNotAllowed) {
+      logger.warn("Response is {} but there is no value for {}", ResponseStatus.MethodNotAllowed,
+          HttpHeaderNames.ALLOW);
+    }
+    HttpUtil.setKeepAlive(response, shouldKeepAlive(status));
     return response;
+  }
+
+  /**
+   * @param status the {@link HttpResponseStatus}
+   * @return {@code true} if the channel should be kept alive
+   */
+  private boolean shouldKeepAlive(HttpResponseStatus status) {
+    boolean shouldKeepAlive = true;
+    if (request != null) {
+      if (request.getArgs().containsKey(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT)) {
+        shouldKeepAlive =
+            Boolean.parseBoolean(request.getArgs().get(RestUtils.InternalKeys.KEEP_ALIVE_ON_ERROR_HINT).toString());
+      } else if (request.getRestMethod().equals(RestMethod.POST)) {
+        shouldKeepAlive = false;
+      } else if (request.getRestMethod().equals(RestMethod.PUT) && (HttpUtil.isTransferEncodingChunked(request.request)
+          || HttpUtil.getContentLength(request.request, 0L) > 0)) {
+        shouldKeepAlive = false;
+      }
+    }
+    return shouldKeepAlive && !forceClose && HttpUtil.isKeepAlive(responseMetadata)
+        && !CLOSE_CONNECTION_ERROR_STATUSES.contains(status);
   }
 
   /**

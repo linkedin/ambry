@@ -19,4 +19,5 @@ package com.github.ambry.frontend;
 public class Operations {
   public static final String GET_PEERS = "peers";
   public static final String GET_SIGNED_URL = "signedUrl";
+  public static final String UPDATE_TTL = "updateTtl";
 }

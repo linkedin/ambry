@@ -22,7 +22,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -882,6 +881,14 @@ public class Utils {
         }
       });
     }
+  }
+
+  /**
+   * @param str the {@link String} to examine
+   * @return {@code true} if {@code str} is {@code null} or is an empty string.
+   */
+  public static boolean isNullOrEmpty(String str) {
+    return str == null || str.isEmpty();
   }
 
   /**
