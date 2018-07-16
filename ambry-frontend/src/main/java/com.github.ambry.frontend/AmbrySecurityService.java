@@ -133,8 +133,8 @@ class AmbrySecurityService implements SecurityService {
       if (operationOrBlobId.startsWith("/")) {
         operationOrBlobId = operationOrBlobId.substring(1);
       }
-      if (blobInfo == null && !restRequest.getRestMethod().equals(RestMethod.OPTIONS) && !restRequest.getRestMethod()
-          .equals(RestMethod.PUT)) {
+      RestMethod restMethod = restRequest.getRestMethod();
+      if (blobInfo == null && !restMethod.equals(RestMethod.OPTIONS) && !restMethod.equals(RestMethod.PUT)) {
         if (!operationOrBlobId.equals(Operations.GET_SIGNED_URL)) {
           throw new IllegalArgumentException("BlobInfo is null");
         }
@@ -142,7 +142,6 @@ class AmbrySecurityService implements SecurityService {
       try {
         GetBlobOptions options;
         responseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        RestMethod restMethod = restRequest.getRestMethod();
         switch (restMethod) {
           case HEAD:
             options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);

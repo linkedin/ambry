@@ -238,7 +238,6 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       if (operationOrBlobId.equalsIgnoreCase(Operations.UPDATE_TTL)) {
         ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          exception.set(e);
           if (e != null && e instanceof RouterException
               && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
             try {
@@ -247,6 +246,7 @@ class AmbryBlobStorageService implements BlobStorageService {
               logger.error("Exception while setting {}", Headers.ALLOW, exc);
             }
           }
+          submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {
         exception.set(
@@ -257,7 +257,9 @@ class AmbryBlobStorageService implements BlobStorageService {
       exception.set(extractExecutionExceptionCause(e));
     } finally {
       frontendMetrics.putPreProcessingTimeInMs.update(preProcessingTime);
-      submitResponse(restRequest, restResponseChannel, response.get(), exception.get());
+      if (exception.get() != null) {
+        submitResponse(restRequest, restResponseChannel, response.get(), exception.get());
+      }
     }
   }
 
