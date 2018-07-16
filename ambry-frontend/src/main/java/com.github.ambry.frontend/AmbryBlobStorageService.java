@@ -45,6 +45,7 @@ import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,6 +224,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
+    AtomicReference<ReadableStreamChannel> response = new AtomicReference<>(null);
+    AtomicReference<Exception> exception = new AtomicReference<>(null);
     try {
       logger.trace("Handling PUT request - {}", restRequest.getUri());
       checkAvailable();
@@ -235,25 +238,26 @@ class AmbryBlobStorageService implements BlobStorageService {
       }
       if (operationOrBlobId.equalsIgnoreCase(Operations.UPDATE_TTL)) {
         ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          exception.set(e);
           if (e != null && e instanceof RouterException
               && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
             try {
               restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
-            } catch (RestServiceException exp) {
-              logger.error("Exception while setting {}", Headers.ALLOW, exp);
+            } catch (RestServiceException exc) {
+              logger.error("Exception while setting {}", Headers.ALLOW, exc);
             }
           }
-          submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {
-        submitResponse(restRequest, restResponseChannel, null,
+        exception.set(
             new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest));
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
     } catch (Exception e) {
-      submitResponse(restRequest, restResponseChannel, null, extractExecutionExceptionCause(e));
+      exception.set(extractExecutionExceptionCause(e));
     } finally {
       frontendMetrics.putPreProcessingTimeInMs.update(preProcessingTime);
+      submitResponse(restRequest, restResponseChannel, response.get(), exception.get());
     }
   }
 
