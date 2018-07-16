@@ -1119,7 +1119,7 @@ public final class ServerTestUtil {
       putFutures.add(future);
     }
     for (Future<String> future : putFutures) {
-      future.get(5, TimeUnit.SECONDS);
+      future.get(20, TimeUnit.SECONDS);
     }
     assertTrue("Did not receive all callbacks in time", callbackLatch.await(1, TimeUnit.SECONDS));
     if (exceptionRef.get() != null) {
@@ -1283,7 +1283,8 @@ public final class ServerTestUtil {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         propertyList.add(new BlobProperties(1000, "serviceid1", accountId, containerId, testEncryption));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
-            clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false, BlobId.BlobDataType.DATACHUNK));
+            clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false,
+            BlobId.BlobDataType.DATACHUNK));
         dataList.add(TestUtils.getRandomBytes(1000));
         if (testEncryption) {
           encryptionKeyList.add(TestUtils.getRandomBytes(128));
@@ -1852,7 +1853,8 @@ public final class ServerTestUtil {
   }
 
   private static void checkBlobId(Router router, BlobId blobId, byte[] data) throws Exception {
-    GetBlobResult result = router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build()).get(1, TimeUnit.SECONDS);
+    GetBlobResult result =
+        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build()).get(20, TimeUnit.SECONDS);
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
         result.getBlobInfo().getBlobProperties().getBlobSize());
