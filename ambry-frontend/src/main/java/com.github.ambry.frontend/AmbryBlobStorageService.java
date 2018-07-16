@@ -45,7 +45,6 @@ import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -224,8 +223,8 @@ class AmbryBlobStorageService implements BlobStorageService {
     long processingStartTime = System.currentTimeMillis();
     long preProcessingTime = 0;
     handlePrechecks(restRequest, restResponseChannel);
-    AtomicReference<ReadableStreamChannel> response = new AtomicReference<>(null);
-    AtomicReference<Exception> exception = new AtomicReference<>(null);
+    ReadableStreamChannel response = null;
+    Exception exception = null;
     try {
       logger.trace("Handling PUT request - {}", restRequest.getUri());
       checkAvailable();
@@ -249,16 +248,16 @@ class AmbryBlobStorageService implements BlobStorageService {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {
-        exception.set(
-            new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest));
+        exception =
+            new RestServiceException("Unrecognized operation: " + operationOrBlobId, RestServiceErrorCode.BadRequest);
       }
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
     } catch (Exception e) {
-      exception.set(extractExecutionExceptionCause(e));
+      exception = extractExecutionExceptionCause(e);
     } finally {
       frontendMetrics.putPreProcessingTimeInMs.update(preProcessingTime);
-      if (exception.get() != null) {
-        submitResponse(restRequest, restResponseChannel, response.get(), exception.get());
+      if (exception != null) {
+        submitResponse(restRequest, restResponseChannel, response, exception);
       }
     }
   }
