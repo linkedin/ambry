@@ -84,7 +84,7 @@ public class MessageInfoTest {
    * @param containerId the expected container id in {@code info}.
    * @param operationTimeMs the expected operation time (ms) in {@code info}.
    */
-  private void checkGetters(MessageInfo info, StoreKey key, long size, boolean isDeleted, boolean isTtlUpdated,
+  public static void checkGetters(MessageInfo info, StoreKey key, long size, boolean isDeleted, boolean isTtlUpdated,
       long expiresAtMs, Long crc, short accountId, short containerId, long operationTimeMs) {
     assertEquals("Key not as expected", key, info.getStoreKey());
     assertEquals("Size not as expected", size, info.getSize());

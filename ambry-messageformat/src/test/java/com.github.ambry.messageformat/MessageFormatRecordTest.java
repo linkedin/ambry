@@ -652,4 +652,26 @@ public class MessageFormatRecordTest {
       Assert.assertEquals("Error code mismatch", MessageFormatErrorCodes.Data_Corrupt, e.getErrorCode());
     }
   }
+
+  /**
+   * @param stream stream that contains data
+   * @return the header as extracted from the {@code stream}
+   * @throws IOException
+   * @throws MessageFormatException
+   */
+  public static MessageHeader_Format getHeader(DataInputStream stream) throws IOException, MessageFormatException {
+    short version = stream.readShort();
+    if (!isValidHeaderVersion(version)) {
+      throw new MessageFormatException("Version not known while reading message - " + version,
+          MessageFormatErrorCodes.Unknown_Format_Version);
+    }
+    byte[] bytes = new byte[getHeaderSizeForVersion(version)];
+    Utils.readBytesFromStream(stream, bytes, Short.BYTES, bytes.length - Short.BYTES);
+    ByteBuffer buf = ByteBuffer.wrap(bytes);
+    buf.putShort(version);
+    buf.rewind();
+    MessageHeader_Format header = getMessageHeader(version, buf);
+    header.verifyHeader();
+    return header;
+  }
 }

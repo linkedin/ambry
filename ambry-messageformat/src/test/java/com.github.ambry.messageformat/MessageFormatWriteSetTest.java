@@ -15,13 +15,12 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockId;
-import com.github.ambry.store.Write;
+import com.github.ambry.store.MockWrite;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Assert;
@@ -29,32 +28,6 @@ import org.junit.Test;
 
 
 public class MessageFormatWriteSetTest {
-
-  public class MockWrite implements Write {
-
-    ByteBuffer buf;
-
-    public MockWrite(int size) {
-      buf = ByteBuffer.allocate(size);
-    }
-
-    @Override
-    public int appendFrom(ByteBuffer buffer) throws IOException {
-      int toWrite = buffer.remaining();
-      buf.put(buffer);
-      return toWrite;
-    }
-
-    @Override
-    public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
-      channel.read(buf);
-    }
-
-    public ByteBuffer getBuffer() {
-      buf.flip();
-      return buf;
-    }
-  }
 
   @Test
   public void writeSetTest() throws IOException {

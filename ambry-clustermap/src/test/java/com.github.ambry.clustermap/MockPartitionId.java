@@ -102,7 +102,7 @@ public class MockPartitionId implements PartitionId {
   /**
    * If all replicaIds == !isSealed, then partition status = Read-Write, else Read-Only
    */
-  void resolvePartitionStatus() {
+  public void resolvePartitionStatus() {
     boolean isReadWrite = true;
     for (ReplicaId replicaId : replicaIds) {
       if (replicaId.isSealed()) {

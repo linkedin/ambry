@@ -14,7 +14,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
 
@@ -31,8 +30,8 @@ import java.nio.ByteBuffer;
  *
  */
 public class TtlUpdateMessageFormatInputStream extends MessageFormatInputStream {
-  public TtlUpdateMessageFormatInputStream(StoreKey key, short accountId, short containerId, long updateTimeInMs)
-      throws MessageFormatException {
+  public TtlUpdateMessageFormatInputStream(StoreKey key, short accountId, short containerId, long expiresAtMs,
+      long updateTimeInMs) throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int recordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(UpdateRecord.Type.TTL_UPDATE);
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + recordSize);
@@ -43,7 +42,7 @@ public class TtlUpdateMessageFormatInputStream extends MessageFormatInputStream 
         MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
     buffer.put(key.toBytes());
     MessageFormatRecord.Update_Format_V3.serialize(buffer,
-        new UpdateRecord(accountId, containerId, updateTimeInMs, new TtlUpdateSubRecord(Utils.Infinite_Time)));
+        new UpdateRecord(accountId, containerId, updateTimeInMs, new TtlUpdateSubRecord(expiresAtMs)));
     messageLength = buffer.capacity();
     buffer.flip();
   }

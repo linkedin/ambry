@@ -32,6 +32,7 @@ import com.github.ambry.messageformat.MessageFormatMetrics;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.network.CompositeSend;
 import com.github.ambry.network.Request;
 import com.github.ambry.network.RequestResponseChannel;
@@ -39,6 +40,7 @@ import com.github.ambry.network.Send;
 import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
@@ -60,6 +62,8 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.FindToken;
@@ -134,11 +138,11 @@ public class AmbryRequests implements RequestAPI {
     this.enableDataPrefetch = enableDataPrefetch;
     this.storeKeyConverterFactory = storeKeyConverterFactory;
 
-    requestsDisableInfo.put(RequestOrResponseType.PutRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.GetRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.DeleteRequest, Collections.newSetFromMap(new ConcurrentHashMap<>()));
-    requestsDisableInfo.put(RequestOrResponseType.ReplicaMetadataRequest,
-        Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    for (RequestOrResponseType requestType : EnumSet.of(RequestOrResponseType.PutRequest,
+        RequestOrResponseType.GetRequest, RequestOrResponseType.DeleteRequest,
+        RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest)) {
+      requestsDisableInfo.put(requestType, Collections.newSetFromMap(new ConcurrentHashMap<>()));
+    }
 
     Set<PartitionId> partitionIds = new HashSet<>();
     for (ReplicaId replicaId : clusterMap.getReplicaIds(currentNode)) {
@@ -166,6 +170,9 @@ public class AmbryRequests implements RequestAPI {
           break;
         case AdminRequest:
           handleAdminRequest(request);
+          break;
+        case TtlUpdateRequest:
+          handleTtlUpdateRequest(request);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -459,6 +466,86 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
             metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  @Override
+  public void handleTtlUpdateRequest(Request request) throws IOException, InterruptedException {
+    TtlUpdateRequest updateRequest =
+        TtlUpdateRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    metrics.updateBlobTtlRequestQueueTimeInMs.update(requestQueueTime);
+    metrics.updateBlobTtlRequestRate.mark();
+    long startTime = SystemTime.getInstance().milliseconds();
+    TtlUpdateResponse response = null;
+    try {
+      ServerErrorCode error =
+          validateRequest(updateRequest.getBlobId().getPartition(), RequestOrResponseType.TtlUpdateRequest, false);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating TtlUpdateRequest failed with error {} for request {}", error, updateRequest);
+        response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(), error);
+      } else {
+        BlobId convertedStoreKey =
+            (BlobId) getConvertedStoreKeys(Collections.singletonList(updateRequest.getBlobId())).get(0);
+        MessageFormatInputStream stream =
+            new TtlUpdateMessageFormatInputStream(convertedStoreKey, convertedStoreKey.getAccountId(),
+                convertedStoreKey.getContainerId(), updateRequest.getExpiresAtMs(),
+                updateRequest.getOperationTimeInMs());
+        MessageInfo info =
+            new MessageInfo(convertedStoreKey, stream.getSize(), false, true, updateRequest.getExpiresAtMs(),
+                convertedStoreKey.getAccountId(), convertedStoreKey.getContainerId(),
+                updateRequest.getOperationTimeInMs());
+        MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, Collections.singletonList(info), false);
+        Store store = storageManager.getStore(updateRequest.getBlobId().getPartition());
+        store.updateTtl(writeset);
+        response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
+            ServerErrorCode.No_Error);
+        if (notification != null) {
+          notification.onBlobReplicaUpdated(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
+              BlobReplicaSourceType.PRIMARY, UpdateType.TTL_UPDATE, info);
+        }
+      }
+    } catch (StoreException e) {
+      boolean logInErrorLevel = false;
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+        metrics.idNotFoundError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+        metrics.ttlExpiredError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+        metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+        metrics.ttlUpdateAuthorizationFailure.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Already_Updated) {
+        metrics.ttlAlreadyUpdatedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Update_Not_Allowed) {
+        metrics.ttlUpdateRejectedError.inc();
+      } else {
+        logInErrorLevel = true;
+        metrics.unExpectedStoreTtlUpdateError.inc();
+      }
+      if (logInErrorLevel) {
+        logger.error("Store exception on a TTL update with error code {} for request {}", e.getErrorCode(),
+            updateRequest, e);
+      } else {
+        logger.trace("Store exception on a TTL update with error code {} for request {}", e.getErrorCode(),
+            updateRequest, e);
+      }
+      response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
+      logger.error("Unknown exception for TTL update request {}", updateRequest, e);
+      response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+      metrics.unExpectedStoreTtlUpdateError.inc();
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", updateRequest, response, processingTime);
+      metrics.updateBlobTtlProcessingTimeInMs.update(processingTime);
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.updateBlobTtlResponseQueueTimeInMs, metrics.updateBlobTtlSendTimeInMs,
+            metrics.updateBlobTtlTotalTimeInMs, null, null, totalTimeSpent));
   }
 
   public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
@@ -806,7 +893,8 @@ public class AmbryRequests implements RequestAPI {
             Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
             controlRequestForPartitions(
                 EnumSet.of(RequestOrResponseType.GetRequest, RequestOrResponseType.ReplicaMetadataRequest,
-                    RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds, true);
+                    RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
+                    RequestOrResponseType.TtlUpdateRequest), partitionIds, true);
             if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                 true)) {
               if (storageManager.controlCompactionForBlobStore(partitionId, true)) {
@@ -842,8 +930,8 @@ public class AmbryRequests implements RequestAPI {
             if (storageManager.controlCompactionForBlobStore(partitionId, false)) {
               Collection<PartitionId> partitionIds = Collections.singletonList(partitionId);
               controlRequestForPartitions(
-                  EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest), partitionIds,
-                  false);
+                  EnumSet.of(RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest,
+                      RequestOrResponseType.TtlUpdateRequest), partitionIds, false);
               if (replicationManager.controlReplicationForPartitions(partitionIds, Collections.<String>emptyList(),
                   false)) {
                 if (isRemoteLagLesserOrEqual(partitionIds, 0,

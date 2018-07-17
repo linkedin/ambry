@@ -94,11 +94,11 @@ public class ServerMetrics {
   public final Histogram deleteBlobSendTimeInMs;
   public final Histogram deleteBlobTotalTimeInMs;
 
-  public final Histogram ttlBlobRequestQueueTimeInMs;
-  public final Histogram ttlBlobProcessingTimeInMs;
-  public final Histogram ttlBlobResponseQueueTimeInMs;
-  public final Histogram ttlBlobSendTimeInMs;
-  public final Histogram ttlBlobTotalTimeInMs;
+  public final Histogram updateBlobTtlRequestQueueTimeInMs;
+  public final Histogram updateBlobTtlProcessingTimeInMs;
+  public final Histogram updateBlobTtlResponseQueueTimeInMs;
+  public final Histogram updateBlobTtlSendTimeInMs;
+  public final Histogram updateBlobTtlTotalTimeInMs;
 
   public final Histogram replicaMetadataRequestQueueTimeInMs;
   public final Histogram replicaMetadataRequestProcessingTimeInMs;
@@ -149,7 +149,7 @@ public class ServerMetrics {
   public final Meter getBlobAllRequestRate;
   public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
-  public final Meter ttlBlobRequestRate;
+  public final Meter updateBlobTtlRequestRate;
   public final Meter replicaMetadataRequestRate;
   public final Meter triggerCompactionRequestRate;
   public final Meter requestControlRequestRate;
@@ -172,7 +172,7 @@ public class ServerMetrics {
   public final Counter storeIOError;
   public final Counter unExpectedStorePutError;
   public final Counter unExpectedStoreGetError;
-  public final Counter unExpectedStoreTTLError;
+  public final Counter unExpectedStoreTtlUpdateError;
   public final Counter unExpectedStoreDeleteError;
   public final Counter unExpectedAdminOperationError;
   public final Counter unExpectedStoreFindEntriesError;
@@ -186,6 +186,9 @@ public class ServerMetrics {
   public final Counter temporarilyDisabledError;
   public final Counter getAuthorizationFailure;
   public final Counter deleteAuthorizationFailure;
+  public final Counter ttlUpdateAuthorizationFailure;
+  public final Counter ttlAlreadyUpdatedError;
+  public final Counter ttlUpdateRejectedError;
 
   public ServerMetrics(MetricRegistry registry) {
     putBlobRequestQueueTimeInMs =
@@ -283,13 +286,14 @@ public class ServerMetrics {
     deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobSendTime"));
     deleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "DeleteBlobTotalTime"));
 
-    ttlBlobRequestQueueTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestQueueTime"));
-    ttlBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobProcessingTime"));
-    ttlBlobResponseQueueTimeInMs =
-        registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobResponseQueueTime"));
-    ttlBlobSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobSendTime"));
-    ttlBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "TTLBlobTotalTime"));
+    updateBlobTtlRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlRequestQueueTime"));
+    updateBlobTtlProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlProcessingTime"));
+    updateBlobTtlResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlResponseQueueTime"));
+    updateBlobTtlSendTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlSendTime"));
+    updateBlobTtlTotalTimeInMs = registry.histogram(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlTotalTime"));
 
     replicaMetadataRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestQueueTime"));
@@ -372,7 +376,7 @@ public class ServerMetrics {
     getBlobAllRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobAllRequestRate"));
     getBlobInfoRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "GetBlobInfoRequestRate"));
     deleteBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "DeleteBlobRequestRate"));
-    ttlBlobRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "TTLBlobRequestRate"));
+    updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "UpdateBlobTtlRequestRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(AmbryRequests.class, "ReplicaMetadataRequestRate"));
     triggerCompactionRequestRate =
         registry.meter(MetricRegistry.name(AmbryRequests.class, "TriggerCompactionRequestRate"));
@@ -410,12 +414,17 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreDeleteError"));
     unExpectedAdminOperationError =
         registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedAdminOperationError"));
-    unExpectedStoreTTLError = registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTTLError"));
+    unExpectedStoreTtlUpdateError =
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreTtlUpdateError"));
     unExpectedStoreFindEntriesError =
         registry.counter(MetricRegistry.name(AmbryRequests.class, "UnexpectedStoreFindEntriesError"));
     getAuthorizationFailure = registry.counter(MetricRegistry.name(AmbryRequests.class, "GetAuthorizationFailure"));
     deleteAuthorizationFailure =
         registry.counter(MetricRegistry.name(AmbryRequests.class, "DeleteAuthorizationFailure"));
+    ttlUpdateAuthorizationFailure =
+        registry.counter(MetricRegistry.name(AmbryRequests.class, "TtlUpdateAuthorizationFailure"));
+    ttlAlreadyUpdatedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TtlAlreadyUpdatedError"));
+    ttlUpdateRejectedError = registry.counter(MetricRegistry.name(AmbryRequests.class, "TtlUpdateRejectedError"));
   }
 
   /**
