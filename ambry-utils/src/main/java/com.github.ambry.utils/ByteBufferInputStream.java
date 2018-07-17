@@ -67,7 +67,11 @@ public class ByteBufferInputStream extends InputStream {
 
   @Override
   public int read(byte[] bytes, int offset, int length) throws IOException {
-    if (length == 0) {
+    if (bytes == null) {
+      throw new NullPointerException();
+    } else if (offset < 0 || length < 0 || length > bytes.length - offset) {
+      throw new IndexOutOfBoundsException();
+    } else if (length == 0) {
       return 0;
     }
     int count = Math.min(byteBuffer.remaining(), length);
