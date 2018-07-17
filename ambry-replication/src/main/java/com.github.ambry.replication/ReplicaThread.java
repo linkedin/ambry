@@ -29,11 +29,13 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
+import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -313,15 +315,10 @@ class ReplicaThread implements Runnable {
    * @return - List of ExchangeMetadataResponse that contains the set of store keys that are missing from the local
    *           store and are present in the remote replicas and also the new token from the remote replicas
    * @throws IOException
-   * @throws StoreException
-   * @throws MessageFormatException
    * @throws ReplicationException
-   * @throws InterruptedException
    */
   List<ExchangeMetadataResponse> exchangeMetadata(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode)
-      throws IOException, ReplicationException, InterruptedException {
-
+      List<RemoteReplicaInfo> replicasToReplicatePerNode) throws IOException, ReplicationException {
     long exchangeMetadataStartTimeInMs = SystemTime.getInstance().milliseconds();
     List<ExchangeMetadataResponse> exchangeMetadataResponseList = new ArrayList<>();
     if (replicasToReplicatePerNode.size() > 0) {
@@ -389,13 +386,12 @@ class ReplicaThread implements Runnable {
    * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
    *                                     from the remote stores
    * @throws IOException
-   * @throws StoreException
    * @throws MessageFormatException
    * @throws ReplicationException
    */
   void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList)
-      throws IOException, StoreException, MessageFormatException, ReplicationException {
+      throws IOException, MessageFormatException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = SystemTime.getInstance().milliseconds();
     try {
       if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
@@ -547,12 +543,13 @@ class ReplicaThread implements Runnable {
       } else if (!missingRemoteStoreKeys.contains(messageInfo.getStoreKey())) {
         // the key is present in the local store. Mark it for deletion if it is deleted in the remote store and not
         // deleted yet locally
-        if (messageInfo.isDeleted() && !remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey)) {
+        boolean deletedLocally = remoteReplicaInfo.getLocalStore().isKeyDeleted(localKey);
+        if (messageInfo.isDeleted() && !deletedLocally) {
           MessageFormatInputStream deleteStream =
               new DeleteMessageFormatInputStream(localKey, localKey.getAccountId(), localKey.getContainerId(),
                   messageInfo.getOperationTimeMs());
-          MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, false, localKey.getAccountId(),
-              localKey.getContainerId(), messageInfo.getOperationTimeMs());
+          MessageInfo info = new MessageInfo(localKey, deleteStream.getSize(), true, messageInfo.isTtlUpdated(),
+              localKey.getAccountId(), localKey.getContainerId(), messageInfo.getOperationTimeMs());
           ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
           infoList.add(info);
           MessageFormatWriteSet writeset = new MessageFormatWriteSet(deleteStream, infoList, false);
@@ -580,6 +577,12 @@ class ReplicaThread implements Runnable {
             notification.onBlobReplicaDeleted(dataNodeId.getHostname(), dataNodeId.getPort(), localKey.getID(),
                 BlobReplicaSourceType.REPAIRED);
           }
+        } else if (!deletedLocally && !messageInfo.isDeleted() && messageInfo.isTtlUpdated()) {
+          MessageInfo infoWithLocalKey =
+              new MessageInfo(localKey, messageInfo.getSize(), false, true, messageInfo.getExpirationTimeInMs(),
+                  messageInfo.getCrc(), localKey.getAccountId(), localKey.getContainerId(),
+                  messageInfo.getOperationTimeMs());
+          applyTtlUpdate(infoWithLocalKey, remoteReplicaInfo);
         }
       } else {
         if (messageInfo.isDeleted()) {
@@ -704,10 +707,12 @@ class ReplicaThread implements Runnable {
    *                    simply advance the tokens for every store.
    * @param replicasToReplicatePerNode The list of remote replicas for the remote node
    * @param remoteNode The remote node from which replication needs to happen
+   * @throws IOException
+   * @throws MessageFormatException
    */
   private void writeMessagesToLocalStoreAndAdvanceTokens(List<ExchangeMetadataResponse> exchangeMetadataResponseList,
       GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode, DataNodeId remoteNode)
-      throws IOException {
+      throws IOException, MessageFormatException {
     int partitionResponseInfoIndex = 0;
     long totalBytesFixed = 0;
     long totalBlobsFixed = 0;
@@ -763,6 +768,9 @@ class ReplicaThread implements Runnable {
                   notification.onBlobReplicaCreated(dataNodeId.getHostname(), dataNodeId.getPort(),
                       messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
                 }
+                if (messageInfo.isTtlUpdated()) {
+                  applyTtlUpdate(messageInfo, remoteReplicaInfo);
+                }
               }
               totalBlobsFixed += messageInfoList.size();
               remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
@@ -802,6 +810,52 @@ class ReplicaThread implements Runnable {
     long batchStoreWriteTime = SystemTime.getInstance().milliseconds() - startTime;
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName);
+  }
+
+  /**
+   * Applies a TTL update to the blob described by {@code messageInfo}.
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param remoteReplicaInfo The remote replica that is being replicated from
+   * @throws IOException
+   * @throws MessageFormatException
+   * @throws StoreException
+   */
+  private void applyTtlUpdate(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo)
+      throws IOException, MessageFormatException, StoreException {
+    MessageFormatInputStream ttlUpdateStream =
+        new TtlUpdateMessageFormatInputStream(messageInfo.getStoreKey(), messageInfo.getAccountId(),
+            messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
+    MessageInfo info =
+        new MessageInfo(messageInfo.getStoreKey(), ttlUpdateStream.getSize(), false, true, messageInfo.getAccountId(),
+            messageInfo.getContainerId(), messageInfo.getOperationTimeMs());
+    MessageFormatWriteSet writeSet = new MessageFormatWriteSet(ttlUpdateStream, Collections.singletonList(info), false);
+    DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
+    try {
+      // NOTE: It is possible that the key in question may have expired and this TTL update is being applied after it
+      // is deemed expired. The store will accept the op (BlobStore looks at whether the op was valid to do at the time
+      // of the op, not current time) but if compaction is running at the same time and has decided to clean up the
+      // record before this ttl update was applied (and this didn't find the key missing because compaction has not yet
+      // committed), then we have a bad situation where only a TTL update exists in the store. This problem has to be
+      // addressed. This can only happen if replication is far behind (for e.g due to a server being down for a long
+      // time). Won't happen if a server is being recreated.
+      remoteReplicaInfo.getLocalStore().updateTtl(writeSet);
+      logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key ttl updated id: {}", remoteNode, threadName,
+          remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+    } catch (StoreException e) {
+      // The blob may be deleted or updated which is alright
+      if (e.getErrorCode() == StoreErrorCodes.ID_Deleted || e.getErrorCode() == StoreErrorCodes.Already_Updated) {
+        logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key already updated: {}", remoteNode,
+            threadName, remoteReplicaInfo.getReplicaId(), messageInfo.getStoreKey());
+      } else {
+        throw e;
+      }
+    }
+    // A Repair event for an update signifies that an update message was received from the remote and it is fired
+    // as long as the update is guaranteed to have taken effect locally.
+    if (notification != null) {
+      notification.onBlobReplicaUpdated(dataNodeId.getHostname(), dataNodeId.getPort(),
+          messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED, UpdateType.TTL_UPDATE, messageInfo);
+    }
   }
 
   static class ExchangeMetadataResponse {

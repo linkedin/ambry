@@ -23,7 +23,6 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatBlobV1InputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
-import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -105,10 +104,12 @@ public class BlobIdTransformerTest {
   public void testBasicOperation() throws Exception {
     for (Pair pair : pairList) {
       for (Class clazz : VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS) {
-        InputAndExpected inputAndExpected = new InputAndExpected(pair, clazz);
-        TransformationOutput output = transformer.transform(inputAndExpected.getInput());
-        assertNull("output exception should be null", output.getException());
-        verifyOutput(output.getMsg(), inputAndExpected.getExpected());
+        for (boolean divergeInfoFromData : new boolean[]{false, true}) {
+          InputAndExpected inputAndExpected = new InputAndExpected(pair, clazz, divergeInfoFromData);
+          TransformationOutput output = transformer.transform(inputAndExpected.getInput());
+          assertNull("output exception should be null", output.getException());
+          verifyOutput(output.getMsg(), inputAndExpected.getExpected());
+        }
       }
     }
   }
@@ -119,7 +120,8 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testNonPutTransform() throws Exception {
-    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), DeleteMessageFormatInputStream.class);
+    InputAndExpected inputAndExpected =
+        new InputAndExpected(pairList.get(0), DeleteMessageFormatInputStream.class, false);
     assertException(transformer.transform(inputAndExpected.getInput()), IllegalArgumentException.class);
   }
 
@@ -129,7 +131,7 @@ public class BlobIdTransformerTest {
    */
   @Test
   public void testGarbageInputStream() throws Exception {
-    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), null);
+    InputAndExpected inputAndExpected = new InputAndExpected(pairList.get(0), null, false);
     assertException(transformer.transform(inputAndExpected.getInput()), MessageFormatException.class);
   }
 
@@ -140,17 +142,16 @@ public class BlobIdTransformerTest {
   @Test
   public void testBrokenStoreKeyConverter() throws Exception {
     InputAndExpected inputAndExpected =
-        new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
+        new InputAndExpected(pairList.get(0), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false);
     TransformationOutput output = transformer.transform(inputAndExpected.getInput());
     verifyOutput(output.getMsg(), inputAndExpected.getExpected());
 
     factory.setException(new BlobIdTransformerTestException());
-    inputAndExpected = new InputAndExpected(pairList.get(1), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
+    inputAndExpected = new InputAndExpected(pairList.get(1), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false);
     output = transformer.transform(inputAndExpected.getInput());
-    Assert.assertTrue("Should lead to IllegalStateException",
-        output.getException() instanceof IllegalStateException);
+    Assert.assertTrue("Should lead to IllegalStateException", output.getException() instanceof IllegalStateException);
     factory.setException(null);
-    inputAndExpected = new InputAndExpected(pairList.get(2), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0]);
+    inputAndExpected = new InputAndExpected(pairList.get(2), VALID_MESSAGE_FORMAT_INPUT_STREAM_IMPLS[0], false);
     output = transformer.transform(inputAndExpected.getInput());
     verifyOutput(output.getMsg(), inputAndExpected.getExpected());
   }
@@ -232,10 +233,9 @@ public class BlobIdTransformerTest {
    * @param storeKeyConverter
    * @throws Exception {@link StoreKeyConverter#convert(Collection)} may throw an Exception
    */
-  private void preConvertPairFirsts(List<Pair> pairs, StoreKeyConverter storeKeyConverter)
-      throws Exception {
+  private void preConvertPairFirsts(List<Pair> pairs, StoreKeyConverter storeKeyConverter) throws Exception {
     List<StoreKey> pairFirsts = new ArrayList<>();
-    for (Pair<String,String> pair : pairs) {
+    for (Pair<String, String> pair : pairs) {
       pairFirsts.add(createBlobId(pair.getFirst()));
     }
     storeKeyConverter.convert(pairFirsts);
@@ -268,15 +268,26 @@ public class BlobIdTransformerTest {
     private final long randomStaticSeed = new Random().nextLong();
     private Random buildRandom = new Random(randomStaticSeed);
 
-    public InputAndExpected(Pair<String, String> pair, Class clazz) throws IOException, MessageFormatException {
-      boolean hasEncryption = clazz == PutMessageFormatInputStream.class ? true : false;
-      input = buildMessage(pair.getFirst(), clazz, hasEncryption);
+    /**
+     * Constructs the input and expected
+     * @param pair the pair of blob ids (old, new)
+     * @param clazz the put message input stream class to use
+     * @param divergeInfoFromData if {@code true}, changes some fields in the info to be different from what is in the
+     *                            data
+     * @throws IOException
+     * @throws MessageFormatException
+     */
+    InputAndExpected(Pair<String, String> pair, Class clazz, boolean divergeInfoFromData)
+        throws IOException, MessageFormatException {
+      boolean hasEncryption = clazz == PutMessageFormatInputStream.class;
+      input = buildMessage(pair.getFirst(), clazz, hasEncryption, divergeInfoFromData);
       if (pair.getSecond() == null) {
         //can't just assign 'input' since Message has an
         //InputStream that is modified when read
         expected = null;//buildMessage(pair.getFirst(), PutMessageFormatInputStream.class, hasEncryption);
       } else {
-        expected = buildMessage(pair.getSecond(), PutMessageFormatInputStream.class, hasEncryption);
+        expected =
+            buildMessage(pair.getSecond(), PutMessageFormatInputStream.class, hasEncryption, divergeInfoFromData);
       }
     }
 
@@ -298,7 +309,7 @@ public class BlobIdTransformerTest {
       return ByteBuffer.wrap(randomByteArray(size));
     }
 
-    private Message buildMessage(String blobIdString, Class clazz, boolean hasEncryption)
+    private Message buildMessage(String blobIdString, Class clazz, boolean hasEncryption, boolean divergeInfoFromData)
         throws IOException, MessageFormatException {
       buildRandom = new Random(randomStaticSeed);
       BlobId blobId = createBlobId(blobIdString);
@@ -334,11 +345,17 @@ public class BlobIdTransformerTest {
         inputStreamSize = 100;
       }
 
-      messageInfo = new MessageInfo(blobId, inputStreamSize, false, false,
-          Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds()),
-          null, blobId.getAccountId(), blobId.getContainerId(), blobProperties.getCreationTimeInMs());
-      Message message = new Message(messageInfo, inputStream);
-      return message;
+      boolean ttlUpdated = false;
+      long expiryTimeMs =
+          Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
+      if (divergeInfoFromData) {
+        ttlUpdated = true;
+        expiryTimeMs = Utils.Infinite_Time;
+      }
+      messageInfo =
+          new MessageInfo(blobId, inputStreamSize, false, ttlUpdated, expiryTimeMs, null, blobId.getAccountId(),
+              blobId.getContainerId(), blobProperties.getCreationTimeInMs());
+      return new Message(messageInfo, inputStream);
     }
 
     private InputStream createBlobStream() {
